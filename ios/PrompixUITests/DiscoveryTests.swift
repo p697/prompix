@@ -1,9 +1,15 @@
 import XCTest
+import UIKit
 
 @MainActor final class DiscoveryTests: XCTestCase {
     private var app: XCUIApplication!
     override func setUp() async throws {
         continueAfterFailure = false
+        #if compiler(>=6.4)
+        if #available(iOS 27.0, *), XCUIDevice.shared.voiceOverService.isEnabled {
+            try XCUIDevice.shared.voiceOverService.disable()
+        }
+        #endif
         app = XCUIApplication()
         app.launchArguments += ["--offline", "-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN"]
         app.launch()
@@ -115,6 +121,348 @@ import XCTest
         }
         #else
         throw XCTSkip("Actual VoiceOver traversal requires Xcode 27 or later.")
+        #endif
+    }
+
+    func testVoiceOverDetailEditorAndSavedRoundTrip() throws {
+        #if compiler(>=6.4)
+        guard #available(iOS 27.0, *) else { throw XCTSkip("Actual spoken traversal requires iOS 27.") }
+        continueAfterFailure = true
+        let voiceOver = XCUIDevice.shared.voiceOverService
+        var speech: [String] = []
+        defer {
+            do { try voiceOver.disable() } catch { XCTFail("Could not restore VoiceOver: \(error)") }
+            let transcript = XCTAttachment(string: speech.joined(separator: "\n"))
+            transcript.name = "VoiceOver detail editor saved round trip"
+            transcript.lifetime = .keepAlways
+            add(transcript)
+        }
+        if voiceOver.isEnabled { try voiceOver.disable() }
+        app.buttons["kind-text"].tap()
+        try voiceOver.enable()
+
+        func require(_ condition: Bool, _ message: String) throws {
+            guard condition else {
+                XCTFail(message)
+                throw NSError(domain: "PrompixVoiceOverTest", code: 2, userInfo: [NSLocalizedDescriptionKey: message])
+            }
+        }
+        func focus(_ description: String, backwards: Bool = false, matching predicate: (String) -> Bool) throws {
+            let deadline = Date().addingTimeInterval(45)
+            var utterance = try voiceOver.currentSpeech().utterance
+            for _ in 0..<70 {
+                speech.append("\(description): \(utterance)")
+                if predicate(utterance) { return }
+                if Date() >= deadline { break }
+                utterance = try (backwards ? voiceOver.moveBackward() : voiceOver.moveForward()).utterance
+            }
+            XCTFail("VoiceOver did not reach \(description)")
+            throw NSError(domain: "PrompixVoiceOverTest", code: 1)
+        }
+        func activate(_ element: XCUIElement) {
+            // Spoken focus is verified above; activation uses a targeted synthetic
+            // double-tap, not a claim of physical VoiceOver gesture acceptance.
+            element.doubleTap()
+        }
+        try focus("card") { $0.contains("抽一张塔罗") && !$0.contains("收藏") }
+        activate(app.buttons["prompt-gentle-tarot"])
+        try require(app.buttons["copyPrompt"].waitForExistence(timeout: 5), "Spoken card must open detail")
+        try focus("detail copy") { $0.contains("复制 Prompt") }
+        activate(app.buttons["copyPrompt"])
+        try require(app.buttons["copyPrompt"].label.contains("已复制"), "Copy must confirm its action")
+        try focus("detail edit", backwards: true) { $0.contains("编辑后使用") }
+        activate(app.buttons["编辑后使用"])
+        let editor = app.textViews["promptEditor"]
+        try require(editor.waitForExistence(timeout: 5), "Spoken edit action must open the editor")
+        let spokenPrefix = String((editor.value as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines).prefix(20))
+        try require(!spokenPrefix.isEmpty, "Editor must have meaningful current content")
+        try focus("editor text") { $0.contains(spokenPrefix) }
+        activate(editor)
+        editor.typeText(" VoiceOver note.")
+        try require((editor.value as? String ?? "").contains("VoiceOver note."), "Editor must accept the note")
+        try focus("editor copy") { $0.contains("复制修改后的 Prompt") }
+        activate(app.buttons["copyEditedPrompt"])
+        try require(app.buttons["copyEditedPrompt"].label.contains("已复制"), "Edited copy must confirm its action")
+        try focus("editor done", backwards: true) { $0.contains("完成") && $0.contains("按钮") }
+        activate(app.buttons["完成"])
+        try require(app.buttons["detailFavorite"].waitForExistence(timeout: 5), "Done must leave the editor")
+        try focus("bookmark") { $0.contains("收藏") && $0.contains("按钮") }
+        let wasSaved = app.buttons["detailFavorite"].label == "取消收藏"
+        activate(app.buttons["detailFavorite"])
+        try require(app.buttons["detailFavorite"].label == (wasSaved ? "收藏 Prompt" : "取消收藏"), "Bookmark state must change")
+        if wasSaved {
+            try focus("save again") { $0.contains("收藏") && $0.contains("按钮") }
+            activate(app.buttons["detailFavorite"])
+        }
+        try focus("detail back", backwards: true) { $0.contains("返回") && $0.contains("按钮") }
+        activate(app.navigationBars.buttons.element(boundBy: 0))
+        try require(app.buttons["kind-text"].waitForExistence(timeout: 5), "Back must reach discovery")
+        // Explore the native tab directly rather than rereading the entire feed.
+        app.tabBars.buttons["收藏"].tap()
+        let savedTabSpeech = try voiceOver.currentSpeech().utterance
+        speech.append("saved tab (targeted exploration): \(savedTabSpeech)")
+        try require(savedTabSpeech.contains("收藏"), "The explored tab must announce Saved")
+        activate(app.tabBars.buttons["收藏"])
+        try require(app.navigationBars["收藏"].waitForExistence(timeout: 5), "Saved tab must open the saved list")
+        try require(app.buttons["prompt-gentle-tarot"].waitForExistence(timeout: 5), "Saved must contain the item")
+        app.buttons["prompt-gentle-tarot"].tap()
+        let savedCardSpeech = try voiceOver.currentSpeech().utterance
+        speech.append("saved card (targeted exploration): \(savedCardSpeech)")
+        try require(savedCardSpeech.contains("抽一张塔罗") && !savedCardSpeech.contains("取消收藏"), "Saved card must speak its title as the navigation action")
+        capture("acceptance-voiceover-saved")
+        #else
+        throw XCTSkip("Actual spoken traversal requires Xcode 27.")
+        #endif
+    }
+
+    func testLongDraftEditingAndInteractiveDismissal() throws {
+        try exerciseLongDraft(requireVisibleKeyboard: false)
+    }
+
+    func testVisibleSoftwareKeyboardLongDraftLayout() throws {
+        guard ProcessInfo.processInfo.environment["PROMPIX_VISIBLE_SOFTWARE_KEYBOARD"] == "1" else {
+            throw XCTSkip("Opt in on a simulator with its software keyboard visibly enabled.")
+        }
+        try exerciseLongDraft(requireVisibleKeyboard: true)
+    }
+
+    private func exerciseLongDraft(requireVisibleKeyboard: Bool) throws {
+        app.buttons["kind-text"].tap()
+        app.buttons["prompt-gentle-tarot"].tap()
+        app.buttons["编辑后使用"].tap()
+        let editor = app.textViews["promptEditor"]
+        XCTAssertTrue(editor.waitForExistence(timeout: 5))
+        editor.tap()
+        let keyboard = app.keyboards.firstMatch
+        if requireVisibleKeyboard {
+            guard keyboard.waitForExistence(timeout: 5), keyboard.isHittable, keyboard.frame.height > 200 else {
+                throw XCTSkip("Software keyboard is not visibly available; editing persistence does not establish keyboard-obstruction coverage.")
+            }
+        }
+        let paragraph = "Consider one small creative choice today. Describe the scene, the feeling, and one practical next step. Keep the original idea intact.\n\n"
+        let inserted = "\n" + String(repeating: paragraph, count: 12) + "PROMPIX-END-X"
+        editor.typeText(inserted)
+        editor.typeText(XCUIKeyboardKey.delete.rawValue + "Y")
+        let expected = try XCTUnwrap(editor.value as? String)
+        XCTAssertTrue(expected.contains("PROMPIX-END-Y"))
+        XCTAssertGreaterThan(expected.count, 1600)
+        if requireVisibleKeyboard {
+            XCTAssertTrue(keyboard.isHittable)
+            XCTAssertGreaterThan(keyboard.frame.height, 200, "Software keyboard must occupy visible layout space")
+        }
+        let layout = XCTAttachment(string: "Keyboard frame: \(keyboard.frame); editor frame: \(editor.frame); copy frame: \(app.buttons["copyEditedPrompt"].frame)")
+        layout.name = "Long editor keyboard layout"; layout.lifetime = .keepAlways; add(layout)
+        XCTAssertTrue(app.buttons["copyEditedPrompt"].isHittable)
+        XCTAssertTrue(app.buttons["完成"].isHittable)
+        capture(requireVisibleKeyboard ? "acceptance-long-editor-visible-keyboard" : "acceptance-long-editor-editing")
+        app.buttons["copyEditedPrompt"].tap()
+        XCTAssertTrue(app.buttons["copyEditedPrompt"].label.contains("已复制"))
+        // Drag the sheet header, rather than scrolling the TextEditor content.
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.08))
+            .press(forDuration: 0.1, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.85)))
+        XCTAssertTrue(editor.waitForNonExistence(timeout: 5))
+        app.buttons["编辑后使用"].tap()
+        XCTAssertTrue(editor.waitForExistence(timeout: 5))
+        XCTAssertEqual(editor.value as? String, expected, "Swipe dismissal must preserve the complete draft")
+        capture("acceptance-long-editor-restored")
+        app.buttons["完成"].tap()
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.01, dy: 0.5))
+            .press(forDuration: 0.1, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)))
+        XCTAssertTrue(app.buttons["kind-text"].waitForExistence(timeout: 5), "Native edge return must reach discovery")
+        // Restore this simulator-only draft so later VoiceOver traversal remains concise.
+        app.buttons["prompt-gentle-tarot"].tap()
+        app.buttons["编辑后使用"].tap()
+        app.buttons["编辑选项"].tap()
+        app.buttons["恢复原始 Prompt"].tap()
+        app.buttons["恢复原文"].tap()
+        XCTAssertFalse((editor.value as? String ?? "").contains("PROMPIX-END-Y"))
+        app.buttons["完成"].tap()
+    }
+
+    func testReducedMotionImageZoomAndReturn() throws {
+        guard UIAccessibility.isReduceMotionEnabled else { throw XCTSkip("Run explicitly with the simulator Reduce Motion setting enabled.") }
+        let state = XCTAttachment(string: "UIAccessibility.isReduceMotionEnabled = true")
+        state.name = "Reduced Motion runtime state"; state.lifetime = .keepAlways; add(state)
+        app.buttons["kind-image"].tap()
+        app.buttons["prompt-paper-forms"].tap()
+        app.buttons["previewButton"].tap()
+        let image = app.descendants(matching: .any)["loadedImage-0"]
+        XCTAssertTrue(image.waitForExistence(timeout: 5))
+        image.doubleTap()
+        capture("acceptance-reduced-motion-zoom")
+        image.doubleTap()
+        app.buttons["完成"].tap()
+        XCTAssertTrue(app.buttons["copyPrompt"].waitForExistence(timeout: 5))
+    }
+
+    func testDraftWriteFailureKeepsBufferUntilExplicitExit() throws {
+        #if targetEnvironment(simulator)
+        guard let containerPath = ProcessInfo.processInfo.environment["PROMPIX_DRAFT_FIXTURE_CONTAINER"] else {
+            throw XCTSkip("Requires an explicit simulator Prompix app-container path for the reversible write-collision fixture.")
+        }
+        guard let simulatorID = ProcessInfo.processInfo.environment["SIMULATOR_UDID"], UUID(uuidString: simulatorID) != nil else {
+            throw XCTSkip("Requires a valid running simulator UUID.")
+        }
+        let explicitContainer = URL(fileURLWithPath: containerPath).standardizedFileURL
+        guard explicitContainer.path.contains("/CoreSimulator/Devices/\(simulatorID)/data/Containers/Data/Application/"),
+              UUID(uuidString: explicitContainer.lastPathComponent) != nil else {
+            throw XCTSkip("Refusing a path outside the current simulator's app containers.")
+        }
+        // XCTest may reinstall the app between the host's opt-in and this test.
+        // Resolve that new UUID only inside the same simulator's explicit parent.
+        let candidates = try FileManager.default.contentsOfDirectory(at: explicitContainer.deletingLastPathComponent(), includingPropertiesForKeys: nil)
+        let matches = candidates.filter { candidate in
+            guard UUID(uuidString: candidate.lastPathComponent) != nil,
+                  let data = try? Data(contentsOf: candidate.appendingPathComponent(".com.apple.mobile_container_manager.metadata.plist")),
+                  let fields = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any] else { return false }
+            return fields["MCMMetadataIdentifier"] as? String == "com.p697.prompix"
+        }
+        guard matches.count == 1, let container = matches.first else {
+            throw XCTSkip("Requires exactly one metadata-verified Prompix container in the current simulator.")
+        }
+        continueAfterFailure = true
+        let fileManager = FileManager.default
+        let draftFile = container.appendingPathComponent("Library/Application Support/Prompix/drafts.json")
+        let originalData = fileManager.fileExists(atPath: draftFile.path) ? try Data(contentsOf: draftFile) : nil
+        func restore(_ bytes: Data?) throws {
+            if fileManager.fileExists(atPath: draftFile.path) { try fileManager.removeItem(at: draftFile) }
+            if let bytes { try bytes.write(to: draftFile, options: .atomic) }
+        }
+        addTeardownBlock { @MainActor in
+            self.app.terminate()
+            do {
+                try restore(originalData)
+                if let originalData { XCTAssertEqual(try Data(contentsOf: draftFile), originalData) }
+                else { XCTAssertFalse(fileManager.fileExists(atPath: draftFile.path)) }
+            } catch { XCTFail("Could not restore simulator draft fixture: \(error)") }
+        }
+        func require(_ condition: Bool, _ message: String) throws {
+            guard condition else {
+                XCTFail(message)
+                throw NSError(domain: "PrompixDraftFixture", code: 1, userInfo: [NSLocalizedDescriptionKey: message])
+            }
+        }
+        func collide() throws {
+            try fileManager.removeItem(at: draftFile)
+            try fileManager.createDirectory(at: draftFile, withIntermediateDirectories: false)
+        }
+        func durableDraft() throws -> String? {
+            let values = try JSONDecoder().decode([String: String].self, from: Data(contentsOf: draftFile))
+            return values["gentle-tarot"]
+        }
+        app.buttons["kind-text"].tap()
+        app.buttons["prompt-gentle-tarot"].tap()
+        app.buttons["编辑后使用"].tap()
+        let editor = app.textViews["promptEditor"]
+        try require(editor.waitForExistence(timeout: 5), "Editor must open")
+        editor.tap()
+        editor.typeText(" Durable fixture baseline.")
+        app.buttons["copyEditedPrompt"].tap()
+        let baseline = try XCTUnwrap(editor.value as? String)
+        try require(try durableDraft() == baseline, "Baseline must be saved before introducing a write collision")
+        let baselineBytes = try Data(contentsOf: draftFile)
+        try collide()
+        editor.tap()
+        editor.typeText(" Recovered write-failure note.")
+        try require(app.buttons["retryDraftSave"].waitForExistence(timeout: 5), "Inline failure must preserve the editor")
+        try require(editor.exists, "Storage failure must not dismiss the editor")
+        let recovered = try XCTUnwrap(editor.value as? String)
+        try require(recovered.contains("Recovered write-failure note."), "The typed failure note must stay intact")
+        try require(app.buttons["retryDraftSave"].waitForExistence(timeout: 5), "Write failure must expose Retry")
+        try require(app.staticTexts["draftStatus"].label.contains("尚未保存"), "Failure status must remain visible")
+        if ProcessInfo.processInfo.environment["PROMPIX_DRAFT_LAYOUT_ONLY"] == "1" {
+            capture("acceptance-write-failure-largest-text")
+            let copyFrame = app.buttons["copyEditedPrompt"].frame
+            let visibleEditorHeight = max(0, min(app.frame.maxY, copyFrame.minY) - editor.frame.minY)
+            let layout = XCTAttachment(string: "Preferred body font: \(UIFont.preferredFont(forTextStyle: .body).pointSize); editor frame: \(editor.frame); copy frame: \(copyFrame); visible editor height above copy: \(visibleEditorHeight); retry frame: \(app.buttons["retryDraftSave"].frame); leave frame: \(app.buttons["leaveUnsavedDraft"].frame)")
+            layout.name = "Largest-text recovery layout"; layout.lifetime = .keepAlways; add(layout)
+            try require(editor.isHittable && visibleEditorHeight >= UIFont.preferredFont(forTextStyle: .body).lineHeight, "Failure state must retain at least one full editor line above the fixed copy action")
+            let header = app.scrollViews["draftStatusScroll"]
+            try require(header.waitForExistence(timeout: 5), "Recovery header must scroll independently")
+            func reveal(_ button: XCUIElement) throws {
+                for _ in 0..<5 {
+                    if button.isHittable && header.frame.contains(CGPoint(x: button.frame.midX, y: button.frame.midY)) { return }
+                    header.swipeUp()
+                }
+                try require(button.isHittable && header.frame.contains(CGPoint(x: button.frame.midX, y: button.frame.midY)), "Recovery action must be reachable by scrolling its header")
+            }
+            let retry = app.buttons["retryDraftSave"]
+            try reveal(retry)
+            retry.tap()
+            try require(editor.exists && editor.value as? String == recovered, "Retry under continued storage failure must keep the buffer")
+            let leave = app.buttons["leaveUnsavedDraft"]
+            try reveal(leave)
+            capture("acceptance-write-failure-largest-text-actions")
+            leave.tap()
+            try require(app.buttons["copyDraftAndLeave"].firstMatch.waitForExistence(timeout: 5), "Leave action must open its native confirmation")
+            capture("acceptance-write-failure-largest-text-dialog")
+            if app.buttons["继续编辑"].firstMatch.exists {
+                app.buttons["继续编辑"].firstMatch.tap()
+            } else {
+                app.coordinate(withNormalizedOffset: CGVector(dx: 0.01, dy: 0.5)).tap()
+            }
+            try require(app.buttons["copyDraftAndLeave"].firstMatch.waitForNonExistence(timeout: 5), "Cancelling must dismiss the native leave dialog")
+            try require(editor.exists && editor.value as? String == recovered, "Cancelling leave must keep the large-text buffer")
+            for button in [app.buttons["copyEditedPrompt"], app.buttons["完成"]] {
+                try require(button.isHittable, "Fixed completion actions must remain reachable")
+            }
+            return
+        }
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.08))
+            .press(forDuration: 0.1, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.85)))
+        try require(editor.exists, "Failed draft must resist interactive dismissal")
+        try require(editor.value as? String == recovered, "Swipe must keep the entire buffer")
+        app.buttons["完成"].tap()
+        try require(editor.exists && editor.value as? String == recovered, "Done must keep the failed-save buffer")
+        capture("acceptance-write-failure-buffer-protected")
+        app.buttons["leaveUnsavedDraft"].tap()
+        capture("acceptance-write-failure-leave-dialog")
+        if app.buttons["继续编辑"].exists {
+            app.buttons["继续编辑"].tap()
+        } else {
+            // Native popover presentations omit the cancel row; tapping outside cancels.
+            app.coordinate(withNormalizedOffset: CGVector(dx: 0.01, dy: 0.5)).tap()
+        }
+        try require(editor.exists && editor.value as? String == recovered, "Cancelling leave must preserve the buffer")
+        try restore(baselineBytes)
+        app.buttons["retryDraftSave"].tap()
+        try require(app.buttons["retryDraftSave"].waitForNonExistence(timeout: 5), "Retry must recover after storage is restored")
+        try require(try durableDraft() == recovered, "Retry must save the exact current buffer")
+        app.buttons["完成"].tap()
+        app.buttons["编辑后使用"].tap()
+        try require(editor.waitForExistence(timeout: 5) && editor.value as? String == recovered, "Recovered draft must reopen intact")
+        capture("acceptance-write-failure-recovered")
+
+        let recoveredBytes = try Data(contentsOf: draftFile)
+        try collide()
+        editor.tap()
+        editor.typeText(" Copy-only unsaved ending.")
+        try require(app.buttons["leaveUnsavedDraft"].waitForExistence(timeout: 5) && editor.exists, "Second failure must preserve the editor")
+        let copyOnly = try XCTUnwrap(editor.value as? String)
+        try require(copyOnly.contains("Copy-only unsaved ending."), "The copy-only note must stay intact")
+        try require(app.buttons["leaveUnsavedDraft"].waitForExistence(timeout: 5), "Second failure must expose explicit exit")
+        app.buttons["leaveUnsavedDraft"].tap()
+        let copyAndLeave = app.buttons["copyDraftAndLeave"].firstMatch
+        try require(copyAndLeave.waitForExistence(timeout: 5), "Leave dialog must expose Copy and Leave")
+        copyAndLeave.tap()
+        try require(editor.waitForNonExistence(timeout: 5), "Copy and Leave must close the editor")
+        // The UI runner cannot read another app's pasteboard on this runtime.
+        // Compare this exact buffer with public simctl pbpaste in the host fixture.
+        let clipboardExpectation = XCTAttachment(string: copyOnly)
+        clipboardExpectation.name = "Copy-and-leave expected buffer"
+        clipboardExpectation.lifetime = .keepAlways
+        add(clipboardExpectation)
+        try restore(recoveredBytes)
+        app.terminate()
+        app.launch()
+        app.buttons["kind-text"].tap()
+        app.buttons["prompt-gentle-tarot"].tap()
+        app.buttons["编辑后使用"].tap()
+        try require(editor.waitForExistence(timeout: 5) && editor.value as? String == recovered, "Relaunch must preserve the prior durable draft after explicit copy-only exit")
+        try require(try durableDraft() == recovered, "Copy-only exit must not overwrite the prior durable draft")
+        capture("acceptance-copy-only-exit-durable-draft")
+        #else
+        throw XCTSkip("Write-collision fixtures are simulator-only.")
         #endif
     }
 

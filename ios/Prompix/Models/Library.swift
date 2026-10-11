@@ -87,16 +87,16 @@ import Observation
         try JSONEncoder().encode(updated).write(to: draftFile, options: .atomic)
         drafts = updated
     }
-    func refresh(force: Bool = false) async {
+    func refresh(force: Bool = false, session: URLSession = .shared) async {
         guard !isRefreshing, !ProcessInfo.processInfo.arguments.contains("--offline") else { return }
         if !force, let lastAttempt, Date().timeIntervalSince(lastAttempt) < 900 { return }
         lastAttempt = Date(); isRefreshing = true
         defer { isRefreshing = false }
         do {
-            let data = try await CatalogSync.fetch(CatalogSync.endpoint, maximum: 32_000)
+            let data = try await CatalogSync.fetch(CatalogSync.endpoint, maximum: 32_000, session: session)
             let manifest = try JSONDecoder().decode(CatalogManifest.self, from: data).validated()
             if manifest.version == version { syncMessage = nil; return }
-            let content = try await CatalogSync.fetch(manifest.catalog, maximum: 10_000_000)
+            let content = try await CatalogSync.fetch(manifest.catalog, maximum: 10_000_000, session: session)
             try install(content, manifest: manifest)
             syncMessage = nil
         } catch is CancellationError { }
