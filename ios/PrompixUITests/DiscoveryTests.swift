@@ -221,7 +221,7 @@ import XCTest
         XCTAssertFalse(app.buttons["previousImage"].isEnabled)
         for index in 1...4 {
             XCTAssertTrue(app.navigationBars["\(index) / 4"].waitForExistence(timeout: 5))
-            XCTAssertTrue(app.descendants(matching: .any)["loadedImage"].waitForExistence(timeout: 20))
+            XCTAssertTrue(app.descendants(matching: .any)["loadedImage-\(index - 1)"].waitForExistence(timeout: 20))
             capture("gallery-\(index)")
             if index < 4 { app.buttons["nextImage"].tap() }
         }

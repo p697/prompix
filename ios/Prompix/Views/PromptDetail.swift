@@ -320,7 +320,7 @@ struct ImageViewer: View {
         NavigationStack {
             TabView(selection: $selection) {
                 ForEach(0..<count, id: \.self) { index in
-                    ImagePage(name: name, url: urls.isEmpty ? nil : urls[index], active: selection == index)
+                    ImagePage(name: name, url: urls.isEmpty ? nil : urls[index], active: selection == index, index: index)
                         .tag(index)
                 }
             }.tabViewStyle(.page(indexDisplayMode: count > 1 ? .always : .never))
@@ -350,6 +350,7 @@ private struct ImagePage: View {
     let name: String
     let url: URL?
     let active: Bool
+    let index: Int
     @State private var remoteImage: UIImage?
     @State private var failed = false
     @State private var offlinePreview = false
@@ -359,7 +360,7 @@ private struct ImagePage: View {
             Color.black
             if url == nil || remoteImage != nil {
                 ZoomImage(image: remoteImage ?? UIImage(named: name))
-                    .accessibilityIdentifier("loadedImage")
+                    .accessibilityIdentifier("loadedImage-\(index)")
             } else if failed {
                 ContentUnavailableView {
                     Label(String(localized: "图片暂不可用"), systemImage: "photo")
