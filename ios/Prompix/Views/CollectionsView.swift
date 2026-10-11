@@ -68,7 +68,7 @@ struct SettingsView: View {
                 }
                 Section("你的内容，留在你的设备上") {
                     Button(cleared ? "图片缓存已清理" : "清理图片缓存") { ImageStore.shared.clear(); cleared = true }
-                    Text("只清理远程图片，不会删除收藏和 Prompt 文字。").font(.caption).foregroundStyle(.secondary)
+                    Text("清理浏览缓存，保留收藏缩略图、Prompt 文字和编辑草稿。").font(.caption).foregroundStyle(.secondary)
                     Text("收藏和编辑都在本机完成。这一版没有账号、不上传输入、不收集行为数据。删除 App 会清除本地收藏。")
                         .font(.subheadline).foregroundStyle(.secondary)
                     Text("视频仅在你点开时播放，离开播放器或切到后台后暂停。内置内容可离线浏览；外部工具需要网络。")

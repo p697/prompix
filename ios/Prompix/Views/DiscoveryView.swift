@@ -164,18 +164,30 @@ struct SearchView: View {
 struct FavoritesView: View {
     @Environment(Library.self) private var library
     @State private var kind: PromptKind?
+    @State private var query = ""
+    @State private var images = ImageStore.shared
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
                     Text("留住灵感，等一个想试试的时刻。").font(.subheadline).foregroundStyle(.secondary).padding(.horizontal, 20)
                     KindPicker(selection: $kind)
-                    let items = library.favorites.filter { kind == nil || $0.kind == kind }
+                    if !images.offlineFailures.isEmpty {
+                        Button { Task { await images.keepOffline(library.savedImageURLs) } } label: {
+                            Label("部分收藏预览尚未下载，轻点重试", systemImage: "arrow.down.circle")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }.padding(.horizontal, 20)
+                    }
+                    let items = library.favorites.filter { PromptQuery(text: query, kind: kind).matches($0) }
                     if items.isEmpty {
-                        ContentUnavailableView("把喜欢的，留在这里", systemImage: "bookmark", description: Text("轻点卡片上的书签。\n收藏的 Prompt 可离线查看，已浏览的图片会缓存。"))
+                        if !query.isEmpty { ContentUnavailableView.search(text: query) }
+                        else {
+                        ContentUnavailableView("把喜欢的，留在这里", systemImage: "bookmark", description: Text("轻点卡片上的书签。\n文字保存在本机，缩略图会下载以供离线查看。"))
+                        }
                     } else { PromptGrid(items: items).padding(.horizontal, 16) }
                 }.padding(.bottom, 24)
             }.navigationTitle("收藏")
+                .searchable(text: $query, prompt: "在收藏中找灵感")
                 .navigationDestination(for: Prompt.self) { PromptDetail(item: $0) }
         }
     }
