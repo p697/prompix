@@ -24,3 +24,7 @@ First-party assets:
 - `WebExamples/`: six original, functional portfolio/studio/recipe/travel/timer/gallery artifacts. All illustrations are original CSS/SVG; no third-party scripts, tracking or remote assets. Native cards use real WebKit screenshots of these artifacts.
 
 The release catalog must not silently replace editorial studies with unverified model-result claims. Third-party datasets/media stay outside the repository.
+
+## Interface languages
+
+The native interface follows the system language (Simplified Chinese or English); the app-specific language setting is available in iOS Settings. Prompt text, author examples and bundled website content retain their original language. UI translations live in `Prompix/Resources/Localizable.xcstrings`. Keep topic identifiers stable and localize only their displayed labels so filtering works in either language.

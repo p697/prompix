@@ -20,10 +20,10 @@ struct PromptDetail: View {
                 if WebsiteExamples.files[item.id] != nil {
                     Button { webPresented = true } label: {
                         hero.overlay(alignment: .bottomTrailing) {
-                            Label("打开作品", systemImage: "safari").font(.subheadline.weight(.medium))
+                            Label(String(localized: "打开作品"), systemImage: "safari").font(.subheadline.weight(.medium))
                                 .padding(.horizontal, 16).padding(.vertical, 12).background(.regularMaterial, in: Capsule()).padding(16)
                         }
-                    }.buttonStyle(.plain).accessibilityLabel("打开网页作品").accessibilityIdentifier("previewButton")
+                    }.buttonStyle(.plain).accessibilityLabel(String(localized: "打开网页作品")).accessibilityIdentifier("previewButton")
                 } else if item.kind == .video || item.media?.image != nil || item.media?.imageURL != nil {
                     Button {
                         if item.kind == .video { playerPresented = true } else { imagePresented = true }
@@ -33,7 +33,7 @@ struct PromptDetail: View {
                                 .font(.body).padding(14).background(.regularMaterial, in: Circle()).padding(16)
                         }
                     }.buttonStyle(.plain)
-                        .accessibilityLabel(item.kind == .video ? "播放视频" : "放大图片")
+                        .accessibilityLabel(item.kind == .video ? String(localized: "播放视频") : String(localized: "放大图片"))
                         .accessibilityIdentifier("previewButton")
                 } else { hero }
                 VStack(alignment: .leading, spacing: 24) {
@@ -50,42 +50,42 @@ struct PromptDetail: View {
                     Divider()
                     VStack(alignment: .leading, spacing: 10) {
                         Eyebrow(text: "THE IDEA")
-                        Text(item.kind == .text ? "你会得到什么" : "创作思路").font(.headline)
+                        Text(item.kind == .text ? String(localized: "你会得到什么") : String(localized: "创作思路")).font(.headline)
                         Text(item.example).font(.subheadline).lineSpacing(6).textSelection(.enabled)
                     }
                     VStack(alignment: .leading, spacing: 14) {
                         HStack {
                             Eyebrow(text: "THE PROMPT")
                             Spacer()
-                            Button("编辑", systemImage: "square.and.pencil") { editorPresented = true }.font(.subheadline)
+                            Button(String(localized: "编辑"), systemImage: "square.and.pencil") { editorPresented = true }.font(.subheadline)
                                 .accessibilityIdentifier("editPrompt")
                         }
                         Text(item.prompt).font(.system(.subheadline)).lineSpacing(6).textSelection(.enabled)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }.padding(20).background(Palette.soft, in: RoundedRectangle(cornerRadius: 18))
                     if WebsiteExamples.files[item.id] != nil {
-                        Button("打开原创网页示例", systemImage: "safari") { webPresented = true }.accessibilityIdentifier("webExample")
+                        Button(String(localized: "打开原创网页示例"), systemImage: "safari") { webPresented = true }.accessibilityIdentifier("webExample")
                     }
                     if let toolURL = item.toolURL {
                         Link(destination: toolURL) {
                             HStack {
                                 VStack(alignment: .leading, spacing: 5) {
-                                    Text("带着灵感，去试试").font(.subheadline.weight(.medium))
-                                    Text("复制后打开工具，粘贴使用").font(.caption).foregroundStyle(.secondary)
+                                    Text(String(localized: "带着灵感，去试试")).font(.subheadline.weight(.medium))
+                                    Text(String(localized: "复制后打开工具，粘贴使用")).font(.caption).foregroundStyle(.secondary)
                                 }; Spacer(); Image(systemName: "arrow.up.right")
                             }.padding(.vertical, 5)
                         }
                     }
-                    if let demo = item.media?.demoURL { Link("打开网页示例", destination: demo).font(.subheadline) }
+                    if let demo = item.media?.demoURL { Link(String(localized: "打开网页示例"), destination: demo).font(.subheadline) }
                     VStack(alignment: .leading, spacing: 8) {
                         HStack { Text(item.source.author ?? item.source.name).font(.caption.weight(.medium)); Spacer(); Text(item.source.method).font(.caption).foregroundStyle(.secondary) }
                         Text("\(item.source.license) · \(item.previewLabel)").font(.caption2).foregroundStyle(.secondary)
-                        if let repository = item.source.repository { Link("收录于 \(item.source.name)", destination: repository).font(.caption) }
-                        if let source = item.source.url { Link("查看原始来源 ↗", destination: source).font(.caption) }
+                        if let repository = item.source.repository { Link(String(localized: "收录于 \(item.source.name)"), destination: repository).font(.caption) }
+                        if let source = item.source.url { Link(String(localized: "查看原始来源 ↗"), destination: source).font(.caption) }
                     }
                     if !related.isEmpty {
                         Divider()
-                        HStack { Text("顺着灵感，再逛一点").font(.headline); Spacer(); Image(systemName: "arrow.down.right").foregroundStyle(.secondary) }
+                        HStack { Text(String(localized: "顺着灵感，再逛一点")).font(.headline); Spacer(); Image(systemName: "arrow.down.right").foregroundStyle(.secondary) }
                         PromptGrid(items: related)
                     }
                 }.padding(.horizontal, 22)
@@ -95,23 +95,23 @@ struct PromptDetail: View {
         .toolbar(.hidden, for: .tabBar)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                ShareLink(item: "\(item.title)\n\n\(item.prompt)\n\n来自 \(item.source.author ?? item.source.name) · \(item.source.license)\n\(item.source.url?.absoluteString ?? "https://prompix.dev")") { Label("分享", systemImage: "square.and.arrow.up") }
+                ShareLink(item: "\(item.title)\n\n\(item.prompt)\n\n\(String(localized: "来自")) \(item.source.author ?? item.source.name) · \(item.source.license)\n\(item.source.url?.absoluteString ?? "https://prompix.dev")") { Label(String(localized: "分享"), systemImage: "square.and.arrow.up") }
                     .accessibilityIdentifier("sharePrompt")
             }
             ToolbarItem(placement: .topBarTrailing) {
                 Button { library.toggle(item) } label: { Image(systemName: library.isSaved(item) ? "bookmark.fill" : "bookmark") }
-                    .accessibilityLabel(library.isSaved(item) ? "取消收藏" : "收藏 Prompt").accessibilityIdentifier("detailFavorite")
+                    .accessibilityLabel(library.isSaved(item) ? String(localized: "取消收藏") : String(localized: "收藏 Prompt")).accessibilityIdentifier("detailFavorite")
             }
         }
         .safeAreaInset(edge: .bottom) {
             HStack(spacing: 12) {
                 Button { editorPresented = true } label: { Image(systemName: "slider.horizontal.3").frame(width: 50, height: 48) }
-                    .buttonStyle(.plain).background(Palette.soft, in: RoundedRectangle(cornerRadius: 16)).accessibilityLabel("编辑后使用")
+                    .buttonStyle(.plain).background(Palette.soft, in: RoundedRectangle(cornerRadius: 16)).accessibilityLabel(String(localized: "编辑后使用"))
                 Button {
                     UIPasteboard.general.string = item.prompt
                     copied = true
                 } label: {
-                    Label(copied ? "已复制，去创造吧" : "复制 Prompt", systemImage: copied ? "checkmark" : "doc.on.doc")
+                    Label(copied ? String(localized: "已复制，去创造吧") : String(localized: "复制 Prompt"), systemImage: copied ? "checkmark" : "doc.on.doc")
                         .font(.subheadline.weight(.semibold)).frame(maxWidth: .infinity).frame(height: 48)
                         .foregroundStyle(Color(uiColor: .systemBackground)).background(Color.primary, in: RoundedRectangle(cornerRadius: 16))
                 }.buttonStyle(.plain).accessibilityIdentifier("copyPrompt").sensoryFeedback(.success, trigger: copied)
@@ -145,32 +145,32 @@ struct PromptEditor: View {
         NavigationStack {
             VStack(alignment: .leading, spacing: 12) {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("写进你的想法，变成自己的版本。原始 Prompt 会保留。").font(.caption).foregroundStyle(.secondary)
+                    Text(String(localized: "写进你的想法，变成自己的版本。原始 Prompt 会保留。")).font(.caption).foregroundStyle(.secondary)
                     HStack {
-                        Label(saved ? "已保存到此设备" : library.error == nil ? "正在保存…" : "尚未保存，可先复制保留", systemImage: saved ? "checkmark.circle" : "circle.dotted")
+                        Label(saved ? String(localized: "已保存到此设备") : library.error == nil ? String(localized: "正在保存…") : String(localized: "尚未保存，可先复制保留"), systemImage: saved ? "checkmark.circle" : "circle.dotted")
                             .font(.caption2).foregroundStyle(.secondary).accessibilityIdentifier("draftStatus")
                         Spacer()
-                        Text("\(text.count) 字符").font(.caption2.monospacedDigit()).foregroundStyle(.tertiary)
+                        Text(String(localized: "\(text.count) 字符")).font(.caption2.monospacedDigit()).foregroundStyle(.tertiary)
                     }
                 }.padding(.horizontal, 20).padding(.top, 14)
                 TextEditor(text: $text).font(.body).scrollContentBackground(.hidden).padding(.horizontal, 16)
                     .accessibilityIdentifier("promptEditor")
-            }.navigationTitle("让它更像你").navigationBarTitleDisplayMode(.inline)
+            }.navigationTitle(String(localized: "让它更像你")).navigationBarTitleDisplayMode(.inline)
                 .toolbar {
-                    ToolbarItem(placement: .cancellationAction) { Button("完成") { if library.saveDraft(text, for: item) { dismiss() } } }
+                    ToolbarItem(placement: .cancellationAction) { Button(String(localized: "完成")) { if library.saveDraft(text, for: item) { dismiss() } } }
                     ToolbarItem(placement: .primaryAction) {
                         Menu {
-                            Button("恢复原始 Prompt", systemImage: "arrow.counterclockwise", role: .destructive) { restorePresented = true }
+                            Button(String(localized: "恢复原始 Prompt"), systemImage: "arrow.counterclockwise", role: .destructive) { restorePresented = true }
                                 .disabled(text == item.prompt)
-                        } label: { Label("编辑选项", systemImage: "ellipsis.circle") }
+                        } label: { Label(String(localized: "编辑选项"), systemImage: "ellipsis.circle") }
                     }
-                    ToolbarItem(placement: .primaryAction) { ShareLink(item: text) { Label("分享", systemImage: "square.and.arrow.up") }.disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) }
+                    ToolbarItem(placement: .primaryAction) { ShareLink(item: text) { Label(String(localized: "分享"), systemImage: "square.and.arrow.up") }.disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) }
                 }
                 .safeAreaInset(edge: .bottom) {
                     Button {
                         UIPasteboard.general.string = text; copied = true
                         saved = library.saveDraft(text, for: item)
-                    } label: { Label(copied ? "已复制修改后的 Prompt" : "复制修改后的 Prompt", systemImage: copied ? "checkmark" : "doc.on.doc").frame(maxWidth: .infinity).padding(10) }
+                    } label: { Label(copied ? String(localized: "已复制修改后的 Prompt") : String(localized: "复制修改后的 Prompt"), systemImage: copied ? "checkmark" : "doc.on.doc").frame(maxWidth: .infinity).padding(10) }
                         .buttonStyle(.borderedProminent).disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                         .padding().background(.bar).sensoryFeedback(.success, trigger: copied)
                 }
@@ -185,10 +185,10 @@ struct PromptEditor: View {
                 .onChange(of: scenePhase) { _, phase in
                     if phase != .active, initialized { saved = library.saveDraft(text, for: item) }
                 }
-                .confirmationDialog("恢复原始 Prompt？", isPresented: $restorePresented, titleVisibility: .visible) {
-                    Button("恢复原文", role: .destructive) { text = item.prompt; saved = library.saveDraft(text, for: item) }
-                    Button("取消", role: .cancel) {}
-                } message: { Text("这会替换你在此设备上保存的修改。") }
+                .confirmationDialog(String(localized: "恢复原始 Prompt？"), isPresented: $restorePresented, titleVisibility: .visible) {
+                    Button(String(localized: "恢复原文"), role: .destructive) { text = item.prompt; saved = library.saveDraft(text, for: item) }
+                    Button(String(localized: "取消"), role: .cancel) {}
+                } message: { Text(String(localized: "这会替换你在此设备上保存的修改。")) }
         }
     }
 }
@@ -261,19 +261,19 @@ struct MovieView: View {
             VStack(spacing: 16) {
                 if playback.failed {
                     ContentUnavailableView {
-                        Label("视频暂不可用", systemImage: "video.slash")
+                        Label(String(localized: "视频暂不可用"), systemImage: "video.slash")
                     } description: {
-                        Text("检查网络后再试。完整 Prompt 仍可复制使用。")
+                        Text(String(localized: "检查网络后再试。完整 Prompt 仍可复制使用。"))
                     } actions: {
-                        Button("重新加载") { playback.start(url: url) }.buttonStyle(.bordered).accessibilityIdentifier("retryVideo")
+                        Button(String(localized: "重新加载")) { playback.start(url: url) }.buttonStyle(.bordered).accessibilityIdentifier("retryVideo")
                     }
                 } else if let player = playback.player {
                     VideoPlayer(player: player).aspectRatio(playback.aspectRatio, contentMode: .fit)
-                        .overlay { if playback.loading { ProgressView("正在加载视频…").padding(16).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14)).allowsHitTesting(false) } }
+                        .overlay { if playback.loading { ProgressView(String(localized: "正在加载视频…")).padding(16).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14)).allowsHitTesting(false) } }
                 }
                 Text(caption).font(.caption).foregroundStyle(.secondary).padding(.horizontal, 20)
-            }.frame(maxWidth: .infinity, maxHeight: .infinity).background(.black).navigationTitle("动态灵感").navigationBarTitleDisplayMode(.inline)
-                .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完成") { dismiss() } } }
+            }.frame(maxWidth: .infinity, maxHeight: .infinity).background(.black).navigationTitle(String(localized: "动态灵感")).navigationBarTitleDisplayMode(.inline)
+                .toolbar { ToolbarItem(placement: .confirmationAction) { Button(String(localized: "完成")) { dismiss() } } }
                 .onAppear { playback.start(url: url) }
                 .onDisappear { playback.stop() }
                 .onChange(of: scenePhase) { _, phase in if phase != .active { playback.pause() } }
@@ -296,16 +296,16 @@ struct ImageViewer: View {
                 if url == nil || remoteImage != nil { ZoomImage(image: remoteImage ?? UIImage(named: name)).ignoresSafeArea(edges: .bottom) }
                 else if failed {
                     ContentUnavailableView {
-                        Label("图片暂不可用", systemImage: "photo")
-                    } description: { Text("检查网络后可以重新加载。") }
-                    actions: { Button("重新加载") { attempt += 1 }.buttonStyle(.bordered).accessibilityIdentifier("retryImage") }
+                        Label(String(localized: "图片暂不可用"), systemImage: "photo")
+                    } description: { Text(String(localized: "检查网络后可以重新加载。")) }
+                    actions: { Button(String(localized: "重新加载")) { attempt += 1 }.buttonStyle(.bordered).accessibilityIdentifier("retryImage") }
                     .environment(\.colorScheme, .dark)
                 }
                 else { ProgressView().tint(.white) }
             }.overlay(alignment: .bottom) {
                 if offlinePreview {
                     Button { attempt += 1 } label: {
-                        Label("当前为离线预览 · 轻点加载清晰图片", systemImage: "arrow.clockwise")
+                        Label(String(localized: "当前为离线预览 · 轻点加载清晰图片"), systemImage: "arrow.clockwise")
                             .font(.caption).padding(12).foregroundStyle(.white).background(.black.opacity(0.7), in: Capsule())
                     }.padding().accessibilityIdentifier("loadFullImage")
                 }
@@ -322,7 +322,7 @@ struct ImageViewer: View {
                     failed = remoteImage == nil
                 }
             }
-                .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完成") { dismiss() } } }
+                .toolbar { ToolbarItem(placement: .confirmationAction) { Button(String(localized: "完成")) { dismiss() } } }
                 .toolbarBackground(.visible, for: .navigationBar).toolbarBackground(.black, for: .navigationBar).toolbarColorScheme(.dark, for: .navigationBar)
         }
     }
@@ -348,7 +348,7 @@ struct ZoomImage: UIViewRepresentable {
         context.coordinator.image = image
         let tap = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.doubleTap(_:)))
         tap.numberOfTapsRequired = 2; scroll.addGestureRecognizer(tap)
-        scroll.accessibilityLabel = "图片预览，双指缩放或双击放大"
+        scroll.accessibilityLabel = String(localized: "图片预览，双指缩放或双击放大")
         return scroll
     }
     func updateUIView(_ uiView: UIScrollView, context: Context) {
