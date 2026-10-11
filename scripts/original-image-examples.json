@@ -1,0 +1,38 @@
+[
+  {
+    "id": "paper-forms",
+    "asset": "studio-paper-forms",
+    "input": "the feeling of a calm beginning after a busy week",
+    "prompt": "Create a minimal abstract poster expressing the feeling of a calm beginning after a busy week. Use three large organic paper-cut shapes: one muted forest green, one terracotta, one pale golden yellow, on warm uncoated ivory paper. Asymmetric balanced composition, subtle paper texture and realistic cut edges, no gradients, no typography, no frame. Vertical 3:4. Keep a clear visual hierarchy and generous negative space.",
+    "generator": "Built-in image_gen tool",
+    "generatedAt": "2026-10-12",
+    "note": "Original Prompix template example; no source model version is inferred."
+  },
+  {
+    "id": "object-poster",
+    "asset": "studio-object-poster",
+    "input": "one folded ivory paper airplane",
+    "prompt": "Create a refined exhibition poster image featuring one folded ivory paper airplane as a sculptural hero. Warm gallery lighting, off-white seamless background, a low limestone pedestal, subtle natural shadow. The object should be visually accurate with believable material texture. Editorial product photography, 85mm lens feel, soft depth of field. Leave the upper third empty for a title to be added later. No generated lettering, logos, extra objects or frame. Vertical 4:5.",
+    "generator": "Built-in image_gen tool",
+    "generatedAt": "2026-10-12",
+    "note": "Original Prompix template example; no source model version is inferred."
+  },
+  {
+    "id": "quiet-book",
+    "asset": "studio-quiet-book",
+    "input": "leaving home and slowly learning to belong somewhere new",
+    "prompt": "Design a text-free book cover illustration for a literary novel about leaving home and slowly learning to belong somewhere new. Choose one symbolic everyday object that suggests the theme without literal storytelling. Use a restrained palette of ivory, desaturated olive and burnt orange, elegant paper-cut composition, subtle tactile grain, ample negative space for later typesetting. Vertical 2:3, flat artwork, no book mockup, no readable text. Give the composition a quiet sense of mystery.",
+    "generator": "Built-in image_gen tool",
+    "generatedAt": "2026-10-12",
+    "note": "Original Prompix template example; no source model version is inferred."
+  },
+  {
+    "id": "color-memory",
+    "asset": "studio-color-memory",
+    "input": "on a rainy summer afternoon, I sat by an open window with a cup of tea, hearing the rain soften and seeing one brief patch of sunlight",
+    "prompt": "Translate this memory into an abstract visual composition: on a rainy summer afternoon, I sat by an open window with a cup of tea, hearing the rain soften and seeing one brief patch of sunlight. Select five colors that evoke its light, temperature and emotional rhythm. Create a sophisticated arrangement of overlapping matte organic forms with tactile paper texture. No literal figures, text or charts. Soft natural illumination, museum print quality, vertical 4:5. Keep the palette cohesive with one surprising accent.",
+    "generator": "Built-in image_gen tool",
+    "generatedAt": "2026-10-12",
+    "note": "Original Prompix template example; no source model version is inferred."
+  }
+]

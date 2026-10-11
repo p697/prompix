@@ -252,6 +252,7 @@ import CryptoKit
     }
     func testRemoteEditionIsAtomicCachedAndRemovalsReachFavorites() throws {
         let library = Library(directory: directory)
+        let bundledVersion = library.version
         let saved = try XCTUnwrap(library.prompts.first)
         library.toggle(saved)
         library.saveDraft("Remove this draft with its source", for: saved)
@@ -263,7 +264,7 @@ import CryptoKit
         let digest = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
         let manifest = CatalogManifest(schemaVersion: 1, version: "remote-test", sha256: digest, catalog: URL(string: "https://api.prompix.dev/releases/remote-test/catalog.json")!)
         XCTAssertThrowsError(try library.install(Data("broken".utf8), manifest: manifest))
-        XCTAssertEqual(library.version, "studio-002")
+        XCTAssertEqual(library.version, bundledVersion)
         XCTAssertTrue(library.isSaved(saved))
         try library.install(data, manifest: manifest)
         XCTAssertEqual(library.version, "remote-test")
