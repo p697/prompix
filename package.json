@@ -11,7 +11,8 @@
     "daily": "tsx ingest/daily.ts",
     "remove": "tsx ingest/remove.ts",
     "check:deployment": "tsx scripts/check-deployment.ts",
-    "review": "tsx ingest/review.ts"
+    "review": "tsx ingest/review.ts",
+    "rollback": "tsx ingest/rollback.ts"
   },
   "dependencies": {
     "csv-parse": "^7.0.3",
