@@ -25,6 +25,14 @@ First-party assets:
 
 The release catalog must not silently replace editorial studies with unverified model-result claims. Third-party datasets/media stay outside the repository.
 
+The editor prevents interactive dismissal while changes are unsaved. A failed write keeps the current text visible and offers retry or an explicit choice to copy and leave, discard and leave, or keep editing. Leaving without saving preserves the last successful draft and stops pending lifecycle saves. Catalog transport tests use isolated injected sessions to verify offline, timeout and checksum-failure recovery without modifying global networking or the deployed API.
+
+`testDraftWriteFailureKeepsBufferUntilExplicitExit` is an opt-in simulator test. Pass `PROMPIX_DRAFT_FIXTURE_CONTAINER` to the test runner with the simulator's Prompix data-container path; it verifies the running simulator and app metadata before temporarily introducing a write collision. Back up the draft file outside the simulator first and restore it in the host runner's cleanup even if XCTest aborts. The test also registers teardown restoration. Compare its expected clipboard attachment with `simctl pbpaste` for that simulator; reading the clipboard from the test-runner app can be denied by iOS and is not proof of a copy failure. Never run this fixture against a physical device.
+
+`testVoiceOverDetailEditorAndSavedRoundTrip` records actual speech on Xcode 27 / iOS 27 and uses targeted synthetic double-taps to activate spoken controls; it does not replace physical VoiceOver gesture acceptance. Long-draft persistence runs separately from visible-keyboard layout: opt into `testVisibleSoftwareKeyboardLongDraftLayout` with `PROMPIX_VISIBLE_SOFTWARE_KEYBOARD=1` only when the simulator draws an interactive software keyboard. `testReducedMotionImageZoomAndReturn` requires the simulator's Reduce Motion setting to be enabled. Restore simulator settings after these checks.
+
+For the largest-text recovery layout, set the simulator to its largest accessibility content size and add `PROMPIX_DRAFT_LAYOUT_ONLY=1` to the write-collision fixture. It checks the editor's visible area above the fixed Copy footer and scrolls the bounded status area to activate recovery controls. Keep the same external backup and cleanup requirements, and inspect the screenshots rather than relying only on element existence.
+
 A first-party procedural MP4 remains only in `PrompixTests/Resources/playback-fixture.mp4` for AVPlayer recovery tests. It is not bundled in the app or listed as a prompt example. The live UI test still verifies remote community video playback.
 
 All six first-party image prompts have real generated examples in `studio-004`.

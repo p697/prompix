@@ -318,6 +318,133 @@ import CryptoKit
         XCTAssertThrowsError(try manifest.validated())
     }
 
+    func testOfflineRefreshPreservesSavedDataAndForcedRetryInstallsNewEdition() async throws {
+        try await assertRefreshPreservesSavedDataAndRecovers(failure: "offline")
+    }
+
+    func testTimedOutCatalogRefreshPreservesSavedDataAndForcedRetryInstallsNewEdition() async throws {
+        try await assertRefreshPreservesSavedDataAndRecovers(failure: "timeout")
+    }
+
+    func testDamagedCatalogRefreshPreservesSavedDataAndForcedRetryInstallsNewEdition() async throws {
+        try await assertRefreshPreservesSavedDataAndRecovers(failure: "damaged-catalog")
+    }
+
+    private func assertRefreshPreservesSavedDataAndRecovers(failure: String) async throws {
+        let library = Library(directory: directory)
+        let favorite = try XCTUnwrap(library.prompts.first)
+        let edited = try XCTUnwrap(library.prompts.last)
+        let draft = "Keep my personal draft: 中文 ✨\nSecond line."
+        var initial = Catalog(schemaVersion: 1, version: "edition-before-refresh", prompts: library.prompts)
+        initial.publishedAt = "2026-10-10T10:00:00Z"
+        let initialBytes = try JSONEncoder().encode(initial)
+        let initialDigest = SHA256.hash(data: initialBytes).map { String(format: "%02x", $0) }.joined()
+        try library.install(initialBytes, manifest: CatalogManifest(schemaVersion: 1, version: initial.version,
+            sha256: initialDigest, catalog: URL(string: "https://api.prompix.dev/releases/\(initial.version)/catalog.json")!))
+        XCTAssertTrue(library.toggle(favorite))
+        XCTAssertTrue(library.saveDraft(draft, for: edited))
+        let originalDate = library.updatedAt
+        let files = ["catalog.json", "favorites.json", "drafts.json"]
+        let originalFiles = try files.map { try Data(contentsOf: directory.appending(path: $0)) }
+
+        let failingSession = refreshSession(response: failure)
+        defer { failingSession.invalidateAndCancel() }
+        await library.refresh(force: true, session: failingSession)
+
+        XCTAssertFalse(library.isRefreshing)
+        XCTAssertNotNil(library.syncMessage)
+        XCTAssertNil(library.error)
+        XCTAssertEqual(library.version, initial.version)
+        XCTAssertEqual(library.prompts, initial.prompts)
+        XCTAssertEqual(library.updatedAt, originalDate)
+        XCTAssertEqual(library.favorites, [favorite])
+        XCTAssertEqual(library.draft(for: edited), draft)
+        XCTAssertEqual(try files.map { try Data(contentsOf: directory.appending(path: $0)) }, originalFiles)
+        let afterFailure = Library(directory: directory)
+        XCTAssertEqual(afterFailure.version, initial.version)
+        XCTAssertEqual(afterFailure.prompts, initial.prompts)
+        XCTAssertEqual(afterFailure.favorites, [favorite])
+        XCTAssertEqual(afterFailure.draft(for: edited), draft)
+
+        // Retry immediately to exercise the explicit action's bypass of the refresh throttle.
+        let recoverySession = refreshSession(response: "success")
+        defer { recoverySession.invalidateAndCancel() }
+        await library.refresh(force: true, session: recoverySession)
+
+        let expected = try JSONDecoder().decode(Catalog.self, from: CatalogRefreshProtocol.catalogData).validated()
+        XCTAssertFalse(library.isRefreshing)
+        XCTAssertNil(library.syncMessage)
+        XCTAssertNil(library.error)
+        XCTAssertEqual(library.version, expected.version)
+        XCTAssertEqual(library.prompts, expected.prompts)
+        XCTAssertEqual(library.updatedAt, ISO8601DateFormatter().date(from: expected.publishedAt!))
+        XCTAssertEqual(library.favorites, [favorite], "A new edition must preserve unrelated saved snapshots")
+        XCTAssertEqual(library.draft(for: edited), draft)
+        XCTAssertEqual(try Data(contentsOf: directory.appending(path: "catalog.json")), CatalogRefreshProtocol.catalogData)
+        let reopened = Library(directory: directory)
+        XCTAssertEqual(reopened.version, expected.version)
+        XCTAssertEqual(reopened.prompts, expected.prompts)
+        XCTAssertEqual(reopened.favorites, [favorite])
+        XCTAssertEqual(reopened.draft(for: edited), draft)
+    }
+
+    private func refreshSession(response: String) -> URLSession {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [CatalogRefreshProtocol.self]
+        // Per-session configuration keeps concurrent tests independent, without a shared handler.
+        configuration.httpAdditionalHeaders = ["X-Prompix-Test-Response": response]
+        return URLSession(configuration: configuration)
+    }
+}
+
+private final class CatalogRefreshProtocol: URLProtocol, @unchecked Sendable {
+    static let catalogData = Data("""
+        {"schemaVersion":1,"version":"edition-after-refresh","publishedAt":"2026-10-11T10:00:00Z","prompts":[
+          {"id":"refresh-fixture","kind":"text","title":"Fresh inspiration","summary":"An original transport test fixture.",
+           "prompt":"Describe a calm morning in two sentences.","example":"Sunlight crosses the room. The kettle begins to sing.",
+           "tags":["Test"],"model":"Text model","artwork":"text","previewLabel":"Original example",
+           "source":{"name":"Prompix tests","license":"Original test fixture","method":"original"}}
+        ]}
+        """.utf8)
+
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func startLoading() {
+        guard let url = request.url, url.host == "api.prompix.dev" else {
+            client?.urlProtocol(self, didFailWithError: URLError(.unsupportedURL))
+            return
+        }
+        let mode = request.value(forHTTPHeaderField: "X-Prompix-Test-Response")
+        if mode == "offline" {
+            client?.urlProtocol(self, didFailWithError: URLError(.notConnectedToInternet))
+            return
+        }
+        let bytes: Data
+        if url.path == "/v1/latest.json" {
+            let digest = SHA256.hash(data: Self.catalogData).map { String(format: "%02x", $0) }.joined()
+            bytes = Data("""
+                {"schemaVersion":1,"version":"edition-after-refresh","sha256":"\(digest)",
+                 "catalog":"https://api.prompix.dev/releases/edition-after-refresh/catalog.json"}
+                """.utf8)
+        } else if url.path == "/releases/edition-after-refresh/catalog.json" {
+            if mode == "timeout" {
+                // A deterministic transport error, not a measurement of the real 25-second deadline.
+                client?.urlProtocol(self, didFailWithError: URLError(.timedOut))
+                return
+            }
+            // Still valid JSON, but different bytes must fail the manifest's integrity check.
+            bytes = mode == "damaged-catalog" ? Self.catalogData + Data("\n".utf8) : Self.catalogData
+        } else {
+            client?.urlProtocol(self, didFailWithError: URLError(.unsupportedURL))
+            return
+        }
+        let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil,
+            headerFields: ["Content-Type": "application/json", "Content-Length": String(bytes.count)])!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: bytes)
+        client?.urlProtocolDidFinishLoading(self)
+    }
+    override func stopLoading() {}
 }
 
 private final class ThumbnailProtocol: URLProtocol, @unchecked Sendable {

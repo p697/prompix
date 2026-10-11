@@ -146,28 +146,29 @@ struct PromptEditor: View {
     @State private var copied = false
     @State private var initialized = false
     @State private var saved = true
+    @State private var saveError: String?
     @State private var restorePresented = false
+    @State private var leavePresented = false
+    @State private var leavingWithoutSaving = false
+    @State private var headerHeight: CGFloat?
     init(item: Prompt) { self.item = item; _text = State(initialValue: item.prompt) }
     var body: some View {
         NavigationStack {
-            VStack(alignment: .leading, spacing: 12) {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(typeSize.isAccessibilitySize ? String(localized: "原文会保留。") : String(localized: "写进你的想法，变成自己的版本。原始 Prompt 会保留。"))
-                        .font(.footnote).foregroundStyle(Palette.muted).fixedSize(horizontal: false, vertical: true)
-                    HStack {
-                        Label(saved ? String(localized: "已保存到此设备") : library.error == nil ? String(localized: "正在保存…") : String(localized: "尚未保存，可先复制保留"), systemImage: saved ? "checkmark.circle" : "circle.dotted")
-                            .font(.footnote).foregroundStyle(Palette.muted).fixedSize(horizontal: false, vertical: true).accessibilityIdentifier("draftStatus")
-                        if !typeSize.isAccessibilitySize {
-                            Spacer()
-                            Text(String(localized: "\(text.count) 字符")).font(.footnote.monospacedDigit()).foregroundStyle(Palette.muted)
+            GeometryReader { geometry in
+                VStack(alignment: .leading, spacing: 12) {
+                    ScrollView {
+                        editorHeader.onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
+                            if height > 0 { headerHeight = height }
                         }
                     }
-                }.padding(.horizontal, 20).padding(.top, 14)
-                TextEditor(text: $text).font(.body).scrollContentBackground(.hidden).padding(.horizontal, 16)
-                    .accessibilityIdentifier("promptEditor")
+                    .frame(height: min(headerHeight ?? geometry.size.height * 0.45, max(0, geometry.size.height * 0.45)))
+                    .accessibilityIdentifier("draftStatusScroll")
+                    TextEditor(text: $text).font(.body).scrollContentBackground(.hidden).padding(.horizontal, 16)
+                        .frame(maxHeight: .infinity).accessibilityIdentifier("promptEditor")
+                }
             }.navigationTitle(String(localized: "让它更像你")).navigationBarTitleDisplayMode(.inline)
                 .toolbar {
-                    ToolbarItem(placement: .cancellationAction) { Button(String(localized: "完成")) { if library.saveDraft(text, for: item) { dismiss() } } }
+                    ToolbarItem(placement: .cancellationAction) { Button(String(localized: "完成")) { if save() { dismiss() } } }
                     ToolbarItem(placement: .primaryAction) {
                         Menu {
                             Button(String(localized: "恢复原始 Prompt"), systemImage: "arrow.counterclockwise", role: .destructive) { restorePresented = true }
@@ -179,7 +180,7 @@ struct PromptEditor: View {
                 .safeAreaInset(edge: .bottom) {
                     Button {
                         UIPasteboard.general.string = text; copied = true
-                        saved = library.saveDraft(text, for: item)
+                        save()
                     } label: {
                         PrimaryActionLabel(title: copied ? String(localized: "已复制修改后的 Prompt") : String(localized: "复制修改后的 Prompt"),
                             compactTitle: copied ? String(localized: "已复制") : String(localized: "复制"), symbol: copied ? "checkmark" : "doc.on.doc")
@@ -187,22 +188,79 @@ struct PromptEditor: View {
                         .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                         .padding().background(.bar).sensoryFeedback(.success, trigger: copied)
                 }
-                .onAppear { text = library.draft(for: item); initialized = true }
-                .onChange(of: text) { _, _ in copied = false; saved = false }
+                .onAppear {
+                    guard !initialized else { return }
+                    text = library.draft(for: item); initialized = true
+                }
+                .onChange(of: text) { _, _ in copied = false; saved = text == library.draft(for: item); saveError = nil }
                 .task(id: text) {
                     guard initialized else { return }
                     do { try await Task.sleep(for: .milliseconds(400)) } catch { return }
-                    saved = library.saveDraft(text, for: item)
+                    save()
                 }
-                .onDisappear { if initialized { library.saveDraft(text, for: item) } }
+                .onDisappear { if initialized { save() } }
                 .onChange(of: scenePhase) { _, phase in
-                    if phase != .active, initialized { saved = library.saveDraft(text, for: item) }
+                    if phase != .active, initialized { save() }
                 }
                 .confirmationDialog(String(localized: "恢复原始 Prompt？"), isPresented: $restorePresented, titleVisibility: .visible) {
-                    Button(String(localized: "恢复原文"), role: .destructive) { text = item.prompt; saved = library.saveDraft(text, for: item) }
+                    Button(String(localized: "恢复原文"), role: .destructive) { text = item.prompt; save() }
                     Button(String(localized: "取消"), role: .cancel) {}
                 } message: { Text(String(localized: "这会替换你在此设备上保存的修改。")) }
+                .confirmationDialog(String(localized: "本次修改尚未保存"), isPresented: $leavePresented, titleVisibility: .visible) {
+                    Button(String(localized: "复制并退出")) {
+                        UIPasteboard.general.string = text
+                        leaveWithoutSaving()
+                    }.accessibilityIdentifier("copyDraftAndLeave")
+                    Button(String(localized: "放弃本次修改并退出"), role: .destructive) { leaveWithoutSaving() }
+                        .accessibilityIdentifier("discardDraftAndLeave")
+                    Button(String(localized: "继续编辑"), role: .cancel) {}
+                } message: {
+                    Text(String(localized: "退出后将保留上一次成功保存的草稿。你可以先复制本次修改，再离开编辑器。"))
+                }
         }
+        .interactiveDismissDisabled(!saved || text != library.draft(for: item))
+    }
+    private var editorHeader: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(typeSize.isAccessibilitySize ? String(localized: "原文会保留。") : String(localized: "写进你的想法，变成自己的版本。原始 Prompt 会保留。"))
+                .font(.footnote).foregroundStyle(Palette.muted).fixedSize(horizontal: false, vertical: true)
+            HStack {
+                Label(saved ? String(localized: "已保存到此设备") : saveError != nil ? String(localized: "尚未保存，可先复制保留") : String(localized: "正在保存…"), systemImage: saved ? "checkmark.circle" : "circle.dotted")
+                    .font(.footnote).foregroundStyle(Palette.muted).fixedSize(horizontal: false, vertical: true).accessibilityIdentifier("draftStatus")
+                if !typeSize.isAccessibilitySize {
+                    Spacer()
+                    Text(String(localized: "\(text.count) 字符")).font(.footnote.monospacedDigit()).foregroundStyle(Palette.muted)
+                }
+            }
+            if let saveError {
+                Text(saveError).font(.footnote).foregroundStyle(Palette.muted)
+                    .fixedSize(horizontal: false, vertical: true).accessibilityIdentifier("draftSaveError")
+                ViewThatFits(in: .horizontal) {
+                    HStack { saveRecoveryActions }
+                    VStack(alignment: .leading) { saveRecoveryActions }
+                }
+            }
+        }.padding(.horizontal, 20).padding(.top, 14)
+            .frame(maxWidth: .infinity, alignment: .leading).fixedSize(horizontal: false, vertical: true)
+    }
+    private var saveRecoveryActions: some View {
+        Group {
+            Button(String(localized: "重试保存")) { save() }.accessibilityIdentifier("retryDraftSave")
+            Button(String(localized: "退出编辑")) { leavePresented = true }.accessibilityIdentifier("leaveUnsavedDraft")
+        }.buttonStyle(.bordered).controlSize(.large)
+    }
+    @discardableResult private func save() -> Bool {
+        guard !leavingWithoutSaving else { return false }
+        saved = library.saveDraft(text, for: item)
+        saveError = saved ? nil : library.error ?? String(localized: "尚未保存，可先复制保留")
+        // Present draft failures here: a root alert can dismiss this editor sheet.
+        if !saved { library.dismissError() }
+        return saved
+    }
+    private func leaveWithoutSaving() {
+        // Explicitly abandoning edits must also stop pending lifecycle saves.
+        leavingWithoutSaving = true
+        dismiss()
     }
 }
 
