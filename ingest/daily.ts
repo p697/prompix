@@ -61,6 +61,8 @@ async function upload(key: string, path: string, type: string) {
   await exec(
     process.env.PROMPIX_WRANGLER ?? "wrangler",
     [
+      "--config",
+      join(repo, "services/content/wrangler.jsonc"),
       "r2",
       "object",
       "put",

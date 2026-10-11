@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Install a versioned runtime and a daily per-user launchd job. No credentials in plist."""
-import os, pathlib, plistlib, shutil, subprocess, time
+import os, pathlib, plistlib, shlex, shutil, subprocess, time
 repo = pathlib.Path(__file__).resolve().parent.parent
 home = pathlib.Path.home()
 base = home / '.local/share/prompix'
@@ -22,15 +22,24 @@ link.symlink_to(runtime, target_is_directory=True)
 os.replace(link, base / 'runtime')
 node = shutil.which('node')
 assert node
+# launchd does not inherit the interactive shell PATH. Wrangler's env-node
+# shebang must resolve the same runtime as the collector, including keg-only Node.
+command_paths = [str(pathlib.Path(node).parent)]
+for command in ['wrangler', 'git']:
+    executable = shutil.which(command)
+    if executable:
+        command_paths.append(str(pathlib.Path(executable).parent))
+command_paths.extend(['/opt/homebrew/bin', '/usr/local/bin', '/usr/bin', '/bin'])
+runner_path = ':'.join(dict.fromkeys(command_paths))
 runner=base/'run-daily.sh'
 runner.write_text('''#!/bin/sh
 set -eu
-export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
+export PATH='''+shlex.quote(runner_path)+'''
 export WRANGLER_SEND_METRICS=false
 cd "$HOME/.local/share/prompix/runtime"
 log="$HOME/.local/share/prompix/daily.log"
 if [ -f "$log" ] && [ "$(wc -c < "$log")" -gt 1000000 ]; then mv "$log" "$log.previous"; fi
-exec '''+node+''' --env-file-if-exists="$HOME/.config/prompix/x.env" --import tsx ingest/daily.ts --publish >> "$log" 2>&1
+exec '''+shlex.quote(node)+''' --env-file-if-exists="$HOME/.config/prompix/x.env" --import tsx ingest/daily.ts --publish >> "$log" 2>&1
 ''')
 runner.chmod(0o700)
 plist=home/'Library/LaunchAgents/dev.prompix.collect.plist'

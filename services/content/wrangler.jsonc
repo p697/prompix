@@ -1,5 +1,6 @@
 {
   "name": "prompix-content",
+  "account_id": "2af7e222bfcfd78b5df8f627971dfbca",
   "main": "index.ts",
   "compatibility_date": "2026-10-11",
   "compatibility_flags": ["nodejs_compat"],
