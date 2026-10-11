@@ -1,5 +1,7 @@
 # 调研结论摘要（截至 2026-10）
 
+> 状态（2026-10-11）：以下旧调研包含时效性数字和未经本轮复核的判断，不能当作当前产品约束；首版范围以 [product.md](product.md) 与 D-20 至 D-24 为准。文本、图片、视频、网页均是首版核心内容。
+
 本文是前期调研的公开摘要，只保留支撑决策的结论。数字都是调研时的快照，之后可能变化。法律部分不构成法律意见。
 
 ## 1. 竞品与供给
@@ -68,3 +70,17 @@ ChatGPT 和 Grok 可以通过官方认领的通用链接打开 App 并预填；G
 
 - **OpenClaw、Hermes Agent 不适合**：它们面向个人助理场景，默认权限宽，官方不把提示词注入算作漏洞，迭代极快，定时任务也有未修复的缺陷，不适合无人值守、读取不可信内容的生产流水线。
 - **代码优先的方案**：确定性流水线，加上只返回 JSON 的模型判断。结构化输出是否可靠取决于模型 API：DeepSeek 在思考模式下不支持强制调用工具；通义千问的视觉模型只支持 `json_object`。因此代码里必须再校验一遍。
+
+
+## 9. 本轮补充：多模态发现参考（2026-10-11）
+
+- [YouMind](https://youmind.com/zh-CN/prompts)：按媒介、模型与用途组织效果案例；网页、代码动效与模型直接生成视频需要区分。
+- [PromptHero](https://prompthero.com/)：图片与视频浏览、多模型筛选、精选／最新组织。
+- [prompts.chat](https://github.com/f/prompts.chat)：通用文本内容与自部署方案；代码和 Prompt 数据分别有许可说明。
+- [AIPRM](https://www.aiprm.com/prompts/)：写作、营销、生产力与开发用途；适合参考任务分类。
+- [FlowGPT Fortune Teller](https://flowgpt.com/p/fortune-teller) 与 [Roast Bot 9000](https://flowgpt.com/p/roast-bot-9000)：娱乐文本有使用迹象，页面分别展示约 7.4K 和 73.2K 对话；平台累计数字不是当前热度、独立用户或 Prompix 需求验证。
+- [AI Academy 塔罗专题](https://academy.techpresso.co/prompts/chatgpt-prompts-tarot)：用途说明、输入项与复制的文本组织方式。
+- [PromptBase](https://promptbase.com/)：文本、图片、视频、应用／游戏的综合内容货架；市场内容不自动可抓取或复用。
+- [v0 模板](https://v0.app/docs/templates) 与 [Lovable 模板](https://lovable.dev/templates/)：网页作品缩略图、用途分类与复用入口。模板不是原始 Prompt，有演示不代表可以取得原始指令。
+
+产品启发是“用途／效果先行，内容类型与模型独立”，不是只做视觉创作。研究参考和采集来源分开；允许自建采集与原创整理，不依赖一家的内容与接口。

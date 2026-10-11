@@ -1,36 +1,33 @@
 # Prompix 文档
 
-Prompix 是一个开源、免费的移动 App：把网上公开授权的 AI 图片、视频提示词和 Agent Skill 做成可以像逛淘宝一样浏览的视觉化货架，看中就一键带到 ChatGPT、Claude、Gemini 或 Grok 里使用。
+Prompix 是开源、免费的多模态 Prompt 集合 App。用户像逛手机淘宝和小红书一样，发现有意思的文本、图片、视频、网页 Prompt，收藏并带到合适的工具中使用。
 
-当前阶段：方案已确定，准备进入 M0（运营 Agent 与管理后台）和 M1（iOS 客户端）开发。
+当前阶段：首版范围已确认，**优先确认设计方向，确认后再开始客户端开发**。iOS 原生先行，自建轻量采集；最终交付可装真机的验收版。复杂运营 Agent 和 Skill 后置。
 
-## 先读这三份
-
-| 文档 | 内容 |
-|---|---|
-| [product.md](product.md) | 产品定义：定位、目标用户、核心体验、v1 范围、市场与上线顺序、品牌 |
-| [decisions.md](decisions.md) | 决策记录：每个关键决定是什么、为什么这样定 |
-| [roadmap.md](roadmap.md) | 里程碑、任务拆分、验收标准、需要人来做的待办、风险 |
-
-## 规格
+## 当前方案
 
 | 文档 | 内容 |
 |---|---|
-| [tech-plan.md](tech-plan.md) | 技术方案总览：架构、各部分选型、成本 |
-| [ops-agent.md](ops-agent.md) | 运营 Agent 详细设计：流程、数据模型、模型调用、控制与运维、发布、安全 |
-| [content-policy.md](content-policy.md) | 内容来源白名单、许可判定、署名、不收录的内容、下架流程 |
-| [handoff.md](handoff.md) | 一键使用规格：四个 AI App 的能力矩阵、实现策略、远程配置、真机测试清单 |
-| [design.md](design.md) | 设计规范：设计令牌、组件、10 个界面说明、交互与可访问性 |
+| [product.md](product.md) | 产品定位、四类内容、发现体验、首版边界 |
+| [tech-plan.md](tech-plan.md) | 原生客户端、内容协议、轻量采集、静态发布 |
+| [roadmap.md](roadmap.md) | 设计关口、模拟器开发、真机交付、上架与分工 |
+| [decisions.md](decisions.md) | 历史决定与本轮 D-20 至 D-24；旧决定保留并标明替代关系 |
+| [design.md](design.md) | 设计原则、待确认方向、核心页面和四类卡片要求 |
+| [handoff.md](handoff.md) | 复制、编辑、分享和目标工具打开的能力边界 |
+| [content-policy.md](content-policy.md) | 来源、署名、许可和轻量下架流程 |
 
-界面稿在 [`../design/v2/`](../design/v2/)，用浏览器打开其中的 `index.html` 可以一次看全部 10 屏。
+## 背景与旧方案
 
-## 背景
-
-| 文档 | 内容 |
+| 文档 | 状态 |
 |---|---|
-| [research-summary.md](research-summary.md) | 前期调研结论摘要：竞品、Skill 生态、移动端用法、法律与平台规则、安全、市场、Agent 框架 |
+| [research-summary.md](research-summary.md) | 调研线索及新补充的多模态参考；历史结论不是已验证的产品事实 |
+| [ops-agent.md](ops-agent.md) | 延后实施的旧运营 Agent 方案，不是首版依赖 |
+| [design/v2](../design/v2/index.html) | 旧版 10 屏 HTML 静态稿，仅供参考；非当前范围或视觉定稿 |
+
+产品内的网页 Prompt 是首版内容；完整的 Prompix 网页产品是后续项目，两者不同。HTML 设计稿也不代表使用 HTML 实现 App。
 
 ## 维护规则
 
-- 文档和代码不一致时，以代码为准，并在同一个 PR 里更新文档。
-- 新的关键决定追加到 decisions.md。不要改写历史条目，过时的条目标记为"已替代"并指向新条目。
+- 文档与代码不一致时以代码为准，并在同一 PR 更新文档；目前尚无已实现的客户端或采集服务。
+- 新关键决定追加到 decisions.md；旧条目保留，并标明被哪些新条目替代。
+- 待确认的设计、外部接口能力和部署条件不能写成已经验证。
