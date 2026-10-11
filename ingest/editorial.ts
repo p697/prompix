@@ -26,7 +26,9 @@ export type Reviews = z.infer<typeof reviewsSchema>;
 /** A review applies only to the exact source text that was inspected. */
 export function applyEditorialReviews(items: Candidate[], reviews: Reviews): Candidate[] {
   return items.map((item) => {
-    const baseline: Candidate = item.id.startsWith("pc-") ? { ...item, reviewStatus: "draft" } : item;
+    // Collection establishes provenance and available media, not editorial
+    // quality. Every community item needs a review of its current source text.
+    const baseline: Candidate = { ...item, reviewStatus: "draft" };
     const review = reviews[item.id];
     if (!review || review.fingerprint !== item.fingerprint) return baseline;
     const { demoURL, imageURL, imageURLs, priority, ...metadata } = review.metadata;

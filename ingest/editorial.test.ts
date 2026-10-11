@@ -42,3 +42,25 @@ test("reviewed concise prompts and editorial order survive selection and removal
   assert.equal(selectEdition(ranked, new Set(["short"]), 2).length, 1);
   assert.equal(reviewsSchema.safeParse({ short: { fingerprint: short.fingerprint, reviewedAt: "2026-10-11T00:00:00Z", metadata: { ...metadata, priority: 101 } } }).success, false);
 });
+
+test("image and video publication requires a review of the exact current text", () => {
+  for (const kind of ["image", "video"] as const) {
+    const candidate = {
+      ...item, id: `youmind-${kind}-sample`, kind, reviewStatus: "candidate" as const,
+      media: { image: null, video: null, demoURL: null, imageURL: "https://example.com/preview.jpg", ...(kind === "video" ? { videoURL: "https://example.com/clip.mp4" } : {}) },
+    };
+    const matching = { [candidate.id]: reviews[item.id] };
+    assert.equal(selectEdition(applyEditorialReviews([candidate], {}), new Set(), 10).length, 0);
+    const changed = { ...candidate, prompt: candidate.prompt + " Use blue.", fingerprint: "c".repeat(64) };
+    assert.equal(selectEdition(applyEditorialReviews([changed], matching), new Set(), 10).length, 0);
+    assert.equal(selectEdition(applyEditorialReviews([candidate], matching), new Set(), 10).length, 1);
+    // A cached snapshot of the same text remains eligible; collection itself
+    // remains inspectable and is not mutated by the publication gate.
+    assert.equal(selectEdition(applyEditorialReviews([structuredClone(candidate)], matching), new Set(), 10).length, 1);
+    assert.equal(candidate.reviewStatus, "candidate");
+    if (kind === "video") {
+      const watchOnly = { ...candidate, media: { image: null, video: null, demoURL: null, imageURL: "https://example.com/preview.jpg" } };
+      assert.equal(selectEdition(applyEditorialReviews([watchOnly], matching), new Set(), 10).length, 0);
+    }
+  }
+});
