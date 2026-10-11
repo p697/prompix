@@ -197,12 +197,13 @@ struct PromptEditor: View {
     private(set) var player: AVPlayer?
     private(set) var failed = false
     private(set) var loading = true
+    private(set) var aspectRatio: CGFloat = 16 / 9
     @ObservationIgnored private var subscriptions = Set<AnyCancellable>()
     @ObservationIgnored private var timeout: Task<Void, Never>?
 
     func start(url: URL?) {
         stop()
-        failed = false; loading = true
+        failed = false; loading = true; aspectRatio = 16 / 9
         guard let url else { fail(); return }
         let item = AVPlayerItem(url: url)
         let player = AVPlayer(playerItem: item)
@@ -211,6 +212,10 @@ struct PromptEditor: View {
             guard let self, self.player?.currentItem === item else { return }
             if status == .failed { self.fail() }
             else if status == .readyToPlay { self.loading = false }
+        }.store(in: &subscriptions)
+        item.publisher(for: \.presentationSize).receive(on: RunLoop.main).sink { [weak self] size in
+            guard let self, self.player?.currentItem === item, size.width > 0, size.height > 0 else { return }
+            self.aspectRatio = size.width / size.height
         }.store(in: &subscriptions)
         player.publisher(for: \.timeControlStatus).receive(on: RunLoop.main).sink { [weak self] status in
             guard let self, self.player === player, !self.failed else { return }
@@ -263,16 +268,16 @@ struct MovieView: View {
                         Button("重新加载") { playback.start(url: url) }.buttonStyle(.bordered).accessibilityIdentifier("retryVideo")
                     }
                 } else if let player = playback.player {
-                    VideoPlayer(player: player).aspectRatio(16/9, contentMode: .fit)
+                    VideoPlayer(player: player).aspectRatio(playback.aspectRatio, contentMode: .fit)
                         .overlay { if playback.loading { ProgressView("正在加载视频…").padding(16).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14)).allowsHitTesting(false) } }
                 }
                 Text(caption).font(.caption).foregroundStyle(.secondary).padding(.horizontal, 20)
-            }.navigationTitle("动态灵感").navigationBarTitleDisplayMode(.inline)
+            }.frame(maxWidth: .infinity, maxHeight: .infinity).background(.black).navigationTitle("动态灵感").navigationBarTitleDisplayMode(.inline)
                 .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完成") { dismiss() } } }
                 .onAppear { playback.start(url: url) }
                 .onDisappear { playback.stop() }
                 .onChange(of: scenePhase) { _, phase in if phase != .active { playback.pause() } }
-        }
+        }.preferredColorScheme(.dark)
     }
 }
 
