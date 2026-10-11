@@ -9,6 +9,7 @@ struct Artwork: View {
                 else if item.kind == .web, UIImage(named: "web-\(item.id)") != nil {
                     Image("web-\(item.id)").resizable().scaledToFill().frame(width: proxy.size.width, height: proxy.size.height, alignment: .top).clipped()
                 }
+                else if let cover = item.cover { editorialCover(cover, size: proxy.size) }
                 else if item.artwork == "text-editorial" || item.artwork == "web-editorial" { communityArtwork(size: proxy.size) }
                 else if item.kind == .video, UIImage(named: item.id) != nil { photo(item.id, size: proxy.size) } else {
                 switch item.artwork {
@@ -39,6 +40,32 @@ struct Artwork: View {
                 Spacer(minLength: 0)
                 Text(item.kind == .web ? "MAKE SOMETHING" : "A NEW CONVERSATION").font(.system(size: 7, design: .monospaced)).tracking(1)
             }.foregroundStyle(Color(red: 0.28, green: 0.32, blue: 0.23)).padding(size.width * 0.12)
+        }
+    }
+    private func editorialCover(_ cover: Prompt.Cover, size: CGSize) -> some View {
+        let colors: [String: (Color, Color)] = [
+            "sage": (Color(red: 0.85, green: 0.88, blue: 0.79), Color(red: 0.25, green: 0.33, blue: 0.23)),
+            "clay": (Color(red: 0.92, green: 0.84, blue: 0.75), Color(red: 0.46, green: 0.25, blue: 0.20)),
+            "ink": (Color(red: 0.24, green: 0.31, blue: 0.27), Color(red: 0.92, green: 0.93, blue: 0.79)),
+            "sky": (Color(red: 0.81, green: 0.87, blue: 0.87), Color(red: 0.25, green: 0.37, blue: 0.41)),
+            "cream": (Color(red: 0.94, green: 0.92, blue: 0.85), Color(red: 0.36, green: 0.35, blue: 0.27))
+        ]
+        let palette = colors[cover.tone] ?? colors["cream"]!
+        return ZStack {
+            palette.0
+            VStack(alignment: .leading, spacing: 18) {
+                HStack {
+                    Circle().stroke(palette.1.opacity(0.55), lineWidth: 0.8).frame(width: 19, height: 19)
+                        .overlay { Circle().fill(palette.1).frame(width: 4, height: 4) }
+                    Spacer()
+                    Image(systemName: "arrow.up.right").font(.system(size: 12, weight: .light))
+                }
+                Spacer(minLength: 0)
+                Text(cover.text).font(.system(size: min(size.width * 0.15, 32), weight: .regular, design: .serif))
+                    .lineSpacing(5).fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 0)
+                Text(cover.eyebrow).font(.system(size: max(7, size.width * 0.038), design: .monospaced)).tracking(1.1)
+            }.foregroundStyle(palette.1).padding(size.width * 0.12)
         }
     }
     private func photo(_ name: String, size: CGSize) -> some View {

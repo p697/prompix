@@ -25,6 +25,7 @@ import {
 } from "./sources.ts";
 import { download } from "./network.ts";
 import { searchX } from "./x.ts";
+import { applyEditorialReviews, reviewsSchema } from "./editorial.ts";
 const exec = promisify(execFile);
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const root = resolve(
@@ -186,12 +187,13 @@ async function run() {
       { removedIDs: [] },
     );
     const excluded = new Set(moderation.removedIDs);
+    const reviewed = applyEditorialReviews(all, reviewsSchema.parse(await json(join(root, "editorial.json"), {})));
     const picked: Candidate[] = [];
     // Balanced mix: original text/web ideas remain available alongside real community imagery.
     for (const source of repositories)
       picked.push(
         ...selectEdition(
-          all.filter((x) => x.id.startsWith(source.id)),
+          reviewed.filter((x) => x.id.startsWith(source.id)),
           excluded,
           source.kind === "video" ? 6 : 12,
         ),
@@ -199,11 +201,12 @@ async function run() {
     for (const kind of ["text", "web"] as const)
       picked.push(
         ...selectEdition(
-          all.filter((x) => x.id.startsWith("pc-") && x.kind === kind),
+          reviewed.filter((x) => x.id.startsWith("pc-") && x.kind === kind),
           excluded,
           kind === "text" ? 16 : 8,
         ),
       );
+    picked.sort((a, b) => (b.editorialRank ?? -1) - (a.editorialRank ?? -1));
     const mediaMap = await json<Record<string, string>>(
       join(root, "media-map.json"),
       {},
@@ -215,6 +218,7 @@ async function run() {
         fingerprint: _,
         featured: __,
         reviewStatus: ___,
+        editorialRank: ____,
         ...prompt
       } = candidate;
       try {
@@ -323,7 +327,8 @@ async function run() {
       bundled.filter((x) => x.kind === "web"),
       published.filter((x) => x.kind === "text"),
       published.filter((x) => x.kind === "web"),
-      bundled.filter((x) => x.kind === "image" || x.kind === "video"),
+      // Keep development motion studies and abstract placeholders out of public editions.
+      bundled.filter((x) => x.kind === "image" && x.media?.image),
     ];
     const prompts: Prompt[] = [];
     const seen = new Set<string>();

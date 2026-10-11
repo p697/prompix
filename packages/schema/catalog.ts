@@ -16,6 +16,11 @@ export const promptSchema = z.object({
   toolURL: https.nullable(),
   artwork: resource,
   previewLabel: nonempty,
+  cover: z.object({
+    text: nonempty.max(100),
+    eyebrow: nonempty.max(40),
+    tone: z.enum(["sage", "clay", "ink", "sky", "cream"]),
+  }).optional(),
   source: z.object({
     name: nonempty,
     url: https.nullable(),

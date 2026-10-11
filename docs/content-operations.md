@@ -37,3 +37,9 @@ Cloudflare 上传使用本机已授权的 Wrangler OAuth；过期后若刷新失
 | 不需要定时采集 | `launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/dev.prompix.collect.plist`；内容服务仍可读 |
 
 发布版本保存在 R2 和本机 releases 下。回滚时选择已验证的旧 manifest 上传到 `v1/latest.json`，但必须保留有效移除记录，不能直接复活已下架条目。不要为恢复一次抓取而清空收藏或整个内容目录。
+
+## 编辑发布
+
+候选保存在 `candidates/`，编辑记录保存在仓库外的 `editorial.json`。用 `npm run review -- <candidate-id> /absolute/path/editorial-metadata.json` 写入标题、用途、示例、标签、封面和可选排序；字段说明见 [采集说明](../ingest/README.md)。原始正文与作者保持不变。编辑记录绑定正文指纹，来源正文变化后需要重新确认。
+
+社区文本默认不发布，网页还须有作品链接与真实预览。图片条目需要核对正文与所选图片，不能假定上游首图就是对应结果；可通过 imageURL 指定已检查的图片。编辑命令只准备内容，下一次 daily 发布才生效。原创内置目录目前 36 条，不使用旧生成脚本覆盖维护。

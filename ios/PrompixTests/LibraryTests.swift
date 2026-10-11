@@ -136,7 +136,7 @@ import CryptoKit
         let digest = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
         let manifest = CatalogManifest(schemaVersion: 1, version: "remote-test", sha256: digest, catalog: URL(string: "https://api.prompix.dev/releases/remote-test/catalog.json")!)
         XCTAssertThrowsError(try library.install(Data("broken".utf8), manifest: manifest))
-        XCTAssertEqual(library.version, "studio-001")
+        XCTAssertEqual(library.version, "studio-002")
         XCTAssertTrue(library.isSaved(saved))
         try library.install(data, manifest: manifest)
         XCTAssertEqual(library.version, "remote-test")

@@ -136,6 +136,19 @@ import XCTest
             app.navigationBars.buttons.element(boundBy: 0).tap()
         }
     }
+    func testEditorialTextDiscoveryAndDetail() {
+        app.buttons["kind-text"].tap()
+        let card = app.buttons["prompt-daily-side-quest"]
+        for _ in 0..<8 { if card.isHittable { break }; app.swipeUp() }
+        XCTAssertTrue(card.isHittable)
+        capture("15-editorial-text-discovery")
+        card.tap()
+        XCTAssertTrue(app.buttons["copyPrompt"].waitForExistence(timeout: 5))
+        capture("16-editorial-text-detail")
+        app.buttons["编辑后使用"].tap()
+        XCTAssertTrue((app.textViews["promptEditor"].value as? String ?? "").contains("支线"))
+        app.buttons["完成"].tap()
+    }
     func testLiveCommunityEditionAndRemotePreviews() throws {
         app.terminate()
         app.launchArguments.removeAll { $0 == "--offline" }

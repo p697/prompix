@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit && tsc -p services/content/tsconfig.json",
     "daily": "tsx ingest/daily.ts",
     "remove": "tsx ingest/remove.ts",
-    "check:deployment": "tsx scripts/check-deployment.ts"
+    "check:deployment": "tsx scripts/check-deployment.ts",
+    "review": "tsx ingest/review.ts"
   },
   "dependencies": {
     "csv-parse": "^7.0.3",
