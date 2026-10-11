@@ -40,6 +40,7 @@ export const promptSchema = z.object({
       aspectRatio: z.number().min(0.1).max(10).optional(),
       videoURL: https.optional(),
     })
+    .refine(media => !media.imageURLs || media.imageURL === media.imageURLs[0], "Gallery must start with its cover")
     .nullable(),
   publishedAt: z.string().optional(),
 });

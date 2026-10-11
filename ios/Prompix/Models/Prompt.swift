@@ -79,6 +79,7 @@ struct Catalog: Codable {
             guard !(removedIDs ?? []).contains(item.id) else { throw CatalogError.invalidItems }
             if let ratio = item.media?.aspectRatio, !(0.1...10).contains(ratio) { throw CatalogError.invalidItems }
             guard (item.media?.imageURLs?.count ?? 0) <= 8 else { throw CatalogError.invalidItems }
+            if let gallery = item.media?.imageURLs, gallery.isEmpty || gallery.first != item.media?.imageURL { throw CatalogError.invalidItems }
             let mediaURLs = [item.media?.imageURL, item.media?.videoURL].compactMap { $0 } + (item.media?.imageURLs ?? [])
             guard mediaURLs.allSatisfy({ $0.scheme == "https" && $0.host == "api.prompix.dev" && $0.path.hasPrefix("/media/") }) else { throw CatalogError.invalidItems }
             let urls = [item.toolURL, item.source.url, item.media?.demoURL, item.source.repository].compactMap { $0 }

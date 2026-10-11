@@ -28,6 +28,16 @@ Raw prompts.chat roles remain drafts, including older cached snapshots. Review a
 
 Reviews live in the external content directory, preserve source text and attribution, and match the exact text fingerprint. Changed text must be reviewed again. Inspect each selected image against the prompt: the first image in an upstream post can belong to a different example. The review command does not publish. Run daily staging and checks before activating a new edition. Procedural video studies and image placeholders stay in the labeled offline studio catalog; they are excluded from live editions.
 
+An optional `imageURLs` list adds an explicitly reviewed gallery (1–8 HTTPS images,
+in presentation order). Its first image becomes `imageURL`, preserving older
+clients' cover behavior. Duplicates are removed. Do not turn every upstream image
+into a gallery automatically: verify that each one demonstrates this prompt,
+including any variable substitutions. Publishing mirrors every selected image;
+a media failure excludes the whole candidate. Recovery checks every gallery
+asset before activation. Upgrade the scheduled runtime before using this new
+editorial field. Saved offline thumbnails still cover the primary image only;
+additional images require a connection or an existing browsing cache.
+
 
 ## Release recovery
 
