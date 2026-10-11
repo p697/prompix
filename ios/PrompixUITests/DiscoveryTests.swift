@@ -228,6 +228,11 @@ import XCTest
         XCTAssertFalse(app.buttons["nextImage"].isEnabled)
         app.buttons["previousImage"].tap()
         XCTAssertTrue(app.navigationBars["3 / 4"].waitForExistence(timeout: 5))
+        app.descendants(matching: .any)["loadedImage-2"].swipeRight()
+        XCTAssertTrue(app.navigationBars["2 / 4"].waitForExistence(timeout: 5))
+        app.descendants(matching: .any)["loadedImage-1"].doubleTap()
+        capture("gallery-zoom")
+        app.descendants(matching: .any)["loadedImage-1"].doubleTap()
         app.buttons["完成"].tap()
         XCTAssertTrue(app.buttons["copyPrompt"].exists)
     }

@@ -77,3 +77,5 @@ CI 的较旧模拟器暴露了本地视频缺失时 AVPlayer 失败回调延迟�
 视频 UI 验证现在等待 AVPlayer 的播放时钟前进，不再只等待播放器标题。线上社区视频与内置视频均通过，截图确认实际画面；图片、网页和专题路径同步通过。证据为 `~/.local/share/prompix/Quality-Gallery-Playback.xcresult`。这仍不代替真机性能、慢网与后台恢复的最终验收。
 
 图集协议新增可选的 1–8 张有序图片，保留旧客户端的主封面字段。只接受编辑明确确认的图片，发布时全部镜像，回滚检查全部资源。原生使用分页浏览、页码、前后切换与独立缩放，按当前页加载；保存的离线缩略图目前仅覆盖主图。
+
+线上 `edition-7d431b9673e70dab` 仍为 56 条精选内容，新增四张复古发明示例组成的完整图集。每日运行副本已升级，四图均镜像到自有 API；部署协议与全图集回滚演练（不激活）通过。iPhone 18 Pro 逐页加载、前后边界、滑动翻页、双击缩放和返回详情通过，截图已复查：`Quality-Live-Gallery.xcresult`、`Quality-Live-Gallery-Gestures.xcresult`。合并支持功能后的 19 项原生模型测试通过：`Quality-Gallery-Merged-Models.xcresult`。
