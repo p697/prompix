@@ -14,7 +14,11 @@ test('CSV preserves quoted newlines, attributes contributors, rejects missing/un
 test('first-party catalog matches shipping contract and rejects duplicate IDs and unsupported schema',async()=>{
   const raw=JSON.parse(await readFile(new URL('../ios/Prompix/Resources/catalog.json',import.meta.url),'utf8'));
   const catalog=catalogSchema.parse(raw);
-  assert.equal(new Set(catalog.prompts.map(i=>i.kind)).size,4);
+  assert.equal(catalog.version,'studio-004');
+  assert.equal(catalog.prompts.length,30);
+  assert.deepEqual([...new Set(catalog.prompts.map(i=>i.kind))].sort(),['image','text','web']);
+  assert.equal(catalog.prompts.some(i=>i.media?.video),false);
+  assert.equal(catalog.removedIDs?.length ?? 0,0);
   assert.equal(catalogSchema.safeParse({...raw,schemaVersion:2}).success,false);
   assert.equal(catalogSchema.safeParse({...raw,prompts:[raw.prompts[0],raw.prompts[0]]}).success,false);
   assert.equal(catalogSchema.safeParse({...raw,prompts:[{...raw.prompts[0],toolURL:'http://example.com'}]}).success,false);

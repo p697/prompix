@@ -267,20 +267,12 @@ import XCTest
         }
     }
 
-    func testImageVideoWebAndCollections() {
+    func testImageWebAndCollections() {
         app.buttons["kind-image"].tap()
         app.buttons["prompt-summer-citrus"].tap()
         app.buttons["previewButton"].tap()
         XCTAssertTrue(app.buttons["完成"].waitForExistence(timeout: 5))
         capture("06-image-viewer")
-        app.buttons["完成"].tap()
-        app.navigationBars.buttons.element(boundBy: 0).tap()
-        app.buttons["kind-video"].tap()
-        app.buttons["prompt-slow-road"].tap()
-        app.buttons["previewButton"].tap()
-        XCTAssertTrue(app.navigationBars["动态灵感"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.descendants(matching: .any)["playingVideo"].waitForExistence(timeout: 15))
-        capture("07-video-playing")
         app.buttons["完成"].tap()
         app.navigationBars.buttons.element(boundBy: 0).tap()
         app.buttons["kind-web"].tap()
@@ -298,6 +290,18 @@ import XCTest
         app.navigationBars.buttons.element(boundBy: 0).tap()
         app.tabBars.buttons["专题"].tap()
         capture("09-collections")
+    }
+    func testFirstVideoUpdateExplainsOfflineAvailabilityAndReturnsToIdeas() throws {
+        app.buttons["kind-video"].tap()
+        XCTAssertTrue(app.staticTexts["视频灵感，联网后见"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["loadVideoExamples"].isHittable)
+        XCTAssertFalse(app.buttons["prompt-slow-road"].exists)
+        try waitForRenderingToSettle()
+        try app.performAccessibilityAudit(for: [.hitRegion, .sufficientElementDescription])
+        capture("07-video-first-update")
+        app.buttons["browseOtherIdeas"].tap()
+        XCTAssertTrue(app.buttons["prompt-gentle-tarot"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["loadVideoExamples"].exists)
     }
     func testEditedDraftPersistsAcrossRelaunch() {
         app.buttons["kind-text"].tap()

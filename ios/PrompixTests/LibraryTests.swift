@@ -115,7 +115,7 @@ import CryptoKit
         XCTAssertFalse(playback.loading)
         playback.start(url: directory.appending(path: "missing.mp4"))
         XCTAssertTrue(playback.failed, "Missing local media must fail without waiting for AVPlayer")
-        let url = try XCTUnwrap(Bundle.main.url(forResource: "slow-road", withExtension: "mp4"))
+        let url = try XCTUnwrap(Bundle(for: LibraryTests.self).url(forResource: "playback-fixture", withExtension: "mp4"))
         playback.start(url: url)
         // Allow the real 25-second buffering deadline to settle on slower CI simulators.
         for _ in 0..<300 {
@@ -158,10 +158,12 @@ import CryptoKit
         XCTAssertEqual(failed.favorites.first?.prompt, item.prompt)
     }
 
-    func testFourKindsAndSearchIntersection() throws {
+    func testBundledFallbackAndSearchIntersection() throws {
         let library = Library(directory: directory)
-        XCTAssertEqual(Set(library.prompts.map(\.kind)), Set(PromptKind.allCases))
-        for kind in PromptKind.allCases { XCTAssertGreaterThanOrEqual(library.prompts.filter { $0.kind == kind }.count, 6) }
+        XCTAssertEqual(library.version, "studio-004")
+        XCTAssertEqual(library.prompts.count, 30)
+        XCTAssertEqual(Set(library.prompts.map(\.kind)), Set([PromptKind.text, .image, .web]))
+        for kind in [PromptKind.text, .image, .web] { XCTAssertGreaterThanOrEqual(library.prompts.filter { $0.kind == kind }.count, 6) }
         let query = PromptQuery(text: "塔罗", kind: .text)
         XCTAssertEqual(library.prompts.filter(query.matches).map(\.id), ["gentle-tarot"])
         XCTAssertTrue(library.prompts.filter(PromptQuery(text: "塔罗", kind: .web).matches).isEmpty)
@@ -243,13 +245,47 @@ import CryptoKit
     func testBundledMediaExist() throws {
         let library = Library(directory: directory)
         for item in library.prompts {
-            if let movie = item.media?.video { XCTAssertNotNil(Bundle.main.url(forResource: movie, withExtension: "mp4"), movie) }
+            XCTAssertNil(item.media?.video, "Procedural playback fixtures must not ship as prompt examples")
             if let image = item.media?.image { XCTAssertNotNil(UIImage(named: image), image) }
         }
+        XCTAssertNotNil(Bundle(for: LibraryTests.self).url(forResource: "playback-fixture", withExtension: "mp4"))
+        XCTAssertNil(Bundle.main.url(forResource: "playback-fixture", withExtension: "mp4"))
+        XCTAssertTrue((Bundle.main.urls(forResourcesWithExtension: "mp4", subdirectory: nil) ?? []).isEmpty)
         for (id, filename) in WebsiteExamples.files {
             XCTAssertNotNil(Bundle.main.url(forResource: filename, withExtension: "html", subdirectory: "WebExamples"), filename)
             XCTAssertNotNil(UIImage(named: "web-\(id)"), id)
         }
+    }
+    func testCachedVideoEditionAndSavedSnapshotSurviveFallbackRetirement() throws {
+        let library = Library(directory: directory)
+        let original = try XCTUnwrap(library.prompts.first)
+        let video = Prompt(id: "saved-video", kind: .video, title: "Video example", summary: original.summary,
+            prompt: original.prompt, example: original.example, tags: original.tags, model: "Video model",
+            toolURL: original.toolURL, artwork: "video-editorial", previewLabel: "Reviewed video",
+            source: original.source, media: Prompt.Media(image: nil, video: nil, demoURL: nil,
+                imageURL: URL(string: "https://api.prompix.dev/media/test-cover.jpg"),
+                videoURL: URL(string: "https://api.prompix.dev/media/test-video.mp4")))
+        let catalog = Catalog(schemaVersion: 1, version: "edition-cached-video", prompts: [video])
+        let data = try JSONEncoder().encode(catalog)
+        let digest = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+        let manifest = CatalogManifest(schemaVersion: 1, version: catalog.version, sha256: digest,
+            catalog: URL(string: "https://api.prompix.dev/releases/edition-cached-video/catalog.json")!)
+        try library.install(data, manifest: manifest)
+        XCTAssertTrue(library.toggle(video))
+        XCTAssertTrue(library.saveDraft("Keep my video draft", for: video))
+        let cached = Library(directory: directory)
+        XCTAssertEqual(cached.version, catalog.version)
+        XCTAssertEqual(cached.prompts, [video])
+        XCTAssertEqual(cached.favorites, [video])
+        XCTAssertEqual(cached.draft(for: video), "Keep my video draft")
+
+        // A missing edition cache may restore the bundle, but must not delete saved snapshots.
+        try FileManager.default.removeItem(at: directory.appending(path: "catalog.json"))
+        let fallback = Library(directory: directory)
+        XCTAssertEqual(fallback.version, "studio-004")
+        XCTAssertFalse(fallback.prompts.contains { $0.kind == .video })
+        XCTAssertEqual(fallback.favorites, [video])
+        XCTAssertEqual(fallback.draft(for: video), "Keep my video draft")
     }
     func testRemoteEditionIsAtomicCachedAndRemovalsReachFavorites() throws {
         let library = Library(directory: directory)

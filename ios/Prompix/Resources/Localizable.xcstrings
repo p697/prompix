@@ -2324,6 +2324,57 @@
           }
         }
       }
+    },
+    "视频灵感，联网后见": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Discover videos online"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "视频灵感，联网后见"
+          }
+        }
+      }
+    },
+    "首次联网更新后，就能浏览真实的视频案例。现在也可以先逛文本、图片和网页灵感。": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connect to load real video examples. You can explore text, image and website ideas while offline."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "首次联网更新后，就能浏览真实的视频案例。现在也可以先逛文本、图片和网页灵感。"
+          }
+        }
+      }
+    },
+    "先逛其他灵感": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Explore other ideas"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "先逛其他灵感"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

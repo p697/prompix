@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "version": "studio-003",
+  "version": "studio-004",
   "prompts": [
     {
       "id": "summer-citrus",
@@ -53,34 +53,6 @@
         "method": "原创"
       },
       "media": null
-    },
-    {
-      "id": "slow-road",
-      "kind": "video",
-      "title": "把六秒钟，留给一场日落",
-      "summary": "一条弯路、一片晚霞，一个舍不得划走的慢镜头。",
-      "prompt": "Generate a 6-second cinematic landscape shot, 16:9. A quiet winding road crosses dark green coastal hills at sunset. A warm pale sun sits low in a dusty peach sky. Camera slowly pushes forward at a constant speed with a very subtle lateral drift, like a calm drone gliding toward the horizon. Muted colors, fine film grain, natural atmospheric haze, soft highlights. One continuous shot. No people, no cars, no text, no sudden cuts, no flicker. Keep the road geometry stable throughout.",
-      "example": "试着改变一天中的时间，保留同样的镜头运动，就能做出清晨、雨后和蓝调时刻的系列。这里的可播放短片是程序绘制的运镜示意。",
-      "tags": [
-        "创作灵感",
-        "电影",
-        "风景"
-      ],
-      "model": "视频模型",
-      "toolURL": "https://dreamina.capcut.com/",
-      "artwork": "sunset",
-      "previewLabel": "原创程序动画 · 运镜示意，非模型生成视频",
-      "source": {
-        "name": "Prompix Studio",
-        "url": null,
-        "license": "CC0-1.0",
-        "method": "原创"
-      },
-      "media": {
-        "image": null,
-        "video": "slow-road",
-        "demoURL": null
-      }
     },
     {
       "id": "quiet-portfolio",
@@ -257,33 +229,6 @@
       }
     },
     {
-      "id": "sea-breath",
-      "kind": "video",
-      "title": "海浪，也有自己的呼吸",
-      "summary": "一个镜头，一种节奏。用明确的运动描述，把气氛留住。",
-      "prompt": "Generate a 6-second video, 16:9. A quiet sea at blue hour, gentle waves flowing onto smooth wet sand. Locked camera at low height, one continuous wave approaching and receding. Fine analogue film grain, natural textures, balanced exposure. One continuous shot. No text, watermarks, morphing objects, sudden cuts, flashes or extra moving subjects. Motion should begin gently and end gently.",
-      "example": "保持固定机位，只让水面变化，更容易观察模型能否保持空间稳定。",
-      "tags": [
-        "创作灵感",
-        "电影"
-      ],
-      "model": "视频模型",
-      "toolURL": "https://dreamina.capcut.com/",
-      "artwork": "ocean",
-      "previewLabel": "原创程序动画 · 节奏示意，非模型生成视频",
-      "source": {
-        "name": "Prompix Studio",
-        "url": null,
-        "license": "CC0-1.0",
-        "method": "原创"
-      },
-      "media": {
-        "image": null,
-        "video": "sea-breath",
-        "demoURL": null
-      }
-    },
-    {
       "id": "indie-studio",
       "kind": "web",
       "title": "给独立工作室，一张数字名片",
@@ -359,33 +304,6 @@
       }
     },
     {
-      "id": "small-orbit",
-      "kind": "video",
-      "title": "围着一个小物件，转一小圈",
-      "summary": "一个镜头，一种节奏。用明确的运动描述，把气氛留住。",
-      "prompt": "Generate a 6-second video, 16:9. A matte ceramic sphere on a stone pedestal in a warm studio. Camera makes a slow 30-degree orbit, stable object geometry and consistent soft side lighting. Fine analogue film grain, natural textures, balanced exposure. One continuous shot. No text, watermarks, morphing objects, sudden cuts, flashes or extra moving subjects. Motion should begin gently and end gently.",
-      "example": "环绕镜头要说明角度和速度，避免把“cinematic”当作唯一指令。",
-      "tags": [
-        "创作灵感",
-        "电影"
-      ],
-      "model": "视频模型",
-      "toolURL": "https://dreamina.capcut.com/",
-      "artwork": "orbit",
-      "previewLabel": "原创程序动画 · 节奏示意，非模型生成视频",
-      "source": {
-        "name": "Prompix Studio",
-        "url": null,
-        "license": "CC0-1.0",
-        "method": "原创"
-      },
-      "media": {
-        "image": null,
-        "video": "small-orbit",
-        "demoURL": null
-      }
-    },
-    {
       "id": "sunday-recipes",
       "kind": "web",
       "title": "把拿手菜，做成一本小食谱",
@@ -436,33 +354,6 @@
         "video": null,
         "demoURL": null,
         "aspectRatio": 0.6666666666666666
-      }
-    },
-    {
-      "id": "slow-bloom",
-      "kind": "video",
-      "title": "让一朵花，慢慢醒过来",
-      "summary": "一个镜头，一种节奏。用明确的运动描述，把气氛留住。",
-      "prompt": "Generate a 6-second video, 16:9. A single cream peony opening almost imperceptibly in morning window light. Static macro camera, subtle petal motion and soft botanical shadows, realistic plant anatomy. Fine analogue film grain, natural textures, balanced exposure. One continuous shot. No text, watermarks, morphing objects, sudden cuts, flashes or extra moving subjects. Motion should begin gently and end gently.",
-      "example": "用轻微变化替代夸张开合，画面会更安静。封面与短片是编辑运动示意。",
-      "tags": [
-        "创作灵感",
-        "电影"
-      ],
-      "model": "视频模型",
-      "toolURL": "https://dreamina.capcut.com/",
-      "artwork": "bloom",
-      "previewLabel": "原创程序动画 · 节奏示意，非模型生成视频",
-      "source": {
-        "name": "Prompix Studio",
-        "url": null,
-        "license": "CC0-1.0",
-        "method": "原创"
-      },
-      "media": {
-        "image": null,
-        "video": "slow-bloom",
-        "demoURL": null
       }
     },
     {
@@ -519,33 +410,6 @@
       }
     },
     {
-      "id": "coffee-pause",
-      "kind": "video",
-      "title": "把喝咖啡的六秒钟，拉长一点",
-      "summary": "一个镜头，一种节奏。用明确的运动描述，把气氛留住。",
-      "prompt": "Generate a 6-second video, 16:9. A handmade ceramic cup of black coffee on a wooden table, thin steam drifting in a shaft of morning light. Locked-off close-up, restrained natural movement, no hands. Fine analogue film grain, natural textures, balanced exposure. One continuous shot. No text, watermarks, morphing objects, sudden cuts, flashes or extra moving subjects. Motion should begin gently and end gently.",
-      "example": "把动作限制在蒸汽和光线，让模型更容易维持杯子和桌面的形状。",
-      "tags": [
-        "创作灵感",
-        "电影"
-      ],
-      "model": "视频模型",
-      "toolURL": "https://dreamina.capcut.com/",
-      "artwork": "coffee",
-      "previewLabel": "原创程序动画 · 节奏示意，非模型生成视频",
-      "source": {
-        "name": "Prompix Studio",
-        "url": null,
-        "license": "CC0-1.0",
-        "method": "原创"
-      },
-      "media": {
-        "image": null,
-        "video": "coffee-pause",
-        "demoURL": null
-      }
-    },
-    {
       "id": "soft-focus",
       "kind": "web",
       "title": "做一个，让人愿意专注的计时器",
@@ -568,33 +432,6 @@
         "method": "原创"
       },
       "media": null
-    },
-    {
-      "id": "rain-window",
-      "kind": "video",
-      "title": "把下雨天，收进一个镜头",
-      "summary": "一个镜头，一种节奏。用明确的运动描述，把气氛留住。",
-      "prompt": "Generate a 6-second video, 16:9. Rain droplets slowly sliding down a window, an out-of-focus green garden beyond. Fixed camera, shallow depth of field, muted cool tones, occasional droplets joining naturally. Fine analogue film grain, natural textures, balanced exposure. One continuous shot. No text, watermarks, morphing objects, sudden cuts, flashes or extra moving subjects. Motion should begin gently and end gently.",
-      "example": "雨滴是主角，背景保持模糊。不要同时要求复杂运镜和很多物体运动。",
-      "tags": [
-        "创作灵感",
-        "电影"
-      ],
-      "model": "视频模型",
-      "toolURL": "https://dreamina.capcut.com/",
-      "artwork": "rain",
-      "previewLabel": "原创程序动画 · 节奏示意，非模型生成视频",
-      "source": {
-        "name": "Prompix Studio",
-        "url": null,
-        "license": "CC0-1.0",
-        "method": "原创"
-      },
-      "media": {
-        "image": null,
-        "video": "rain-window",
-        "demoURL": null
-      }
     },
     {
       "id": "little-gallery",

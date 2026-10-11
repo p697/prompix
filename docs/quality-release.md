@@ -108,3 +108,11 @@ Xcode 27 提供实际 VoiceOver 测试服务。首次朗读记录暴露瀑布流
 全量图像审计保留为 `PROMPIX_FULL_ACCESSIBILITY_AUDIT=1` 诊断路径：它也会检查照片中的文字和原生半透明栏，需要结合实际像素复查；不把所有检测项通过或所有页面 VoiceOver 路径写成已完成。Apple 当前接口见 [Xcode 27 release notes](https://developer.apple.com/documentation/xcode-release-notes/xcode-27-release-notes)。
 
 合并发行准备后，19 项模型测试与小屏深色最大辅助字号的九个检查页面再次通过，含实际来源链接的可见范围校验：`Quality-Accessible-Merged.xcresult`。
+
+### 首次打开的真实内容边界
+
+`studio-004` 内置目录保留 30 条原创文本、图片与网页内容，移除六条程序动画视频及其生产资源。Video 在首次更新前说明需联网获取真实案例，并提供检查更新和继续浏览其他灵感的入口。已有在线目录缓存、收藏快照与个人草稿不做迁移或删除；此处不是内容下架操作。原 `slow-road` 程序动画仅保留为单元测试 bundle 的 `playback-fixture.mp4`，用于验证 AVPlayer 失败后恢复，线上视频 UI 验证继续使用真实社区案例。
+
+`Quality-Production-Fallback-Rebuilt.xcresult` 中 20 个模型测试与两条 UI 流程全部通过，覆盖原生视频首次更新说明／继续浏览、离线图片查看、可交互网页示例与专题。模型验证既有视频缓存、收藏与草稿在回退时保留，六张原创图片与六张网页封面真实存在，播放测试文件仅在测试 bundle。已检查首次更新空状态截图。此前磁盘空间不足损坏了编译后的资源目录；清理该可重建输出并重新编译后通过，未放宽资源断言。本轮不操作真机，也不据此宣称完整发行验收通过。
+
+合入 D-36 的界面后，新空状态在 `Quality-Production-Fallback-Accessible-2.xcresult` 通过实际按钮可达性、触控区域和元素描述检查；内容侧 26 项测试、类型检查与 `studio-004` 的 30 条协议校验通过。

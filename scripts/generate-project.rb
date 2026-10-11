@@ -37,6 +37,11 @@ end
   target.add_dependency(app)
   test_group = project.main_group.new_group(name, name)
   Dir.glob(File.join(root, "ios/#{name}/*.swift")).sort.each { |file| target.source_build_phase.add_file_reference(test_group.new_file(File.basename(file))) }
+  resource_files = Dir.glob(File.join(root, "ios/#{name}/Resources/*")).sort
+  unless resource_files.empty?
+    test_resources = test_group.new_group('Resources', 'Resources')
+    resource_files.each { |file| target.resources_build_phase.add_file_reference(test_resources.new_file(File.basename(file))) }
+  end
   target.build_configurations.each do |config|
     config.build_settings.merge!({'PRODUCT_BUNDLE_IDENTIFIER' => "com.p697.#{name.downcase}", 'GENERATE_INFOPLIST_FILE' => 'YES', 'SWIFT_VERSION' => '6.0', 'CODE_SIGN_STYLE' => 'Automatic'})
     if type == :unit_test_bundle
