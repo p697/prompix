@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 800" width="600" height="800">
+<rect width="600" height="800" fill="#F3E3C8"/>
+<circle cx="300" cy="330" r="190" fill="#FF6A3D"/>
+<rect x="0" y="420" width="600" height="380" fill="#F3E3C8"/>
+<g fill="#2350C8">
+<rect x="0" y="430" width="600" height="26"/>
+<rect x="0" y="480" width="600" height="20"/>
+<rect x="0" y="522" width="600" height="14"/>
+<rect x="0" y="556" width="600" height="8"/>
+</g>
+<text x="300" y="690" text-anchor="middle" font-family="Helvetica Neue, Helvetica, sans-serif" font-size="96" font-weight="900" fill="#1B1B1B" letter-spacing="2">SUMMER</text>
+<text x="300" y="740" text-anchor="middle" font-family="Helvetica Neue, Helvetica, sans-serif" font-size="22" font-weight="600" fill="#1B1B1B" letter-spacing="8">SOUND FESTIVAL · 2026</text>
+<text x="40" y="70" font-family="Helvetica Neue, Helvetica, sans-serif" font-size="20" font-weight="700" fill="#1B1B1B">07.18 — 07.20</text>
+</svg>
