@@ -453,4 +453,115 @@ import XCTest
         capture("12-live-video-playing")
     }
 
+    func testShareCancellationKeepsDetailUsable() throws {
+        app.buttons["kind-text"].tap()
+        app.buttons["prompt-gentle-tarot"].tap()
+        app.buttons["sharePrompt"].tap()
+        XCTAssertTrue(app.otherElements["ActivityListView"].waitForExistence(timeout: 5))
+        capture("release-system-share")
+        let dismissRegion = app.otherElements["PopoverDismissRegion"]
+        if dismissRegion.exists { dismissRegion.tap() }
+        else {
+            let close = app.buttons.matching(NSPredicate(format: "identifier == %@ OR label == %@", "Close", "关闭")).firstMatch
+            XCTAssertTrue(close.waitForExistence(timeout: 5), app.debugDescription)
+            close.tap()
+        }
+        XCTAssertTrue(app.buttons["copyPrompt"].waitForExistence(timeout: 5))
+        app.buttons["copyPrompt"].tap()
+        XCTAssertTrue(app.buttons["copyPrompt"].label.contains("已复制"))
+        app.buttons["编辑后使用"].tap()
+        XCTAssertTrue(app.textViews["promptEditor"].waitForExistence(timeout: 5))
+        capture("release-after-share-cancel")
+    }
+
+    func testLiveFiveScreenBrowsingPreservesReturnPosition() throws {
+        app.terminate()
+        app.launchArguments.removeAll { $0 == "--offline" }
+        app.launch()
+        XCTAssertTrue(app.staticTexts["DAILY FINDS"].waitForExistence(timeout: 35))
+        for page in 1...5 {
+            try waitForRenderingToSettle()
+            capture("release-discovery-page-\(page)")
+            let visible = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "prompt-"))
+                .allElementsBoundByIndex.filter {
+                    $0.isHittable && $0.frame.minY > 160 && $0.frame.maxY < app.frame.maxY - 100
+                }
+            let card = try XCTUnwrap(visible.first, "A complete card must be available on screen \(page)")
+            let identifier = card.identifier
+            let originalY = card.frame.minY
+            card.tap()
+            XCTAssertTrue(app.buttons["copyPrompt"].waitForExistence(timeout: 5))
+            app.navigationBars.buttons.element(boundBy: 0).tap()
+            try waitForRenderingToSettle()
+            XCTAssertEqual(app.buttons[identifier].frame.minY, originalY, accuracy: 3, "Returning must preserve the browsing position")
+            if page < 5 { app.swipeUp() }
+        }
+    }
+
+    func testEveryPublishedVideoPlaysAndBackgroundPauses() async throws {
+        struct Manifest: Decodable { let catalog: URL }
+        struct Edition: Decodable {
+            struct Item: Decodable { let id: String; let title: String; let kind: String }
+            let version: String
+            let prompts: [Item]
+        }
+        let (manifestData, _) = try await URLSession.shared.data(from: URL(string: "https://api.prompix.dev/v1/latest.json")!)
+        let manifest = try JSONDecoder().decode(Manifest.self, from: manifestData)
+        XCTAssertEqual(manifest.catalog.host, "api.prompix.dev")
+        let (catalogData, _) = try await URLSession.shared.data(from: manifest.catalog)
+        let edition = try JSONDecoder().decode(Edition.self, from: catalogData)
+        let videos = edition.prompts.filter { $0.kind == "video" }
+        XCTAssertFalse(videos.isEmpty)
+        var played: [String] = []
+        defer {
+            let evidence = XCTAttachment(string: "Edition: \(edition.version)\nPlayed:\n" + played.joined(separator: "\n"))
+            evidence.name = "Published video playback inventory"
+            evidence.lifetime = .keepAlways
+            add(evidence)
+        }
+        app.terminate()
+        app.launchArguments.removeAll { $0 == "--offline" }
+        for (index, video) in videos.enumerated() {
+            app.launch()
+            XCTAssertTrue(app.staticTexts["DAILY FINDS"].waitForExistence(timeout: 35))
+            app.buttons["searchButton"].tap()
+            let search = app.searchFields.firstMatch
+            XCTAssertTrue(search.waitForExistence(timeout: 5))
+            search.tap()
+            search.typeText(video.title)
+            let matchingCards = app.buttons.matching(identifier: "prompt-\(video.id)")
+            XCTAssertTrue(matchingCards.firstMatch.waitForExistence(timeout: 5), video.id)
+            // The presenting feed remains in XCTest's tree beneath the search sheet.
+            let card = try XCTUnwrap(matchingCards.allElementsBoundByIndex.first { $0.isHittable }, video.id)
+            card.tap()
+            app.buttons["previewButton"].tap()
+            let player = app.descendants(matching: .any)["playingVideo"]
+            XCTAssertTrue(player.waitForExistence(timeout: 35), video.id)
+            XCTAssertFalse(app.buttons["retryVideo"].exists, video.id)
+            capture("release-video-\(index + 1)")
+            played.append(video.id)
+            if index == 0 {
+                XCUIDevice.shared.press(.home)
+                app.activate()
+                let playPause = app.buttons["Play/Pause"]
+                // A center tap can activate AVKit's large Play button. Reveal
+                // controls away from it without accidentally resuming playback.
+                if !playPause.exists { player.coordinate(withNormalizedOffset: CGVector(dx: 0.1, dy: 0.1)).tap() }
+                XCTAssertTrue(playPause.waitForExistence(timeout: 5))
+                XCTAssertEqual(playPause.label, "播放", "Returning from the background must leave playback paused")
+                playPause.tap()
+                XCTAssertEqual(playPause.label, "暂停")
+                let elapsed = app.staticTexts["Elapsed Time"]
+                let initial = elapsed.label
+                let advances = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in elapsed.exists && elapsed.label != initial }, object: nil)
+                XCTAssertEqual(XCTWaiter.wait(for: [advances], timeout: 4), .completed, "Resume must advance the native playback clock")
+                capture("release-video-background-resumed")
+            }
+            app.buttons["完成"].tap()
+            XCTAssertTrue(app.buttons["copyPrompt"].waitForExistence(timeout: 5))
+            app.terminate()
+        }
+        XCTAssertEqual(Set(played), Set(videos.map(\.id)))
+    }
+
 }

@@ -13,7 +13,7 @@ Prompix 是开源、免费的多模态 Prompt 集合 App。用户像逛手机淘
 | [app-store.md](app-store.md) | 商店中英文文案、审核路径、隐私申报依据与待办 |
 | [quality-release.md](quality-release.md) | 持续目标、完整交付的质量关口与完成证据 |
 | [roadmap.md](roadmap.md) | 设计关口、模拟器开发、真机交付、上架与分工 |
-| [decisions.md](decisions.md) | 历史决定与本轮 D-20 至 D-37；旧决定保留并标明替代关系 |
+| [decisions.md](decisions.md) | 按时间追加的关键决定；旧决定保留并标明替代关系 |
 | [design.md](design.md) | 设计原则、已确认方向、核心页面和四类卡片要求 |
 | [handoff.md](handoff.md) | 复制、编辑、分享和目标工具打开的能力边界 |
 | [content-operations.md](content-operations.md) | 每日采集、发布、凭据与故障恢复 |
