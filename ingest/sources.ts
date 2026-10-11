@@ -1,7 +1,10 @@
 import { createHash } from "node:crypto";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { parse } from "csv-parse/sync";
 import type { Prompt } from "../packages/schema/catalog.ts";
 import { download } from "./network.ts";
+const exec = promisify(execFile);
 export const repositories = [
   {
     id: "youmind-nano",
@@ -173,14 +176,19 @@ export async function collectRepository(
   repo: string,
   filename: string,
 ): Promise<{ text: string; revision: string }> {
-  const metadata = await download(
-    `https://api.github.com/repos/${repo}/commits?per_page=1`,
-    ["api.github.com"],
-    200_000,
-    { Accept: "application/vnd.github+json", "User-Agent": "Prompix/0.2" },
+  const allowed = repo === "f/prompts.chat"
+    ? filename === "prompts.csv"
+    : repositories.some((source) => source.repo === repo) && filename === "README_zh.md";
+  if (!allowed) throw new Error("Repository file is not allowlisted");
+  // Resolve the default branch without consuming the shared, unauthenticated REST quota.
+  // Fetch the file at that immutable commit, even if HEAD moves during this run.
+  const metadata = await exec(
+    "git",
+    ["ls-remote", "--exit-code", `https://github.com/${repo}.git`, "HEAD"],
+    { timeout: 60_000, maxBuffer: 200_000, env: { ...process.env, GIT_TERMINAL_PROMPT: "0" } },
   );
-  const revision = JSON.parse(metadata.bytes.toString())[0]?.sha;
-  if (!/^[a-f0-9]{40}$/.test(revision))
+  const revision = metadata.stdout.match(/^([a-f0-9]{40})\tHEAD\r?$/m)?.[1];
+  if (!revision)
     throw new Error("Invalid repository revision");
   const result = await download(
     `https://raw.githubusercontent.com/${repo}/${revision}/${filename}`,
