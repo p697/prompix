@@ -42,9 +42,19 @@ The native interface follows the system language (Simplified Chinese or English)
 
 Performance checks are explicitly selected UI tests: `testRepeatedLaunchPerformance`
 and `testScrollingResourcePerformance`. Run with `-configuration Release
-ENABLE_TESTABILITY=YES` and a physical-device destination plus your signing team.
+ENABLE_TESTABILITY=YES`. Use a simulator for development; record those results
+separately from a final physical-device run with your signing team.
 The launch test terminates and relaunches the process five times; it does not clear
 OS caches. The scroll test measures CPU and memory over three passes through the
 bundled offline catalog. These provide a repeatable baseline, not a substitute for
 live-image/network, video, thermal, or long-session measurements. Save each run to
 a new result bundle and report the actual metric values and device conditions.
+
+Live release journeys are explicitly selected: `testLiveFiveScreenBrowsingPreservesReturnPosition`
+checks five consecutive screens and return positions, while
+`testEveryPublishedVideoPlaysAndBackgroundPauses` reads the published inventory and
+requires each video playback clock to advance. Keep the content edition unchanged
+during the latter run. `testShareCancellationKeepsDetailUsable` and
+`testCopiedPromptCanOpenExternalToolAndReturn` cover cancellation and external-tool
+return; opening Safari is not proof of tool login, prompt prefill or generation.
+Native tab selection supports both the iPhone bottom bar and iPad floating tabs.

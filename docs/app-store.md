@@ -61,6 +61,8 @@ Suggested review path:
 5. Choose Website and open an original example. WebKit is used only for bundled first-party demonstrations; the app interface is native SwiftUI.
 6. Open Settings for support and privacy, or open an item's report link for attribution/content feedback.
 
+An example video stream is available at https://api.prompix.dev/media/de4abcd733bca4bca95cdb6e9e86c6ef8ab4153acf93b1b29bb2784b356838ef.mp4 (the television explainer example). This is a public content file, not a reviewer account or a login bypass.
+
 The app does not submit prompts to AI services automatically. External tool/source links open through the system. The tarot example is an entertainment and self-reflection writing exercise, not a prediction or professional advice service. Content is editorially selected; there is no public in-app posting or messaging.
 
 ## 隐私申报依据
@@ -82,11 +84,28 @@ The app does not submit prompts to AI services automatically. External tool/sour
 
 依据：[Apple App Privacy Details](https://developer.apple.com/app-store/app-privacy-details/)、[Privacy manifests](https://developer.apple.com/documentation/bundleresources/privacy-manifest-files)、[Required reason APIs](https://developer.apple.com/documentation/bundleresources/describing-use-of-required-reason-api)、[Cloudflare Workers Logs](https://developers.cloudflare.com/workers/observability/logs/workers-logs/)。核对日期为 2026-10-12。
 
+## 截图与年龄问卷准备
+
+当前工程同时支持 iPhone 与 iPad。候选素材采用实际运行截图：iPhone 18 Pro 为 1206×2622，13 英寸 iPad 为 2064×2752；每个尺寸 1–10 张 PNG／JPEG，不带 alpha。按当前 [Apple 截图规范](https://developer.apple.com/help/app-store-connect/reference/app-information/screenshot-specifications/) 准备，上传时仍核对 App Store Connect 对所选设备组的要求。原生英文界面截图保留真实中文内容，不伪装为已提供完整英文内容库。
+
+以下是针对当前 68 条内容的问卷输入准备，不是已提交的年龄结果；Apple 按实际问卷计算分级。完整字段草案与依据存于开发机 `~/.local/share/prompix/release-candidate/submission-preparation.json`，最终提交前随最新内容复核。
+
+| 项目 | 当前准备依据 |
+|---|---|
+| 用户生成内容／社交发现 | 保守按「是」准备：精选并再分发社区创作者的 Prompt 与媒体；无站内发帖或聊天并不自动意味着该项为「否」 |
+| 不受限网页访问 | 否：WebKit 只允许内置作品，外链交给系统浏览器 |
+| 聊天、广告、博彩、抽奖、战利品箱 | 无；塔罗与周末玩法是无赌注或奖品的写作练习 |
+| 酒精、幻想战斗、武器 | 少量：当前示例有酒吧／酒精品牌元素和持剑幻想战斗，没有写实血腥画面 |
+| 健康／身心状态话题 | 有轻度情绪整理和自我照顾的文字玩法；不提供诊断或治疗 |
+| 成人、性、恐怖、粗俗内容 | 当前审核草案为无；不能用少量截图代替发布前完整内容复核 |
+
+分类依据为 [Apple 年龄定义](https://developer.apple.com/help/app-store-connect/reference/app-information/age-ratings-values-and-definitions/) 与 [设置年龄分级](https://developer.apple.com/help/app-store-connect/manage-app-information/set-an-app-age-rating/)。实际发行主体、审核联系人姓名／邮箱／电话、发行地区与 EU trader 状态须按账号事实填写，不从 Git 作者或个人设备名称推断。当前免费且无 IAP，不把付费应用税务／收款配置自动作为阻断项；只处理账号中实际出现的必要协议。
+
 ## 提交前仍需完成
 
 - 最终发行归档、有效签名、隐私报告和上传校验；检查包内 manifest 与资源。
 - 真机启动、滚动、内存、视频、后台恢复与离线测试；完成设计／无障碍关口。
 - 最终版本真实截图：发现、详情、编辑、收藏、四类示例；按实际支持设备生成，不用概念稿替代。
 - 在 App Store Connect 按实际内容完成年龄分级。存在浏览器外链及娱乐反思玩法，不预填未经问卷确认的年龄。
-- 确认发行主体、版权年份、审核联系方式、海外发行区域、协议和税务状态；不把这些账户事项写进开源仓库。
+- 确认发行主体、版权年份、审核联系方式、海外发行区域和账号实际要求的协议／合规事项；不把这些账户事项写进开源仓库。
 - 复核支持入口响应方式及隐私申报；用户完成最终验收后再提交审核。

@@ -12,7 +12,14 @@ import XCTest
         let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         shot.name = name; shot.lifetime = .keepAlways; add(shot)
     }
-    // Select explicitly on a physical device with a Release configuration.
+    private func selectTab(_ title: String) {
+        // iPadOS exposes its floating native tabs as ordinary buttons.
+        let tab = app.tabBars.buttons[title]
+        let target = tab.exists ? tab : app.buttons.matching(NSPredicate(format: "label == %@", title)).firstMatch
+        XCTAssertTrue(target.waitForExistence(timeout: 5))
+        target.tap()
+    }
+    // Run with a Release configuration; record simulator and device results separately.
     // These are process launches, not a claim of empty OS caches or a reboot.
     func testRepeatedLaunchPerformance() {
         let options = XCTMeasureOptions()
@@ -153,11 +160,11 @@ import XCTest
         try auditScreen("editor")
         app.buttons["完成"].tap()
         app.navigationBars.buttons.element(boundBy: 0).tap()
-        app.tabBars.buttons["专题"].tap()
+        selectTab("专题")
         try auditScreen("collections")
-        app.tabBars.buttons["收藏"].tap()
+        selectTab("收藏")
         try auditScreen("favorites")
-        app.tabBars.buttons["发现"].tap()
+        selectTab("发现")
         app.buttons["设置"].tap()
         try auditScreen("settings")
         app.swipeUp()
@@ -204,7 +211,7 @@ import XCTest
         XCTAssertTrue(app.buttons["copyEditedPrompt"].label.contains("已复制"))
         app.buttons["完成"].tap()
         app.navigationBars.buttons.element(boundBy: 0).tap()
-        app.tabBars.buttons["专题"].tap()
+        selectTab("专题")
         capture("23-adaptive-collections")
         app.buttons["collection-play"].tap()
         let collectionCard = app.buttons["prompt-gentle-tarot"]
@@ -236,13 +243,13 @@ import XCTest
         capture("03-editor")
         app.buttons["完成"].tap()
         app.navigationBars.buttons.element(boundBy: 0).tap()
-        app.tabBars.buttons["收藏"].tap()
+        selectTab("收藏")
         XCTAssertTrue(app.buttons["prompt-gentle-tarot"].waitForExistence(timeout: 5))
         capture("04-favorites")
         app.terminate(); app.launch()
-        app.tabBars.buttons["收藏"].tap()
+        selectTab("收藏")
         XCTAssertTrue(app.buttons["prompt-gentle-tarot"].waitForExistence(timeout: 5))
-        app.tabBars.buttons["发现"].tap()
+        selectTab("发现")
         app.buttons["searchButton"].tap()
         let search = app.searchFields.firstMatch
         XCTAssertTrue(search.waitForExistence(timeout: 3))
@@ -267,7 +274,7 @@ import XCTest
         }
     }
 
-    func testImageWebAndCollections() {
+    func testImageWebAndCollections() throws {
         app.buttons["kind-image"].tap()
         app.buttons["prompt-summer-citrus"].tap()
         app.buttons["previewButton"].tap()
@@ -285,10 +292,11 @@ import XCTest
         if !webExample.isHittable { app.swipeUp() }
         webExample.tap()
         XCTAssertTrue(app.webViews.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "Less, but")).firstMatch.waitForExistence(timeout: 10))
+        try waitForRenderingToSettle()
         capture("08b-web-example")
         app.buttons["完成"].tap()
         app.navigationBars.buttons.element(boundBy: 0).tap()
-        app.tabBars.buttons["专题"].tap()
+        selectTab("专题")
         capture("09-collections")
     }
     func testFirstVideoUpdateExplainsOfflineAvailabilityAndReturnsToIdeas() throws {
@@ -472,6 +480,32 @@ import XCTest
         app.buttons["编辑后使用"].tap()
         XCTAssertTrue(app.textViews["promptEditor"].waitForExistence(timeout: 5))
         capture("release-after-share-cancel")
+    }
+
+    func testCopiedPromptCanOpenExternalToolAndReturn() throws {
+        app.buttons["kind-text"].tap()
+        app.buttons["prompt-gentle-tarot"].tap()
+        app.buttons["copyPrompt"].tap()
+        XCTAssertTrue(app.buttons["copyPrompt"].label.contains("已复制"))
+        let tool = app.links.containing(NSPredicate(format: "label BEGINSWITH %@", "带着灵感，去试试")).firstMatch
+        for _ in 0..<6 {
+            if tool.isHittable { break }
+            app.swipeUp()
+        }
+        XCTAssertTrue(tool.isHittable)
+        tool.tap()
+        let safari = XCUIApplication(bundleIdentifier: "com.apple.mobilesafari")
+        XCTAssertTrue(safari.wait(for: .runningForeground, timeout: 10))
+        let browser = XCTAttachment(screenshot: safari.screenshot())
+        browser.name = "release-external-tool-browser"
+        browser.lifetime = .keepAlways
+        add(browser)
+        // Opening the tool does not send the prompt or claim automatic prefilling.
+        app.activate()
+        XCTAssertTrue(app.buttons["copyPrompt"].waitForExistence(timeout: 5))
+        app.buttons["编辑后使用"].tap()
+        XCTAssertTrue(app.textViews["promptEditor"].waitForExistence(timeout: 5))
+        capture("release-after-tool-return")
     }
 
     func testLiveFiveScreenBrowsingPreservesReturnPosition() throws {
