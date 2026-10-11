@@ -20,15 +20,21 @@ An open-source, mobile-first gallery of AI image and video prompts and agent ski
 
 Prompix is an independent project and is not affiliated with OpenAI, Anthropic, Google or xAI. Product names are used only to describe compatibility.
 
+## Docs
+
+Product definition, decisions, roadmap and specs live in [`docs/`](docs/README.md) (written in Chinese). UI mockups for v1 are in [`design/v2/`](design/v2/); open `index.html` in a browser to see all ten screens.
+
 ## Repository layout (planned)
 
 | Path | Purpose |
 |---|---|
 | `ios/` | Native iOS app (SwiftUI) |
-| `agent/` | Content operations agent |
+| `agent/` | Content operations agent (TypeScript) |
 | `admin/` | Admin console (Payload CMS) |
 | `web/` | Web companion (Next.js) |
+| `packages/schema/` | Shared data schema and snapshot format |
 | `docs/` | Product and technical docs |
+| `design/` | UI mockups |
 
 ## Contributing
 

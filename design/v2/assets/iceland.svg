@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 800" width="640" height="800">
+<defs>
+<linearGradient id="sea" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#0E3A5B"/><stop offset="1" stop-color="#2C7DA8"/></linearGradient>
+</defs>
+<rect width="640" height="800" fill="url(#sea)"/>
+<path d="M0 0 L380 0 C340 120 420 200 360 320 C300 440 390 520 320 640 C280 710 300 760 280 800 L0 800 Z" fill="#1F2226"/>
+<path d="M0 0 L300 0 C260 110 330 200 280 310 C230 420 310 520 250 630 C215 700 230 760 210 800 L0 800 Z" fill="#4E6B34"/>
+<path d="M0 0 L220 0 C190 120 240 220 200 320 C160 430 220 520 170 640 C150 700 160 760 140 800 L0 800 Z" fill="#6F8F45"/>
+<path d="M380 0 C340 120 420 200 360 320 C300 440 390 520 320 640 C280 710 300 760 280 800" fill="none" stroke="#FFFFFF" stroke-width="10" stroke-opacity="0.85" stroke-linecap="round"/>
+<path d="M402 0 C362 120 442 200 382 320 C322 440 412 520 342 640 C302 710 322 760 302 800" fill="none" stroke="#FFFFFF" stroke-width="4" stroke-opacity="0.45"/>
+<path d="M430 0 C390 120 470 200 410 320 C350 440 440 520 370 640" fill="none" stroke="#BFE6F5" stroke-width="3" stroke-opacity="0.35"/>
+<path d="M120 0 C150 160 90 300 130 420 C170 540 110 680 130 800" fill="none" stroke="#D9D2C3" stroke-width="8"/>
+<rect x="124" y="380" width="14" height="24" rx="3" fill="#E63946" transform="rotate(10 131 392)"/>
+</svg>

@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 800" width="600" height="800">
+<defs>
+<linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#2E5E63"/><stop offset="1" stop-color="#173A40"/></linearGradient>
+<radialGradient id="leak" cx="0.95" cy="0.08" r="0.6"><stop offset="0" stop-color="#FF8A3D" stop-opacity="0.85"/><stop offset="1" stop-color="#FF8A3D" stop-opacity="0"/></radialGradient>
+<filter id="grain"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" stitchTiles="stitch"/><feColorMatrix type="saturate" values="0"/><feComponentTransfer><feFuncA type="table" tableValues="0 0.18"/></feComponentTransfer></filter>
+</defs>
+<rect width="600" height="800" fill="url(#bg)"/>
+<path d="M90 800 C100 640 190 590 300 585 C410 590 500 640 510 800 Z" fill="#B23A2E"/>
+<path d="M255 585 L300 650 L345 585 Z" fill="#EFE6DA"/>
+<rect x="262" y="500" width="76" height="100" rx="30" fill="#C98E66"/>
+<path d="M180 420 C170 520 190 600 215 640 L240 560 C210 520 195 470 190 420 Z" fill="#2A1B14"/>
+<path d="M420 420 C430 520 410 600 385 640 L360 560 C390 520 405 470 410 420 Z" fill="#2A1B14"/>
+<ellipse cx="300" cy="400" rx="118" ry="140" fill="#D9A27A"/>
+<path d="M178 420 C160 290 230 215 310 220 C400 225 440 300 425 430 C410 360 380 320 330 305 C280 330 220 340 178 420 Z" fill="#2A1B14"/>
+<ellipse cx="255" cy="410" rx="12" ry="8" fill="#2A1B14"/>
+<ellipse cx="345" cy="410" rx="12" ry="8" fill="#2A1B14"/>
+<path d="M272 478 Q300 492 328 478" stroke="#8E3B2E" stroke-width="7" fill="none" stroke-linecap="round"/>
+<rect width="600" height="800" fill="url(#leak)"/>
+<rect width="600" height="800" filter="url(#grain)"/>
+<text x="560" y="770" text-anchor="end" font-family="Menlo, Courier New, monospace" font-size="30" font-weight="700" fill="#FF9A3C" opacity="0.9">'98 10 11</text>
+</svg>

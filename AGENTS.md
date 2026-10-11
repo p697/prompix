@@ -2,6 +2,12 @@
 
 Prompix is built mostly by AI coding agents. These rules apply to every agent and human working in this repository.
 
+## Start here
+
+- Read [docs/README.md](docs/README.md) before starting any task. Key decisions are in `docs/decisions.md`, milestones and task breakdowns in `docs/roadmap.md`, specs in the other files under `docs/`, and UI mockups in `design/v2/`.
+- When code and docs disagree, the code wins; update the docs in the same PR.
+- Append new key decisions to `docs/decisions.md` instead of rewriting earlier entries.
+
 ## Workflow
 
 - Never commit to `main` directly. For each task, create a git worktree outside the main checkout (for example `../worktrees/<branch>`) on a new branch from the latest `origin/main`.
