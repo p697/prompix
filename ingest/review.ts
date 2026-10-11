@@ -3,7 +3,7 @@ import { homedir } from "node:os";
 import { join, resolve, relative, isAbsolute, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { editorialMetadataSchema, reviewsSchema, applyEditorialReviews } from "./editorial.ts";
-import { repositories, type Candidate } from "./sources.ts";
+import { repositories, videoArchive, type Candidate } from "./sources.ts";
 
 const [id, metadataFile] = process.argv.slice(2);
 if (!id || !/^[a-z0-9-]+$/.test(id) || !metadataFile)
@@ -15,7 +15,7 @@ const relativeRoot = relative(await realpath(repo), await realpath(root));
 if (!relativeRoot || (!relativeRoot.startsWith("..") && !isAbsolute(relativeRoot)))
   throw new Error("Editorial content must stay outside the repository");
 let candidate: Candidate | undefined;
-for (const source of [...repositories.map((source) => source.id), "prompts-chat"]) {
+for (const source of [...repositories.map((source) => source.id), "prompts-chat", videoArchive.id]) {
   try {
     const items: Candidate[] = JSON.parse(await readFile(join(root, "candidates", `${source}.json`), "utf8"));
     candidate = items.find((item) => item.id === id);

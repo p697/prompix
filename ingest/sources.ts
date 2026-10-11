@@ -29,6 +29,14 @@ export const repositories = [
   },
 ] as const;
 export type Repository = (typeof repositories)[number];
+// The last upstream release map with complete downloadable video examples.
+// Keep this immutable; backfills are explicitly staged for editorial review.
+export const videoArchive = {
+  id: "youmind-seedance-archive",
+  repo: "YouMind-OpenLab/awesome-seedance-2-prompts",
+  revision: "145d838af98657e4a45ec0cb58c4df31b55e7e52",
+  filename: "README_zh.md",
+} as const;
 export type Candidate = Prompt & {
   fingerprint: string;
   featured: boolean;
@@ -44,6 +52,33 @@ const clean = (text: string) =>
     .replace(/<[^>]*>/g, "")
     .replace(/\*\*/g, "")
     .trim();
+
+/** README headings inside a fenced prompt belong to that prompt, not the feed. */
+function sourceBlocks(markdown: string, source: Repository): string[] {
+  const heading = source.kind === "video" ? /^### / : /^### No\. \d+: /;
+  const blocks: string[] = [];
+  let block: string[] | undefined;
+  let fence: string | undefined;
+  for (const line of markdown.split(/\r?\n/)) {
+    if (!fence && heading.test(line)) {
+      if (block) blocks.push(block.join("\n"));
+      block = [line.replace(heading, "")];
+      continue;
+    }
+    if (block) block.push(line);
+    const delimiter = line.match(/^ {0,3}(`{3,}|~{3,})(.*)$/);
+    if (delimiter) {
+      if (!fence) fence = delimiter[1];
+      else if (delimiter[1][0] === fence[0] && delimiter[1].length >= fence.length && !delimiter[2].trim()) fence = undefined;
+    }
+  }
+  if (block) blocks.push(block.join("\n"));
+  return blocks;
+}
+
+const completeVideo = (item: Candidate) =>
+  item.kind === "video" && Boolean(item.media?.imageURL && item.media?.videoURL);
+
 export function parseYouMind(
   markdown: string,
   source: Repository,
@@ -51,14 +86,14 @@ export function parseYouMind(
 ): Candidate[] {
   const items: Candidate[] = [];
   const seen = new Set<string>();
-  for (const block of markdown.split(/^### No\. \d+: /m).slice(1)) {
-    const title = block.split("\n")[0].trim();
+  for (const block of sourceBlocks(markdown, source)) {
+    const title = block.split("\n")[0].replace(/^No\. \d+: /, "").trim();
     const prompt = block
       .match(/#### 📝[^\n]*\n+```[^\n]*\n([\s\S]*?)\n```/)?.[1]
       ?.trim();
     const summary = block
       .match(/#### 📖[^\n]*\n+([\s\S]*?)(?=\n####)/)?.[1]
-      ?.trim();
+      ?.trim() ?? block.match(/^> (.+)$/m)?.[1]?.trim();
     const original = block.match(
       /\*\*(?:来源|Source):\*\* \[[^\]]+\]\((https:[^)]+)\)/,
     )?.[1];
@@ -70,15 +105,17 @@ export function parseYouMind(
       !summary ||
       !original ||
       !author ||
-      !image ||
-      (source.kind === "video" && !video)
+      (source.kind === "image" && !image)
     )
       continue;
     const hash = fingerprint(prompt);
-    if (seen.has(hash)) continue;
-    seen.add(hash);
+    const id = `${source.id}-${fingerprint(original).slice(0, 16)}`;
+    // Preserve every source post's current fingerprint, even if another post
+    // has the same text. Content deduplication belongs after eligibility checks.
+    if (seen.has(id)) continue;
+    seen.add(id);
     items.push({
-      id: `${source.id}-${fingerprint(original).slice(0, 16)}`,
+      id,
       kind: source.kind,
       title: clean(title),
       summary: clean(summary),
@@ -102,15 +139,45 @@ export function parseYouMind(
         image: null,
         video: null,
         demoURL: null,
-        imageURL: image,
+        ...(image ? { imageURL: image } : {}),
         ...(video ? { videoURL: video } : {}),
       },
       fingerprint: hash,
       featured: block.includes("badge/⭐-Featured"),
-      reviewStatus: "candidate",
+      // Keep watch-page-only posts as drafts so updated text can block a stale
+      // archive review without pretending a watch page is a downloadable clip.
+      reviewStatus: source.kind === "video" && (!image || !video) ? "draft" : "candidate",
     });
   }
   return items;
+}
+/** Current content wins when the same source post also appears in the archive. */
+export function mergeCandidates(...groups: readonly Candidate[][]): Candidate[] {
+  const posts = new Map<string, Candidate>();
+  for (const candidate of groups.flat()) {
+    const current = posts.get(candidate.id);
+    if (!current) posts.set(candidate.id, candidate);
+    // The archive can fill missing media only while the source text is unchanged.
+    // Retain archive provenance and draft status; it still needs editorial review.
+    else if (current.kind === "video" && !completeVideo(current) &&
+      current.fingerprint === candidate.fingerprint && completeVideo(candidate) &&
+      candidate.reviewStatus === "draft") posts.set(candidate.id, candidate);
+  }
+  return [...posts.values()];
+}
+export function parseVideoArchive(markdown: string): Candidate[] {
+  const source = repositories.find((item) => item.repo === videoArchive.repo)!;
+  return parseYouMind(markdown, source, videoArchive.revision)
+    .filter(completeVideo)
+    .map((candidate) => ({ ...candidate, reviewStatus: "draft" }));
+}
+export async function collectVideoArchive(): Promise<Candidate[]> {
+  const raw = await download(
+    `https://raw.githubusercontent.com/${videoArchive.repo}/${videoArchive.revision}/${videoArchive.filename}`,
+    ["raw.githubusercontent.com"],
+  );
+  // Unlike the existing live feed, historical backfill must never ship unreviewed.
+  return parseVideoArchive(raw.bytes.toString());
 }
 export function parseCommunityCSV(csv: string, revision: string): Candidate[] {
   const rows = parse(csv, {
@@ -211,7 +278,8 @@ export function selectEdition(
       item.prompt.length < (item.editorialRank !== undefined ? 20 : 80) ||
       item.prompt.length > 30000 ||
       item.title.length > 160 ||
-      item.reviewStatus !== "candidate"
+      item.reviewStatus !== "candidate" ||
+      (item.kind === "video" && !completeVideo(item))
     )
       return false;
     if (
