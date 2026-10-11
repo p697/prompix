@@ -27,3 +27,8 @@ Install the Mac daily job with `python3 scripts/install-scheduler.py`. See [oper
 Raw prompts.chat roles remain drafts, including older cached snapshots. Review a candidate with `npm run review -- <candidate-id> /absolute/path/editorial-metadata.json`. The metadata requires title, summary, example, tags and previewLabel; optional cover contains text, eyebrow and tone (`sage`, `clay`, `ink`, `sky`, `cream`). Optional imageURL and demoURL select inspected HTTPS previews; web entries require both. Optional priority (0–100) controls editorial selection before upstream featured items.
 
 Reviews live in the external content directory, preserve source text and attribution, and match the exact text fingerprint. Changed text must be reviewed again. Inspect each selected image against the prompt: the first image in an upstream post can belong to a different example. The review command does not publish. Run daily staging and checks before activating a new edition. Procedural video studies and image placeholders stay in the labeled offline studio catalog; they are excluded from live editions.
+
+
+## Release recovery
+
+`npm run rollback -- <edition-or-rollback-version>` validates the saved target manifest against the public catalog and stages a removal-safe rollback. Add `--publish` to verify media and activate it. Recovery holds automatic publishing until `npm run daily -- --publish --resume-publishing` succeeds. Collection continues while held. See [operations](../docs/content-operations.md) for the complete procedure, report paths and urgent removals.

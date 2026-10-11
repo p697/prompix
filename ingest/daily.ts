@@ -1,18 +1,9 @@
-import {
-  mkdir,
-  readFile,
-  writeFile,
-  rename,
-  rm,
-  stat,
-  realpath,
-} from "node:fs/promises";
+import { mkdir, readFile, writeFile, rm } from "node:fs/promises";
 import { createHash } from "node:crypto";
-import { homedir } from "node:os";
-import { dirname, join, resolve, relative, isAbsolute } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { repo, contentRoot as root, base, atomic, json, lockContent, upload, moderationSchema, currentManifest, remoteCatalog } from "./publication.ts";
 import { catalogSchema, type Prompt } from "../packages/schema/catalog.ts";
 import {
   repositories,
@@ -27,14 +18,9 @@ import { download } from "./network.ts";
 import { searchX } from "./x.ts";
 import { applyEditorialReviews, reviewsSchema } from "./editorial.ts";
 const exec = promisify(execFile);
-const repo = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const root = resolve(
-  process.env.PROMPIX_CONTENT_DIR ??
-    join(homedir(), ".local/share/prompix/content"),
-);
 const publishing = process.argv.includes("--publish");
-const base = "https://api.prompix.dev";
-const bucket = "prompix-content";
+const resumePublishing = process.argv.includes("--resume-publishing");
+if (resumePublishing && !publishing) throw new Error("--resume-publishing requires --publish");
 const mediaHosts = [
   "cms-assets.youmind.com",
   "cdn.youmind.com",
@@ -43,44 +29,6 @@ const mediaHosts = [
   "release-assets.githubusercontent.com",
   "objects.githubusercontent.com",
 ];
-async function atomic(path: string, value: unknown) {
-  await mkdir(dirname(path), { recursive: true });
-  const tmp = `${path}.${process.pid}.tmp`;
-  await writeFile(tmp, JSON.stringify(value, null, 2) + "\n");
-  await rename(tmp, path);
-}
-async function json<T>(path: string, fallback: T): Promise<T> {
-  try {
-    return JSON.parse(await readFile(path, "utf8"));
-  } catch (e) {
-    if ((e as NodeJS.ErrnoException).code === "ENOENT") return fallback;
-    throw e;
-  }
-}
-async function upload(key: string, path: string, type: string) {
-  await exec(
-    process.env.PROMPIX_WRANGLER ?? "wrangler",
-    [
-      "--config",
-      join(repo, "services/content/wrangler.jsonc"),
-      "r2",
-      "object",
-      "put",
-      `${bucket}/${key}`,
-      "--remote",
-      "--file",
-      path,
-      "--content-type",
-      type,
-    ],
-    {
-      cwd: repo,
-      timeout: 120000,
-      maxBuffer: 100000,
-      env: { ...process.env, WRANGLER_SEND_METRICS: "false", CI: "true" },
-    },
-  );
-}
 async function aspectRatio(path: string): Promise<number> {
   const result = await exec('/usr/bin/sips', ['-g','pixelWidth','-g','pixelHeight',path], {timeout:30000});
   const width = Number(result.stdout.match(/pixelWidth: (\d+)/)?.[1]);
@@ -89,36 +37,13 @@ async function aspectRatio(path: string): Promise<number> {
   return width / height;
 }
 async function run() {
-  await mkdir(root, { recursive: true });
-  const rel = relative(await realpath(repo), await realpath(root));
-  if (!rel || (!rel.startsWith("..") && !isAbsolute(rel)))
-    throw new Error("Content must stay outside repository");
-  const lock = join(root, "daily.lock");
-  try {
-    await mkdir(lock);
-  } catch (e) {
-    if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e;
-    const owner = await json<{ pid: number } | null>(
-      join(lock, "owner.json"),
-      null,
-    );
-    let alive = false;
-    try {
-      if (owner) {
-        process.kill(owner.pid, 0);
-        alive = true;
-      }
-    } catch {}
-    if (alive || Date.now() - (await stat(lock)).mtimeMs < 3600000)
-      throw new Error("Another collection is running");
-    await rm(lock, { recursive: true });
-    await mkdir(lock);
-  }
-  await atomic(join(lock, "owner.json"), { pid: process.pid });
+  const unlock = await lockContent(root);
   const report: {
     startedAt: string;
     published: boolean;
     version?: string;
+    publicationHold?: unknown;
+    error?: string;
     sources: Record<string, unknown>;
     mediaErrors: string[];
   } = {
@@ -184,10 +109,18 @@ async function run() {
       report.sources.x = {
         status: process.env.X_BEARER_TOKEN ? "daily-limit" : "not-configured",
       };
-    const moderation = await json<{ removedIDs: string[] }>(
-      join(root, "moderation.json"),
-      { removedIDs: [] },
-    );
+    const hold = await json<unknown | null>(join(root, "publication-hold.json"), null);
+    if (publishing && hold && !resumePublishing) {
+      report.publicationHold = hold;
+      return;
+    }
+    const moderation = moderationSchema.parse(await json(join(root, "moderation.json"), { removedIDs: [] }));
+    if (publishing) {
+      // Preserve remote tombstones even if local moderation state has been restored from an older backup.
+      const remote = await remoteCatalog(await currentManifest());
+      moderation.removedIDs = [...new Set([...moderation.removedIDs, ...(remote.removedIDs ?? [])])].sort();
+      await atomic(join(root, "moderation.json"), moderation);
+    }
     const excluded = new Set(moderation.removedIDs);
     const reviewed = applyEditorialReviews(all, reviewsSchema.parse(await json(join(root, "editorial.json"), {})));
     const picked: Candidate[] = [];
@@ -356,9 +289,14 @@ async function run() {
     const latestPath = join(root, "latest.json");
     const current = await json<{ version?: string }>(latestPath, {});
     if (current.version === version && publishing) {
-      report.version = version;
-      report.published = true;
-      return;
+      const active = await currentManifest();
+      if (active.version === version) {
+        await remoteCatalog(active);
+        report.version = version;
+        report.published = true;
+        if (resumePublishing) await rm(join(root, "publication-hold.json"), { force: true });
+        return;
+      }
     }
     const catalog = catalogSchema.parse({
       schemaVersion: 1,
@@ -377,7 +315,7 @@ async function run() {
     const manifest = {
       schemaVersion: 1,
       version,
-      publishedAt: catalog.publishedAt,
+      publishedAt: catalogSchema.parse(JSON.parse(bytes.toString())).publishedAt,
       count: prompts.length,
       sha256: createHash("sha256").update(bytes).digest("hex"),
       catalog: `${base}/releases/${version}/catalog.json`,
@@ -399,16 +337,23 @@ async function run() {
       // Activate LAST. Any earlier failure leaves clients on the previous complete edition.
       await upload("v1/latest.json", manifestPath, "application/json");
       await atomic(latestPath, manifest);
+      const active = await currentManifest();
+      if (active.version !== version || active.sha256 !== manifest.sha256) throw new Error("Activation verification failed");
       report.published = true;
+      if (resumePublishing) await rm(join(root, "publication-hold.json"), { force: true });
     }
     report.version = version;
+  } catch (error) {
+    report.error = String(error);
+    throw error;
   } finally {
-    await atomic(join(root, "status.json"), {
-      ...report,
-      finishedAt: new Date().toISOString(),
-    });
-    console.log(JSON.stringify(report));
-    await rm(lock, { recursive: true });
+    try {
+      await atomic(join(root, "status.json"), {
+        ...report,
+        finishedAt: new Date().toISOString(),
+      });
+      console.log(JSON.stringify(report));
+    } finally { await unlock(); }
   }
 }
 run().catch((error) => {
