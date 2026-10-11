@@ -18,6 +18,7 @@ import { download } from "./network.ts";
 import { searchX } from "./x.ts";
 import { applyEditorialReviews, reviewsSchema } from "./editorial.ts";
 import { aspectRatio, prepareJPEG, publishStudioImages } from "./images.ts";
+import { publicationText } from "./templates.ts";
 const publishing = process.argv.includes("--publish");
 const resumePublishing = process.argv.includes("--resume-publishing");
 if (resumePublishing && !publishing) throw new Error("--resume-publishing requires --publish");
@@ -122,7 +123,8 @@ async function run() {
       count: archive.length,
       revision: videoArchive.revision,
     };
-    const reviewed = applyEditorialReviews(mergeCandidates(all, archive), reviewsSchema.parse(await json(join(root, "editorial.json"), {})));
+    const reviews = reviewsSchema.parse(await json(join(root, "editorial.json"), {}));
+    const reviewed = applyEditorialReviews(mergeCandidates(all, archive), reviews);
     const picked: Candidate[] = [];
     // Balanced mix: original text/web ideas remain available alongside real community imagery.
     for (const source of repositories)
@@ -156,6 +158,7 @@ async function run() {
         editorialRank: ____,
         ...prompt
       } = candidate;
+      prompt.prompt = publicationText(candidate, reviews);
       try {
         if (prompt.media && publishing) {
           const media = { ...prompt.media, ...(prompt.media.imageURLs ? { imageURLs: [...prompt.media.imageURLs] } : {}) };

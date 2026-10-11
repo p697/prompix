@@ -28,6 +28,16 @@ Raw prompts.chat roles remain drafts, including older cached snapshots. Review a
 
 Reviews live in the external content directory, preserve source text and attribution, and match the exact text fingerprint. Changed text must be reviewed again. Inspect each selected image against the prompt: the first image in an upstream post can belong to a different example. The review command does not publish. Run daily staging and checks before activating a new edition. Procedural video studies and image placeholders stay in the labeled offline studio catalog; they are excluded from live editions.
 
+When an exact fingerprint-bound review exists, staging and publication expand
+the upstream notation `{argument name="…" default="…"}` to its default text.
+For JSON prompts, only string values are expanded and the result remains valid
+JSON. Source candidates, fingerprints, reviews and attribution stay unchanged;
+unreviewed/changed text and unknown notation are left untouched. This is not a
+variable engine: editors must explain which defaults to change and how to fill
+remaining placeholders or provide reference images in the destination tool.
+Compare preview substitutions and limitations with the actual source prompt,
+especially when the default differs from the shown result.
+
 An optional `imageURLs` list adds an explicitly reviewed gallery (1–8 HTTPS images,
 in presentation order). Its first image becomes `imageURL`, preserving older
 clients' cover behavior. Duplicates are removed. Do not turn every upstream image
