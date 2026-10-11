@@ -10,6 +10,7 @@ Prompix 是开源、免费的多模态 Prompt 集合 App。用户像逛手机淘
 |---|---|
 | [product.md](product.md) | 产品定位、四类内容、发现体验、首版边界 |
 | [tech-plan.md](tech-plan.md) | 原生客户端、内容协议、轻量采集、静态发布 |
+| [app-store.md](app-store.md) | 商店中英文文案、审核路径、隐私申报依据与待办 |
 | [quality-release.md](quality-release.md) | 持续目标、完整交付的质量关口与完成证据 |
 | [roadmap.md](roadmap.md) | 设计关口、模拟器开发、真机交付、上架与分工 |
 | [decisions.md](decisions.md) | 历史决定与本轮 D-20 至 D-34；旧决定保留并标明替代关系 |

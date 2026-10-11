@@ -87,3 +87,9 @@ CI 的较旧模拟器暴露了本地视频缺失时 AVPlayer 失败回调延迟�
 21 项内容测试与类型检查通过，覆盖原创图镜像缓存、图片变更后的重新发布和资源路径限制。离线四条详情／全屏预览 UI 路径通过。初次运行发现模型测试硬编码了旧目录版本，改为验证更新失败后仍保留当前版本，19 项模型测试重新通过。证据位于 `Quality-Original-Images.xcresult`（UI 通过，含旧断言失败记录）与 `Quality-Original-Images-Models.xcresult`。
 
 2026-10-12：每日运行副本包含原创图资源，实际发布 `edition-74b1eab219f33793`，共 60 条（文本 20、图片 30、视频 4、网页 6）。六张原创图片远程地址均可访问，目录校验与 200／304／206／HEAD、只读边界检查通过。调整详情头图后再次完成四条离线路径并复查截图：`Quality-Original-Images-Final.xcresult`。
+
+### 发行签名与隐私准备
+
+中英文商店文案、审核路径及隐私数据路径已整理在 `app-store.md`。App 加入隐私 manifest，未把服务端抽样运行记录误写为完全不收集数据。Release 构建已通过签名验证并安装、启动到 iPhone Air；开发描述文件包含该设备，有效期至 2027-10-11 UTC。安装与启动记录位于 `~/.local/share/prompix/release-readiness-{install,launch}.json`。这不是最终交付构建，后续代码改动需重新签名验收。
+
+增加可重复的启动与滚动 CPU／内存测试。首次 Release 测试因默认未开启 testability 无法导入模型，改用显式 `ENABLE_TESTABILITY=YES`；随后设备测试 runner 在建立 IDE 连接前退出 code 74，尚无可用真机性能数值，不记为通过。诊断保存在 `Quality-Air-Performance-2.xcresult` 与 `air-performance-diagnostics`。

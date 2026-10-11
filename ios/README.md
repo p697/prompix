@@ -34,3 +34,16 @@ when available; additional community gallery pages remain remote.
 ## Interface languages
 
 The native interface follows the system language (Simplified Chinese or English); the app-specific language setting is available in iOS Settings. Prompt text, author examples and bundled website content retain their original language. UI translations live in `Prompix/Resources/Localizable.xcstrings`. Keep topic identifiers stable and localize only their displayed labels so filtering works in either language.
+
+## Privacy and submission
+
+`Resources/PrivacyInfo.xcprivacy` is bundled with the app. It declares no tracking and describes operational request data retained by the content service; it does not claim that local drafts or searches are uploaded. Required-reason API declarations must reflect actual code use. Store metadata, review instructions and the final submission checklist are in `docs/app-store.md`.
+
+Performance checks are explicitly selected UI tests: `testRepeatedLaunchPerformance`
+and `testScrollingResourcePerformance`. Run with `-configuration Release
+ENABLE_TESTABILITY=YES` and a physical-device destination plus your signing team.
+The launch test terminates and relaunches the process five times; it does not clear
+OS caches. The scroll test measures CPU and memory over three passes through the
+bundled offline catalog. These provide a repeatable baseline, not a substitute for
+live-image/network, video, thermal, or long-session measurements. Save each run to
+a new result bundle and report the actual metric values and device conditions.
