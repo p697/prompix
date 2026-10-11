@@ -173,6 +173,12 @@ iPhone 18 Pro 连续五屏浏览及每屏详情返回位置通过，五张截图
 
 长文本测试验证超过 1,600 字符的尾部编辑、复制、下滑关闭后原样恢复和原生侧滑返回。当前模拟器可输入文字，但没有实际绘制可点击的软件键盘，因此不能据此确认键盘遮挡布局；独立的可见键盘用例仅在显式启用且键盘实际可交互时运行。减少动态效果在 `Quality-Final-Interaction.xcresult` 的对应通过项中确认运行时设置为 true，并验证图片缩放、复位和返回；该包仍保留其他用例的历史失败。可见软件键盘布局及真机手势留待集中实机检查。
 
+### Build 4 开发签名候选
+
+0.2.0 (4) 已从干净提交 `106f988` 归档并导出，IPA 为 7,145,184 bytes，SHA-256 为 `599c7919ae8e508d7d321aaea7c27da9e5fbd3b6e1119c4be8a63a321c4d3c8c`。归档与导出包均通过独立严格签名检查，版本／iOS 17 最低系统／iPhone 与 iPad 支持正确，描述文件包含已登记验收设备；证书与描述文件有效期同上。30 条原创离线内容、12 张预览、6 个网页及隐私文件与源码匹配，中英文新增恢复文案均已编译，无测试 bundle、程序 MP4 或已知项目密钥命中。静态检查不是 Apple 上传验证。
+
+新版归档、IPA、`release.json`、`binary-audit.json` 与验收说明在 `~/.local/share/prompix/release-candidate-4/`。此构建的真机安装次数为零；用户稍后方便接线时再集中进行新版安装与实机检查。商店截图仍明确来自 build 3，未重新标记为 build 4。归档后的 PR 文档更新不改变 App 源文件；发行记录分别保存归档源码提交与最终合并提交。
+
 ### 测试证据保留
 
 为释放开发磁盘，仅清理可重建编译缓存，以及已被修复后结果替代的六个失败结果包：`Quality-All-Accessibility`、`Quality-All-Accessibility-4`、`Quality-All-Accessibility-Settled`、`Quality-Accessibility-Interaction`、`Quality-Original-Images`、`Quality-Adaptive-Audit`（均为 `.xcresult`）。清理前的机器可读概要保存在 `superseded-test-summaries/`，相关日志和截图保留。上文对应旧路径属于历史记录；通过的验证包、发布数据、当前源文件和用户数据未删除。
