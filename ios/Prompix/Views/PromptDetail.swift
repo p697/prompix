@@ -15,7 +15,7 @@ struct PromptDetail: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 25) {
-                if item.kind == .video || item.media?.image != nil {
+                if item.kind == .video || item.media?.image != nil || item.media?.imageURL != nil {
                     Button {
                         if item.kind == .video { playerPresented = true } else { imagePresented = true }
                     } label: {
@@ -24,7 +24,7 @@ struct PromptDetail: View {
                                 .font(.body).padding(14).background(.regularMaterial, in: Circle()).padding(16)
                         }
                     }.buttonStyle(.plain)
-                        .accessibilityLabel(item.kind == .video ? "播放视频示意" : "放大图片")
+                        .accessibilityLabel(item.kind == .video ? "播放视频" : "放大图片")
                         .accessibilityIdentifier("previewButton")
                 } else { hero }
                 VStack(alignment: .leading, spacing: 24) {
@@ -69,8 +69,9 @@ struct PromptDetail: View {
                     }
                     if let demo = item.media?.demoURL { Link("打开网页示例", destination: demo).font(.subheadline) }
                     VStack(alignment: .leading, spacing: 8) {
-                        HStack { Text(item.source.name).font(.caption.weight(.medium)); Spacer(); Text(item.source.method).font(.caption).foregroundStyle(.secondary) }
+                        HStack { Text(item.source.author ?? item.source.name).font(.caption.weight(.medium)); Spacer(); Text(item.source.method).font(.caption).foregroundStyle(.secondary) }
                         Text("\(item.source.license) · \(item.previewLabel)").font(.caption2).foregroundStyle(.secondary)
+                        if let repository = item.source.repository { Link("收录于 \(item.source.name)", destination: repository).font(.caption) }
                         if let source = item.source.url { Link("查看原始来源 ↗", destination: source).font(.caption) }
                     }
                     if !related.isEmpty {
@@ -85,7 +86,7 @@ struct PromptDetail: View {
         .toolbar(.hidden, for: .tabBar)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                ShareLink(item: "\(item.title)\n\n\(item.prompt)\n\n来自 \(item.source.name)") { Label("分享", systemImage: "square.and.arrow.up") }
+                ShareLink(item: "\(item.title)\n\n\(item.prompt)\n\n来自 \(item.source.author ?? item.source.name) · \(item.source.license)\n\(item.source.url?.absoluteString ?? "https://prompix.dev")") { Label("分享", systemImage: "square.and.arrow.up") }
                     .accessibilityIdentifier("sharePrompt")
             }
             ToolbarItem(placement: .topBarTrailing) {
@@ -108,12 +109,12 @@ struct PromptDetail: View {
             }.padding(.horizontal, 20).padding(.vertical, 10).background(.bar)
         }
         .sheet(isPresented: $editorPresented) { PromptEditor(item: item) }
-        .fullScreenCover(isPresented: $imagePresented) { ImageViewer(name: item.media?.image ?? item.artwork) }
+        .fullScreenCover(isPresented: $imagePresented) { ImageViewer(name: item.media?.image ?? item.artwork, url: item.media?.imageURL) }
         .sheet(isPresented: $webPresented) { WebExample() }
-        .sheet(isPresented: $playerPresented) { MovieView(filename: item.media?.video, caption: item.previewLabel) }
+        .sheet(isPresented: $playerPresented) { MovieView(filename: item.media?.video, remoteURL: item.media?.videoURL, caption: item.previewLabel) }
     }
     private var hero: some View {
-        Artwork(item: item).aspectRatio(item.kind == .image ? 0.95 : 1.15, contentMode: .fit)
+        Artwork(item: item).aspectRatio(item.media?.aspectRatio.map { max(0.6, min(1.8, $0)) } ?? (item.kind == .image ? 0.95 : 1.15), contentMode: .fit)
     }
 
 }
@@ -149,6 +150,7 @@ struct PromptEditor: View {
 
 struct MovieView: View {
     let filename: String?
+    let remoteURL: URL?
     let caption: String
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
@@ -162,7 +164,8 @@ struct MovieView: View {
             }.navigationTitle("动态灵感").navigationBarTitleDisplayMode(.inline)
                 .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完成") { dismiss() } } }
                 .onAppear {
-                    if let filename, let url = Bundle.main.url(forResource: filename, withExtension: "mp4") { player = AVPlayer(url: url); player?.play() }
+                    if let remoteURL { player = AVPlayer(url: remoteURL); player?.play() }
+                    else if let filename, let url = Bundle.main.url(forResource: filename, withExtension: "mp4") { player = AVPlayer(url: url); player?.play() }
                 }.onDisappear { player?.pause(); player = nil }
                 .onChange(of: scenePhase) { _, phase in if phase != .active { player?.pause() } }
         }
@@ -171,10 +174,18 @@ struct MovieView: View {
 
 struct ImageViewer: View {
     let name: String
+    let url: URL?
+    @State private var remoteImage: UIImage?
+    @State private var failed = false
     @Environment(\.dismiss) private var dismiss
     var body: some View {
         NavigationStack {
-            ZoomImage(name: name).ignoresSafeArea(edges: .bottom).background(.black)
+            ZStack {
+                Color.black
+                if url == nil || remoteImage != nil { ZoomImage(image: remoteImage ?? UIImage(named: name)).ignoresSafeArea(edges: .bottom) }
+                else if failed { ContentUnavailableView("图片暂不可用", systemImage: "photo", description: Text("关闭后可以重新尝试。")) }
+                else { ProgressView().tint(.white) }
+            }.task(id: url) { if let url { do { remoteImage = try await ImageStore.shared.image(for: url) } catch { failed = true } } }
                 .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完成") { dismiss() } } }
                 .toolbarBackground(.visible, for: .navigationBar).toolbarBackground(.black, for: .navigationBar).toolbarColorScheme(.dark, for: .navigationBar)
         }
@@ -182,14 +193,14 @@ struct ImageViewer: View {
 }
 
 struct ZoomImage: UIViewRepresentable {
-    let name: String
+    let image: UIImage?
     func makeCoordinator() -> Coordinator { Coordinator() }
     func makeUIView(context: Context) -> UIScrollView {
         let scroll = UIScrollView()
         scroll.minimumZoomScale = 1; scroll.maximumZoomScale = 5
         scroll.delegate = context.coordinator
         scroll.backgroundColor = .black
-        let image = UIImageView(image: UIImage(named: name))
+        let image = UIImageView(image: self.image)
         image.contentMode = .scaleAspectFit
         image.translatesAutoresizingMaskIntoConstraints = false
         scroll.addSubview(image)

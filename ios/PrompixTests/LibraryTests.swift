@@ -1,4 +1,5 @@
 import XCTest
+import CryptoKit
 @testable import Prompix
 
 @MainActor final class LibraryTests: XCTestCase {
@@ -62,4 +63,32 @@ import XCTest
             if let image = item.media?.image { XCTAssertNotNil(UIImage(named: image), image) }
         }
     }
+    func testRemoteEditionIsAtomicCachedAndRemovalsReachFavorites() throws {
+        let library = Library(directory: directory)
+        let saved = try XCTUnwrap(library.prompts.first)
+        library.toggle(saved)
+        let remaining = library.prompts.filter { $0.id != saved.id }
+        var catalog = Catalog(schemaVersion: 1, version: "remote-test", prompts: remaining)
+        catalog.removedIDs = [saved.id]
+        catalog.publishedAt = "2026-10-11T09:52:20.729Z"
+        let data = try JSONEncoder().encode(catalog)
+        let digest = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+        let manifest = CatalogManifest(schemaVersion: 1, version: "remote-test", sha256: digest, catalog: URL(string: "https://api.prompix.dev/releases/remote-test/catalog.json")!)
+        XCTAssertThrowsError(try library.install(Data("broken".utf8), manifest: manifest))
+        XCTAssertEqual(library.version, "studio-001")
+        XCTAssertTrue(library.isSaved(saved))
+        try library.install(data, manifest: manifest)
+        XCTAssertEqual(library.version, "remote-test")
+        XCTAssertFalse(library.isSaved(saved))
+        XCTAssertNotNil(library.updatedAt)
+        let reopened = Library(directory: directory)
+        XCTAssertEqual(reopened.version, "remote-test")
+        XCTAssertEqual(reopened.prompts.count, remaining.count)
+        XCTAssertFalse(reopened.isSaved(saved))
+    }
+    func testRemoteManifestCannotRedirectCatalogToUntrustedHost() throws {
+        let manifest = CatalogManifest(schemaVersion: 1, version: "test", sha256: String(repeating: "a", count: 64), catalog: URL(string: "https://example.com/releases/test/catalog.json")!)
+        XCTAssertThrowsError(try manifest.validated())
+    }
+
 }
