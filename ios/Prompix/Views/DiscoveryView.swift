@@ -173,13 +173,18 @@ struct FavoritesView: View {
                     Text("留住灵感，等一个想试试的时刻。").font(.subheadline).foregroundStyle(.secondary).padding(.horizontal, 20)
                     KindPicker(selection: $kind)
                     if !images.offlineFailures.isEmpty {
-                        Button { Task { await images.keepOffline(library.savedImageURLs) } } label: {
+                        Button { Task { if let urls = library.savedImageURLs { await images.keepOffline(urls) } } } label: {
                             Label("部分收藏预览尚未下载，轻点重试", systemImage: "arrow.down.circle")
                                 .font(.caption).foregroundStyle(.secondary)
                         }.padding(.horizontal, 20)
                     }
                     let items = library.favorites.filter { PromptQuery(text: query, kind: kind).matches($0) }
-                    if items.isEmpty {
+                    if !library.favoritesReadable {
+                        ContentUnavailableView {
+                            Label("收藏暂时无法读取", systemImage: "bookmark.slash")
+                        } description: { Text("原文件和离线预览已保留，暂时不会覆盖你的收藏。") }
+                        actions: { Button("重新读取收藏") { library.reloadFavorites() }.buttonStyle(.bordered) }
+                    } else if items.isEmpty {
                         if !query.isEmpty { ContentUnavailableView.search(text: query) }
                         else {
                         ContentUnavailableView("把喜欢的，留在这里", systemImage: "bookmark", description: Text("轻点卡片上的书签。\n文字保存在本机，缩略图会下载以供离线查看。"))
