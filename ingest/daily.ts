@@ -158,13 +158,22 @@ async function run() {
       } = candidate;
       try {
         if (prompt.media && publishing) {
-          const media = { ...prompt.media };
-          for (const field of ["imageURL", "videoURL"] as const) {
-            const url = media[field];
-            if (!url) continue;
+          const media = { ...prompt.media, ...(prompt.media.imageURLs ? { imageURLs: [...prompt.media.imageURLs] } : {}) };
+          const targets = [
+            ...(["imageURL", "videoURL"] as const).flatMap(field => media[field] ? [{
+              url: media[field]!, video: field === "videoURL", cover: field === "imageURL",
+              assign: (url: string) => { media[field] = url; },
+            }] : []),
+            ...(media.imageURLs ?? []).map((url, index) => ({
+              url, video: false, cover: false,
+              assign: (mirrored: string) => { media.imageURLs![index] = mirrored; },
+            })),
+          ];
+          for (const target of targets) {
+            const { url, video, cover } = target;
             if (mediaMap[url]) {
-              media[field] = mediaMap[url];
-              if (field === 'imageURL') {
+              target.assign(mediaMap[url]);
+              if (cover) {
                 if (!aspects[url]) {
                   const cached = await download(mediaMap[url], ['api.prompix.dev'], 8_000_000);
                   const file = join(root, `aspect-${process.pid}.jpg`);
@@ -179,9 +188,8 @@ async function run() {
             const data = await download(
               url,
               mediaHosts,
-              field === "videoURL" ? 60_000_000 : 20_000_000,
+              video ? 60_000_000 : 20_000_000,
             );
-            const video = field === "videoURL";
             if (video && data.bytes.subarray(4, 8).toString() !== "ftyp")
               throw new Error("Invalid MP4 signature");
             if (
@@ -221,7 +229,7 @@ async function run() {
                   { timeout: 30000 },
                 );
               if (!video) {
-                aspects[url] = await aspectRatio(output); media.aspectRatio = aspects[url];
+                aspects[url] = await aspectRatio(output); if (cover) media.aspectRatio = aspects[url];
                 await atomic(join(root,'media-aspects.json'),aspects);
               }
               const hash = createHash("sha256")
@@ -229,8 +237,8 @@ async function run() {
                 .digest("hex");
               const key = `media/${hash}.${video ? "mp4" : "jpg"}`;
               await upload(key, output, video ? "video/mp4" : "image/jpeg");
-              media[field] = `${base}/${key}`;
-              mediaMap[url] = media[field];
+              mediaMap[url] = `${base}/${key}`;
+              target.assign(mediaMap[url]);
               await atomic(join(root, "media-map.json"), mediaMap);
             } finally {
               await rm(input, { force: true });

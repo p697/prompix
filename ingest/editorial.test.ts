@@ -7,6 +7,15 @@ const candidates = parseCommunityCSV('act,prompt,type,contributor\n"A tiny tale"
 const item = candidates[0];
 const metadata = { title: "Give a teacup a tiny adventure", summary: "An ordinary object with an unusual wish.", example: "A teacup hoped to hear the sea. One morning its owner opened the window while the kettle boiled, and for a moment it was almost there.", tags: ["好玩一点"], previewLabel: "Editorial example" };
 const reviews: Reviews = { [item.id]: { fingerprint: item.fingerprint, reviewedAt: "2026-10-11T00:00:00Z", metadata } };
+test("only an explicit editorial gallery adds images, keeps its order and chooses the cover", () => {
+  const images = ["https://example.com/a.jpg", "https://example.com/b.jpg", "https://example.com/a.jpg"];
+  const gallery = { [item.id]: { ...reviews[item.id], metadata: { ...metadata, imageURLs: images } } };
+  const approved = applyEditorialReviews(candidates, gallery)[0];
+  assert.deepEqual(approved.media?.imageURLs, images.slice(0, 2));
+  assert.equal(approved.media?.imageURL, images[0]);
+  assert.equal(applyEditorialReviews(candidates, reviews)[0].media, null);
+  assert.equal(reviewsSchema.safeParse({ [item.id]: { ...reviews[item.id], metadata: { ...metadata, imageURLs: Array(9).fill(images[0]) } } }).success, false);
+});
 test("raw role prompts cannot enter an edition until edited; provenance and source text survive approval", () => {
   assert.equal(selectEdition(candidates, new Set(), 10).length, 0);
   assert.equal(selectEdition(applyEditorialReviews([{ ...item, reviewStatus: "candidate" }], {}), new Set(), 10).length, 0);

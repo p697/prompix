@@ -11,7 +11,7 @@ export interface RecoveryTransport {
   verifyMedia: typeof verifyMedia;
 }
 async function verifyMedia(catalog: import("../packages/schema/catalog.ts").Catalog) {
-  const urls = new Set(catalog.prompts.flatMap(p => [p.media?.imageURL, p.media?.videoURL]).filter((url): url is string => !!url));
+  const urls = new Set(catalog.prompts.flatMap(p => [p.media?.imageURL, p.media?.videoURL, ...(p.media?.imageURLs ?? [])]).filter((url): url is string => !!url));
   for (const url of urls) {
     z.string().regex(/^https:\/\/api\.prompix\.dev\/media\/[a-f0-9]{64}\.(jpg|mp4)$/).parse(url);
     const response = await fetch(url, { method: "HEAD", redirect: "error", signal: AbortSignal.timeout(15000) });

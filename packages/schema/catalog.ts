@@ -36,6 +36,7 @@ export const promptSchema = z.object({
       video: resource.nullable(),
       demoURL: https.nullable(),
       imageURL: https.optional(),
+      imageURLs: z.array(https).min(1).max(8).optional(),
       aspectRatio: z.number().min(0.1).max(10).optional(),
       videoURL: https.optional(),
     })

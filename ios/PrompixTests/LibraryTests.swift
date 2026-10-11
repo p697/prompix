@@ -9,6 +9,21 @@ import CryptoKit
     }
     override func tearDown() async throws { try? FileManager.default.removeItem(at: directory) }
 
+    func testGalleryPreservesCoverOrderAndRejectsUntrustedMedia() throws {
+        let cover = URL(string: "https://api.prompix.dev/media/cover.jpg")!
+        let second = URL(string: "https://api.prompix.dev/media/second.jpg")!
+        let media = Prompt.Media(image: nil, video: nil, demoURL: nil, imageURL: cover, imageURLs: [second, cover])
+        XCTAssertEqual(media.galleryURLs, [cover, second])
+        let library = Library(directory: directory)
+        var raw = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(library.prompts[0])) as? [String: Any])
+        raw["media"] = ["imageURLs": ["https://untrusted.example/image.jpg"]]
+        let invalid = try JSONDecoder().decode(Prompt.self, from: JSONSerialization.data(withJSONObject: raw))
+        XCTAssertThrowsError(try Catalog(schemaVersion: 1, version: "test", prompts: [invalid]).validated())
+        raw["media"] = ["imageURLs": Array(repeating: cover.absoluteString, count: 9)]
+        let tooMany = try JSONDecoder().decode(Prompt.self, from: JSONSerialization.data(withJSONObject: raw))
+        XCTAssertThrowsError(try Catalog(schemaVersion: 1, version: "test", prompts: [tooMany]).validated())
+    }
+
     func testFavoritesSurviveRelaunchAndStorePromptSnapshot() throws {
         let first = Library(directory: directory)
         let item = try XCTUnwrap(first.prompts.first)

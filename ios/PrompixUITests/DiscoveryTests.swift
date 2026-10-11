@@ -91,7 +91,8 @@ import XCTest
         app.buttons["prompt-slow-road"].tap()
         app.buttons["previewButton"].tap()
         XCTAssertTrue(app.navigationBars["动态灵感"].waitForExistence(timeout: 5))
-        capture("07-video")
+        XCTAssertTrue(app.descendants(matching: .any)["playingVideo"].waitForExistence(timeout: 15))
+        capture("07-video-playing")
         app.buttons["完成"].tap()
         app.navigationBars.buttons.element(boundBy: 0).tap()
         app.buttons["kind-web"].tap()
@@ -204,6 +205,33 @@ import XCTest
         XCTAssertTrue(app.navigationBars["About and settings"].waitForExistence(timeout: 5))
         capture("19-english-settings")
     }
+    func testLiveImageGallery() throws {
+        app.terminate()
+        app.launchArguments.removeAll { $0 == "--offline" }
+        app.launch()
+        XCTAssertTrue(app.staticTexts["DAILY FINDS"].waitForExistence(timeout: 35))
+        app.buttons["searchButton"].tap()
+        let search = app.searchFields.firstMatch
+        XCTAssertTrue(search.waitForExistence(timeout: 3))
+        search.tap(); search.typeText("发明")
+        let card = app.buttons.containing(NSPredicate(format: "identifier BEGINSWITH %@", "prompt-youmind-nano-")).firstMatch
+        XCTAssertTrue(card.waitForExistence(timeout: 5)); card.tap()
+        app.buttons["previewButton"].tap()
+        XCTAssertTrue(app.navigationBars["1 / 4"].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.buttons["previousImage"].isEnabled)
+        for index in 1...4 {
+            XCTAssertTrue(app.navigationBars["\(index) / 4"].waitForExistence(timeout: 5))
+            XCTAssertTrue(app.descendants(matching: .any)["loadedImage"].waitForExistence(timeout: 20))
+            capture("gallery-\(index)")
+            if index < 4 { app.buttons["nextImage"].tap() }
+        }
+        XCTAssertFalse(app.buttons["nextImage"].isEnabled)
+        app.buttons["previousImage"].tap()
+        XCTAssertTrue(app.navigationBars["3 / 4"].waitForExistence(timeout: 5))
+        app.buttons["完成"].tap()
+        XCTAssertTrue(app.buttons["copyPrompt"].exists)
+    }
+
     func testLiveCommunityEditionAndRemotePreviews() throws {
         app.terminate()
         app.launchArguments.removeAll { $0 == "--offline" }
@@ -223,7 +251,9 @@ import XCTest
         XCTAssertTrue(videoCard.waitForExistence(timeout: 10)); videoCard.tap()
         app.buttons["previewButton"].tap()
         XCTAssertTrue(app.navigationBars["动态灵感"].waitForExistence(timeout: 10))
-        capture("12-live-video")
+        XCTAssertTrue(app.descendants(matching: .any)["playingVideo"].waitForExistence(timeout: 35))
+        XCTAssertFalse(app.buttons["retryVideo"].exists)
+        capture("12-live-video-playing")
     }
 
 }
