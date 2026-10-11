@@ -38,6 +38,18 @@ on GitHub. Personal drafts and saved state never enter this URL. Issue templates
 must exist on the default branch before the feedback links can work. GitHub
 feedback is public and requires an account; the UI states this before leaving.
 
+Support, privacy and content-report pages also offer `support@prompix.dev` as a
+private email contact. Cloudflare Email Routing forwards only that exact address
+to the account owner's existing verified destination; the private destination
+must never appear in the repository. No Prompix or GitHub account is required.
+The website opens the user's mail app and sends nothing itself. Include the
+displayed public prompt ID manually when emailing a content report.
+
+Routing configuration is enabled and its DNS records resolve. This does not by
+itself prove end-to-end delivery; no outbound test email was sent during setup.
+Sanitized configuration evidence lives outside Git at
+`~/.local/share/prompix/release-candidate/support-routing.json`.
+
 Before App Store submission, review the privacy text against the final build's
-network behavior, SDKs and Cloudflare settings. Keep any new private support
-channel and the support page in agreement.
+network behavior, SDKs and Cloudflare settings. Keep the support channel and
+the support page in agreement.

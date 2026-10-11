@@ -15,6 +15,8 @@
 | 隐私网址 | https://prompix.dev/zh/privacy | https://prompix.dev/privacy |
 | 营销网址 | https://prompix.dev/zh | https://prompix.dev |
 
+支持网址提供可直接联系的 `support@prompix.dev`，无需 Prompix 或 GitHub 账号；公开 GitHub issue 作为另一种反馈方式保留。该地址经 Cloudflare Email Routing 转发到项目负责人的既有已验证邮箱。路由与 DNS 已核对，尚未发送测试邮件验证实际投递；支持邮箱不自动代替 App Store Connect 内单独填写的审核联系人。
+
 ### 中文描述
 
 给好奇心，留一点地方。
@@ -74,6 +76,7 @@ The app does not submit prompts to AI services automatically. External tool/sour
 | 内置网页作品 | 本地 WebKit、临时数据存储、CSP 禁止联网 | 无额外服务端收集 |
 | 复制／系统分享／外部网页 | 仅用户主动操作；目标服务自行处理 | 不把系统外的第三方行为描述为 Prompix 内建生成 |
 | GitHub 支持 | 跳转公开 GitHub 表单，需要用户自行登录并提交 | 公开隐私页解释账号与提交内容的可见性；提交时再次核对 Apple 的可选反馈披露条件 |
+| 邮件支持 | 用户主动发邮件至 support@prompix.dev，经 Cloudflare 转发至支持收件箱；邮件服务处理发件地址、正文和附件 | 隐私页说明投递和问题处理用途，不公开发件内容；提交时核对 Apple 对可选支持反馈的披露条件 |
 
 服务器运行日志只能用于交付、安全和故障排查，不用于兴趣画像。上述分类根据实际用途，而不是因为“没有分析 SDK”就选择 Data Not Collected。最终提交时核对 Cloudflare 当前记录字段、留存和安全配置，并按 App Store Connect 实际问卷填写，不能机械复制这份草稿。
 
