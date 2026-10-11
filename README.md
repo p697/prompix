@@ -2,7 +2,7 @@
 
 An open-source, native mobile app for discovering interesting AI prompts across text, images, video, and websites. Explore a feed, see what a prompt can do, save it, and use it in your preferred tool.
 
-> Status: product planning and design direction review. There is nothing to install yet. Client development starts after the user approves the design direction.
+> Status: native iOS 0.1.0 preview implemented. The approved direction is lightweight discovery: Xiaohongshu-style browsing with restrained Cosmos-inspired presentation. See [iOS setup](ios/README.md) and [acceptance notes](docs/acceptance-0.1.md).
 
 ## What it is
 
@@ -27,9 +27,9 @@ Prompix is independent and is not affiliated with the AI tool providers. Product
 
 Read [docs/README.md](docs/README.md) for the current product, technical plan, roadmap, and decisions. Product documents are written in Chinese.
 
-[design/v2](design/v2/index.html) contains historical HTML mockups, not an app implementation or the approved v1 design. The next milestone is to confirm a design direction and core screens before client development.
+[design/v2](design/v2/index.html) contains historical HTML mockups, not an app implementation or the approved v1 design. The current design direction is approved and implemented in native SwiftUI.
 
-## Repository layout (planned)
+## Repository layout
 
 | Path | Purpose |
 |---|---|
