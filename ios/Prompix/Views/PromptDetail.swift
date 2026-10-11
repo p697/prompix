@@ -1,5 +1,7 @@
 import SwiftUI
 import AVKit
+import Combine
+import Observation
 
 struct PromptDetail: View {
     let item: Prompt
@@ -191,27 +193,91 @@ struct PromptEditor: View {
     }
 }
 
+@MainActor @Observable final class MoviePlayback {
+    private(set) var player: AVPlayer?
+    private(set) var failed = false
+    private(set) var loading = true
+    private(set) var aspectRatio: CGFloat = 16 / 9
+    @ObservationIgnored private var subscriptions = Set<AnyCancellable>()
+    @ObservationIgnored private var timeout: Task<Void, Never>?
+
+    func start(url: URL?) {
+        stop()
+        failed = false; loading = true; aspectRatio = 16 / 9
+        guard let url else { fail(); return }
+        let item = AVPlayerItem(url: url)
+        let player = AVPlayer(playerItem: item)
+        self.player = player
+        item.publisher(for: \.status).receive(on: RunLoop.main).sink { [weak self] status in
+            guard let self, self.player?.currentItem === item else { return }
+            if status == .failed { self.fail() }
+            else if status == .readyToPlay { self.loading = false }
+        }.store(in: &subscriptions)
+        item.publisher(for: \.presentationSize).receive(on: RunLoop.main).sink { [weak self] size in
+            guard let self, self.player?.currentItem === item, size.width > 0, size.height > 0 else { return }
+            self.aspectRatio = size.width / size.height
+        }.store(in: &subscriptions)
+        player.publisher(for: \.timeControlStatus).receive(on: RunLoop.main).sink { [weak self] status in
+            guard let self, self.player === player, !self.failed else { return }
+            if status == .waitingToPlayAtSpecifiedRate { self.loading = true; self.armTimeout() }
+            else if status == .playing { self.loading = false; self.timeout?.cancel() }
+            else if item.status == .readyToPlay { self.loading = false; self.timeout?.cancel() }
+        }.store(in: &subscriptions)
+        NotificationCenter.default.publisher(for: AVPlayerItem.failedToPlayToEndTimeNotification, object: item)
+            .receive(on: RunLoop.main).sink { [weak self] _ in
+                guard let self, self.player?.currentItem === item else { return }; self.fail()
+            }.store(in: &subscriptions)
+        armTimeout()
+        player.play()
+    }
+    private func armTimeout() {
+        timeout?.cancel()
+        timeout = Task { [weak self] in
+            do { try await Task.sleep(for: .seconds(25)) } catch { return }
+            guard let self, self.loading else { return }
+            self.fail()
+        }
+    }
+    private func fail() {
+        failed = true; loading = false; timeout?.cancel(); player?.pause()
+    }
+    func pause() { player?.pause(); timeout?.cancel(); loading = false }
+    func stop() {
+        timeout?.cancel(); timeout = nil; subscriptions.removeAll()
+        player?.pause(); player?.replaceCurrentItem(with: nil); player = nil; loading = false
+    }
+}
+
 struct MovieView: View {
     let filename: String?
     let remoteURL: URL?
     let caption: String
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
-    @State private var player: AVPlayer?
+    @State private var playback = MoviePlayback()
+    private var url: URL? { remoteURL ?? filename.flatMap { Bundle.main.url(forResource: $0, withExtension: "mp4") } }
     var body: some View {
         NavigationStack {
             VStack(spacing: 16) {
-                if let player { VideoPlayer(player: player).aspectRatio(16/9, contentMode: .fit) }
-                else { ContentUnavailableView("视频暂不可用", systemImage: "video.slash", description: Text("你仍可以复制完整 Prompt，去创作自己的版本。")) }
+                if playback.failed {
+                    ContentUnavailableView {
+                        Label("视频暂不可用", systemImage: "video.slash")
+                    } description: {
+                        Text("检查网络后再试。完整 Prompt 仍可复制使用。")
+                    } actions: {
+                        Button("重新加载") { playback.start(url: url) }.buttonStyle(.bordered).accessibilityIdentifier("retryVideo")
+                    }
+                } else if let player = playback.player {
+                    VideoPlayer(player: player).aspectRatio(playback.aspectRatio, contentMode: .fit)
+                        .overlay { if playback.loading { ProgressView("正在加载视频…").padding(16).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14)).allowsHitTesting(false) } }
+                }
                 Text(caption).font(.caption).foregroundStyle(.secondary).padding(.horizontal, 20)
-            }.navigationTitle("动态灵感").navigationBarTitleDisplayMode(.inline)
+            }.frame(maxWidth: .infinity, maxHeight: .infinity).background(.black).navigationTitle("动态灵感").navigationBarTitleDisplayMode(.inline)
                 .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完成") { dismiss() } } }
-                .onAppear {
-                    if let remoteURL { player = AVPlayer(url: remoteURL); player?.play() }
-                    else if let filename, let url = Bundle.main.url(forResource: filename, withExtension: "mp4") { player = AVPlayer(url: url); player?.play() }
-                }.onDisappear { player?.pause(); player = nil }
-                .onChange(of: scenePhase) { _, phase in if phase != .active { player?.pause() } }
-        }
+                .onAppear { playback.start(url: url) }
+                .onDisappear { playback.stop() }
+                .onChange(of: scenePhase) { _, phase in if phase != .active { playback.pause() } }
+        }.preferredColorScheme(.dark)
     }
 }
 
@@ -220,15 +286,42 @@ struct ImageViewer: View {
     let url: URL?
     @State private var remoteImage: UIImage?
     @State private var failed = false
+    @State private var offlinePreview = false
+    @State private var attempt = 0
     @Environment(\.dismiss) private var dismiss
     var body: some View {
         NavigationStack {
             ZStack {
                 Color.black
                 if url == nil || remoteImage != nil { ZoomImage(image: remoteImage ?? UIImage(named: name)).ignoresSafeArea(edges: .bottom) }
-                else if failed { ContentUnavailableView("图片暂不可用", systemImage: "photo", description: Text("关闭后可以重新尝试。")) }
+                else if failed {
+                    ContentUnavailableView {
+                        Label("图片暂不可用", systemImage: "photo")
+                    } description: { Text("检查网络后可以重新加载。") }
+                    actions: { Button("重新加载") { attempt += 1 }.buttonStyle(.bordered).accessibilityIdentifier("retryImage") }
+                    .environment(\.colorScheme, .dark)
+                }
                 else { ProgressView().tint(.white) }
-            }.task(id: url) { if let url { do { remoteImage = try await ImageStore.shared.image(for: url) } catch { failed = true } } }
+            }.overlay(alignment: .bottom) {
+                if offlinePreview {
+                    Button { attempt += 1 } label: {
+                        Label("当前为离线预览 · 轻点加载清晰图片", systemImage: "arrow.clockwise")
+                            .font(.caption).padding(12).foregroundStyle(.white).background(.black.opacity(0.7), in: Capsule())
+                    }.padding().accessibilityIdentifier("loadFullImage")
+                }
+            }.task(id: "\(url?.absoluteString ?? name)-\(attempt)") {
+                guard let url else { return }
+                failed = false
+                if remoteImage == nil { remoteImage = ImageStore.shared.offlineImage(for: url) }
+                do {
+                    remoteImage = try await ImageStore.shared.image(for: url, fullResolution: true)
+                    offlinePreview = false
+                } catch {
+                    guard !Task.isCancelled else { return }
+                    offlinePreview = remoteImage != nil
+                    failed = remoteImage == nil
+                }
+            }
                 .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完成") { dismiss() } } }
                 .toolbarBackground(.visible, for: .navigationBar).toolbarBackground(.black, for: .navigationBar).toolbarColorScheme(.dark, for: .navigationBar)
         }
@@ -258,7 +351,9 @@ struct ZoomImage: UIViewRepresentable {
         scroll.accessibilityLabel = "图片预览，双指缩放或双击放大"
         return scroll
     }
-    func updateUIView(_ uiView: UIScrollView, context: Context) {}
+    func updateUIView(_ uiView: UIScrollView, context: Context) {
+        if context.coordinator.image?.image !== image { context.coordinator.image?.image = image }
+    }
     class Coordinator: NSObject, UIScrollViewDelegate {
         weak var image: UIImageView?
         func viewForZooming(in scrollView: UIScrollView) -> UIView? { image }
