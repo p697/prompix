@@ -1,0 +1,25 @@
+name: App problem / 使用问题
+description: Help us reproduce an issue in Prompix.
+title: "App: "
+body:
+  - type: markdown
+    attributes:
+      value: "Remove private information from screenshots and descriptions. 请去除截图与描述中的个人信息。"
+  - type: input
+    id: version
+    attributes:
+      label: App version, device and iOS / App 版本、设备与系统
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps and expected result / 操作步骤与预期结果
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: What happened? / 实际结果
+    validations:
+      required: true

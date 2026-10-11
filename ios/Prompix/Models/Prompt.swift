@@ -118,3 +118,15 @@ struct RelatedPrompts {
         return ranked.prefix(max(0, limit)).map(\.item)
     }
 }
+
+/// Public information routes never include personal drafts or saved collections.
+enum SupportLinks {
+    enum Page: String { case home = "", support, privacy, content, report }
+    static func url(_ page: Page, contentID: String? = nil, language: String = Bundle.main.preferredLocalizations.first ?? "en") -> URL {
+        var parts = URLComponents(string: "https://prompix.dev")!
+        let prefix = language.lowercased().hasPrefix("zh") ? "/zh" : ""
+        parts.path = prefix + (page.rawValue.isEmpty ? "" : "/\(page.rawValue)")
+        if page == .report, let contentID { parts.queryItems = [URLQueryItem(name: "id", value: contentID)] }
+        return parts.url!
+    }
+}

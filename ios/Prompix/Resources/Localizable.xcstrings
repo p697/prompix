@@ -1084,23 +1084,6 @@
         }
       }
     },
-    "收藏和编辑都在本机完成。这一版没有账号、不上传输入、不收集行为数据。删除 App 会清除本地收藏。": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Saved ideas and edits stay on this device. This version has no account, doesn't upload your input, and doesn't collect behavioral analytics. Deleting the app removes local saves."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "收藏和编辑都在本机完成。这一版没有账号、不上传输入、不收集行为数据。删除 App 会清除本地收藏。"
-          }
-        }
-      }
-    },
     "收藏暂时无法读取": {
       "extractionState": "manual",
       "localizations": {
@@ -2248,6 +2231,76 @@
           "stringUnit": {
             "state": "translated",
             "value": "模型"
+          }
+        }
+      }
+    },
+    "Prompix 官网": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Prompix website"
+          }
+        }
+      }
+    },
+    "反馈这条内容": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Report this content"
+          }
+        }
+      }
+    },
+    "帮助与信息": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Help and information"
+          }
+        }
+      }
+    },
+    "帮助与反馈": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Help and feedback"
+          }
+        }
+      }
+    },
+    "开源项目": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open-source project"
+          }
+        }
+      }
+    },
+    "收藏和草稿保存在本机，不上传编辑内容或搜索词，也没有广告与分析 SDK。下载内容仍需要网络请求。删除 App 会清除其本地数据。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saved ideas and drafts stay on your device. Edits and searches are not uploaded, and there are no ads or analytics SDKs. Downloading content still makes network requests. Deleting the app removes its local data."
+          }
+        }
+      }
+    },
+    "隐私说明": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Privacy"
           }
         }
       }

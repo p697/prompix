@@ -1,0 +1,37 @@
+name: Content correction or removal / 内容纠错与下架
+description: Report attribution, preview, source or removal issues.
+title: "Content: "
+body:
+  - type: markdown
+    attributes:
+      value: "This report is public. Do not attach private documents or personal drafts. 此反馈公开可见，请勿提交私人文件或个人草稿。"
+  - type: input
+    id: content-id
+    attributes:
+      label: Prompt ID or title / 条目 ID 或标题
+    validations:
+      required: true
+  - type: input
+    id: source
+    attributes:
+      label: Original public source / 原始公开来源
+      description: Link to the original work or creator.
+  - type: dropdown
+    id: issue
+    attributes:
+      label: What needs attention? / 需要处理什么？
+      options:
+        - Attribution / 署名
+        - Example or prompt mismatch / 预览与正文不符
+        - Unavailable source or media / 来源或媒体失效
+        - Removal request / 下架申请
+        - Other correction / 其他纠错
+    validations:
+      required: true
+  - type: textarea
+    id: details
+    attributes:
+      label: Details / 说明
+      description: Explain the correction. For ownership requests, provide a public reference. Request a private channel before sharing sensitive evidence.
+    validations:
+      required: true

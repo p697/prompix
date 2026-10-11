@@ -1,0 +1,117 @@
+#!/usr/bin/env python3
+"""Build the public product/support site. Uses only first-party repository assets."""
+import html
+import json
+import pathlib
+import shutil
+
+root = pathlib.Path(__file__).resolve().parent
+out = root / 'dist'
+out.mkdir(exist_ok=True)
+for name in ['style.css', 'site.js']:
+    shutil.copy2(root / name, out / name)
+shutil.copytree(root / 'assets', out / 'assets', dirs_exist_ok=True)
+repo = root.parent.parent
+catalog = json.loads((repo / 'ios/Prompix/Resources/catalog.json').read_text())
+originals = {p['id']: p for p in catalog['prompts'] if p['source']['name'] == 'Prompix Studio'}
+e = html.escape
+
+copy = {
+'en': dict(brand='Ideas worth getting lost in.', description='Discover text, image, video and website prompts in a thoughtfully made native iOS app.', support='Support', privacy='Privacy', content='Content & sources', report='Report content', lang='中', other='/zh', skip='Skip to content', close='Close', prompt='Copy prompt', note='Original Prompix examples. Image generated from its prompt; website built as an interactive example.', headline='Follow a little<br>curiosity.', intro='A place to discover what AI can help you make. Good prompts, intriguing results, and ideas you didn’t know you were looking for.', status='Native iOS · In development', edit='A FEW IDEAS TO START WITH', kinds=['Text','Images','Video','Websites'], titles=['A whole summer,<br>in one orange.','A little perspective<br>for today.','A quieter corner<br>of the internet.'], small=['Image · Original example','Text · A reflection exercise','Website · Interactive example'], art='Today,<br>a little<br>perspective.', statement='From “what if”<br>to something yours.', story='Browse for the feeling of finding something good. Stay for the possibility of making it your own.', steps=[('Discover something unexpected.','A small visual experiment, a playful conversation, or the start of your next website.'),('Make the prompt your own.','Read the example, adjust the words, and take it to a tool that suits you.'),('Keep your good finds close.','Save ideas on your device, then come back when the moment feels right.')], release='Made for your iPhone.', release_body='Prompix is being refined for its first public release. There is no public App Store or TestFlight download yet.', project='Follow the open-source project', original='Prompix Studio · Original prompts · CC0', modal_note='Change the details to suit you, then paste into your preferred AI tool. Results vary by model. Reflection prompts are for entertainment, not predictions.', updated='Updated October 11, 2026', footer='A small place for big possibilities.'),
+'zh': dict(brand='让好奇，变成创造。', description='在原生 iOS App 里发现文本、图片、视频和网页 Prompt，把好奇变成自己的创作。', support='帮助与反馈', privacy='隐私', content='内容与来源', report='内容反馈', lang='EN', other='', skip='跳到正文', close='关闭', prompt='复制 Prompt', note='Prompix 原创示例。图片为该 Prompt 的实际生成结果；网页为可交互的原创作品。', headline='好奇心，<br>有了新去处。', intro='有趣的对话、令人心动的画面、一个属于自己的网站。逛一逛，发现 AI 还能这样用。', status='原生 iOS · 正在打磨', edit='从一个小小的念头开始', kinds=['文本','图片','视频','网页'], titles=['把一颗橘子，<br>拍成整个夏天。','抽一张塔罗，<br>换一个看今天的角度。','给自己做一个，<br>有呼吸感的网站。'], small=['图片 · 原创实际示例','文本 · 自我反思小练习','网页 · 原创交互作品'], art='今天，<br>慢慢来。', statement='从「如果可以」，<br>到「这是我的」。', story='不必带着任务来。一个画面、一句回应、一个小小的念头，都可以成为创作的开始。', steps=[('先发现，让你好奇的东西。','从生活玩法，到视觉实验，再到一个属于自己的网站。'),('改几句话，变成自己的版本。','看清示例，补上自己的想法，复制到合适的 AI 工具里试试。'),('把喜欢的灵感，留在手边。','在手机里收藏。等到想做点什么的时候，再回来找它。')], release='为你的 iPhone 而做。', release_body='Prompix 正在打磨首个公开版本，目前尚未开放 App Store 或 TestFlight 下载。', project='关注开源项目', original='Prompix Studio · 原创 Prompt · CC0', modal_note='按自己的想法修改，再粘贴到适合的 AI 工具。不同模型的结果可能不同。塔罗玩法用于娱乐与自我反思，不预测未来。', updated='更新于 2026 年 10 月 11 日', footer='给好奇心，留一点地方。')
+}
+
+pages = {
+'en': {
+'support': ('A little help.', 'Find your way from a good prompt to your own creation.', '''
+<details open><summary>How do I use a prompt?</summary><p>Open an idea, read its example and requirements, then copy the prompt. “Make it yours” lets you edit a personal draft. Open the suggested tool and paste it there. Prompix doesn’t generate results or send your text to that tool automatically.</p></details>
+<details><summary>What works offline?</summary><p>Bundled examples, downloaded prompt text, your drafts and saved thumbnails can be used offline. Full-size remote images and videos need a connection unless already cached. Original bundled website examples open offline; external tools need the internet.</p></details>
+<details><summary>Can I move my saved ideas to another device?</summary><p>This version has no account or cloud sync. Collections and drafts are stored locally. Share or copy anything you want to keep before deleting the app. Device backups are controlled by your iOS settings.</p></details>
+<details><summary>Why won’t an image, video or update load?</summary><p>Check your connection and try Reload. For content updates, pull down in Discover or choose Check for updates in Settings. Existing downloaded ideas remain available if an update fails. Clearing image cache keeps your saved thumbnails and drafts.</p></details>
+<details><summary>Why does my result look different?</summary><p>Models, inputs and settings affect the result. Prompix keeps source attribution and explains whether a preview is an actual output, an editorial illustration or an original interactive example. Follow any reference-image requirements in the prompt.</p></details>
+<details><summary>How do I change the interface language?</summary><p>Prompix supports English and Simplified Chinese. Open App language and system settings from Prompix Settings. Prompts and examples retain their original language.</p></details>
+<h2>Something still feels off?</h2><p>Tell us your app version, device, iOS version and the steps that led to the problem. Remove personal text from screenshots.</p><a class="button" href="https://github.com/p697/prompix/issues/new?template=bug.yml">Report a problem ↗</a><p class="note">Feedback is handled through the public GitHub project and requires a GitHub account. Don’t include passwords, payment details, private drafts or personal documents.</p><p>For attribution, incorrect examples or removal requests, use <a href="/report">content feedback</a>. For data questions, see <a href="/privacy">privacy</a>.</p>'''),
+'privacy': ('Your ideas stay yours.', 'How Prompix handles data in the app and on this website.', '''
+<h2>Saved ideas and personal drafts</h2><p>Prompix has no user account. Saved prompts and edited drafts are stored on your device. We do not upload your edits, searches, clipboard contents or saved collection to our servers. Copying writes to the system clipboard only when you choose it. Sharing uses the iOS share sheet you control.</p><p>Removing a saved item or restoring a draft removes that local entry. Deleting the app removes its local data. iOS backups, shared copies and the system clipboard are managed separately through your device and the services you choose.</p>
+<h2>Requests that make the app work</h2><p>The app downloads content catalogs and requested media from api.prompix.dev. These requests necessarily include network information such as an IP address, request time and requested URL. Cloudflare provides hosting and network protection; operational request and error records can be processed for delivery, security and troubleshooting.</p><p>We do not add advertising identifiers, analytics SDKs, cross-app tracking or personalized advertising. Operational records are not used to build personal interest profiles. Cloudflare’s processing and retention are governed by its service settings and <a href="https://www.cloudflare.com/privacypolicy/">privacy policy</a>.</p>
+<h2>This website</h2><p>This site does not set application cookies, run analytics scripts or store a browsing profile. The example viewer and copy button work in your browser. Hosting still processes the network requests needed to serve these pages. A content-report link may contain a public prompt ID; it never includes your edited draft.</p>
+<h2>External tools and feedback</h2><p>When you open an AI tool, source page or GitHub, that service applies its own privacy policy. Your prompt is not automatically submitted. If you choose to file a GitHub issue, your account name and the information you submit are visible publicly and processed by GitHub. Don’t post private drafts or personal records.</p>
+<h2>Questions and choices</h2><p>You can use downloaded content offline, clear browsing images in the app, remove saved items and drafts, or delete the app. For a data question, <a href="https://github.com/p697/prompix/issues/new?template=privacy.yml">open a privacy inquiry</a> with a general description only. If sensitive information is needed, ask for a private contact channel before sharing it.</p><p>Prompix is maintained through the <a href="https://github.com/p697/prompix">open-source project</a>. Material changes to these practices will be reflected on this page before they apply to a new version.</p>'''),
+'content': ('Good ideas have origins.', 'Examples should be useful. Their sources should be clear.', '''
+<h2>Original and community ideas</h2><p>Prompix combines original prompts and examples with selected material from allowlisted public sources, including YouMind OpenLab and prompts.chat. Each detail page identifies the author or collection, links to the available original source, and shows the recorded license and preparation method.</p><p>Code being open source does not make every prompt, image or video share the code’s license. Follow the license shown for each item and the terms of your chosen generation tool.</p>
+<h2>What a preview means</h2><p>A preview may be an output produced with its prompt, an explicitly labeled editorial illustration, an original interactive website, or a community creator’s example. A listing is not a promise of identical output from every model. Reference materials and model settings may be necessary.</p><p>Text games involving tarot or imaginary predictions are entertainment and reflection exercises. They do not predict events or replace important personal decisions.</p>
+<h2>Corrections and removals</h2><p>If an example does not match its prompt, a credit is wrong, a source has disappeared, or you want your work removed, send a content report with the public prompt ID and source URL. The project maintainer reviews reports; we do not promise an unattended instant response.</p><a class="button" href="/report">Report a content issue →</a><p>Approved removals are applied to the published catalog. Apps remove affected content and saved snapshots after their next successful refresh. Offline devices, exported copies and previously shared content cannot be recalled immediately.</p>
+<h2>Independent by design</h2><p>Prompix is not affiliated with or endorsed by the AI model and tool providers or source platforms mentioned in the app. Product names belong to their respective owners.</p>'''),
+'report': ('Help us get it right.', 'A missing credit, a mismatched preview, or something that should come down.', '''
+<div class="callout" data-context hidden><strong>Prompt ID</strong><p class="report-id" data-content-id></p></div>
+<h2>What to include</h2><ul><li>The prompt ID or title and its original public source link.</li><li>What needs to change: attribution, example, availability or removal.</li><li>For ownership requests, a public link showing your connection to the work.</li></ul><a class="button" data-report href="https://github.com/p697/prompix/issues/new?template=content.yml">Continue to GitHub →</a><p class="note">The next page is a public GitHub issue form. A GitHub account is required. Nothing is submitted until you choose to submit it there. Do not upload identity documents, private correspondence or personal drafts. Ask for a private channel if sensitive evidence is necessary.</p><h2>What happens next</h2><p>The maintainer checks the source and requested correction. Accepted changes appear in a later content update; affected saved copies are removed on the app’s next successful refresh. Offline or exported copies may remain. You can follow the response in your GitHub issue.</p><p>For app problems, visit <a href="/support">support</a>.</p>''')
+},
+'zh': {
+'support': ('需要一点帮助？', '从一个好 Prompt，到自己的创作。', '''
+<details open><summary>怎样使用一个 Prompt？</summary><p>打开灵感，先看示例和素材要求，再复制 Prompt。「编辑后使用」可以保存自己的修改版。随后打开合适的工具并粘贴。Prompix 不在 App 内生成结果，也不会自动把文字提交到外部工具。</p></details>
+<details><summary>哪些内容可以离线用？</summary><p>内置示例、已下载的 Prompt 正文、草稿和收藏缩略图可离线使用。远程高清图片和视频通常需要网络。内置原创网页作品可以离线打开；外部工具需要联网。</p></details>
+<details><summary>收藏可以换手机同步吗？</summary><p>这一版没有账号和云同步，收藏与草稿保存在本机。删除 App 前，请先复制或分享需要保留的内容。设备备份由你的 iOS 设置管理。</p></details>
+<details><summary>图片、视频或内容更新加载失败怎么办？</summary><p>检查网络后点「重新加载」。内容更新可以在发现页下拉刷新，或在设置中点「检查内容更新」。更新失败时仍可浏览原有已下载内容。清理图片缓存会保留收藏缩略图与草稿。</p></details>
+<details><summary>为什么生成的结果不一样？</summary><p>模型、输入和参数都会影响结果。详情会说明预览是实际输出、编辑示意还是原创交互作品，并保留来源。请留意 Prompt 中的参考图片与素材要求。</p></details>
+<details><summary>怎样切换界面语言？</summary><p>Prompix 支持英文和简体中文。在 App 设置里打开「App 语言与系统设置」即可调整。Prompt 和示例保留原作者的语言。</p></details>
+<h2>还有没解决的问题？</h2><p>请提供 App 版本、设备、iOS 版本，以及出现问题的步骤。截图前先去掉个人内容。</p><a class="button" href="https://github.com/p697/prompix/issues/new?template=bug.yml">反馈使用问题 ↗</a><p class="note">目前通过公开 GitHub 项目处理反馈，需要 GitHub 账号。请勿提交密码、支付信息、私人草稿或个人文件。</p><p>署名、预览不符或下架申请，请到<a href="/zh/report">内容反馈</a>；数据相关问题请查看<a href="/zh/privacy">隐私说明</a>。</p>'''),
+'privacy': ('你的想法，属于你。', 'Prompix 如何处理 App 与官网中的数据。', '''
+<h2>收藏和个人草稿</h2><p>Prompix 没有用户账号。收藏和编辑草稿保存在你的设备上，不上传编辑内容、搜索词、剪贴板内容或收藏列表。只有主动点复制时才写入系统剪贴板；分享通过由你选择目标的 iOS 分享面板完成。</p><p>取消收藏或恢复原文会移除对应的本机记录。删除 App 会清除其本地数据。iOS 备份、已经分享的副本与系统剪贴板由设备设置和所选服务分别管理。</p>
+<h2>提供内容所需的网络请求</h2><p>App 从 api.prompix.dev 下载目录与媒体。网络传输需要处理 IP 地址、请求时间和请求网址等信息。Cloudflare 提供托管与网络防护，可为内容传输、安全和故障排查处理必要的请求及错误记录。</p><p>我们没有加入广告标识、分析 SDK、跨 App 跟踪或个性化广告，不使用运行记录建立个人兴趣画像。Cloudflare 的处理和保留方式遵循服务设置及其<a href="https://www.cloudflare.com/privacypolicy/">隐私政策</a>。</p>
+<h2>这个网站</h2><p>官网不设置应用 Cookie、不运行分析脚本，也不建立浏览画像。示例查看与复制在浏览器内完成；托管服务仍需处理加载页面的网络请求。内容反馈链接可能带有公开的 Prompt ID，不含你的修改草稿。</p>
+<h2>外部工具与反馈</h2><p>打开 AI 工具、来源网站或 GitHub 后，适用该服务自己的隐私政策。Prompt 不会被自动提交。若主动提交 GitHub issue，你的账号名和提交内容会公开显示并由 GitHub 处理，请勿上传私人草稿或个人记录。</p>
+<h2>你的选择与问题</h2><p>你可以离线使用已下载内容、在设置中清理浏览图片、移除收藏和草稿，或者删除 App。关于数据的问题，可<a href="https://github.com/p697/prompix/issues/new?template=privacy.yml">提出隐私咨询</a>，先只写一般性描述；需要敏感材料时，请先请求私下联系渠道。</p><p>Prompix 通过<a href="https://github.com/p697/prompix">开源项目</a>维护。处理方式有实质变化时，会在应用到新版本前更新本页。</p>'''),
+'content': ('好灵感，有出处。', '让示例可用，也让来源清楚。', '''
+<h2>原创与社区内容</h2><p>Prompix 汇集原创 Prompt 和示例，以及白名单公开来源中的精选内容，包括 YouMind OpenLab 与 prompts.chat。详情页标注作者或内容集合，链接可用的原始来源，并展示记录的许可与整理方式。</p><p>代码开源不意味着所有 Prompt、图片和视频都使用代码的许可证。请按照条目注明的许可，以及目标生成工具的规则使用内容。</p>
+<h2>预览代表什么？</h2><p>预览可能是用该 Prompt 生成的实际结果、明确标注的编辑示意、原创交互网页，或社区创作者的示例。不保证每个模型都得到同样的结果；部分 Prompt 需要补充参考素材或模型参数。</p><p>塔罗、想象式预测等文字玩法仅用于娱乐与自我反思，不预测真实事件，也不替你做重要决定。</p>
+<h2>纠错与下架</h2><p>如果示例与 Prompt 不符、署名有误、来源消失，或希望移除自己的作品，请附公开 Prompt ID 与来源链接提交内容反馈。负责人会检查申请，不承诺无人值守的即时处理。</p><a class="button" href="/zh/report">反馈内容问题 →</a><p>确认下架后会更新发布目录。App 下一次成功联网刷新时移除受影响条目与收藏快照。离线设备、导出副本和此前已分享的内容无法立即撤回。</p>
+<h2>独立项目</h2><p>Prompix 与 App 中提及的 AI 模型、工具提供方和来源平台没有隶属或背书关系。产品名称归各自所有者所有。</p>'''),
+'report': ('一起把内容做好。', '补一个署名，修一个示例，或移除不该出现的内容。', '''
+<div class="callout" data-context hidden><strong>Prompt ID</strong><p class="report-id" data-content-id></p></div>
+<h2>请告诉我们</h2><ul><li>Prompt ID 或标题，以及原始公开来源链接。</li><li>需要处理的问题：署名、示例、失效或下架。</li><li>如为作品归属申请，可提供表明你与作品关系的公开链接。</li></ul><a class="button" data-report href="https://github.com/p697/prompix/issues/new?template=content.yml">前往 GitHub 反馈 →</a><p class="note">下一页是公开 GitHub issue 表单，需要 GitHub 账号。在你提交前不会发送反馈。请勿上传身份证明、私人通信或个人草稿；如需敏感材料，请先请求私下联系渠道。</p><h2>提交后会怎样？</h2><p>负责人核对来源与修改请求，确认后的变更会随内容更新发布。受影响的收藏副本在 App 下次成功刷新时移除；离线或已导出的副本可能保留。你可以在 GitHub issue 中查看处理回复。</p><p>App 使用问题请查看<a href="/zh/support">帮助与反馈</a>。</p>''')
+}}
+
+def layout(lang, path, title, body):
+    c = copy[lang]
+    prefix = '/zh' if lang == 'zh' else ''
+    current = prefix + ('/' + path if path else '')
+    counterpart = c['other'] + ('/' + path if path else '') or '/'
+    return f'''<!doctype html>
+<html lang="{'zh-Hans' if lang == 'zh' else 'en'}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{e(title)} · Prompix</title><meta name="description" content="{e(c['description'])}"><link rel="canonical" href="https://prompix.dev{current or '/'}"><link rel="alternate" hreflang="{'en' if lang == 'zh' else 'zh-Hans'}" href="https://prompix.dev{counterpart}"><meta property="og:title" content="{e(title)} · Prompix"><meta property="og:description" content="{e(c['description'])}"><meta property="og:image" content="https://prompix.dev/assets/icon.png"><meta name="theme-color" content="#f7f7f2"><link rel="icon" href="/assets/icon.png"><link rel="stylesheet" href="/style.css"><script src="/site.js" defer></script></head>
+<body><a class="skip" href="#main">{c['skip']}</a><div class="wrap"><header class="topbar"><a class="wordmark" href="{prefix or '/'}" aria-label="{'Prompix 首页' if lang == 'zh' else 'Prompix home'}">prompix</a><nav class="nav" aria-label="{'主导航' if lang == 'zh' else 'Main navigation'}"><a href="{prefix}/support" {'aria-current="page"' if path == 'support' else ''}>{c['support']}</a><a class="project-link" href="https://github.com/p697/prompix">GitHub ↗</a><a class="language" href="{counterpart}" aria-label="{'Switch to English' if lang == 'zh' else '切换到中文'}">{c['lang']}</a></nav></header>
+<main id="main">{body}</main><footer class="footer"><div><span class="footer-name">prompix</span><p>{c['footer']}</p></div><nav aria-label="{'网站信息' if lang == 'zh' else 'Site information'}"><a href="{prefix}/support">{c['support']}</a><a href="{prefix}/privacy">{c['privacy']}</a><a href="{prefix}/content">{c['content']}</a><a href="{prefix}/report">{c['report']}</a></nav></footer></div></body></html>'''
+
+def home(lang):
+    c = copy[lang]
+    cards = []
+    citrus_alt = '阳光下石台上的一颗橘子' if lang == 'zh' else 'An orange on a sunlit stone plinth'
+    web_alt = '原创个人网站作品，标题为 Less, but more you' if lang == 'zh' else 'Original portfolio website headed Less, but more you'
+    for i, (kind, artwork, item_id) in enumerate([
+        ('image', f'<img src="/assets/citrus.jpg" width="800" height="1000" alt="{citrus_alt}">', 'summer-citrus'),
+        ('text', f'<div class="text-art" aria-hidden="true"><span class="spark">✦</span><strong>{c["art"]}</strong><small>A LITTLE PERSPECTIVE</small></div>', 'gentle-tarot'),
+        ('web', f'<img src="/assets/portfolio.png" width="800" height="1500" alt="{web_alt}">', 'quiet-portfolio')
+    ]):
+        cards.append(f'<button class="idea {kind}" data-example="{item_id}" aria-haspopup="dialog"><figure>{artwork}</figure><div><h3>{c["titles"][i]}</h3><div class="meta"><span>{c["small"][i]}</span><span aria-hidden="true">↗</span></div></div></button>')
+    templates = ''.join(f'<template id="{item_id}"><pre>{e(originals[item_id]["prompt"])}</pre></template>' for item_id in ['summer-citrus', 'gentle-tarot', 'quiet-portfolio'])
+    steps = ''.join(f'<li><span class="num">0{i+1}</span><div><h3>{a}</h3><p>{b}</p></div></li>' for i,(a,b) in enumerate(c['steps']))
+    return f'''<section class="hero"><div><p class="eyebrow">A POCKETFUL OF POSSIBILITIES</p><h1>{c['headline']}</h1></div><aside><p>{c['intro']}</p><div class="status">{c['status']}</div></aside></section><section aria-label="{'原创灵感示例' if lang == 'zh' else 'Original prompt examples'}"><div class="kinds"><span>{c['edit']}</span>{''.join(f'<span>{k}</span>' for k in c['kinds'])}</div><div class="gallery">{''.join(cards)}</div><p class="gallery-note">{c['note']}</p><noscript><p class="nojs">{'启用 JavaScript 可查看示例 Prompt。帮助与隐私页面无需脚本。' if lang == 'zh' else 'Enable JavaScript to open example prompts. Support and privacy pages work without it.'}</p></noscript></section><section class="story"><div><h2>{c['statement']}</h2><p>{c['story']}</p></div><ol class="steps">{steps}</ol></section><section class="release"><div><h2>{c['release']}</h2><p>{c['release_body']}</p></div><a class="button secondary" href="https://github.com/p697/prompix">{c['project']} ↗</a></section>{templates}<dialog class="dialog" aria-labelledby="example-title"><div class="dialog-head"><h2 id="example-title"></h2><button class="close" aria-label="{c['close']}">×</button></div><p>{c['modal_note']}</p><pre tabindex="0"></pre><div class="dialog-actions"><button class="button" data-copy>{c['prompt']}</button><span class="eyebrow">{c['original']}</span></div><p role="status" aria-live="polite"></p></dialog>'''
+
+for lang in copy:
+    dest = out / ('zh' if lang == 'zh' else '')
+    dest.mkdir(exist_ok=True)
+    (dest / 'index.html').write_text(layout(lang, '', copy[lang]['brand'], home(lang)))
+    for path,(title,intro,body) in pages[lang].items():
+        content = f'<article class="article"><p class="eyebrow">{copy[lang]["updated"]}</p><h1>{title}</h1><p class="intro">{intro}</p>{body}</article>'
+        (dest / f'{path}.html').write_text(layout(lang, path, title, content))
+(out/'404.html').write_text(layout('en', '', 'A little off the path.', '<article class="article"><p class="eyebrow">404</p><h1>A little off the path.</h1><p class="intro">This page isn’t here. There are still good things to discover.</p><a class="button" href="/">Back to Prompix →</a></article>'))
+(out/'_headers').write_text("""/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: no-referrer
+  X-Frame-Options: DENY
+  Permissions-Policy: camera=(), microphone=(), geolocation=()
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'none'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'
+""")
+(out/'robots.txt').write_text('User-agent: *\nAllow: /\nSitemap: https://prompix.dev/sitemap.xml\n')
+urls = ['/', '/zh'] + [prefix+'/'+path for prefix in ['', '/zh'] for path in pages['en']]
+(out/'sitemap.xml').write_text('<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'+''.join(f'<url><loc>https://prompix.dev{path}</loc></url>' for path in urls)+'</urlset>')
+print(f'Built {len(urls)} pages with first-party assets in {out}')

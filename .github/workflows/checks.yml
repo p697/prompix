@@ -18,6 +18,10 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run validate -- ios/Prompix/Resources/catalog.json
+      - name: Build public website
+        run: |
+          python3 services/site/build.py
+          node --check services/site/site.js
   ios:
     runs-on: macos-latest
     steps:
