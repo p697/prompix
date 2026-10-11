@@ -28,6 +28,12 @@ struct Prompt: Codable, Identifiable, Hashable {
     var cover: Cover? = nil
     var searchableText: String { ([title, summary, prompt, model] + tags).joined(separator: " ") }
 
+    func fits(topic: String) -> Bool {
+        // Stable content tags are independent of the interface language.
+        if topic == "创作灵感", kind != .text { return true }
+        return tags.contains(topic)
+    }
+
     struct Source: Codable, Hashable {
         let name: String
         let url: URL?
@@ -84,9 +90,31 @@ struct PromptQuery {
     var model: String?
     func matches(_ prompt: Prompt) -> Bool {
         if let kind, prompt.kind != kind { return false }
-        if let topic, !prompt.tags.contains(topic) { return false }
+        if let topic, !prompt.fits(topic: topic) { return false }
         if let model, prompt.model != model { return false }
         let terms = text.split(whereSeparator: { $0.isWhitespace })
         return terms.allSatisfy { prompt.searchableText.localizedStandardContains(String($0)) }
+    }
+}
+
+struct RelatedPrompts {
+    static func select(for item: Prompt, from items: [Prompt], limit: Int = 4) -> [Prompt] {
+        let broad = Set(["好玩一点", "创作灵感", "日常有用", "文本", "图片", "视频", "网页"])
+        func specificTags(_ prompt: Prompt) -> Set<String> {
+            Set(prompt.tags.filter { !broad.contains($0) }.map { $0.lowercased() })
+        }
+        let tags = specificTags(item)
+        var ranked: [(offset: Int, item: Prompt, score: Int)] = []
+        for (index, candidate) in items.enumerated() where candidate.id != item.id {
+            let shared = tags.intersection(specificTags(candidate)).count
+            var score = shared * 6
+            if candidate.kind == item.kind { score += 3 }
+            if candidate.model == item.model { score += 1 }
+            if score > 0 { ranked.append((index, candidate, score)) }
+        }
+        ranked.sort { left, right in
+            left.score == right.score ? left.offset < right.offset : left.score > right.score
+        }
+        return ranked.prefix(max(0, limit)).map(\.item)
     }
 }

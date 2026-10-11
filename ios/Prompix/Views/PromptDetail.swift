@@ -12,7 +12,7 @@ struct PromptDetail: View {
     @State private var copied = false
     @State private var webPresented = false
     private var related: [Prompt] {
-        Array(library.prompts.filter { $0.id != item.id && !$0.tags.filter(item.tags.contains).isEmpty }.prefix(4))
+        RelatedPrompts.select(for: item, from: library.prompts)
     }
     var body: some View {
         ScrollView {
@@ -38,10 +38,16 @@ struct PromptDetail: View {
                 } else { hero }
                 VStack(alignment: .leading, spacing: 24) {
                     VStack(alignment: .leading, spacing: 12) {
-                        HStack {
-                            Label(item.kind.title, systemImage: item.kind.symbol)
-                            Text("·")
-                            Text(item.model)
+                        ViewThatFits(in: .horizontal) {
+                            HStack {
+                                Label(item.kind.title, systemImage: item.kind.symbol)
+                                Text("·")
+                                Text(item.model)
+                            }.fixedSize()
+                            VStack(alignment: .leading, spacing: 6) {
+                                Label(item.kind.title, systemImage: item.kind.symbol)
+                                Text(item.model).fixedSize(horizontal: false, vertical: true)
+                            }
                         }.font(.caption).foregroundStyle(.secondary)
                         Text(item.title).font(.title2.weight(.semibold)).lineSpacing(5).fixedSize(horizontal: false, vertical: true)
                         Text(item.summary).font(.subheadline).lineSpacing(5).foregroundStyle(.secondary)
@@ -105,15 +111,14 @@ struct PromptDetail: View {
         }
         .safeAreaInset(edge: .bottom) {
             HStack(spacing: 12) {
-                Button { editorPresented = true } label: { Image(systemName: "slider.horizontal.3").frame(width: 50, height: 48) }
+                Button { editorPresented = true } label: { Image(systemName: "slider.horizontal.3").font(.system(size: 20)).frame(width: 50, height: 50) }
                     .buttonStyle(.plain).background(Palette.soft, in: RoundedRectangle(cornerRadius: 16)).accessibilityLabel(String(localized: "编辑后使用"))
                 Button {
                     UIPasteboard.general.string = item.prompt
                     copied = true
                 } label: {
-                    Label(copied ? String(localized: "已复制，去创造吧") : String(localized: "复制 Prompt"), systemImage: copied ? "checkmark" : "doc.on.doc")
-                        .font(.subheadline.weight(.semibold)).frame(maxWidth: .infinity).frame(height: 48)
-                        .foregroundStyle(Color(uiColor: .systemBackground)).background(Color.primary, in: RoundedRectangle(cornerRadius: 16))
+                    PrimaryActionLabel(title: copied ? String(localized: "已复制，去创造吧") : String(localized: "复制 Prompt"),
+                        compactTitle: copied ? String(localized: "已复制") : String(localized: "复制"), symbol: copied ? "checkmark" : "doc.on.doc")
                 }.buttonStyle(.plain).accessibilityIdentifier("copyPrompt").sensoryFeedback(.success, trigger: copied)
             }.padding(.horizontal, 20).padding(.vertical, 10).background(.bar)
         }
@@ -134,6 +139,7 @@ struct PromptEditor: View {
     let item: Prompt
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.dynamicTypeSize) private var typeSize
     @Environment(Library.self) private var library
     @State private var text: String
     @State private var copied = false
@@ -145,12 +151,15 @@ struct PromptEditor: View {
         NavigationStack {
             VStack(alignment: .leading, spacing: 12) {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text(String(localized: "写进你的想法，变成自己的版本。原始 Prompt 会保留。")).font(.caption).foregroundStyle(.secondary)
+                    Text(typeSize.isAccessibilitySize ? String(localized: "原文会保留。") : String(localized: "写进你的想法，变成自己的版本。原始 Prompt 会保留。"))
+                        .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                     HStack {
                         Label(saved ? String(localized: "已保存到此设备") : library.error == nil ? String(localized: "正在保存…") : String(localized: "尚未保存，可先复制保留"), systemImage: saved ? "checkmark.circle" : "circle.dotted")
-                            .font(.caption2).foregroundStyle(.secondary).accessibilityIdentifier("draftStatus")
-                        Spacer()
-                        Text(String(localized: "\(text.count) 字符")).font(.caption2.monospacedDigit()).foregroundStyle(.tertiary)
+                            .font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true).accessibilityIdentifier("draftStatus")
+                        if !typeSize.isAccessibilitySize {
+                            Spacer()
+                            Text(String(localized: "\(text.count) 字符")).font(.caption2.monospacedDigit()).foregroundStyle(.secondary)
+                        }
                     }
                 }.padding(.horizontal, 20).padding(.top, 14)
                 TextEditor(text: $text).font(.body).scrollContentBackground(.hidden).padding(.horizontal, 16)
@@ -170,8 +179,11 @@ struct PromptEditor: View {
                     Button {
                         UIPasteboard.general.string = text; copied = true
                         saved = library.saveDraft(text, for: item)
-                    } label: { Label(copied ? String(localized: "已复制修改后的 Prompt") : String(localized: "复制修改后的 Prompt"), systemImage: copied ? "checkmark" : "doc.on.doc").frame(maxWidth: .infinity).padding(10) }
-                        .buttonStyle(.borderedProminent).disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    } label: {
+                        PrimaryActionLabel(title: copied ? String(localized: "已复制修改后的 Prompt") : String(localized: "复制修改后的 Prompt"),
+                            compactTitle: copied ? String(localized: "已复制") : String(localized: "复制"), symbol: copied ? "checkmark" : "doc.on.doc")
+                    }.buttonStyle(.plain).accessibilityIdentifier("copyEditedPrompt")
+                        .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                         .padding().background(.bar).sensoryFeedback(.success, trigger: copied)
                 }
                 .onAppear { text = library.draft(for: item); initialized = true }
@@ -359,10 +371,10 @@ struct ZoomImage: UIViewRepresentable {
         func viewForZooming(in scrollView: UIScrollView) -> UIView? { image }
         @objc func doubleTap(_ gesture: UITapGestureRecognizer) {
             guard let scroll = gesture.view as? UIScrollView else { return }
-            if scroll.zoomScale > 1 { scroll.setZoomScale(1, animated: true) }
+            if scroll.zoomScale > 1 { scroll.setZoomScale(1, animated: !UIAccessibility.isReduceMotionEnabled) }
             else {
                 let point = gesture.location(in: image)
-                scroll.zoom(to: CGRect(x: point.x - scroll.bounds.width / 4, y: point.y - scroll.bounds.height / 4, width: scroll.bounds.width / 2, height: scroll.bounds.height / 2), animated: true)
+                scroll.zoom(to: CGRect(x: point.x - scroll.bounds.width / 4, y: point.y - scroll.bounds.height / 4, width: scroll.bounds.width / 2, height: scroll.bounds.height / 2), animated: !UIAccessibility.isReduceMotionEnabled)
             }
         }
     }

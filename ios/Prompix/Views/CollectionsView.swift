@@ -5,30 +5,52 @@ struct Collection: Identifiable {
     let title: String
     let subtitle: String
     let topic: String
-    let symbol: String
-    let color: Color
     static let all: [Collection] = [
-        .init(id: "play", title: String(localized: "生活，偶尔不按剧本。"), subtitle: String(localized: "塔罗、故事与一点善意的胡闹"), topic: "好玩一点", symbol: "sparkle", color: Color(red: 0.92, green: 0.88, blue: 0.77)),
-        .init(id: "make", title: String(localized: "给想象，一个出口。"), subtitle: String(localized: "从一张照片，到一个属于你的网站"), topic: "创作灵感", symbol: "sun.max", color: Color(red: 0.80, green: 0.85, blue: 0.78)),
-        .init(id: "daily", title: String(localized: "让日常，轻一点。"), subtitle: String(localized: "少一些费力，多一点自己的时间"), topic: "日常有用", symbol: "wind", color: Color(red: 0.81, green: 0.85, blue: 0.87))
+        .init(id: "play", title: String(localized: "生活，偶尔不按剧本。"), subtitle: String(localized: "塔罗、故事与一点善意的胡闹"), topic: "好玩一点"),
+        .init(id: "make", title: String(localized: "给想象，一个出口。"), subtitle: String(localized: "从一张照片，到一个属于你的网站"), topic: "创作灵感"),
+        .init(id: "daily", title: String(localized: "让日常，轻一点。"), subtitle: String(localized: "少一些费力，多一点自己的时间"), topic: "日常有用")
     ]
+    @MainActor func items(in library: Library) -> [Prompt] { library.prompts.filter { $0.fits(topic: topic) } }
+    func covers(from items: [Prompt]) -> [Prompt] {
+        let previewable = items.filter {
+            $0.kind == .text || $0.media?.image != nil || $0.media?.imageURL != nil || WebsiteExamples.files[$0.id] != nil
+        }
+        var result: [Prompt] = []
+        for item in previewable where !result.contains(where: { $0.kind == item.kind }) { result.append(item) }
+        for item in previewable where !result.contains(where: { $0.id == item.id }) { result.append(item) }
+        return Array(result.prefix(3))
+    }
 }
 struct CollectionsView: View {
+    @Environment(Library.self) private var library
+    @Environment(\.dynamicTypeSize) private var typeSize
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 22) {
+                VStack(alignment: .leading, spacing: 32) {
                     Text(String(localized: "有时候，灵感是一连串的。 ")).font(.subheadline).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                     ForEach(Collection.all) { collection in
+                        let items = collection.items(in: library)
                         NavigationLink { CollectionDetail(collection: collection) } label: {
-                            VStack(alignment: .leading, spacing: 16) {
-                                HStack { Text("A SMALL COLLECTION").font(.system(.caption2, design: .monospaced)).tracking(2); Spacer(); Image(systemName: "arrow.up.right") }
-                                Image(systemName: collection.symbol).font(.system(size: 50, weight: .ultraLight)).padding(.vertical, 12)
-                                Text(collection.title).font(.title3.weight(.medium))
-                                Text(collection.subtitle).font(.caption)
-                            }.foregroundStyle(Color(red: 0.22, green: 0.26, blue: 0.21)).padding(24).frame(maxWidth: .infinity, alignment: .leading)
-                                .background(collection.color, in: RoundedRectangle(cornerRadius: 20))
-                        }.buttonStyle(.plain)
+                            VStack(alignment: .leading, spacing: 14) {
+                                HStack(spacing: 6) {
+                                    ForEach(collection.covers(from: items)) { item in
+                                        Artwork(item: item).frame(maxWidth: .infinity).clipped()
+                                    }
+                                }.frame(height: typeSize.isAccessibilitySize ? 130 : 190)
+                                    .background(Palette.soft).clipShape(RoundedRectangle(cornerRadius: 16))
+                                HStack(alignment: .firstTextBaseline, spacing: 12) {
+                                    Text(collection.title).font(.title3.weight(.medium))
+                                        .fixedSize(horizontal: false, vertical: true)
+                                    Spacer(minLength: 0)
+                                    Image(systemName: "arrow.up.right").font(.system(size: 16, weight: .regular))
+                                }
+                                Text(collection.subtitle).font(.subheadline).foregroundStyle(.secondary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                Text(String(localized: "\(items.count) 个灵感")).font(.caption).foregroundStyle(.secondary)
+                            }.foregroundStyle(.primary).multilineTextAlignment(.leading)
+                        }.buttonStyle(.plain).accessibilityIdentifier("collection-\(collection.id)")
                     }
                 }.padding(20).padding(.bottom, 20)
             }.navigationTitle(String(localized: "专题"))
@@ -41,10 +63,14 @@ struct CollectionDetail: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                Text(collection.subtitle).font(.subheadline).foregroundStyle(.secondary)
-                PromptGrid(items: library.prompts.filter { $0.tags.contains(collection.topic) })
+                Text(collection.title).font(.title2.weight(.medium)).fixedSize(horizontal: false, vertical: true)
+                Text(collection.subtitle).font(.subheadline).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                let items = collection.items(in: library)
+                if items.isEmpty {
+                    ContentUnavailableView(String(localized: "灵感还在路上"), systemImage: "sparkle", description: Text(String(localized: "试试其他分类，或回到全部精选。")))
+                } else { PromptGrid(items: items) }
             }.padding(16)
-        }.navigationTitle(collection.title).navigationBarTitleDisplayMode(.inline)
+        }.navigationTitle(String(localized: "专题")).navigationBarTitleDisplayMode(.inline)
             .navigationDestination(for: Prompt.self) { PromptDetail(item: $0) }
     }
 }

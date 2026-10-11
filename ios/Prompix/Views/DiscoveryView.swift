@@ -23,30 +23,22 @@ struct DiscoverView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
+                VStack(alignment: .leading, spacing: 14) {
                     HStack(alignment: .firstTextBaseline) {
                         Text(String(localized: "灵感，随手可得。")).font(.subheadline).foregroundStyle(.secondary)
                         Spacer()
                         if !typeSize.isAccessibilitySize { Text(library.updatedAt == nil ? "STUDIO EDITION" : "DAILY FINDS").font(.system(.caption2, design: .monospaced)).tracking(1.5).foregroundStyle(.tertiary) }
                     }.padding(.horizontal, 20).dynamicTypeSize(...DynamicTypeSize.xxxLarge)
                     KindPicker(selection: $kind)
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 8) {
-                            topicButton(nil, String(localized: "精选"))
-                            ForEach(topics, id: \.self) { topicButton($0, NSLocalizedString($0, comment: "Discovery topic")) }
-                        }.padding(.horizontal, 20)
+                    HStack(spacing: 8) {
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 8) {
+                                topicButton(nil, String(localized: "精选"))
+                                ForEach(topics, id: \.self) { topicButton($0, NSLocalizedString($0, comment: "Discovery topic")) }
+                            }.padding(.leading, 20).padding(.trailing, 4)
+                        }
+                        modelPicker.padding(.trailing, 16)
                     }
-                    HStack {
-                        if let updated = library.updatedAt { Text(updated, format: .dateTime.month().day()).font(.caption2).foregroundStyle(.tertiary) }
-                        else { Text(String(localized: "原创灵感集")).font(.caption2).foregroundStyle(.tertiary) }
-                        Spacer()
-                        Menu {
-                            Button(String(localized: "全部模型")) { model = nil }
-                            ForEach(Array(Set(library.prompts.filter { kind == nil || $0.kind == kind }.map(\.model))).sorted(), id: \.self) { value in
-                                Button { model = value } label: { if model == value { Label(value, systemImage: "checkmark") } else { Text(value) } }
-                            }
-                        } label: { Label(model ?? String(localized: "全部模型"), systemImage: "line.3.horizontal.decrease").font(.caption).foregroundStyle(.secondary) }
-                    }.padding(.horizontal, 20)
                     if let message = library.syncMessage { Text(message).font(.caption).foregroundStyle(.secondary).padding(.horizontal, 20) }
                     if items.isEmpty {
                         ContentUnavailableView(String(localized: "灵感还在路上"), systemImage: "sparkle", description: Text(String(localized: "试试其他分类，或回到全部精选。")))
@@ -68,13 +60,33 @@ struct DiscoverView: View {
             .sheet(isPresented: $settingsPresented) { SettingsView() }
         }
     }
+    private var modelPicker: some View {
+        Menu {
+            Button(String(localized: "全部模型")) { model = nil }
+            ForEach(Array(Set(library.prompts.filter { kind == nil || $0.kind == kind }.map(\.model))).sorted(), id: \.self) { value in
+                Button { model = value } label: {
+                    if model == value { Label(value, systemImage: "checkmark") } else { Text(value) }
+                }
+            }
+        } label: {
+            Group {
+                if typeSize.isAccessibilitySize {
+                    Image(systemName: "line.3.horizontal.decrease").font(.system(size: 22)).frame(width: 44, height: 44)
+                } else {
+                    Label(model ?? String(localized: "模型"), systemImage: "line.3.horizontal.decrease")
+                        .font(.caption).lineLimit(1).padding(.horizontal, 12).frame(maxWidth: 120, minHeight: 44)
+                }
+            }.foregroundStyle(model == nil ? Color.secondary : Palette.accent)
+                .background(Palette.soft, in: Capsule()).contentShape(Capsule())
+        }.accessibilityLabel(model ?? String(localized: "全部模型"))
+    }
     private func topicButton(_ value: String?, _ title: String) -> some View {
         Button { topic = value } label: {
             Text(title).font(.caption.weight(topic == value ? .semibold : .regular))
                 .foregroundStyle(topic == value ? Color(uiColor: .systemBackground) : .secondary)
                 .padding(.horizontal, 15).padding(.vertical, 9)
                 .background(topic == value ? Color.primary : Palette.soft, in: Capsule())
-                .frame(minHeight: 44)
+                .frame(minHeight: 44).contentShape(Rectangle())
         }.buttonStyle(.plain).accessibilityAddTraits(topic == value ? .isSelected : [])
     }
 }
@@ -123,7 +135,7 @@ struct PromptCard: View {
                 } label: {
                     Image(systemName: library.isSaved(item) ? "bookmark.fill" : "bookmark")
                         .font(.system(size: 13)).foregroundStyle(library.isSaved(item) ? Palette.accent : .secondary)
-                        .frame(width: 44, height: 44)
+                        .frame(width: 44, height: 44).contentShape(Rectangle())
                 }.buttonStyle(.plain).accessibilityLabel(library.isSaved(item) ? String(localized: "取消收藏：\(item.title)") : String(localized: "收藏：\(item.title)"))
                     .sensoryFeedback(.selection, trigger: savedFeedback)
             }.foregroundStyle(.secondary).padding(.leading, 2).padding(.top, 0).padding(.bottom, -10)
@@ -148,7 +160,7 @@ struct SearchView: View {
                     KindPicker(selection: $kind)
                     if query.isEmpty {
                         Text(String(localized: "从一个小小的念头开始")).font(.subheadline).foregroundStyle(.secondary).padding(.horizontal, 20)
-                        HStack { ForEach(["塔罗", "网站", "电影"], id: \.self) { term in Button(NSLocalizedString(term, comment: "Suggested search")) { query = term }.buttonStyle(.bordered) } }.padding(.horizontal, 20)
+                        HStack { ForEach(["塔罗", "网站", "电影"], id: \.self) { term in Button(NSLocalizedString(term, comment: "Suggested search")) { query = term }.buttonStyle(.bordered).controlSize(.large) } }.padding(.horizontal, 20)
                     }
                     if results.isEmpty { ContentUnavailableView.search(text: query) }
                     else { PromptGrid(items: results).padding(.horizontal, 16) }

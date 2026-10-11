@@ -185,6 +185,25 @@ import CryptoKit
         XCTAssertEqual(try JSONDecoder().decode([Prompt].self, from: Data(contentsOf: file)), [kept])
     }
 
+    func testCreativeTopicIncludesVisualPromptsWithoutGenericTagsAndRelatedUsesSpecificTags() throws {
+        let library = Library(directory: directory)
+        let original = try XCTUnwrap(library.prompts.first { $0.kind == .image })
+        let image = Prompt(id: "edited-image", kind: .image, title: original.title, summary: original.summary,
+            prompt: original.prompt, example: original.example, tags: ["微缩世界"], model: original.model,
+            toolURL: original.toolURL, artwork: original.artwork, previewLabel: original.previewLabel,
+            source: original.source, media: original.media)
+        XCTAssertTrue(PromptQuery(topic: "创作灵感").matches(image))
+        XCTAssertFalse(PromptQuery(kind: .text, topic: "创作灵感").matches(image))
+        XCTAssertFalse(PromptQuery(topic: "日常有用").matches(image))
+        let tarot = try XCTUnwrap(library.prompts.first { $0.id == "gentle-tarot" })
+        let related = RelatedPrompts.select(for: tarot, from: library.prompts)
+        XCTAssertEqual(related.count, 4)
+        XCTAssertFalse(related.contains { $0.id == tarot.id })
+        XCTAssertTrue(try XCTUnwrap(related.first).tags.contains("自我探索"))
+        XCTAssertEqual(related, RelatedPrompts.select(for: tarot, from: library.prompts))
+        XCTAssertTrue(RelatedPrompts.select(for: tarot, from: library.prompts, limit: 0).isEmpty)
+    }
+
     func testBundledMediaExist() throws {
         let library = Library(directory: directory)
         for item in library.prompts {
