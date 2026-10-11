@@ -88,6 +88,8 @@ struct PromptDetail: View {
                         Text("\(item.source.license) · \(item.previewLabel)").font(.caption2).foregroundStyle(.secondary)
                         if let repository = item.source.repository { Link(String(localized: "收录于 \(item.source.name)"), destination: repository).font(.caption) }
                         if let source = item.source.url { Link(String(localized: "查看原始来源 ↗"), destination: source).font(.caption) }
+                        Link(String(localized: "反馈这条内容"), destination: SupportLinks.url(.report, contentID: item.id))
+                            .font(.caption).frame(minHeight: 44).accessibilityIdentifier("reportContent")
                     }
                     if !related.isEmpty {
                         Divider()

@@ -86,7 +86,7 @@ struct SettingsView: View {
                         Text("prompix").font(.system(size: 32, weight: .semibold, design: .serif))
                         Text(String(localized: "让好奇，变成创造。 ")).font(.subheadline).foregroundStyle(.secondary)
                     }.padding(.vertical, 12)
-                    LabeledContent(String(localized: "版本"), value: "0.2.0 · Preview")
+                    LabeledContent(String(localized: "版本"), value: "\(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—") (\(Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "—"))")
                     LabeledContent(String(localized: "灵感数量"), value: String(library.prompts.count))
                     Link(String(localized: "App 语言与系统设置"), destination: URL(string: UIApplication.openSettingsURLString)!)
                     Text(String(localized: "Prompt 与示例保留原作者的语言。")).font(.caption).foregroundStyle(.secondary)
@@ -97,7 +97,7 @@ struct SettingsView: View {
                 Section(String(localized: "你的内容，留在你的设备上")) {
                     Button(cleared ? String(localized: "图片缓存已清理") : String(localized: "清理图片缓存")) { ImageStore.shared.clear(); cleared = true }
                     Text(String(localized: "清理浏览缓存，保留收藏缩略图、Prompt 文字和编辑草稿。")).font(.caption).foregroundStyle(.secondary)
-                    Text(String(localized: "收藏和编辑都在本机完成。这一版没有账号、不上传输入、不收集行为数据。删除 App 会清除本地收藏。"))
+                    Text(String(localized: "收藏和草稿保存在本机，不上传编辑内容或搜索词，也没有广告与分析 SDK。下载内容仍需要网络请求。删除 App 会清除其本地数据。"))
                         .font(.subheadline).foregroundStyle(.secondary)
                     Text(String(localized: "视频仅在你点开时播放，离开播放器或切到后台后暂停。内置内容可离线浏览；外部工具需要网络。"))
                         .font(.subheadline).foregroundStyle(.secondary)
@@ -105,8 +105,13 @@ struct SettingsView: View {
                 Section(String(localized: "内容与更新")) {
                     Text(String(localized: "内容来自 Prompix 原创与开放社区，每条保留作者和原始来源。每天收集新内容，打开 App 时检查更新；也可以在发现页下拉刷新。不同模型的实际生成结果可能不同。"))
                         .font(.subheadline).foregroundStyle(.secondary)
-                    Link(String(localized: "项目与反馈"), destination: URL(string: "https://github.com/p697/prompix/issues")!)
-                    Link(String(localized: "内容来源与说明"), destination: URL(string: "https://github.com/p697/prompix/blob/main/docs/content-policy.md")!)
+                }
+                Section(String(localized: "帮助与信息")) {
+                    Link(String(localized: "帮助与反馈"), destination: SupportLinks.url(.support)).accessibilityIdentifier("supportWebsite")
+                    Link(String(localized: "隐私说明"), destination: SupportLinks.url(.privacy)).accessibilityIdentifier("privacyPolicy")
+                    Link(String(localized: "内容来源与说明"), destination: SupportLinks.url(.content)).accessibilityIdentifier("contentPolicy")
+                    Link(String(localized: "Prompix 官网"), destination: SupportLinks.url(.home))
+                    Link(String(localized: "开源项目"), destination: URL(string: "https://github.com/p697/prompix")!)
                 }
             }.navigationTitle(String(localized: "关于与设置")).navigationBarTitleDisplayMode(.inline)
                 .toolbar { ToolbarItem(placement: .confirmationAction) { Button(String(localized: "完成")) { dismiss() } } }

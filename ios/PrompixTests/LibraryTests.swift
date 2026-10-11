@@ -216,6 +216,14 @@ import CryptoKit
         XCTAssertTrue(RelatedPrompts.select(for: tarot, from: library.prompts, limit: 0).isEmpty)
     }
 
+    func testPublicSupportRoutesRespectLanguageAndOnlyIncludeContentIdentity() throws {
+        XCTAssertEqual(SupportLinks.url(.privacy, language: "en").absoluteString, "https://prompix.dev/privacy")
+        XCTAssertEqual(SupportLinks.url(.support, language: "zh-Hans").absoluteString, "https://prompix.dev/zh/support")
+        let report = SupportLinks.url(.report, contentID: "gentle-tarot", language: "en")
+        XCTAssertEqual(report.absoluteString, "https://prompix.dev/report?id=gentle-tarot")
+        XCTAssertNil(URLComponents(url: SupportLinks.url(.home, contentID: "ignored", language: "en"), resolvingAgainstBaseURL: false)?.query)
+    }
+
     func testBundledMediaExist() throws {
         let library = Library(directory: directory)
         for item in library.prompts {

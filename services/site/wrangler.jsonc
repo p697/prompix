@@ -1,0 +1,8 @@
+{
+  "name": "prompix-site",
+  "account_id": "2af7e222bfcfd78b5df8f627971dfbca",
+  "compatibility_date": "2026-10-11",
+  "workers_dev": false,
+  "routes": [{"pattern": "prompix.dev", "custom_domain": true}],
+  "assets": {"directory": "./dist", "html_handling": "drop-trailing-slash", "not_found_handling": "404-page"}
+}

@@ -12,7 +12,7 @@ Prompix 是开源、免费的多模态 Prompt 集合 App。用户像逛手机淘
 | [tech-plan.md](tech-plan.md) | 原生客户端、内容协议、轻量采集、静态发布 |
 | [quality-release.md](quality-release.md) | 持续目标、完整交付的质量关口与完成证据 |
 | [roadmap.md](roadmap.md) | 设计关口、模拟器开发、真机交付、上架与分工 |
-| [decisions.md](decisions.md) | 历史决定与本轮 D-20 至 D-32；旧决定保留并标明替代关系 |
+| [decisions.md](decisions.md) | 历史决定与本轮 D-20 至 D-33；旧决定保留并标明替代关系 |
 | [design.md](design.md) | 设计原则、已确认方向、核心页面和四类卡片要求 |
 | [handoff.md](handoff.md) | 复制、编辑、分享和目标工具打开的能力边界 |
 | [content-operations.md](content-operations.md) | 每日采集、发布、凭据与故障恢复 |
@@ -35,3 +35,5 @@ Prompix 是开源、免费的多模态 Prompt 集合 App。用户像逛手机淘
 - 待确认的设计、外部接口能力和部署条件不能写成已经验证。
 
 开发与验证见 [ios/README.md](../ios/README.md)、[ingest/README.md](../ingest/README.md) 与 [acceptance-0.1.md](acceptance-0.1.md)。
+
+品牌官网、帮助、隐私与内容反馈的双语静态实现见 [services/site](../services/site/README.md)，部署于 `prompix.dev`；不代替原生客户端。
