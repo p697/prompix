@@ -1,0 +1,43 @@
+# macOS
+.DS_Store
+
+# Secrets: real values live in ~/.config/prompix
+.env
+.env.*
+!.env.example
+*.pem
+*.p8
+*.p12
+*.mobileprovision
+
+# Xcode / Swift
+DerivedData/
+xcuserdata/
+*.xcuserstate
+.build/
+.swiftpm/
+*.ipa
+*.dSYM
+*.dSYM.zip
+
+# Node
+node_modules/
+.next/
+dist/
+coverage/
+.turbo/
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Local data, content snapshots and logs (third-party content is never committed)
+/data/
+*.sqlite
+*.db
+*.log
+
+# Private materials that must never be published
+research_notes/
+reports/
