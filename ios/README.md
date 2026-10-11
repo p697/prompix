@@ -1,6 +1,6 @@
 # Prompix for iOS
 
-Native SwiftUI app, iOS 17+. Open `Prompix.xcodeproj`, choose the Prompix scheme, then run on an iPhone simulator. No third-party Swift dependencies or backend are required for the preview.
+Native SwiftUI app, iOS 17+. Open `Prompix.xcodeproj`, choose the Prompix scheme, then run on an iPhone simulator. No third-party Swift dependencies. The app downloads verified editions from api.prompix.dev and falls back to bundled content offline.
 
 ```sh
 xcodebuild -project ios/Prompix.xcodeproj -scheme Prompix \
@@ -12,7 +12,9 @@ Use a simulator name available on your Mac (`xcrun simctl list devices available
 
 The preview includes four kinds, editorial collections, local keyword search, favorites persisted atomically as item snapshots, editing/copying, native sharing, UIScrollView image zoom, AVKit video playback, and a bundled original website example. The main interface, navigation, search, editor and all app controls are native. WebKit is used only to preview the first-party website artifact, with JavaScript disabled and an ephemeral data store.
 
-The catalog is bundled and offline. There is no remote content refresh, account, tracking or generation service in this build. Video does not autoplay in the feed. Full-size dynamic text switches the feed to one column. The current preview uses Chinese interface copy; internationalization is a release milestone.
+Launch and foreground refresh download a hash-checked remote catalog, with a cached or bundled fallback. Pull to refresh checks immediately. Community images use bounded memory/disk caches; saved prompt snapshots remain local and offline. Removed IDs propagate to favorites after a successful update. There is no account, tracking or generation service. Video does not autoplay in the feed. Full-size dynamic text switches the feed to one column. The current preview uses Chinese interface copy; internationalization is a release milestone.
+
+Run only `PrompixTests` for deterministic model validation. UI tests include offline journeys and an explicitly selected live community image/video test; the latter requires the deployed content service. The `--offline` launch argument uses the bundled edition for deterministic UI fixtures.
 
 First-party assets:
 - `catalog.json`: original Prompix prompts and editorial example text, CC0-1.0.

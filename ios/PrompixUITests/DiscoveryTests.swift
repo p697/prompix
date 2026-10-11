@@ -5,7 +5,7 @@ import XCTest
     override func setUp() async throws {
         continueAfterFailure = false
         app = XCUIApplication()
-        app.launchArguments += ["-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN"]
+        app.launchArguments += ["--offline", "-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN"]
         app.launch()
     }
     func capture(_ name: String) {
@@ -75,4 +75,26 @@ import XCTest
         app.tabBars.buttons["专题"].tap()
         capture("09-collections")
     }
+    func testLiveCommunityEditionAndRemotePreviews() throws {
+        app.terminate()
+        app.launchArguments.removeAll { $0 == "--offline" }
+        app.launch()
+        XCTAssertTrue(app.staticTexts["DAILY FINDS"].waitForExistence(timeout: 35))
+        let imageCard = app.buttons.containing(NSPredicate(format: "identifier BEGINSWITH %@", "prompt-youmind-nano-")).firstMatch
+        XCTAssertTrue(imageCard.waitForExistence(timeout: 10))
+        capture("10-live-discovery")
+        imageCard.tap()
+        app.buttons["previewButton"].tap()
+        XCTAssertTrue(app.scrollViews.matching(NSPredicate(format: "label CONTAINS %@", "图片预览")).firstMatch.waitForExistence(timeout: 20))
+        capture("11-live-image")
+        app.buttons["完成"].tap()
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        app.buttons["kind-video"].tap()
+        let videoCard = app.buttons.containing(NSPredicate(format: "identifier BEGINSWITH %@", "prompt-youmind-seedance-")).firstMatch
+        XCTAssertTrue(videoCard.waitForExistence(timeout: 10)); videoCard.tap()
+        app.buttons["previewButton"].tap()
+        XCTAssertTrue(app.navigationBars["动态灵感"].waitForExistence(timeout: 10))
+        capture("12-live-video")
+    }
+
 }

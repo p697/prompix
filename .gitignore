@@ -41,3 +41,6 @@ __pycache__/
 # Private materials that must never be published
 research_notes/
 reports/
+
+# Cloudflare local state
+.wrangler/

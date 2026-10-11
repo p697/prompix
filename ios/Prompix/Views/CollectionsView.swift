@@ -51,6 +51,7 @@ struct CollectionDetail: View {
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(Library.self) private var library
+    @State private var cleared = false
     var body: some View {
         NavigationStack {
             List {
@@ -59,17 +60,22 @@ struct SettingsView: View {
                         Text("prompix").font(.system(size: 32, weight: .semibold, design: .serif))
                         Text("让好奇，变成创造。 ").font(.subheadline).foregroundStyle(.secondary)
                     }.padding(.vertical, 12)
-                    LabeledContent("版本", value: "0.1.0 · Preview")
-                    LabeledContent("灵感集", value: library.version)
+                    LabeledContent("版本", value: "0.2.0 · Preview")
+                    LabeledContent("灵感数量", value: String(library.prompts.count))
+                    if let updated = library.updatedAt { LabeledContent("本期更新") { Text(updated, style: .date) } }
+                    Button(library.isRefreshing ? "正在更新…" : "检查内容更新") { Task { await library.refresh(force: true) } }.disabled(library.isRefreshing)
+                    if let message = library.syncMessage { Text(message).font(.caption).foregroundStyle(.secondary) }
                 }
                 Section("你的内容，留在你的设备上") {
+                    Button(cleared ? "图片缓存已清理" : "清理图片缓存") { ImageStore.shared.clear(); cleared = true }
+                    Text("只清理远程图片，不会删除收藏和 Prompt 文字。").font(.caption).foregroundStyle(.secondary)
                     Text("收藏和编辑都在本机完成。这一版没有账号、不上传输入、不收集行为数据。删除 App 会清除本地收藏。")
                         .font(.subheadline).foregroundStyle(.secondary)
                     Text("视频仅在你点开时播放，离开播放器或切到后台后暂停。内置内容可离线浏览；外部工具需要网络。")
                         .font(.subheadline).foregroundStyle(.secondary)
                 }
-                Section("关于这次预览") {
-                    Text("这是一组 Prompix 原创 Prompt。图片示例、编辑封面和程序动画均在详情中注明。不同模型的实际生成结果可能不同。")
+                Section("内容与更新") {
+                    Text("内容来自 Prompix 原创与开放社区，每条保留作者和原始来源。每天收集新内容，打开 App 时检查更新；也可以在发现页下拉刷新。不同模型的实际生成结果可能不同。")
                         .font(.subheadline).foregroundStyle(.secondary)
                     Link("项目与反馈", destination: URL(string: "https://github.com/p697/prompix/issues")!)
                     Link("内容来源与说明", destination: URL(string: "https://github.com/p697/prompix/blob/main/docs/content-policy.md")!)

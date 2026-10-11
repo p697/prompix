@@ -1,0 +1,10 @@
+{
+  "name": "prompix-content",
+  "main": "index.ts",
+  "compatibility_date": "2026-10-11",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": false,
+  "routes": [{"pattern": "api.prompix.dev", "custom_domain": true}],
+  "r2_buckets": [{"binding": "CONTENT", "bucket_name": "prompix-content"}],
+  "observability": {"enabled": true, "head_sampling_rate": 0.1}
+}

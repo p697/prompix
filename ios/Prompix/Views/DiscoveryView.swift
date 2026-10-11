@@ -3,9 +3,9 @@ import SwiftUI
 struct RootView: View {
     var body: some View {
         TabView {
-            DiscoverView().tabItem { Label("发现", systemImage: "square.grid.2x2") }
-            CollectionsView().tabItem { Label("专题", systemImage: "square.stack") }
-            FavoritesView().tabItem { Label("收藏", systemImage: "bookmark") }
+            DiscoverView().tabItem { Label { Text("发现") } icon: { TabSymbol.image("discover") } }
+            CollectionsView().tabItem { Label { Text("专题") } icon: { TabSymbol.image("collections") } }
+            FavoritesView().tabItem { Label { Text("收藏") } icon: { TabSymbol.image("saved") } }
         }
     }
 }
@@ -15,10 +15,11 @@ struct DiscoverView: View {
     @Environment(\.dynamicTypeSize) private var typeSize
     @State private var kind: PromptKind?
     @State private var topic: String?
+    @State private var model: String?
     @State private var searchPresented = false
     @State private var settingsPresented = false
     private let topics = ["好玩一点", "创作灵感", "日常有用"]
-    private var items: [Prompt] { library.prompts.filter { PromptQuery(kind: kind, topic: topic).matches($0) } }
+    private var items: [Prompt] { library.prompts.filter { PromptQuery(kind: kind, topic: topic, model: model).matches($0) } }
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -26,7 +27,7 @@ struct DiscoverView: View {
                     HStack(alignment: .firstTextBaseline) {
                         Text("灵感，随手可得。").font(.subheadline).foregroundStyle(.secondary)
                         Spacer()
-                        if !typeSize.isAccessibilitySize { Text("VOL. 001").font(.system(.caption2, design: .monospaced)).tracking(1.5).foregroundStyle(.tertiary) }
+                        if !typeSize.isAccessibilitySize { Text(library.updatedAt == nil ? "STUDIO EDITION" : "DAILY FINDS").font(.system(.caption2, design: .monospaced)).tracking(1.5).foregroundStyle(.tertiary) }
                     }.padding(.horizontal, 20).dynamicTypeSize(...DynamicTypeSize.xxxLarge)
                     KindPicker(selection: $kind)
                     ScrollView(.horizontal, showsIndicators: false) {
@@ -35,6 +36,18 @@ struct DiscoverView: View {
                             ForEach(topics, id: \.self) { topicButton($0, $0) }
                         }.padding(.horizontal, 20)
                     }
+                    HStack {
+                        if let updated = library.updatedAt { Text(updated, format: .dateTime.month().day()).font(.caption2).foregroundStyle(.tertiary) }
+                        else { Text("原创灵感集").font(.caption2).foregroundStyle(.tertiary) }
+                        Spacer()
+                        Menu {
+                            Button("全部模型") { model = nil }
+                            ForEach(Array(Set(library.prompts.filter { kind == nil || $0.kind == kind }.map(\.model))).sorted(), id: \.self) { value in
+                                Button { model = value } label: { if model == value { Label(value, systemImage: "checkmark") } else { Text(value) } }
+                            }
+                        } label: { Label(model ?? "全部模型", systemImage: "line.3.horizontal.decrease").font(.caption).foregroundStyle(.secondary) }
+                    }.padding(.horizontal, 20)
+                    if let message = library.syncMessage { Text(message).font(.caption).foregroundStyle(.secondary).padding(.horizontal, 20) }
                     if items.isEmpty {
                         ContentUnavailableView("灵感还在路上", systemImage: "sparkle", description: Text("试试其他分类，或回到全部精选。"))
                     } else { PromptGrid(items: items).padding(.horizontal, 16) }
@@ -42,6 +55,8 @@ struct DiscoverView: View {
                         .foregroundStyle(.tertiary).padding(.horizontal, 40).padding(.vertical, 24)
                 }.padding(.top, 4).padding(.bottom, 16)
             }
+            .refreshable { await library.refresh(force: true) }
+            .onChange(of: kind) { _, _ in model = nil }
             .navigationTitle("").navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .principal) { Text("prompix").font(.system(size: 27, weight: .semibold, design: .serif)).fixedSize().accessibilityAddTraits(.isHeader) }
@@ -115,7 +130,8 @@ struct PromptCard: View {
         }
     }
     private var ratio: CGFloat {
-        switch item.kind { case .text: 0.84; case .image: item.artwork == "lake" ? 1.02 : 0.76; case .video: 0.94; case .web: 0.87 }
+        if let ratio = item.media?.aspectRatio { return max(0.65, min(1.5, ratio)) }
+        return switch item.kind { case .text: 0.84; case .image: item.artwork == "lake" ? 1.02 : 0.76; case .video: 0.94; case .web: 0.87 }
     }
 }
 
@@ -156,7 +172,7 @@ struct FavoritesView: View {
                     KindPicker(selection: $kind)
                     let items = library.favorites.filter { kind == nil || $0.kind == kind }
                     if items.isEmpty {
-                        ContentUnavailableView("把喜欢的，留在这里", systemImage: "bookmark", description: Text("轻点卡片上的书签。\n收藏的 Prompt 和示意封面可离线查看。"))
+                        ContentUnavailableView("把喜欢的，留在这里", systemImage: "bookmark", description: Text("轻点卡片上的书签。\n收藏的 Prompt 可离线查看，已浏览的图片会缓存。"))
                     } else { PromptGrid(items: items).padding(.horizontal, 16) }
                 }.padding(.bottom, 24)
             }.navigationTitle("收藏")

@@ -7,13 +7,17 @@
     "validate": "tsx ingest/cli.ts validate",
     "stage": "tsx ingest/cli.ts stage",
     "test": "tsx --test ingest/*.test.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit && tsc -p services/content/tsconfig.json",
+    "daily": "tsx ingest/daily.ts",
+    "remove": "tsx ingest/remove.ts",
+    "check:deployment": "tsx scripts/check-deployment.ts"
   },
   "dependencies": {
     "csv-parse": "^7.0.3",
     "zod": "^4.1.12"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "^5.20261011.1",
     "@types/node": "^22.18.0",
     "tsx": "^4.20.6",
     "typescript": "^5.9.3"

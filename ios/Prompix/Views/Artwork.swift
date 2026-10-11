@@ -5,7 +5,9 @@ struct Artwork: View {
     var body: some View {
         GeometryReader { proxy in
             ZStack {
-                if item.kind == .video, UIImage(named: item.id) != nil { photo(item.id, size: proxy.size) } else {
+                if let url = item.media?.imageURL { RemoteImage(url: url).frame(width: proxy.size.width, height: proxy.size.height).clipped() }
+                else if item.artwork == "text-editorial" || item.artwork == "web-editorial" { communityArtwork(size: proxy.size) }
+                else if item.kind == .video, UIImage(named: item.id) != nil { photo(item.id, size: proxy.size) } else {
                 switch item.artwork {
                 case "citrus": photo("citrus", size: proxy.size)
                 case "lake": photo("lake", size: proxy.size)
@@ -17,13 +19,24 @@ struct Artwork: View {
                 }
                 if item.kind == .video {
                     VStack { Spacer(); HStack {
-                        Label("0:06", systemImage: "play.fill").font(.system(size: 11, weight: .medium, design: .monospaced))
+                        Label(item.media?.videoURL == nil ? "0:06" : "播放", systemImage: "play.fill").font(.system(size: 11, weight: .medium, design: .monospaced))
                             .foregroundStyle(.white).padding(.horizontal, 9).padding(.vertical, 6).background(.black.opacity(0.28), in: Capsule())
                         Spacer()
                     }.padding(12) }
                 }
             }.frame(width: proxy.size.width, height: proxy.size.height).clipped()
         }.accessibilityHidden(true)
+    }
+    private func communityArtwork(size: CGSize) -> some View {
+        ZStack {
+            Color(red: 0.92, green: 0.91, blue: 0.85)
+            VStack(alignment: .leading, spacing: 16) {
+                Image(systemName: item.kind == .web ? "curlybraces" : "quote.opening").font(.system(size: 28, weight: .ultraLight))
+                Text(item.title).font(.system(size: min(size.width * 0.12, 28), weight: .regular, design: .serif)).lineLimit(5).minimumScaleFactor(0.75)
+                Spacer(minLength: 0)
+                Text(item.kind == .web ? "MAKE SOMETHING" : "A NEW CONVERSATION").font(.system(size: 7, design: .monospaced)).tracking(1)
+            }.foregroundStyle(Color(red: 0.28, green: 0.32, blue: 0.23)).padding(size.width * 0.12)
+        }
     }
     private func photo(_ name: String, size: CGSize) -> some View {
         Image(name).resizable().scaledToFill().frame(width: size.width, height: size.height).clipped()
