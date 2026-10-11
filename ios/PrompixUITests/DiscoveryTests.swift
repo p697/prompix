@@ -12,6 +12,30 @@ import XCTest
         let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         shot.name = name; shot.lifetime = .keepAlways; add(shot)
     }
+    // Select explicitly on a physical device with a Release configuration.
+    // These are process launches, not a claim of empty OS caches or a reboot.
+    func testRepeatedLaunchPerformance() {
+        let options = XCTMeasureOptions()
+        options.iterationCount = 5
+        measure(metrics: [XCTApplicationLaunchMetric(waitUntilResponsive: true)], options: options) {
+            app.terminate()
+            app.launch()
+            XCTAssertTrue(app.buttons["kind-text"].waitForExistence(timeout: 10))
+        }
+    }
+
+    func testScrollingResourcePerformance() {
+        XCTAssertTrue(app.buttons["kind-text"].waitForExistence(timeout: 10))
+        let options = XCTMeasureOptions()
+        options.iterationCount = 3
+        measure(metrics: [XCTMemoryMetric(application: app), XCTCPUMetric(application: app)], options: options) {
+            for _ in 0..<6 { app.swipeUp() }
+            for _ in 0..<6 { app.swipeDown() }
+        }
+        XCTAssertTrue(app.buttons["kind-text"].exists)
+        capture("air-scroll-after-measurement")
+    }
+
     func testAdaptiveBrowsingAndEditing() throws {
         defer { XCUIDevice.shared.orientation = .portrait }
         XCTAssertTrue(app.buttons["kind-text"].waitForExistence(timeout: 10))

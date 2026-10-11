@@ -117,7 +117,8 @@ import CryptoKit
         XCTAssertTrue(playback.failed, "Missing local media must fail without waiting for AVPlayer")
         let url = try XCTUnwrap(Bundle.main.url(forResource: "slow-road", withExtension: "mp4"))
         playback.start(url: url)
-        for _ in 0..<100 {
+        // Allow the real 25-second buffering deadline to settle on slower CI simulators.
+        for _ in 0..<300 {
             if !playback.loading { break }
             try await Task.sleep(for: .milliseconds(100))
         }

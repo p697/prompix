@@ -16,6 +16,7 @@
 		350572DF6142FD68FA212A7C /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0CF3E9A85D89E313C2F2361 /* Theme.swift */; };
 		4506A05E3DEB7E24EFC89AB5 /* PrompixApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAF36A507580A41DC1A35C7C /* PrompixApp.swift */; };
 		470B6CAE7A5EE5757EA8E748 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 36FB6A0E478B602F5153F759 /* Foundation.framework */; };
+		5C4D20500F6C7054E2E8BB40 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = D822B1464734C7B7DC27994C /* PrivacyInfo.xcprivacy */; };
 		620D35B2B8CD7D55C9AC2A1C /* slow-bloom.mp4 in Resources */ = {isa = PBXBuildFile; fileRef = ADCE318507FA6F9719E674FD /* slow-bloom.mp4 */; };
 		62DE919CCB7A9DF2901731E8 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 08BDF7130E36D24ACFFAE971 /* Assets.xcassets */; };
 		809A7FDC2A2F4AE0383E28E1 /* TabSymbol.swift in Sources */ = {isa = PBXBuildFile; fileRef = 134BAC48565179E6442C6108 /* TabSymbol.swift */; };
@@ -79,6 +80,7 @@
 		C99C7A55D7754E71EF735E91 /* CatalogSync.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = CatalogSync.swift; path = Models/CatalogSync.swift; sourceTree = "<group>"; };
 		CF1E70C596FB670E3DE71FFE /* Localizable.xcstrings */ = {isa = PBXFileReference; includeInIndex = 1; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		D22D0AA1AAA53AF21F3D5B66 /* Artwork.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = Artwork.swift; path = Views/Artwork.swift; sourceTree = "<group>"; };
+		D822B1464734C7B7DC27994C /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		DAF36A507580A41DC1A35C7C /* PrompixApp.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = PrompixApp.swift; path = App/PrompixApp.swift; sourceTree = "<group>"; };
 		E0CF3E9A85D89E313C2F2361 /* Theme.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = Theme.swift; path = Views/Theme.swift; sourceTree = "<group>"; };
 		E1F2B5BE27DA3B85CC70BDFF /* small-orbit.mp4 */ = {isa = PBXFileReference; includeInIndex = 1; path = "small-orbit.mp4"; sourceTree = "<group>"; };
@@ -159,6 +161,7 @@
 				33EF98E841D6055DE88EE30C /* slow-road.mp4 */,
 				E1F2B5BE27DA3B85CC70BDFF /* small-orbit.mp4 */,
 				CF1E70C596FB670E3DE71FFE /* Localizable.xcstrings */,
+				D822B1464734C7B7DC27994C /* PrivacyInfo.xcprivacy */,
 			);
 			name = Resources;
 			path = Resources;
@@ -316,6 +319,7 @@
 				E10D15F8A63FEDC252F77E4C /* slow-road.mp4 in Resources */,
 				82D8D64BA801F7124C217611 /* small-orbit.mp4 in Resources */,
 				BD2F9154C6BEB70394FC569A /* Localizable.xcstrings in Resources */,
+				5C4D20500F6C7054E2E8BB40 /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
