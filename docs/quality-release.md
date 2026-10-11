@@ -133,6 +133,12 @@ iPhone 18 Pro 连续五屏浏览及每屏详情返回位置通过，五张截图
 
 首次网页截图抓到 WebKit 尚未绘制的空白瞬间，不能作为可视证据；复测的 `release-ipad-tabs-evidence/DEF51A15-EE95-44AB-8EB2-B4A2AA208281.png` 已由两名 Agent 独立检查为实际渲染作品。网页截图流程增加渲染稳定等待。iPad 发现、详情、编辑、收藏、专题与网页均复查实际像素，无操作被遮挡的阻断问题。
 
+### Build 3 的 Release 模拟器基线
+
+`Quality-Release-Final-Simulator.xcresult` 在 iPhone 18 Pro／iOS 27 模拟器上五项全部通过，使用 Release、`ENABLE_TESTABILITY=YES`。覆盖英文发现／编辑／设置、图片／实际网页／专题、最新在线目录与图片／视频播放，以及重复启动和连续滚动。设备构建号为 0.2.0 (3)，应用生产逻辑与已验证版本一致。
+
+五次进程启动的 XCTest 首帧可响应指标均值为 3.312 秒，范围 3.280–3.339 秒；它包含模拟器自动化环境影响，不是空缓存冷启动或真机启动承诺。三轮离线内容滚动的峰值物理内存均值为 112,594 kB，最高 116,132 kB，CPU 时间均值为每轮 6.526 秒。没有设置历史性能回归基线；“测试通过”不代表已证明真机帧率、发热或慢网体验。这些实机条件留到最终一次集中验收，开发阶段不继续安装用户手机。
+
 ### 测试证据保留
 
 为释放开发磁盘，仅清理可重建编译缓存，以及已被修复后结果替代的六个失败结果包：`Quality-All-Accessibility`、`Quality-All-Accessibility-4`、`Quality-All-Accessibility-Settled`、`Quality-Accessibility-Interaction`、`Quality-Original-Images`、`Quality-Adaptive-Audit`（均为 `.xcresult`）。清理前的机器可读概要保存在 `superseded-test-summaries/`，相关日志和截图保留。上文对应旧路径属于历史记录；通过的验证包、发布数据、当前源文件和用户数据未删除。
