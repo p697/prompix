@@ -97,7 +97,7 @@
       "model": "v0 / 网站生成工具",
       "toolURL": "https://v0.app/",
       "artwork": "portfolio",
-      "previewLabel": "Prompix 编辑示意 · 非模型实测结果",
+      "previewLabel": "Prompix 原创可交互网页 · 示例数据",
       "source": {
         "name": "Prompix Studio",
         "url": null,
@@ -282,7 +282,7 @@
       "id": "indie-studio",
       "kind": "web",
       "title": "给独立工作室，一张数字名片",
-      "summary": "不需要从空白画布开始。把你的想法，变成可以打开的小网站。",
+      "summary": "让你的创意工作室拥有清晰的作品、服务介绍与联系入口。",
       "prompt": "Build a responsive, accessible website for an independent creative studio. An oversized serif headline, a three-project grid, a concise services section and a contact email. Dark olive background with a pale citrus accent.\n\nUse semantic HTML, keyboard-operable controls, visible focus states, readable contrast and responsive layouts from 320px upward. Respect reduced-motion preferences. Every displayed control must work. Avoid tracking and unnecessary dependencies. Label all sample data clearly, keep content in one editable data module, and provide runnable code plus setup instructions. Use only self-created or explicitly permitted media.",
       "example": "先准备三个真实案例和一句能说明你做什么的话。",
       "tags": [
@@ -293,7 +293,7 @@
       "model": "v0 / 网站生成工具",
       "toolURL": "https://v0.app/",
       "artwork": "studio",
-      "previewLabel": "Prompix 编辑示意 · 非模型实测结果",
+      "previewLabel": "Prompix 原创可交互网页 · 示例数据",
       "source": {
         "name": "Prompix Studio",
         "url": null,
@@ -379,7 +379,7 @@
       "id": "sunday-recipes",
       "kind": "web",
       "title": "把拿手菜，做成一本小食谱",
-      "summary": "不需要从空白画布开始。把你的想法，变成可以打开的小网站。",
+      "summary": "六道小食谱，能搜索、筛选，也能勾选买齐的食材。",
       "prompt": "Build a responsive, accessible website for a personal recipe collection. A searchable list of six clearly labeled sample recipes, category filters, ingredient checkboxes and a recipe detail with preparation steps. Warm cream and muted tomato palette. Store checked ingredients locally.\n\nUse semantic HTML, keyboard-operable controls, visible focus states, readable contrast and responsive layouts from 320px upward. Respect reduced-motion preferences. Every displayed control must work. Avoid tracking and unnecessary dependencies. Label all sample data clearly, keep content in one editable data module, and provide runnable code plus setup instructions. Use only self-created or explicitly permitted media.",
       "example": "可以要求加一个“冰箱里有什么”筛选，但第一版先把一张食谱做好。",
       "tags": [
@@ -390,7 +390,7 @@
       "model": "v0 / 网站生成工具",
       "toolURL": "https://v0.app/",
       "artwork": "recipe",
-      "previewLabel": "Prompix 编辑示意 · 非模型实测结果",
+      "previewLabel": "Prompix 原创可交互网页 · 示例数据",
       "source": {
         "name": "Prompix Studio",
         "url": null,
@@ -454,7 +454,7 @@
       "id": "travel-notes",
       "kind": "web",
       "title": "为下一次出发，做一本旅行手记",
-      "summary": "不需要从空白画布开始。把你的想法，变成可以打开的小网站。",
+      "summary": "三篇旅行手记与一张打包清单，把路上的小事留住。",
       "prompt": "Build a responsive, accessible website for a personal travel journal. Three destination stories with dates, a reading view, an editable packing checklist stored locally, and an about section. No location tracking or external map API. Cream, sea blue and sand colors.\n\nUse semantic HTML, keyboard-operable controls, visible focus states, readable contrast and responsive layouts from 320px upward. Respect reduced-motion preferences. Every displayed control must work. Avoid tracking and unnecessary dependencies. Label all sample data clearly, keep content in one editable data module, and provide runnable code plus setup instructions. Use only self-created or explicitly permitted media.",
       "example": "填入自己的地点和照片。旅行地图不是必需品，好读的故事更重要。",
       "tags": [
@@ -465,7 +465,7 @@
       "model": "v0 / 网站生成工具",
       "toolURL": "https://v0.app/",
       "artwork": "travel",
-      "previewLabel": "Prompix 编辑示意 · 非模型实测结果",
+      "previewLabel": "Prompix 原创可交互网页 · 示例数据",
       "source": {
         "name": "Prompix Studio",
         "url": null,
@@ -529,7 +529,7 @@
       "id": "soft-focus",
       "kind": "web",
       "title": "做一个，让人愿意专注的计时器",
-      "summary": "不需要从空白画布开始。把你的想法，变成可以打开的小网站。",
+      "summary": "准确计时、暂停与休息切换，给眼前的一件事留出空间。",
       "prompt": "Build a responsive, accessible website for a calm focus timer. A 25-minute countdown, start/pause/reset controls, optional 5-minute break and a local daily completed-session count. Store deadline timestamps so background tabs remain accurate. No notifications without consent. Dark green with soft cream numerals.\n\nUse semantic HTML, keyboard-operable controls, visible focus states, readable contrast and responsive layouts from 320px upward. Respect reduced-motion preferences. Every displayed control must work. Avoid tracking and unnecessary dependencies. Label all sample data clearly, keep content in one editable data module, and provide runnable code plus setup instructions. Use only self-created or explicitly permitted media.",
       "example": "要求工具用时间戳计算剩余时间，避免切到后台后计时失准。",
       "tags": [
@@ -540,7 +540,7 @@
       "model": "v0 / 网站生成工具",
       "toolURL": "https://v0.app/",
       "artwork": "timer",
-      "previewLabel": "Prompix 编辑示意 · 非模型实测结果",
+      "previewLabel": "Prompix 原创可交互网页 · 示例数据",
       "source": {
         "name": "Prompix Studio",
         "url": null,
@@ -580,7 +580,7 @@
       "id": "little-gallery",
       "kind": "web",
       "title": "把喜欢的小东西，开成一家展馆",
-      "summary": "不需要从空白画布开始。把你的想法，变成可以打开的小网站。",
+      "summary": "九件日常小物，能分类、细看和收藏的私人展馆。",
       "prompt": "Build a responsive, accessible website for a personal collection gallery. A responsive grid of nine editable sample objects, object details, category filters and a locally saved favorites view. Neutral warm gallery aesthetic with large images and small captions.\n\nUse semantic HTML, keyboard-operable controls, visible focus states, readable contrast and responsive layouts from 320px upward. Respect reduced-motion preferences. Every displayed control must work. Avoid tracking and unnecessary dependencies. Label all sample data clearly, keep content in one editable data module, and provide runnable code plus setup instructions. Use only self-created or explicitly permitted media.",
       "example": "可以收集椅子、唱片或建筑细节。先建立统一的图片比例，再谈动效。",
       "tags": [
@@ -591,7 +591,7 @@
       "model": "v0 / 网站生成工具",
       "toolURL": "https://v0.app/",
       "artwork": "gallery",
-      "previewLabel": "Prompix 编辑示意 · 非模型实测结果",
+      "previewLabel": "Prompix 原创可交互网页 · 示例数据",
       "source": {
         "name": "Prompix Studio",
         "url": null,

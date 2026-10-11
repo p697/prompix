@@ -92,6 +92,50 @@ import XCTest
         XCTAssertTrue((editor.value as? String ?? "").contains("My personal intention."))
         capture("13-persistent-draft")
     }
+    func testOriginalWebsitesAndCaptureTheirRealPreviews() {
+        app.buttons["kind-web"].tap()
+        capture("14-web-discovery")
+        let examples = [
+            ("quiet-portfolio", "Less, but"), ("indie-studio", "Ideas take"),
+            ("sunday-recipes", "A slower"), ("travel-notes", "Go a little"),
+            ("soft-focus", "Make room"), ("little-gallery", "Objects")
+        ]
+        for (id, headline) in examples {
+            let card = app.buttons["prompt-\(id)"]
+            for _ in 0..<6 { if card.isHittable { break }; app.swipeUp() }
+            XCTAssertTrue(card.isHittable, id); card.tap()
+            app.buttons["previewButton"].tap()
+            let web = app.webViews.firstMatch
+            XCTAssertTrue(web.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", headline)).firstMatch.waitForExistence(timeout: 10), id)
+            let shot = XCTAttachment(screenshot: web.screenshot())
+            shot.name = "web-\(id)"; shot.lifetime = .keepAlways; add(shot)
+            if id == "soft-focus" {
+                let start = web.buttons["开始专注"]
+                if !start.isHittable { web.swipeUp() }
+                start.tap()
+                XCTAssertTrue(web.buttons["暂停"].waitForExistence(timeout: 3))
+                web.buttons["暂停"].tap()
+                XCTAssertTrue(web.buttons["继续"].waitForExistence(timeout: 3))
+                web.buttons["重新开始"].tap()
+                XCTAssertTrue(web.buttons["开始专注"].exists)
+            }
+            if id == "sunday-recipes" {
+                let recipe = web.buttons["打开番茄鸡蛋吐司"]
+                for _ in 0..<4 { if recipe.isHittable { break }; web.swipeUp() }
+                recipe.tap()
+                XCTAssertTrue(web.staticTexts["准备食材"].waitForExistence(timeout: 3))
+                web.buttons["关闭食谱"].tap()
+            }
+            if id == "little-gallery" {
+                let object = web.descendants(matching: .any).matching(identifier: "收藏一只不对称的花瓶").firstMatch
+                for _ in 0..<4 { if object.isHittable { break }; web.swipeUp() }
+                object.tap()
+                XCTAssertTrue(web.descendants(matching: .any).matching(identifier: "取消收藏一只不对称的花瓶").firstMatch.waitForExistence(timeout: 3))
+            }
+            app.buttons["完成"].tap()
+            app.navigationBars.buttons.element(boundBy: 0).tap()
+        }
+    }
     func testLiveCommunityEditionAndRemotePreviews() throws {
         app.terminate()
         app.launchArguments.removeAll { $0 == "--offline" }

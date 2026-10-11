@@ -1,0 +1,332 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; style-src 'self' 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:; connect-src 'none'; base-uri 'none'; form-action 'none'"
+    />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Sunday Table — 小食谱</title>
+    <link rel="stylesheet" href="base.css" />
+    <style>
+      :root {
+        --paper: #f7efe1;
+        --ink: #793f30;
+        --muted: #8e7462;
+        --accent: #b45539;
+      }
+      .hero-art {
+        height: 190px;
+        display: grid;
+        place-items: center;
+        background: #e8d5b5;
+        margin: 25px 0 30px;
+        border-radius: 100px 100px 4px 4px;
+        overflow: hidden;
+      }
+      .plate {
+        width: 160px;
+        height: 160px;
+        border: 18px solid #fff9e9;
+        border-radius: 50%;
+        background: #d7d4a7;
+        box-shadow: 0 8px 15px #783f3020;
+        position: relative;
+      }
+      .tomato {
+        position: absolute;
+        width: 58px;
+        height: 58px;
+        background: #b44f36;
+        border-radius: 50%;
+        top: 26px;
+        left: 20px;
+        border: 4px solid #cf7152;
+      }
+      .tomato:after {
+        content: "";
+        position: absolute;
+        width: 30px;
+        height: 9px;
+        background: #5f7044;
+        transform: rotate(-30deg);
+        top: 8px;
+        left: 10px;
+        border-radius: 100%;
+      }
+      .tomato.two {
+        left: 50px;
+        top: 55px;
+        background: #d9a955;
+        border-color: #e4bd7a;
+      }
+      .recipe-card {
+        text-align: left;
+        border: 0;
+        padding: 0;
+        display: block;
+        width: 100%;
+        border-radius: 0;
+        min-height: 0;
+      }
+      .recipe-art {
+        height: 145px;
+        background: var(--tone);
+        display: grid;
+        place-items: center;
+        margin-bottom: 12px;
+      }
+      .recipe-art svg {
+        height: 115px;
+        width: 160px;
+      }
+      .recipe-card h3 {
+        margin: 8px 0 3px;
+        font-size: 16px;
+      }
+      .recipe-card small {
+        font-size: 11px;
+        color: var(--muted);
+      }
+      .steps {
+        padding-left: 22px;
+        font-size: 14px;
+        line-height: 1.9;
+      }
+      .steps li {
+        padding: 8px 0;
+      }
+      #resultCount {
+        font-size: 11px;
+        color: var(--muted);
+      }
+      dialog h2 {
+        font-size: 29px;
+      }
+    </style>
+  </head>
+  <body>
+    <header><b>SUNDAY TABLE</b><a href="#recipes">今日食谱 ↓</a></header>
+    <main>
+      <div class="eyebrow">SIX SMALL REASONS TO STAY IN</div>
+      <h1>A slower<br />Sunday.</h1>
+      <p class="intro">不急着出门。挑一道拿手菜，<br />把日子过得有滋有味。</p>
+      <div class="hero-art" aria-hidden="true">
+        <div class="plate">
+          <i class="tomato"></i><i class="tomato two"></i>
+        </div>
+      </div>
+      <section id="recipes">
+        <h2>What sounds good?</h2>
+        <label for="search" class="small">按菜名或食材搜索</label
+        ><input
+          id="search"
+          class="search"
+          type="search"
+          placeholder="比如：番茄、蘑菇、早餐"
+          style="margin-top: 10px"
+        />
+        <div class="filters" role="group" aria-label="食谱分类">
+          <button class="active" data-category="全部" aria-pressed="true">
+            全部</button
+          ><button data-category="早餐" aria-pressed="false">早餐</button
+          ><button data-category="午晚餐" aria-pressed="false">午晚餐</button
+          ><button data-category="小点" aria-pressed="false">小点</button>
+        </div>
+        <p id="resultCount" role="status"></p>
+        <div id="cards" class="grid"></div>
+        <p id="empty" hidden>还没有这道菜，试试其他食材。</p>
+      </section>
+      <p class="note">
+        六道原创示例食谱，可替换为自己的配方。烹饪时间为参考；请根据食材状态调整，确认食物熟透并留意个人过敏原。食材勾选保存在当前浏览环境。
+      </p>
+    </main>
+    <footer>COOK SOMETHING GOOD / PROMPIX ORIGINAL EXAMPLE</footer>
+    <dialog id="detail">
+      <div class="row">
+        <span class="eyebrow">IN YOUR OWN KITCHEN</span
+        ><button id="close">关闭食谱</button>
+      </div>
+      <div id="recipe"></div>
+    </dialog>
+    <script>
+      const recipes = [
+        {
+          id: "toast",
+          name: "番茄鸡蛋吐司",
+          category: "早餐",
+          time: "15 分钟",
+          tone: "#e7c7a5",
+          ingredients: [
+            "吐司 2 片",
+            "鸡蛋 2 个",
+            "番茄 1 个",
+            "橄榄油、盐少许",
+          ],
+          steps: [
+            "番茄切小块，鸡蛋打散。",
+            "平底锅加少许油，炒软番茄，再加入蛋液炒至完全凝固。",
+            "吐司烘至表面微脆，放上番茄炒蛋，按喜好调味。",
+          ],
+        },
+        {
+          id: "oats",
+          name: "苹果肉桂燕麦",
+          category: "早餐",
+          time: "12 分钟",
+          tone: "#ddd4b7",
+          ingredients: [
+            "燕麦片 50 克",
+            "牛奶或植物奶 200 毫升",
+            "苹果半个",
+            "肉桂粉少许",
+          ],
+          steps: [
+            "苹果切小丁。",
+            "燕麦、奶和苹果一起小火煮，边煮边搅拌至燕麦柔软。",
+            "加入少量肉桂粉，盛入碗中。",
+          ],
+        },
+        {
+          id: "mushroom",
+          name: "蘑菇奶油意面",
+          category: "午晚餐",
+          time: "25 分钟",
+          tone: "#d6c7b6",
+          ingredients: [
+            "意面 160 克",
+            "蘑菇 150 克",
+            "淡奶油 80 毫升",
+            "蒜 1 瓣",
+            "盐、黑胡椒少许",
+          ],
+          steps: [
+            "按包装说明煮意面，保留半杯煮面水。",
+            "炒香蒜末，放入蘑菇片炒熟。",
+            "加入奶油和少量面水煮匀，放入意面拌匀并调味。",
+          ],
+        },
+        {
+          id: "rice",
+          name: "香葱蛋炒饭",
+          category: "午晚餐",
+          time: "15 分钟",
+          tone: "#d9d5b3",
+          ingredients: [
+            "妥善冷藏的熟米饭 1 碗",
+            "鸡蛋 2 个",
+            "香葱 2 根",
+            "食用油、盐少许",
+          ],
+          steps: [
+            "香葱切碎，鸡蛋打散。",
+            "锅中加油，炒熟鸡蛋，加入米饭并打散。",
+            "充分加热至整锅滚烫，加入葱花和盐拌匀后立即食用。",
+          ],
+        },
+        {
+          id: "pear",
+          name: "蜂蜜烤梨",
+          category: "小点",
+          time: "30 分钟",
+          tone: "#e5cd9d",
+          ingredients: [
+            "梨 2 个",
+            "蜂蜜 2 茶匙",
+            "核桃少许（可省略）",
+            "肉桂粉少许",
+          ],
+          steps: [
+            "烤箱预热至 180°C，梨对半切开并去核。",
+            "梨放入烤盘，淋蜂蜜，撒肉桂粉。",
+            "烤约 20–25 分钟至变软，按需加入核桃。蜂蜜不适合一岁以下婴儿。",
+          ],
+        },
+        {
+          id: "yogurt",
+          name: "莓果酸奶杯",
+          category: "小点",
+          time: "5 分钟",
+          tone: "#d9bdbb",
+          ingredients: [
+            "原味酸奶 150 克",
+            "洗净的莓果 80 克",
+            "即食燕麦 2 汤匙",
+          ],
+          steps: [
+            "杯底放一层酸奶和燕麦。",
+            "加入莓果，再叠一层酸奶。",
+            "用余下莓果装饰，现做现吃。",
+          ],
+        },
+      ];
+      let category = "全部";
+      const cards = document.querySelector("#cards"),
+        search = document.querySelector("#search"),
+        dialog = document.querySelector("#detail");
+      const read = (id) => {
+        try {
+          return JSON.parse(localStorage.getItem("recipe-" + id) || "[]");
+        } catch {
+          return [];
+        }
+      };
+      function render() {
+        const q = search.value.trim().toLowerCase();
+        const shown = recipes.filter(
+          (r) =>
+            (category === "全部" || r.category === category) &&
+            [r.name, r.category, ...r.ingredients]
+              .join(" ")
+              .toLowerCase()
+              .includes(q),
+        );
+        cards.innerHTML = shown
+          .map(
+            (r, i) =>
+              `<button class="recipe-card" data-open="${r.id}" aria-label="打开${r.name}"><div class="recipe-art" style="--tone:${r.tone}" aria-hidden="true"><svg viewBox="0 0 180 130"><ellipse cx="90" cy="68" rx="59" ry="51" fill="#fff8e6"/><ellipse cx="90" cy="68" rx="42" ry="35" fill="#b6bd8e"/><circle cx="75" cy="58" r="16" fill="#b96845"/><circle cx="105" cy="76" r="18" fill="#dcb365"/><path d="M71 71q20-40 43-18" stroke="#6c804e" stroke-width="7" fill="none"/></svg></div><h3>${r.name}</h3><small>${r.category} / ${r.time}</small></button>`,
+          )
+          .join("");
+        document.querySelector("#resultCount").textContent =
+          `${shown.length} 道食谱`;
+        document.querySelector("#empty").hidden = shown.length > 0;
+        cards
+          .querySelectorAll("[data-open]")
+          .forEach((b) => (b.onclick = () => openRecipe(b.dataset.open)));
+      }
+      function openRecipe(id) {
+        const r = recipes.find((r) => r.id === id),
+          checked = read(id);
+        document.querySelector("#recipe").innerHTML =
+          `<h2>${r.name}</h2><p>${r.time} · 示例配方</p><h3>准备食材</h3>${r.ingredients.map((v, i) => `<label class="check"><input type="checkbox" data-index="${i}" ${checked.includes(i) ? "checked" : ""}>${v}</label>`).join("")}<h3 style="margin-top:25px">慢慢做</h3><ol class="steps">${r.steps.map((s) => `<li>${s}</li>`).join("")}</ol>`;
+        dialog.querySelectorAll("input").forEach(
+          (input) =>
+            (input.onchange = () => {
+              const selected = [
+                ...dialog.querySelectorAll("input:checked"),
+              ].map((i) => Number(i.dataset.index));
+              try {
+                localStorage.setItem("recipe-" + id, JSON.stringify(selected));
+              } catch {}
+            }),
+        );
+        dialog.showModal();
+      }
+      search.oninput = render;
+      document.querySelectorAll("[data-category]").forEach(
+        (b) =>
+          (b.onclick = () => {
+            category = b.dataset.category;
+            document.querySelectorAll("[data-category]").forEach((x) => {
+              x.classList.toggle("active", x === b);
+              x.setAttribute("aria-pressed", x === b ? "true" : "false");
+            });
+            render();
+          }),
+      );
+      document.querySelector("#close").onclick = () => dialog.close();
+      render();
+    </script>
+  </body>
+</html>

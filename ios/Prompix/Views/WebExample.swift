@@ -1,37 +1,83 @@
 import SwiftUI
 import WebKit
 
-// Only bundled, first-party examples are rendered here. The app shell is native.
+enum WebsiteExamples {
+    static let files = [
+        "quiet-portfolio": "portfolio",
+        "indie-studio": "studio",
+        "sunday-recipes": "recipes",
+        "travel-notes": "travel",
+        "soft-focus": "focus",
+        "little-gallery": "gallery"
+    ]
+}
+
+// JavaScript is enabled only for bundled, first-party artifacts, never the native app shell.
 struct WebExample: View {
+    let filename: String
     @Environment(\.dismiss) private var dismiss
+    @State private var loading = true
+    @State private var failure: String?
+    @State private var attempt = 0
     var body: some View {
         NavigationStack {
-            BundledWebsite().navigationTitle("原创网页示例").navigationBarTitleDisplayMode(.inline)
+            ZStack {
+                BundledWebsite(filename: filename, loading: $loading, failure: $failure).id(attempt)
+                if loading { ProgressView("正在打开作品…").padding(20).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16)) }
+                if let failure {
+                    ContentUnavailableView {
+                        Label("网页暂不可用", systemImage: "safari")
+                    } description: { Text(failure) } actions: {
+                        Button("重新打开") { self.failure = nil; loading = true; attempt += 1 }
+                    }.background(Palette.paper)
+                }
+            }.navigationTitle("原创网页示例").navigationBarTitleDisplayMode(.inline)
                 .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完成") { dismiss() } } }
         }
     }
 }
 struct BundledWebsite: UIViewRepresentable {
-    func makeCoordinator() -> Coordinator { Coordinator() }
+    let filename: String
+    @Binding var loading: Bool
+    @Binding var failure: String?
+    func makeCoordinator() -> Coordinator { Coordinator(loading: $loading, failure: $failure) }
     func makeUIView(context: Context) -> WKWebView {
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = .nonPersistent()
-        configuration.defaultWebpagePreferences.allowsContentJavaScript = false
+        configuration.defaultWebpagePreferences.allowsContentJavaScript = true
         let view = WKWebView(frame: .zero, configuration: configuration)
         view.navigationDelegate = context.coordinator
-        if let url = Bundle.main.url(forResource: "portfolio", withExtension: "html", subdirectory: "WebExamples") {
+        view.isOpaque = false
+        if WebsiteExamples.files.values.contains(filename),
+           let url = Bundle.main.url(forResource: filename, withExtension: "html", subdirectory: "WebExamples") {
+            context.coordinator.root = url.deletingLastPathComponent().standardizedFileURL.path + "/"
             view.loadFileURL(url, allowingReadAccessTo: url.deletingLastPathComponent())
+        } else {
+            Task { @MainActor in loading = false; failure = "作品文件没有加载成功。你仍可以复制完整 Prompt。" }
         }
         return view
     }
     func updateUIView(_ uiView: WKWebView, context: Context) {}
     class Coordinator: NSObject, WKNavigationDelegate {
+        var root = ""
+        let loading: Binding<Bool>
+        let failure: Binding<String?>
+        init(loading: Binding<Bool>, failure: Binding<String?>) { self.loading = loading; self.failure = failure }
+        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) { loading.wrappedValue = false }
+        func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) { showFailure(error) }
+        func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) { showFailure(error) }
+        func webViewWebContentProcessDidTerminate(_ webView: WKWebView) { showFailure(URLError(.cannotLoadFromNetwork)) }
+        private func showFailure(_ error: Error) {
+            if (error as NSError).code == NSURLErrorCancelled { return }
+            loading.wrappedValue = false
+            failure.wrappedValue = "作品暂时没有打开成功，请重新尝试。"
+        }
         func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
             guard let url = navigationAction.request.url else { decisionHandler(.cancel); return }
-            if url.isFileURL { decisionHandler(.allow) }
+            if url.isFileURL, !root.isEmpty, url.standardizedFileURL.path.hasPrefix(root) { decisionHandler(.allow) }
             else {
                 decisionHandler(.cancel)
-                if url.scheme == "https", navigationAction.navigationType == .linkActivated { UIApplication.shared.open(url) }
+                if ["https", "mailto"].contains(url.scheme ?? ""), navigationAction.navigationType == .linkActivated { UIApplication.shared.open(url) }
             }
         }
     }
