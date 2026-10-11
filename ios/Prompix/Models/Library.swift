@@ -26,14 +26,14 @@ import Observation
             if FileManager.default.fileExists(atPath: savedURL.path) {
                 favorites = try JSONDecoder().decode([Prompt].self, from: Data(contentsOf: savedURL))
             }
-        } catch { favoritesReadable = false; self.error = "收藏暂时无法读取。原文件已保留，请稍后重试。" }
+        } catch { favoritesReadable = false; self.error = String(localized: "收藏暂时无法读取。原文件已保留，请稍后重试。") }
         do {
             if FileManager.default.fileExists(atPath: draftFile.path) {
                 drafts = try JSONDecoder().decode([String: String].self, from: Data(contentsOf: draftFile))
             }
         } catch {
             draftsReadable = false
-            self.error = "编辑草稿暂时无法读取。原文件已保留，暂不覆盖已有修改。"
+            self.error = String(localized: "编辑草稿暂时无法读取。原文件已保留，暂不覆盖已有修改。")
         }
         do {
             guard let catalogURL else { throw CocoaError(.fileNoSuchFile) }
@@ -52,7 +52,7 @@ import Observation
                 }
                 try removeDrafts(ids: removed)
             }
-        } catch { self.error = "灵感暂时没有加载成功。你仍然可以查看已保存的收藏。" }
+        } catch { self.error = String(localized: "灵感暂时没有加载成功。你仍然可以查看已保存的收藏。") }
     }
 
     private static func parseDate(_ value: String) -> Date? {
@@ -65,7 +65,7 @@ import Observation
     func draft(for item: Prompt) -> String { drafts[item.id] ?? item.prompt }
     @discardableResult func saveDraft(_ text: String, for item: Prompt) -> Bool {
         guard draftsReadable else {
-            error = "已有草稿暂时无法读取，修改未保存。你可以先复制内容。"
+            error = String(localized: "已有草稿暂时无法读取，修改未保存。你可以先复制内容。")
             return false
         }
         var updated = drafts
@@ -76,7 +76,7 @@ import Observation
             drafts = updated
             return true
         } catch {
-            self.error = "草稿未能保存，请检查设备存储空间。你仍可以复制本次修改。"
+            self.error = String(localized: "草稿未能保存，请检查设备存储空间。你仍可以复制本次修改。")
             return false
         }
     }
@@ -100,7 +100,7 @@ import Observation
             try install(content, manifest: manifest)
             syncMessage = nil
         } catch is CancellationError { }
-        catch { syncMessage = "暂时无法更新，仍可浏览已下载的灵感。" }
+        catch { syncMessage = String(localized: "暂时无法更新，仍可浏览已下载的灵感。") }
     }
     func install(_ data: Data, manifest: CatalogManifest) throws {
         let catalog = try CatalogSync.verify(data, manifest: manifest.validated())
@@ -123,11 +123,11 @@ import Observation
             let valid = recovered.filter { !removedIDs.contains($0.id) }
             if valid != recovered { try JSONEncoder().encode(valid).write(to: savedFile, options: .atomic) }
             favorites = valid; favoritesReadable = true; error = nil
-        } catch { self.error = "收藏仍然无法读取，原文件与离线预览已保留。" }
+        } catch { self.error = String(localized: "收藏仍然无法读取，原文件与离线预览已保留。") }
     }
     @discardableResult func toggle(_ item: Prompt) -> Bool {
         guard favoritesReadable else {
-            error = "已有收藏暂时无法读取。为保留原文件，本次修改未保存。"
+            error = String(localized: "已有收藏暂时无法读取。为保留原文件，本次修改未保存。")
             return false
         }
         var updated = favorites
@@ -138,7 +138,7 @@ import Observation
             try data.write(to: directory.appending(path: "favorites.json"), options: .atomic)
             favorites = updated
             return true
-        } catch { self.error = "未能保存收藏，请检查设备存储空间后重试。"; return false }
+        } catch { self.error = String(localized: "未能保存收藏，请检查设备存储空间后重试。"); return false }
     }
     func dismissError() { error = nil }
 }

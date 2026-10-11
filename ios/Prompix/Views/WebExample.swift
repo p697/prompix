@@ -23,16 +23,16 @@ struct WebExample: View {
         NavigationStack {
             ZStack {
                 BundledWebsite(filename: filename, loading: $loading, failure: $failure).id(attempt)
-                if loading { ProgressView("正在打开作品…").padding(20).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16)) }
+                if loading { ProgressView(String(localized: "正在打开作品…")).padding(20).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16)) }
                 if let failure {
                     ContentUnavailableView {
-                        Label("网页暂不可用", systemImage: "safari")
+                        Label(String(localized: "网页暂不可用"), systemImage: "safari")
                     } description: { Text(failure) } actions: {
-                        Button("重新打开") { self.failure = nil; loading = true; attempt += 1 }
+                        Button(String(localized: "重新打开")) { self.failure = nil; loading = true; attempt += 1 }
                     }.background(Palette.paper)
                 }
-            }.navigationTitle("原创网页示例").navigationBarTitleDisplayMode(.inline)
-                .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完成") { dismiss() } } }
+            }.navigationTitle(String(localized: "原创网页示例")).navigationBarTitleDisplayMode(.inline)
+                .toolbar { ToolbarItem(placement: .confirmationAction) { Button(String(localized: "完成")) { dismiss() } } }
         }
     }
 }
@@ -53,7 +53,7 @@ struct BundledWebsite: UIViewRepresentable {
             context.coordinator.root = url.deletingLastPathComponent().standardizedFileURL.path + "/"
             view.loadFileURL(url, allowingReadAccessTo: url.deletingLastPathComponent())
         } else {
-            Task { @MainActor in loading = false; failure = "作品文件没有加载成功。你仍可以复制完整 Prompt。" }
+            Task { @MainActor in loading = false; failure = String(localized: "作品文件没有加载成功。你仍可以复制完整 Prompt。") }
         }
         return view
     }
@@ -70,7 +70,7 @@ struct BundledWebsite: UIViewRepresentable {
         private func showFailure(_ error: Error) {
             if (error as NSError).code == NSURLErrorCancelled { return }
             loading.wrappedValue = false
-            failure.wrappedValue = "作品暂时没有打开成功，请重新尝试。"
+            failure.wrappedValue = String(localized: "作品暂时没有打开成功，请重新尝试。")
         }
         func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
             guard let url = navigationAction.request.url else { decisionHandler(.cancel); return }

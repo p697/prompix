@@ -18,7 +18,7 @@ struct KindPicker: View {
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 26) {
-                choice(nil, title: "全部")
+                choice(nil, title: String(localized: "全部"))
                 ForEach(PromptKind.allCases) { choice($0, title: $0.title) }
             }.padding(.horizontal, 20)
         }

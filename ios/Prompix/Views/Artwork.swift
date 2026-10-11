@@ -23,7 +23,7 @@ struct Artwork: View {
                 }
                 if item.kind == .video {
                     VStack { Spacer(); HStack {
-                        Label(item.media?.videoURL == nil ? "0:06" : "播放", systemImage: "play.fill").font(.system(size: 11, weight: .medium, design: .monospaced))
+                        Label(item.media?.videoURL == nil ? "0:06" : String(localized: "播放"), systemImage: "play.fill").font(.system(size: 11, weight: .medium, design: .monospaced))
                             .foregroundStyle(.white).padding(.horizontal, 9).padding(.vertical, 6).background(.black.opacity(0.28), in: Capsule())
                         Spacer()
                     }.padding(12) }

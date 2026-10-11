@@ -149,6 +149,26 @@ import XCTest
         XCTAssertTrue((app.textViews["promptEditor"].value as? String ?? "").contains("支线"))
         app.buttons["完成"].tap()
     }
+    func testEnglishInterfacePreservesPromptContent() {
+        app.terminate()
+        app.launchArguments = ["--offline", "-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        app.launch()
+        XCTAssertTrue(app.tabBars.buttons["Discover"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.tabBars.buttons["Collections"].exists)
+        XCTAssertTrue(app.tabBars.buttons["Saved"].exists)
+        capture("17-english-discovery")
+        app.buttons["kind-text"].tap()
+        app.buttons["prompt-gentle-tarot"].tap()
+        XCTAssertEqual(app.buttons["copyPrompt"].label, "Copy prompt")
+        app.buttons["Make it yours"].tap()
+        XCTAssertTrue(app.textViews["promptEditor"].waitForExistence(timeout: 5))
+        capture("18-english-editor")
+        app.buttons["Done"].tap()
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        app.buttons["Settings"].tap()
+        XCTAssertTrue(app.navigationBars["About and settings"].waitForExistence(timeout: 5))
+        capture("19-english-settings")
+    }
     func testLiveCommunityEditionAndRemotePreviews() throws {
         app.terminate()
         app.launchArguments.removeAll { $0 == "--offline" }

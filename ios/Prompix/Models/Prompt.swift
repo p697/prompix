@@ -4,7 +4,7 @@ enum PromptKind: String, Codable, CaseIterable, Identifiable {
     case text, image, video, web
     var id: String { rawValue }
     var title: String {
-        switch self { case .text: "文本"; case .image: "图片"; case .video: "视频"; case .web: "网页" }
+        switch self { case .text: String(localized: "文本"); case .image: String(localized: "图片"); case .video: String(localized: "视频"); case .web: String(localized: "网页") }
     }
     var symbol: String {
         switch self { case .text: "text.alignleft"; case .image: "photo"; case .video: "play.rectangle"; case .web: "safari" }

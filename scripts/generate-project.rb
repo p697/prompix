@@ -3,6 +3,8 @@ require 'xcodeproj'
 root = File.expand_path('..', __dir__)
 path = File.join(root, 'ios/Prompix.xcodeproj')
 project = Xcodeproj::Project.new(path)
+project.root_object.development_region = "zh-Hans"
+project.root_object.known_regions = ["zh-Hans", "en", "Base"]
 project.build_configurations.each do |config|
   config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '17.0'
   config.build_settings['SWIFT_VERSION'] = '6.0'
