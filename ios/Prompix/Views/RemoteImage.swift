@@ -54,12 +54,10 @@ import Observation
             } catch { if !Task.isCancelled, retainedURLs.contains(url) { offlineFailures.insert(url) } }
         }
     }
-    func image(for url: URL) async throws -> UIImage {
+    func offlineImage(for url: URL) -> UIImage? { UIImage(contentsOfFile: offlineFile(for: url).path) }
+    func image(for url: URL, fullResolution: Bool = false) async throws -> UIImage {
         if let image = memory.object(forKey: url as NSURL) { return image }
-        if let image = UIImage(contentsOfFile: offlineFile(for: url).path) {
-            memory.setObject(image, forKey: url as NSURL, cost: Int(image.size.width * image.size.height * 4))
-            return image
-        }
+        if !fullResolution, let image = offlineImage(for: url) { return image }
         if let existing = pending[url] { return try await existing.value }
         let task = Task { @MainActor in
             let data = try await CatalogSync.fetch(url, maximum: 8_000_000, session: session)

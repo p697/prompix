@@ -75,6 +75,50 @@ import CryptoKit
         catch { }
     }
 
+    func testFullImageDoesNotReuseRetainedThumbnailOrDestroyItOnFailure() async throws {
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [ThumbnailProtocol.self]
+        let url = URL(string: "https://api.prompix.dev/media/test-full.jpg")!
+        let store = ImageStore(offlineDirectory: directory, session: URLSession(configuration: config))
+        await store.keepOffline([url])
+        let offline = URLSessionConfiguration.ephemeral
+        offline.protocolClasses = [OfflineProtocol.self]
+        let reopened = ImageStore(offlineDirectory: directory, session: URLSession(configuration: offline))
+        _ = try await reopened.image(for: url)
+        do { _ = try await reopened.image(for: url, fullResolution: true); XCTFail("Full-resolution requests must not silently return a retained thumbnail") }
+        catch { }
+        XCTAssertNotNil(reopened.offlineImage(for: url))
+        let online = ImageStore(offlineDirectory: directory, session: URLSession(configuration: config))
+        let full = try await online.image(for: url, fullResolution: true)
+        XCTAssertGreaterThan(full.size.width, 0)
+    }
+
+    func testVideoFailureCanRecoverAndStopReleasesMedia() async throws {
+        let playback = MoviePlayback()
+        playback.start(url: nil)
+        XCTAssertTrue(playback.failed)
+        XCTAssertFalse(playback.loading)
+        playback.start(url: directory.appending(path: "missing.mp4"))
+        for _ in 0..<100 {
+            if playback.failed { break }
+            try await Task.sleep(for: .milliseconds(100))
+        }
+        XCTAssertTrue(playback.failed, "AVPlayer item failures must reach the retry state")
+        let url = try XCTUnwrap(Bundle.main.url(forResource: "slow-road", withExtension: "mp4"))
+        playback.start(url: url)
+        for _ in 0..<100 {
+            if !playback.loading { break }
+            try await Task.sleep(for: .milliseconds(100))
+        }
+        XCTAssertFalse(playback.failed)
+        XCTAssertFalse(playback.loading)
+        XCTAssertNotNil(playback.player)
+        playback.pause()
+        XCTAssertEqual(playback.player?.rate, 0)
+        playback.stop()
+        XCTAssertNil(playback.player)
+    }
+
     func testInvalidCatalogDoesNotDestroyOfflineFavorites() throws {
         let first = Library(directory: directory)
         let item = try XCTUnwrap(first.prompts.first)
