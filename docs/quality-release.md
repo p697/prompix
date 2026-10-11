@@ -63,3 +63,5 @@
 iPhone 17e 的标准字号浅色与最大辅助字号深色均通过浏览、详情复制、编辑复制、专题进入和横屏路径，并复查截图；发现页的 XCTest 触控区域与元素描述审计通过。证据：`Quality-Adaptive-Audit-2.xcresult`、`Quality-Adaptive-Final-AX.xcresult`，位于 `~/.local/share/prompix/`。这不代表全部页面 VoiceOver 顺序、对比度和所有屏幕适配已完成，仍保留整体质量关口。
 
 iPhone 18 Pro 标准字号英文发现／编辑／设置和 16 项原生模型测试通过：`Quality-Adaptive-English.xcresult`。模型验证包含跨类型创作筛选、具体标签相关性和原有收藏／草稿恢复路径。
+
+CI 的较旧模拟器暴露了本地视频缺失时 AVPlayer 失败回调延迟；本地不可读文件现在立即失败，另加可配置缓冲期限验证损坏媒体的重试状态。17 项模型测试通过，证据为 `Quality-Adaptive-Media-Deadline-2.xcresult`。

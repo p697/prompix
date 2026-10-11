@@ -212,11 +212,14 @@ struct PromptEditor: View {
     private(set) var aspectRatio: CGFloat = 16 / 9
     @ObservationIgnored private var subscriptions = Set<AnyCancellable>()
     @ObservationIgnored private var timeout: Task<Void, Never>?
+    private let bufferingTimeout: Duration
+
+    init(bufferingTimeout: Duration = .seconds(25)) { self.bufferingTimeout = bufferingTimeout }
 
     func start(url: URL?) {
         stop()
         failed = false; loading = true; aspectRatio = 16 / 9
-        guard let url else { fail(); return }
+        guard let url, !url.isFileURL || FileManager.default.isReadableFile(atPath: url.path) else { fail(); return }
         let item = AVPlayerItem(url: url)
         let player = AVPlayer(playerItem: item)
         self.player = player
@@ -244,8 +247,9 @@ struct PromptEditor: View {
     }
     private func armTimeout() {
         timeout?.cancel()
+        let duration = bufferingTimeout
         timeout = Task { [weak self] in
-            do { try await Task.sleep(for: .seconds(25)) } catch { return }
+            do { try await Task.sleep(for: duration) } catch { return }
             guard let self, self.loading else { return }
             self.fail()
         }

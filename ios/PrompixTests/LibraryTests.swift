@@ -99,11 +99,7 @@ import CryptoKit
         XCTAssertTrue(playback.failed)
         XCTAssertFalse(playback.loading)
         playback.start(url: directory.appending(path: "missing.mp4"))
-        for _ in 0..<100 {
-            if playback.failed { break }
-            try await Task.sleep(for: .milliseconds(100))
-        }
-        XCTAssertTrue(playback.failed, "AVPlayer item failures must reach the retry state")
+        XCTAssertTrue(playback.failed, "Missing local media must fail without waiting for AVPlayer")
         let url = try XCTUnwrap(Bundle.main.url(forResource: "slow-road", withExtension: "mp4"))
         playback.start(url: url)
         for _ in 0..<100 {
@@ -115,6 +111,22 @@ import CryptoKit
         XCTAssertNotNil(playback.player)
         playback.pause()
         XCTAssertEqual(playback.player?.rate, 0)
+        playback.stop()
+        XCTAssertNil(playback.player)
+    }
+
+    func testUnreadableVideoReachesRetryWithinBufferingDeadline() async throws {
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let url = directory.appending(path: "invalid.mp4")
+        try Data("This is not a video".utf8).write(to: url)
+        let playback = MoviePlayback(bufferingTimeout: .milliseconds(200))
+        playback.start(url: url)
+        for _ in 0..<100 {
+            if playback.failed { break }
+            try await Task.sleep(for: .milliseconds(100))
+        }
+        XCTAssertTrue(playback.failed, "Unreadable media must reach retry even when AVPlayer failure delivery is delayed")
+        XCTAssertFalse(playback.loading)
         playback.stop()
         XCTAssertNil(playback.player)
     }
