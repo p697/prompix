@@ -4,6 +4,7 @@
   "type": "module",
   "scripts": {
     "collect": "tsx ingest/cli.ts collect",
+    "backfill:video": "tsx ingest/backfill.ts",
     "validate": "tsx ingest/cli.ts validate",
     "stage": "tsx ingest/cli.ts stage",
     "test": "tsx --test ingest/*.test.ts",

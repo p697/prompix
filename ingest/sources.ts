@@ -29,6 +29,14 @@ export const repositories = [
   },
 ] as const;
 export type Repository = (typeof repositories)[number];
+// The last upstream release map with complete downloadable video examples.
+// Keep this immutable; backfills are explicitly staged for editorial review.
+export const videoArchive = {
+  id: "youmind-seedance-archive",
+  repo: "YouMind-OpenLab/awesome-seedance-2-prompts",
+  revision: "145d838af98657e4a45ec0cb58c4df31b55e7e52",
+  filename: "README_zh.md",
+} as const;
 export type Candidate = Prompt & {
   fingerprint: string;
   featured: boolean;
@@ -51,14 +59,15 @@ export function parseYouMind(
 ): Candidate[] {
   const items: Candidate[] = [];
   const seen = new Set<string>();
-  for (const block of markdown.split(/^### No\. \d+: /m).slice(1)) {
-    const title = block.split("\n")[0].trim();
+  const separator = source.kind === "video" ? /^### /m : /^### No\. \d+: /m;
+  for (const block of markdown.split(separator).slice(1)) {
+    const title = block.split("\n")[0].replace(/^No\. \d+: /, "").trim();
     const prompt = block
       .match(/#### 📝[^\n]*\n+```[^\n]*\n([\s\S]*?)\n```/)?.[1]
       ?.trim();
     const summary = block
       .match(/#### 📖[^\n]*\n+([\s\S]*?)(?=\n####)/)?.[1]
-      ?.trim();
+      ?.trim() ?? block.match(/^> (.+)$/m)?.[1]?.trim();
     const original = block.match(
       /\*\*(?:来源|Source):\*\* \[[^\]]+\]\((https:[^)]+)\)/,
     )?.[1];
@@ -111,6 +120,30 @@ export function parseYouMind(
     });
   }
   return items;
+}
+/** Current content wins when the same source post also appears in the archive. */
+export function mergeCandidates(...groups: readonly Candidate[][]): Candidate[] {
+  const ids = new Set<string>();
+  const fingerprints = new Set<string>();
+  return groups.flat().filter((candidate) => {
+    if (ids.has(candidate.id) || fingerprints.has(candidate.fingerprint)) return false;
+    ids.add(candidate.id);
+    fingerprints.add(candidate.fingerprint);
+    return true;
+  });
+}
+export function parseVideoArchive(markdown: string): Candidate[] {
+  const source = repositories.find((item) => item.repo === videoArchive.repo)!;
+  return parseYouMind(markdown, source, videoArchive.revision)
+    .map((candidate) => ({ ...candidate, reviewStatus: "draft" }));
+}
+export async function collectVideoArchive(): Promise<Candidate[]> {
+  const raw = await download(
+    `https://raw.githubusercontent.com/${videoArchive.repo}/${videoArchive.revision}/${videoArchive.filename}`,
+    ["raw.githubusercontent.com"],
+  );
+  // Unlike the existing live feed, historical backfill must never ship unreviewed.
+  return parseVideoArchive(raw.bytes.toString());
 }
 export function parseCommunityCSV(csv: string, revision: string): Candidate[] {
   const rows = parse(csv, {

@@ -44,6 +44,29 @@ name remains in the bundled catalog; public editions add a content-addressed
 image asset sets needed for this step. A missing or invalid original asset aborts
 publication before activation, preserving the existing online edition.
 
+## Video archive backfill
+
+`npm run backfill:video` stages an explicit, immutable snapshot of the existing
+allowlisted YouMind Seedance repository (2026-03-25, commit
+`145d838af98657e4a45ec0cb58c4df31b55e7e52`). This archive retains complete
+prompt/poster/MP4 pairs that are no longer present together in the current README.
+It is historical reference content, not a claim about today's trends. The current
+repository collector continues to follow upstream updates.
+
+The command downloads only the pinned README and writes draft candidates to
+`candidates/youmind-seedance-archive.json` outside Git. It neither publishes nor
+calls X, and shares the content-operation lock. Empty/failed fetches preserve the
+previous archive. To inspect separately from the active pipeline, set
+`PROMPIX_CONTENT_DIR` to an external review directory for this command.
+
+Every archive item requires `npm run review` before entering an edition. Inspect
+the actual clip and a representative poster; a successfully fetched MP4 is not
+an editorial approval. The daily job merges current source records first, using
+stable original-post IDs and prompt fingerprints to avoid duplicates. Current
+text changes invalidate older editorial fingerprints; existing removal IDs still
+apply. The video channel admits up to 12 eligible examples. Watch-page links are
+never treated as downloadable videos, and third-party material stays outside Git.
+
 
 ## Release recovery
 

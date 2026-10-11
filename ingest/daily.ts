@@ -11,6 +11,8 @@ import {
   selectEdition,
   type Candidate,
   fingerprint,
+  mergeCandidates,
+  videoArchive,
 } from "./sources.ts";
 import { download } from "./network.ts";
 import { searchX } from "./x.ts";
@@ -113,7 +115,13 @@ async function run() {
       await atomic(join(root, "moderation.json"), moderation);
     }
     const excluded = new Set(moderation.removedIDs);
-    const reviewed = applyEditorialReviews(all, reviewsSchema.parse(await json(join(root, "editorial.json"), {})));
+    const archive = await json<Candidate[]>(join(root, "candidates", `${videoArchive.id}.json`), []);
+    report.sources[videoArchive.id] = {
+      status: archive.length ? "staged" : "not-staged",
+      count: archive.length,
+      revision: videoArchive.revision,
+    };
+    const reviewed = applyEditorialReviews(mergeCandidates(all, archive), reviewsSchema.parse(await json(join(root, "editorial.json"), {})));
     const picked: Candidate[] = [];
     // Balanced mix: original text/web ideas remain available alongside real community imagery.
     for (const source of repositories)
@@ -121,7 +129,7 @@ async function run() {
         ...selectEdition(
           reviewed.filter((x) => x.id.startsWith(source.id)),
           excluded,
-          source.kind === "video" ? 6 : 12,
+          12,
         ),
       );
     for (const kind of ["text", "web"] as const)
