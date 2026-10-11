@@ -4,13 +4,17 @@ enum Palette {
     static let paper = Color(uiColor: .systemBackground)
     static let soft = Color(uiColor: .secondarySystemBackground)
     static let ink = Color.primary
-    static let muted = Color.secondary
-    static let accent = Color(red: 0.39, green: 0.44, blue: 0.32)
+    static let muted = Color(uiColor: UIColor { traits in
+        traits.userInterfaceStyle == .dark ? UIColor(white: 0.72, alpha: 1) : UIColor(white: 0.36, alpha: 1)
+    })
+    static let accent = Color(uiColor: UIColor { traits in
+        traits.userInterfaceStyle == .dark ? UIColor(red: 0.69, green: 0.75, blue: 0.59, alpha: 1) : UIColor(red: 0.35, green: 0.40, blue: 0.28, alpha: 1)
+    })
 }
 
 struct Eyebrow: View {
     let text: String
-    var body: some View { Text(text).font(.system(.caption2, design: .monospaced)).tracking(2).foregroundStyle(.secondary) }
+    var body: some View { Text(text).font(.system(.footnote, design: .monospaced)).tracking(2).foregroundStyle(Palette.muted) }
 }
 
 struct KindPicker: View {
@@ -28,7 +32,7 @@ struct KindPicker: View {
         Button { selection = kind } label: {
             VStack(spacing: 10) {
                 Text(title).font(.subheadline.weight(selection == kind ? .semibold : .regular))
-                    .foregroundStyle(selection == kind ? Color.primary : .secondary)
+                    .foregroundStyle(selection == kind ? Color.primary : Palette.muted)
                 Capsule().fill(selection == kind ? Color.primary : .clear).frame(width: 18, height: 2)
             }.frame(minWidth: 44, minHeight: 44).contentShape(Rectangle())
         }.buttonStyle(.plain)
