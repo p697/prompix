@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; style-src 'self' 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:; connect-src 'none'; base-uri 'none'; form-action 'none'"
+    />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Small Objects — 日常的小小展馆</title>
+    <link rel="stylesheet" href="base.css" />
+    <style>
+      :root {
+        --paper: #f2eee5;
+        --ink: #3b4438;
+        --muted: #7a7c6b;
+        --accent: #697756;
+      }
+      h1 {
+        font-size: clamp(57px, 12vw, 98px);
+      }
+      .objects {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 25px 14px;
+      }
+      .object {
+        position: relative;
+      }
+      .object-open {
+        display: block;
+        width: 100%;
+        padding: 0;
+        border: 0;
+        border-radius: 0;
+        text-align: left;
+      }
+      .object .art {
+        aspect-ratio: 0.86;
+        margin-bottom: 12px;
+      }
+      .object h3 {
+        font-size: 13px;
+        margin: 0 0 4px;
+      }
+      .object small {
+        font: 9px monospace;
+        letter-spacing: 1px;
+        color: var(--muted);
+      }
+      .save {
+        position: absolute;
+        right: 6px;
+        top: 6px;
+        width: 44px;
+        padding: 0;
+        border: 0;
+        background: #f5f3e699;
+        font-size: 19px;
+      }
+      .save[aria-pressed="true"] {
+        color: #743f2d;
+        background: #f6ead7;
+      }
+      .empty {
+        padding: 40px 0;
+      }
+      dialog .art {
+        margin: 20px 0;
+        aspect-ratio: 1.25;
+      }
+      #count {
+        font-size: 11px;
+        color: var(--muted);
+      }
+      @media (min-width: 720px) {
+        .objects {
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: 35px 25px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header><b>SMALL OBJECTS</b><span>A PERSONAL MUSEUM</span></header>
+    <main>
+      <div class="eyebrow">ORDINARY THINGS, CAREFULLY SEEN</div>
+      <h1>Objects<br />of affection.</h1>
+      <p class="intro">
+        一把椅子、一只杯子、一盏温暖的灯。<br />为日常里喜欢的东西，留一个位置。
+      </p>
+      <div class="filters" role="group" aria-label="展品分类">
+        <button data-filter="全部" class="active" aria-pressed="true">
+          全部</button
+        ><button data-filter="器物" aria-pressed="false">器物</button
+        ><button data-filter="家具" aria-pressed="false">家具</button
+        ><button data-filter="纸与声音" aria-pressed="false">纸与声音</button
+        ><button data-filter="收藏" aria-pressed="false">我的收藏</button>
+      </div>
+      <p id="count" role="status"></p>
+      <div id="objects" class="objects"></div>
+      <p id="empty" class="empty" hidden>
+        展馆里还有空位。轻点展品右上角的心，留下喜欢的东西。
+      </p>
+      <p class="note">
+        九件原创 SVG
+        器物插画与虚构藏品说明。你可以替换成自己的照片和收藏故事。收藏只保存在当前浏览环境。
+      </p>
+    </main>
+    <footer>NOTICE THE LITTLE THINGS / PROMPIX STUDIO</footer>
+    <dialog id="detail">
+      <div class="row">
+        <span class="eyebrow">A CLOSER LOOK</span
+        ><button id="close">返回展馆</button>
+      </div>
+      <div id="content"></div>
+    </dialog>
+    <script>
+      const items = [
+        {
+          id: "vase",
+          name: "一只不对称的花瓶",
+          category: "器物",
+          color: "#d8c5ad",
+          ink: "#967958",
+          story:
+            "瓶口稍稍向一边偏，让一枝普通的叶子也有了自己的姿态。喜欢它不那么工整的地方。",
+          shape:
+            '<path d="M90 35h60v42q35 20 29 72-5 32-59 32t-59-32q-6-52 29-72Z" fill="currentColor"/><ellipse cx="120" cy="35" rx="30" ry="8" fill="#e9dccb"/>',
+        },
+        {
+          id: "chair",
+          name: "窗边的木椅",
+          category: "家具",
+          color: "#c9cbb8",
+          ink: "#667454",
+          story:
+            "每天早晨，把它搬到光能照到的地方。家具不一定是空间的主角，有时只是让人安静坐下的理由。",
+          shape:
+            '<path d="M65 50q55-40 110 0v70H65Z" fill="currentColor"/><path d="M58 122h124v18H58Z" fill="#354a35"/><path d="m72 137-8 50m102-50 8 50" stroke="currentColor" stroke-width="12"/>',
+        },
+        {
+          id: "cup",
+          name: "厚厚的早餐杯",
+          category: "器物",
+          color: "#dfcec0",
+          ink: "#a56d51",
+          story:
+            "它比别的杯子重一点。冬天用双手捧着的时候，这点重量变成了踏实的感觉。",
+          shape:
+            '<path d="M70 58h85v76q0 32-43 32t-42-32Z" fill="currentColor"/><path d="M155 72q52-10 42 32-8 29-42 21" fill="none" stroke="currentColor" stroke-width="14"/><ellipse cx="113" cy="58" rx="43" ry="10" fill="#f2e5cf"/>',
+        },
+        {
+          id: "lamp",
+          name: "夜读的小台灯",
+          category: "家具",
+          color: "#d2d6cc",
+          ink: "#637267",
+          story:
+            "只照亮书页和桌子的一角。晚上不需要把整个房间都点亮，一小圈光就够了。",
+          shape:
+            '<path d="M70 80q50-100 100 0Z" fill="currentColor"/><path d="M120 79v83" stroke="currentColor" stroke-width="10"/><ellipse cx="120" cy="170" rx="50" ry="10" fill="currentColor"/><path d="m78 87-28 67h140l-28-67Z" fill="#eddfaa" opacity=".5"/>',
+        },
+        {
+          id: "record",
+          name: "一张周末唱片",
+          category: "纸与声音",
+          color: "#c5cecd",
+          ink: "#334a47",
+          story:
+            "翻面的时候起身走两步，音乐也因此有了呼吸。封套已经磨旧，喜欢的那一首依然很好听。",
+          shape:
+            '<circle cx="120" cy="105" r="75" fill="currentColor"/><g stroke="#86988d" fill="none"><circle cx="120" cy="105" r="65"/><circle cx="120" cy="105" r="55"/><circle cx="120" cy="105" r="45"/></g><circle cx="120" cy="105" r="25" fill="#c8a578"/><circle cx="120" cy="105" r="4" fill="#e9eee1"/>',
+        },
+        {
+          id: "book",
+          name: "页角微卷的手记",
+          category: "纸与声音",
+          color: "#d9cfb9",
+          ink: "#9b7054",
+          story:
+            "不记录每天做了多少事，只记下一些想留住的句子。偶尔画一片叶子，也算写完了一页。",
+          shape:
+            '<path d="M65 35h110v145H65q-15 0-15-15V50q0-15 15-15Z" fill="currentColor"/><path d="M70 37v143" stroke="#e7d1ac" stroke-width="3"/><path d="M88 77h65M88 95h45" stroke="#ddc7a8" stroke-width="4"/><path d="M150 35v48l-10-8-10 8V35Z" fill="#6c7c61"/>',
+        },
+        {
+          id: "clock",
+          name: "不急着走的钟",
+          category: "器物",
+          color: "#d2cabf",
+          ink: "#707462",
+          story:
+            "圆圆的表盘没有数字。它当然还是准确的，只是不愿意把每一分钟都喊得很响。",
+          shape:
+            '<circle cx="120" cy="102" r="72" fill="currentColor"/><circle cx="120" cy="102" r="62" fill="#e9e3cf"/><path d="M120 102V60m0 42 32 19" stroke="#52634d" stroke-width="6" stroke-linecap="round"/><circle cx="120" cy="102" r="5" fill="#a3794f"/>',
+        },
+        {
+          id: "table",
+          name: "一个可以挪动的边几",
+          category: "家具",
+          color: "#d1c1ad",
+          ink: "#815c40",
+          story:
+            "有时放咖啡，有时放一摞书。它不要求固定的位置，哪里需要，就安静地去哪里。",
+          shape:
+            '<ellipse cx="120" cy="73" rx="80" ry="27" fill="currentColor"/><path d="m65 83-9 97m119-97 9 97M120 91v96" stroke="currentColor" stroke-width="13"/>',
+        },
+        {
+          id: "mobile",
+          name: "窗前的一点风",
+          category: "器物",
+          color: "#c7d0bf",
+          ink: "#536e5a",
+          story: "风来的时候，形状会改变。风停下的时候，影子继续留在墙上。",
+          shape:
+            '<path d="M120 20v25M55 65l120-22M70 61v50m85-64v73M120 44v105" stroke="currentColor" stroke-width="2"/><ellipse cx="70" cy="130" rx="28" ry="20" fill="#a97c50"/><path d="m135 125 40-10 5 40-45 5Z" fill="#6c8364"/><ellipse cx="120" cy="173" rx="22" ry="29" fill="#ded8b4"/>',
+        },
+      ];
+      let filter = "全部",
+        saved = [];
+      try {
+        saved = JSON.parse(localStorage.getItem("small-objects") || "[]");
+      } catch {}
+      const art = (i) =>
+        `<div class="art" style="background:${i.color};color:${i.ink}"><svg viewBox="0 0 240 210" role="img" aria-label="${i.name}原创插画">${i.shape}</svg></div>`;
+      const dialog = document.querySelector("#detail");
+      function save() {
+        try {
+          localStorage.setItem("small-objects", JSON.stringify(saved));
+        } catch {}
+      }
+      function render() {
+        const shown = items.filter(
+          (i) =>
+            filter === "全部" ||
+            (filter === "收藏" ? saved.includes(i.id) : i.category === filter),
+        );
+        document.querySelector("#objects").innerHTML = shown
+          .map(
+            (i, n) =>
+              `<article class="object"><button class="object-open" data-open="${i.id}">${art(i)}<h3>${i.name}</h3><small>${i.category} / NO. ${String(items.indexOf(i) + 1).padStart(2, "0")}</small></button><button class="save" data-save="${i.id}" aria-label="${saved.includes(i.id) ? "取消收藏" : "收藏"}${i.name}" aria-pressed="${saved.includes(i.id)}">${saved.includes(i.id) ? "♥" : "♡"}</button></article>`,
+          )
+          .join("");
+        document.querySelector("#count").textContent =
+          `${shown.length} 件日常小物`;
+        document.querySelector("#empty").hidden = shown.length > 0;
+        document.querySelectorAll("[data-open]").forEach(
+          (b) =>
+            (b.onclick = () => {
+              const i = items.find((i) => i.id === b.dataset.open);
+              document.querySelector("#content").innerHTML =
+                art(i) +
+                `<h2>${i.name}</h2><p>${i.story}</p><span class="eyebrow">${i.category} / ORIGINAL OBJECT STUDY</span>`;
+              dialog.showModal();
+            }),
+        );
+        document.querySelectorAll("[data-save]").forEach(
+          (b) =>
+            (b.onclick = () => {
+              const id = b.dataset.save;
+              saved = saved.includes(id)
+                ? saved.filter((v) => v !== id)
+                : [...saved, id];
+              save();
+              render();
+            }),
+        );
+      }
+      document.querySelectorAll("[data-filter]").forEach(
+        (b) =>
+          (b.onclick = () => {
+            filter = b.dataset.filter;
+            document.querySelectorAll("[data-filter]").forEach((x) => {
+              x.classList.toggle("active", x === b);
+              x.setAttribute("aria-pressed", String(x === b));
+            });
+            render();
+          }),
+      );
+      document.querySelector("#close").onclick = () => dialog.close();
+      render();
+    </script>
+  </body>
+</html>

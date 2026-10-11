@@ -6,6 +6,9 @@ struct Artwork: View {
         GeometryReader { proxy in
             ZStack {
                 if let url = item.media?.imageURL { RemoteImage(url: url).frame(width: proxy.size.width, height: proxy.size.height).clipped() }
+                else if item.kind == .web, UIImage(named: "web-\(item.id)") != nil {
+                    Image("web-\(item.id)").resizable().scaledToFill().frame(width: proxy.size.width, height: proxy.size.height, alignment: .top).clipped()
+                }
                 else if item.artwork == "text-editorial" || item.artwork == "web-editorial" { communityArtwork(size: proxy.size) }
                 else if item.kind == .video, UIImage(named: item.id) != nil { photo(item.id, size: proxy.size) } else {
                 switch item.artwork {

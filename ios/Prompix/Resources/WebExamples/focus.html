@@ -1,0 +1,287 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; style-src 'self' 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:; connect-src 'none'; base-uri 'none'; form-action 'none'"
+    />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Soft Focus — 留一点专注的空间</title>
+    <link rel="stylesheet" href="base.css" />
+    <style>
+      :root {
+        --paper: #23362e;
+        --ink: #eeeccf;
+        --muted: #aebdaa;
+        --accent: #c3d792;
+      }
+      main {
+        text-align: center;
+        max-width: 640px;
+      }
+      .eyebrow {
+        color: var(--muted);
+      }
+      h1 {
+        font-size: clamp(49px, 10vw, 76px);
+        letter-spacing: -2px;
+        margin: 35px 0 20px;
+      }
+      .modes {
+        justify-content: center;
+        margin: 35px 0 20px;
+      }
+      .modes button {
+        border: 0;
+        color: var(--muted);
+      }
+      .modes button.active {
+        background: #ffffff13;
+        color: var(--ink);
+      }
+      .dial {
+        position: relative;
+        aspect-ratio: 1;
+        max-width: 330px;
+        margin: 15px auto 25px;
+        display: grid;
+        place-items: center;
+      }
+      .dial svg {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        transform: rotate(-90deg);
+      }
+      .dial circle {
+        fill: none;
+        stroke-width: 1.2;
+      }
+      .track {
+        stroke: #536453;
+      }
+      .progress {
+        stroke: #d6dfb0;
+        stroke-dasharray: 565.49;
+        stroke-dashoffset: 0;
+        stroke-linecap: round;
+      }
+      .time {
+        font:
+          normal clamp(60px, 17vw, 83px) / 1 Georgia,
+          serif;
+        font-variant-numeric: tabular-nums;
+        letter-spacing: -3px;
+      }
+      .dial small {
+        font-size: 10px;
+        letter-spacing: 2px;
+        color: var(--muted);
+        display: block;
+        margin-top: 16px;
+      }
+      .controls {
+        display: flex;
+        justify-content: center;
+        gap: 12px;
+      }
+      .controls button {
+        min-width: 110px;
+      }
+      .controls .primary {
+        background: #dce3b3;
+        color: #263a2e;
+      }
+      .count {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        gap: 12px;
+        padding: 32px 0 0;
+      }
+      .count strong {
+        font:
+          28px Georgia,
+          serif;
+      }
+      .count span {
+        font-size: 12px;
+        color: var(--muted);
+      }
+      #status {
+        font-size: 12px;
+        min-height: 24px;
+        margin: 22px 0 0;
+      }
+      .note {
+        max-width: 340px;
+        margin: 35px auto 0;
+      }
+      footer {
+        text-align: center;
+      }
+    </style>
+  </head>
+  <body>
+    <header><b>SOFT FOCUS</b><span>ONE THING AT A TIME</span></header>
+    <main>
+      <div class="eyebrow">A SMALL SPACE FOR YOUR ATTENTION</div>
+      <h1>Make room<br />for focus.</h1>
+      <p>一次，只做一件小事。</p>
+      <div class="filters modes" role="group" aria-label="计时模式">
+        <button data-minutes="25" class="active" aria-pressed="true">
+          专注 25 分钟</button
+        ><button data-minutes="5" aria-pressed="false">休息 5 分钟</button>
+      </div>
+      <div class="dial">
+        <svg viewBox="0 0 200 200" aria-hidden="true">
+          <circle class="track" cx="100" cy="100" r="90" />
+          <circle id="progress" class="progress" cx="100" cy="100" r="90" />
+        </svg>
+        <div>
+          <div id="time" class="time" role="timer" aria-label="剩余时间">
+            25:00
+          </div>
+          <small id="modeLabel">TIME TO BEGIN</small>
+        </div>
+      </div>
+      <div class="controls">
+        <button id="start" class="primary">开始专注</button
+        ><button id="reset">重新开始</button>
+      </div>
+      <p id="status" role="status">不用着急，准备好再开始。</p>
+      <div class="count">
+        <strong id="count">0</strong><span>今天完成的专注时段</span>
+      </div>
+      <p class="note">
+        用时间戳计算倒计时，切到后台后仍保持准确。进度保存在当前浏览环境；无需账号，不发送通知。切换模式会开始新的计时。
+      </p>
+    </main>
+    <footer>TAKE YOUR TIME / PROMPIX ORIGINAL EXAMPLE</footer>
+    <script>
+      const dateKey = () => new Date().toLocaleDateString("en-CA");
+      let state = {
+        duration: 1500,
+        remaining: 1500,
+        end: null,
+        day: dateKey(),
+        count: 0,
+      };
+      try {
+        const saved = JSON.parse(localStorage.getItem("soft-focus"));
+        if (
+          saved &&
+          [300, 1500].includes(saved.duration) &&
+          Number.isFinite(saved.remaining)
+        ) {
+          state = { ...state, ...saved };
+          if (state.day !== dateKey()) {
+            state.day = dateKey();
+            state.count = 0;
+          }
+        }
+      } catch {}
+      const time = document.querySelector("#time"),
+        start = document.querySelector("#start"),
+        status = document.querySelector("#status");
+      function save() {
+        try {
+          localStorage.setItem("soft-focus", JSON.stringify(state));
+        } catch {}
+      }
+      function tick() {
+        if (state.day !== dateKey()) {
+          state.day = dateKey();
+          state.count = 0;
+        }
+        if (state.end !== null) {
+          state.remaining = Math.max(
+            0,
+            Math.ceil((state.end - Date.now()) / 1000),
+          );
+          if (state.remaining === 0) {
+            state.end = null;
+            if (state.duration === 1500) state.count++;
+            status.textContent =
+              state.duration === 1500
+                ? "这一小段专注，完成了。休息一下吧。"
+                : "休息结束，准备好再开始下一件事。";
+            save();
+          }
+        }
+        render();
+      }
+      function render() {
+        const m = Math.floor(state.remaining / 60),
+          s = state.remaining % 60;
+        time.textContent = `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+        time.setAttribute("aria-label", `剩余 ${m} 分 ${s} 秒`);
+        start.textContent =
+          state.end !== null
+            ? "暂停"
+            : state.remaining === state.duration
+              ? state.duration === 1500
+                ? "开始专注"
+                : "开始休息"
+              : "继续";
+        if (state.remaining === 0) start.textContent = "再来一段";
+        document.querySelector("#count").textContent = state.count;
+        document.querySelector("#modeLabel").textContent =
+          state.end !== null
+            ? "ONE THING AT A TIME"
+            : state.remaining === 0
+              ? "WELL DONE"
+              : "TAKE A BREATH";
+        document.querySelector("#progress").style.strokeDashoffset =
+          565.49 * (1 - state.remaining / state.duration);
+        document.querySelectorAll("[data-minutes]").forEach((b) => {
+          const active = Number(b.dataset.minutes) * 60 === state.duration;
+          b.classList.toggle("active", active);
+          b.setAttribute("aria-pressed", String(active));
+        });
+      }
+      start.onclick = () => {
+        tick();
+        if (state.end !== null) {
+          state.end = null;
+          status.textContent = "已暂停。把注意力留给自己。";
+        } else {
+          if (state.remaining === 0) state.remaining = state.duration;
+          state.end = Date.now() + state.remaining * 1000;
+          status.textContent =
+            state.duration === 1500
+              ? "专注于眼前这一件事。"
+              : "让眼睛和身体歇一会儿。";
+        }
+        save();
+        render();
+      };
+      document.querySelector("#reset").onclick = () => {
+        state.remaining = state.duration;
+        state.end = null;
+        status.textContent = "新的开始，慢慢来。";
+        save();
+        render();
+      };
+      document.querySelectorAll("[data-minutes]").forEach(
+        (b) =>
+          (b.onclick = () => {
+            state.duration = Number(b.dataset.minutes) * 60;
+            state.remaining = state.duration;
+            state.end = null;
+            status.textContent = "准备好再开始。";
+            save();
+            render();
+          }),
+      );
+      document.addEventListener("visibilitychange", () => {
+        tick();
+        save();
+      });
+      tick();
+      setInterval(tick, 250);
+    </script>
+  </body>
+</html>

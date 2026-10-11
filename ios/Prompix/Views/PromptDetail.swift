@@ -15,7 +15,14 @@ struct PromptDetail: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 25) {
-                if item.kind == .video || item.media?.image != nil || item.media?.imageURL != nil {
+                if WebsiteExamples.files[item.id] != nil {
+                    Button { webPresented = true } label: {
+                        hero.overlay(alignment: .bottomTrailing) {
+                            Label("打开作品", systemImage: "safari").font(.subheadline.weight(.medium))
+                                .padding(.horizontal, 16).padding(.vertical, 12).background(.regularMaterial, in: Capsule()).padding(16)
+                        }
+                    }.buttonStyle(.plain).accessibilityLabel("打开网页作品").accessibilityIdentifier("previewButton")
+                } else if item.kind == .video || item.media?.image != nil || item.media?.imageURL != nil {
                     Button {
                         if item.kind == .video { playerPresented = true } else { imagePresented = true }
                     } label: {
@@ -54,7 +61,7 @@ struct PromptDetail: View {
                         Text(item.prompt).font(.system(.subheadline)).lineSpacing(6).textSelection(.enabled)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }.padding(20).background(Palette.soft, in: RoundedRectangle(cornerRadius: 18))
-                    if item.id == "quiet-portfolio" {
+                    if WebsiteExamples.files[item.id] != nil {
                         Button("打开原创网页示例", systemImage: "safari") { webPresented = true }.accessibilityIdentifier("webExample")
                     }
                     if let toolURL = item.toolURL {
@@ -110,7 +117,9 @@ struct PromptDetail: View {
         }
         .sheet(isPresented: $editorPresented) { PromptEditor(item: item) }
         .fullScreenCover(isPresented: $imagePresented) { ImageViewer(name: item.media?.image ?? item.artwork, url: item.media?.imageURL) }
-        .sheet(isPresented: $webPresented) { WebExample() }
+        .sheet(isPresented: $webPresented) {
+            if let filename = WebsiteExamples.files[item.id] { WebExample(filename: filename) }
+        }
         .sheet(isPresented: $playerPresented) { MovieView(filename: item.media?.video, remoteURL: item.media?.videoURL, caption: item.previewLabel) }
     }
     private var hero: some View {

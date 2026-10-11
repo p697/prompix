@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; style-src 'self' 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:; connect-src 'none'; base-uri 'none'; form-action 'none'"
+    />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>FORM — Independent studio</title>
+    <link rel="stylesheet" href="base.css" />
+    <style>
+      :root {
+        --paper: #202d25;
+        --ink: #e7ebcd;
+        --muted: #b6c0aa;
+        --accent: #cadc91;
+      }
+      .hero {
+        padding: 12px 0 32px;
+      }
+      h1 {
+        font-size: clamp(68px, 16vw, 134px);
+      }
+      .orb {
+        width: 100%;
+        aspect-ratio: 1.75;
+        background: #cbd697;
+        position: relative;
+        overflow: hidden;
+        margin: 32px 0;
+      }
+      .orb:before {
+        content: "";
+        position: absolute;
+        width: 50%;
+        aspect-ratio: 1;
+        border: 36px solid #51634a;
+        border-radius: 50%;
+        top: 14%;
+        left: 26%;
+        transform: rotate(-22deg);
+      }
+      .orb:after {
+        content: "";
+        position: absolute;
+        background: #e6ebce;
+        width: 100%;
+        height: 22%;
+        top: 41%;
+        transform: rotate(-22deg);
+      }
+      .project {
+        display: block;
+        text-decoration: none;
+      }
+      .project small {
+        color: var(--muted);
+        font-size: 10px;
+      }
+      .art {
+        background: #b6bd9b;
+        color: #384733;
+      }
+      .art.two {
+        background: #be8970;
+      }
+      .art.three {
+        background: #819996;
+      }
+      .services {
+        list-style: none;
+        padding: 0;
+      }
+      .services li {
+        padding: 16px 0;
+        border-bottom: 1px solid #788470;
+        font-size: 17px;
+      }
+      .services span {
+        font: 11px monospace;
+        color: var(--muted);
+        margin-right: 25px;
+      }
+      details {
+        margin-top: 16px;
+      }
+      summary {
+        padding: 12px 0;
+        cursor: pointer;
+        font-size: 13px;
+      }
+      details p {
+        padding-top: 10px;
+      }
+      .contact {
+        padding: 30px 0;
+      }
+      .contact a {
+        font-size: 20px;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <b>FORM / STUDIO</b>
+      <nav><a href="#work">作品</a><a href="#contact">联系 ↗</a></nav>
+    </header>
+    <main>
+      <section class="hero">
+        <div class="eyebrow">SMALL STUDIO. OPEN POSSIBILITIES.</div>
+        <h1>Ideas take<br />shape here.</h1>
+        <p class="intro">
+          把模糊的想法，做成有形的表达。<br />一家关注品牌、网页与日常美感的独立工作室。
+        </p>
+        <a href="#work">看看我们在做什么 ↓</a>
+        <div class="orb" aria-label="原创抽象形体作品"></div>
+      </section>
+      <section id="work">
+        <div class="row">
+          <h2>Selected work.</h2>
+          <span class="eyebrow">01—03</span>
+        </div>
+        <div class="grid">
+          <article>
+            <div class="art">
+              <svg viewBox="0 0 240 180" aria-hidden="true">
+                <rect
+                  x="50"
+                  y="25"
+                  width="140"
+                  height="135"
+                  rx="70"
+                  fill="currentColor"
+                />
+                <circle cx="120" cy="75" r="30" fill="#dce2c1" />
+              </svg>
+            </div>
+            <h3>01 / A quieter kind of bold.</h3>
+            <small>品牌识别 · 原创示例</small>
+            <details>
+              <summary>看项目说明</summary>
+              <p>
+                用一个柔和而坚定的拱形，为日常器物品牌建立视觉识别。示例包含标志、配色与包装方向。
+              </p>
+            </details>
+          </article>
+          <article>
+            <div class="art two">
+              <svg viewBox="0 0 240 180" aria-hidden="true">
+                <path d="M40 135 105 25 170 135Z" fill="#f1d8b7" />
+                <circle cx="165" cy="73" r="45" fill="#684b3f" />
+              </svg>
+            </div>
+            <h3>02 / Objects with a point of view.</h3>
+            <small>编辑设计 · 原创示例</small>
+            <details>
+              <summary>看项目说明</summary>
+              <p>让几何形体在杂志版面里对话，探索纸张质感与克制的排版层次。</p>
+            </details>
+          </article>
+          <article>
+            <div class="art three">
+              <svg viewBox="0 0 240 180" aria-hidden="true">
+                <rect x="45" y="25" width="150" height="130" fill="#e4e7d8" />
+                <path
+                  d="M65 55h110M65 80h70M65 105h90"
+                  stroke="#425956"
+                  stroke-width="10"
+                />
+              </svg>
+            </div>
+            <h3>03 / A little space on the internet.</h3>
+            <small>网页体验 · 原创示例</small>
+            <details>
+              <summary>看项目说明</summary>
+              <p>为个人创作者设计一个轻量网站，让作品而非界面装饰成为主角。</p>
+            </details>
+          </article>
+        </div>
+      </section>
+      <section>
+        <h2>From idea to form.</h2>
+        <ul class="services">
+          <li><span>01</span>品牌与视觉识别</li>
+          <li><span>02</span>网站与数字体验</li>
+          <li><span>03</span>创意方向与编辑设计</li>
+        </ul>
+      </section>
+      <section id="contact" class="contact">
+        <div class="eyebrow">GOOD THINGS START WITH A HELLO</div>
+        <h2 style="margin-top: 18px">Have something in mind?</h2>
+        <p>把你的项目、期望时间与预算范围写进第一封邮件，就可以开启对话。</p>
+        <a href="mailto:studio@example.com">studio@example.com ↗</a>
+        <p class="note">
+          原创网页示例。工作室、项目与邮箱均为演示内容，请替换为自己的真实信息。
+        </p>
+      </section>
+    </main>
+    <footer>FORM / MADE WITH CURIOSITY · PROMPIX STUDIO</footer>
+  </body>
+</html>

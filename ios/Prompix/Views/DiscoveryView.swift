@@ -131,7 +131,7 @@ struct PromptCard: View {
     }
     private var ratio: CGFloat {
         if let ratio = item.media?.aspectRatio { return max(0.65, min(1.5, ratio)) }
-        return switch item.kind { case .text: 0.84; case .image: item.artwork == "lake" ? 1.02 : 0.76; case .video: 0.94; case .web: 0.87 }
+        return switch item.kind { case .text: 0.84; case .image: item.artwork == "lake" ? 1.02 : 0.76; case .video: 0.94; case .web: WebsiteExamples.files[item.id] != nil ? 0.62 : 0.87 }
     }
 }
 

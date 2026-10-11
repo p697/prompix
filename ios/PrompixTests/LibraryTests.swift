@@ -118,6 +118,10 @@ import CryptoKit
             if let movie = item.media?.video { XCTAssertNotNil(Bundle.main.url(forResource: movie, withExtension: "mp4"), movie) }
             if let image = item.media?.image { XCTAssertNotNil(UIImage(named: image), image) }
         }
+        for (id, filename) in WebsiteExamples.files {
+            XCTAssertNotNil(Bundle.main.url(forResource: filename, withExtension: "html", subdirectory: "WebExamples"), filename)
+            XCTAssertNotNil(UIImage(named: "web-\(id)"), id)
+        }
     }
     func testRemoteEditionIsAtomicCachedAndRemovalsReachFavorites() throws {
         let library = Library(directory: directory)

@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; style-src 'self' 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:; connect-src 'none'; base-uri 'none'; form-action 'none'"
+    />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Field Notes — 旅行手记</title>
+    <link rel="stylesheet" href="base.css" />
+    <style>
+      :root {
+        --paper: #eeeade;
+        --ink: #2e515a;
+        --muted: #61797b;
+        --accent: #467f83;
+      }
+      h1 {
+        font-style: italic;
+      }
+      .postcard {
+        background: #e5e0d1;
+        padding: 10px;
+        box-shadow: 0 10px 30px #304e5020;
+        transform: rotate(-2deg);
+        margin: 28px 4px;
+      }
+      .scene {
+        height: 205px;
+        background: #b8d1d0;
+        position: relative;
+        overflow: hidden;
+      }
+      .scene:before {
+        content: "";
+        position: absolute;
+        inset: 45% -20% -35%;
+        background: #729899;
+        border-radius: 50% 50% 0 0;
+        transform: rotate(12deg);
+      }
+      .scene:after {
+        content: "";
+        position: absolute;
+        inset: 70% -20% -30%;
+        background: #c8b89b;
+        border-radius: 60% 30% 0 0;
+        transform: rotate(-8deg);
+      }
+      .sun {
+        position: absolute;
+        background: #eee1b9;
+        width: 60px;
+        height: 60px;
+        right: 20%;
+        top: 15%;
+        border-radius: 50%;
+      }
+      .postcard small {
+        display: block;
+        padding: 13px 5px 6px;
+        font: 10px monospace;
+        letter-spacing: 1px;
+      }
+      .story {
+        padding: 22px 0;
+        border-bottom: 1px solid #7e939533;
+      }
+      .story h3 {
+        font:
+          26px Georgia,
+          serif;
+        margin: 10px 0;
+      }
+      .story .date {
+        font: 10px monospace;
+        letter-spacing: 1px;
+      }
+      .story button {
+        font-size: 12px;
+        padding: 8px 16px;
+      }
+      .pack {
+        background: #e4e2d6;
+        padding: 22px;
+      }
+      .pack h2 {
+        font-size: 28px;
+      }
+      .stamp {
+        display: inline-block;
+        border: 1px solid #5d787d;
+        border-radius: 50%;
+        padding: 18px 12px;
+        font: 9px monospace;
+        transform: rotate(10deg);
+      }
+      #packingCount {
+        font-size: 12px;
+      }
+      dialog p {
+        line-height: 2.1;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <b>FIELD NOTES / 旅途中</b>
+      <nav><a href="#stories">手记</a><a href="#packing">行囊</a></nav>
+    </header>
+    <main>
+      <div class="eyebrow">PLACES WE CARRY WITH US</div>
+      <h1>Go a little<br />further.</h1>
+      <p class="intro">不是去过多少地方，<br />而是记住了多少个瞬间。</p>
+      <div class="postcard" aria-label="原创海岸插画">
+        <div class="scene"><i class="sun"></i></div>
+        <small>POSTCARD 001 / THE QUIET COAST</small>
+      </div>
+      <section id="stories">
+        <div class="row">
+          <h2>Along the way.</h2>
+          <span class="stamp">TAKE<br />YOUR TIME</span>
+        </div>
+        <article class="story">
+          <span class="date">01 / 2026.04.18 · 海边</span>
+          <h3>把清晨，交给海风。</h3>
+          <p>路的尽头是一片很安静的海。我们没有赶日出，只是坐了一会儿。</p>
+          <button data-story="0">读海边手记</button>
+        </article>
+        <article class="story">
+          <span class="date">02 / 2026.05.09 · 山间</span>
+          <h3>走慢一点，听见更多。</h3>
+          <p>沿着小路上山，路牌少了，树和风的声音多了。</p>
+          <button data-story="1">读山间手记</button>
+        </article>
+        <article class="story">
+          <span class="date">03 / 2026.06.21 · 城市</span>
+          <h3>在陌生街角，过熟悉的一天。</h3>
+          <p>一杯咖啡，一本旧书。今天不追着景点跑。</p>
+          <button data-story="2">读城市手记</button>
+        </article>
+      </section>
+      <section id="packing">
+        <div class="pack">
+          <div class="eyebrow">A LITTLE LESS TO THINK ABOUT</div>
+          <h2 style="margin-top: 15px">出发前的小清单</h2>
+          <div id="checks"></div>
+          <p id="packingCount" role="status"></p>
+          <button id="reset">重新打包</button>
+        </div>
+      </section>
+      <section>
+        <h2>A note from the road.</h2>
+        <p>
+          旅行手记可以很小：一个细节、一张照片和一句想留住的话。把这里的地点、日期与段落替换成你的真实经历。
+        </p>
+        <p class="note">
+          Prompix
+          原创网页示例，以上地点与叙事均为虚构。没有地图接口或位置追踪；清单保存在当前浏览环境。
+        </p>
+      </section>
+    </main>
+    <footer>COLLECT MOMENTS, NOT CHECKPOINTS / PROMPIX STUDIO</footer>
+    <dialog id="reading">
+      <div class="row">
+        <span class="eyebrow">A PAGE FROM THE JOURNAL</span
+        ><button id="close">合上手记</button>
+      </div>
+      <h2 id="storyTitle"></h2>
+      <div id="storyBody"></div>
+    </dialog>
+    <script>
+      const entries = [
+        {
+          title: "把清晨，交给海风。",
+          body: [
+            "民宿老板说，往东走十分钟就能看见海。我们走了二十分钟，因为中途有一只猫，也因为面包店刚刚开门。",
+            "沙滩上没有太多人。有人牵着狗慢慢走，风把海面的光吹成很细的小片。我把手机放进包里，坐在防波堤上吃完了面包。",
+            "回程买了一张没有写字的明信片。想寄给谁还没决定，但我想先把这个早晨留住。",
+          ],
+        },
+        {
+          title: "走慢一点，听见更多。",
+          body: [
+            "山路并不陡，却有很多容易错过的小转弯。走了一阵，我们决定收起路线攻略。",
+            "树林里有一块被阳光照亮的石头。我在上面坐了五分钟，看蚂蚁搬走一小片叶子。原来休息也可以成为目的地。",
+            "到达山顶时，云挡住了远处的风景。我们没有失望，因为一路上已经看到了很多。",
+          ],
+        },
+        {
+          title: "在陌生街角，过熟悉的一天。",
+          body: [
+            "今天只给自己安排了一件事：找到一家愿意坐很久的咖啡店。它就在地铁口后的第二条小街里。",
+            "隔壁桌的人在画画。窗外有人给植物浇水。一座城市最让我好奇的，往往是这些不在地图上的日常。",
+            "离开前，在街角买了一本旧书。扉页上有一句铅笔写的祝福，像来自陌生人的小小欢迎。",
+          ],
+        },
+      ];
+      const reading = document.querySelector("#reading");
+      document.querySelectorAll("[data-story]").forEach(
+        (b) =>
+          (b.onclick = () => {
+            const e = entries[Number(b.dataset.story)];
+            document.querySelector("#storyTitle").textContent = e.title;
+            document.querySelector("#storyBody").replaceChildren(
+              ...e.body.map((text) => {
+                const p = document.createElement("p");
+                p.textContent = text;
+                return p;
+              }),
+            );
+            reading.showModal();
+          }),
+      );
+      document.querySelector("#close").onclick = () => reading.close();
+      const list = [
+        "证件与预订信息",
+        "充电器与移动电源",
+        "雨具与舒适的鞋",
+        "随身水杯",
+        "常用个人物品",
+        "给行李留一点空位",
+      ];
+      let checked = [];
+      try {
+        checked = JSON.parse(localStorage.getItem("field-packing") || "[]");
+      } catch {}
+      function render() {
+        document.querySelector("#checks").innerHTML = list
+          .map(
+            (s, i) =>
+              `<label class="check"><input type="checkbox" value="${i}" ${checked.includes(i) ? "checked" : ""}>${s}</label>`,
+          )
+          .join("");
+        document.querySelector("#packingCount").textContent =
+          `已准备 ${checked.length} / ${list.length} 项`;
+        document.querySelectorAll("#checks input").forEach(
+          (input) =>
+            (input.onchange = () => {
+              checked = [
+                ...document.querySelectorAll("#checks input:checked"),
+              ].map((i) => Number(i.value));
+              save();
+              document.querySelector("#packingCount").textContent =
+                `已准备 ${checked.length} / ${list.length} 项`;
+            }),
+        );
+      }
+      function save() {
+        try {
+          localStorage.setItem("field-packing", JSON.stringify(checked));
+        } catch {}
+      }
+      document.querySelector("#reset").onclick = () => {
+        checked = [];
+        save();
+        render();
+      };
+      render();
+    </script>
+  </body>
+</html>
