@@ -19,6 +19,62 @@ import CryptoKit
         XCTAssertTrue(Library(directory: directory).favorites.isEmpty)
     }
 
+    func testDraftSurvivesRelaunchAndCanRestoreOriginalWithoutChangingSource() throws {
+        let first = Library(directory: directory)
+        let item = try XCTUnwrap(first.prompts.first)
+        let edited = "A personal draft with 中文 and emoji ✨\nSecond line."
+        XCTAssertTrue(first.saveDraft(edited, for: item))
+        let reopened = Library(directory: directory)
+        XCTAssertEqual(reopened.draft(for: item), edited)
+        XCTAssertEqual(reopened.prompts.first?.prompt, item.prompt)
+        XCTAssertTrue(reopened.saveDraft(item.prompt, for: item))
+        XCTAssertNil(Library(directory: directory).drafts[item.id])
+    }
+
+    func testFailedDraftWriteDoesNotReplaceLastSavedDraft() throws {
+        let library = Library(directory: directory)
+        let item = try XCTUnwrap(library.prompts.first)
+        XCTAssertTrue(library.saveDraft("Keep this draft", for: item))
+        let file = directory.appending(path: "drafts.json")
+        try FileManager.default.removeItem(at: file)
+        try FileManager.default.createDirectory(at: file, withIntermediateDirectories: true)
+        XCTAssertFalse(library.saveDraft("Cannot write this", for: item))
+        XCTAssertEqual(library.draft(for: item), "Keep this draft")
+        XCTAssertNotNil(library.error)
+    }
+
+    func testUnreadableDraftsAreNotOverwritten() throws {
+        let library = Library(directory: directory)
+        let item = try XCTUnwrap(library.prompts.first)
+        let file = directory.appending(path: "drafts.json")
+        let broken = Data("broken".utf8)
+        try broken.write(to: file)
+        let reopened = Library(directory: directory)
+        XCTAssertFalse(reopened.saveDraft("New text", for: item))
+        XCTAssertEqual(try Data(contentsOf: file), broken)
+    }
+
+    func testSavedThumbnailSurvivesCacheClearAndRelaunchThenIsRemovedWhenUnsaved() async throws {
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [ThumbnailProtocol.self]
+        let url = URL(string: "https://api.prompix.dev/media/test.jpg")!
+        let store = ImageStore(offlineDirectory: directory, session: URLSession(configuration: config))
+        await store.keepOffline([url])
+        XCTAssertTrue(store.offlineFailures.isEmpty)
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: directory.path).count, 1)
+        store.clear()
+        let offline = URLSessionConfiguration.ephemeral
+        offline.protocolClasses = [OfflineProtocol.self]
+        let reopened = ImageStore(offlineDirectory: directory, session: URLSession(configuration: offline))
+        let image = try await reopened.image(for: url)
+        XCTAssertGreaterThan(image.size.width, 0)
+        await reopened.keepOffline([])
+        reopened.clear()
+        XCTAssertTrue(try FileManager.default.contentsOfDirectory(atPath: directory.path).isEmpty)
+        do { _ = try await reopened.image(for: url); XCTFail("Unsaved thumbnail must no longer be retained") }
+        catch { }
+    }
+
     func testInvalidCatalogDoesNotDestroyOfflineFavorites() throws {
         let first = Library(directory: directory)
         let item = try XCTUnwrap(first.prompts.first)
@@ -67,6 +123,7 @@ import CryptoKit
         let library = Library(directory: directory)
         let saved = try XCTUnwrap(library.prompts.first)
         library.toggle(saved)
+        library.saveDraft("Remove this draft with its source", for: saved)
         let remaining = library.prompts.filter { $0.id != saved.id }
         var catalog = Catalog(schemaVersion: 1, version: "remote-test", prompts: remaining)
         catalog.removedIDs = [saved.id]
@@ -85,10 +142,30 @@ import CryptoKit
         XCTAssertEqual(reopened.version, "remote-test")
         XCTAssertEqual(reopened.prompts.count, remaining.count)
         XCTAssertFalse(reopened.isSaved(saved))
+        XCTAssertNil(reopened.drafts[saved.id])
     }
     func testRemoteManifestCannotRedirectCatalogToUntrustedHost() throws {
         let manifest = CatalogManifest(schemaVersion: 1, version: "test", sha256: String(repeating: "a", count: 64), catalog: URL(string: "https://example.com/releases/test/catalog.json")!)
         XCTAssertThrowsError(try manifest.validated())
     }
 
+}
+
+private final class ThumbnailProtocol: URLProtocol, @unchecked Sendable {
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func startLoading() {
+        let bytes = Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAEUlEQVR4nGNILAjAihiGlgQAP6xIQWSZPVUAAAAASUVORK5CYII=")!
+        let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: ["Content-Type": "image/png"])!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: bytes)
+        client?.urlProtocolDidFinishLoading(self)
+    }
+    override func stopLoading() {}
+}
+private final class OfflineProtocol: URLProtocol, @unchecked Sendable {
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func startLoading() { client?.urlProtocol(self, didFailWithError: URLError(.notConnectedToInternet)) }
+    override func stopLoading() {}
 }

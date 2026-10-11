@@ -75,6 +75,23 @@ import XCTest
         app.tabBars.buttons["专题"].tap()
         capture("09-collections")
     }
+    func testEditedDraftPersistsAcrossRelaunch() {
+        app.buttons["kind-text"].tap()
+        app.buttons["prompt-gentle-tarot"].tap()
+        app.buttons["编辑后使用"].tap()
+        let editor = app.textViews["promptEditor"]
+        XCTAssertTrue(editor.waitForExistence(timeout: 5))
+        editor.tap()
+        editor.typeText(" My personal intention.")
+        app.buttons["完成"].tap()
+        app.terminate(); app.launch()
+        app.buttons["kind-text"].tap()
+        app.buttons["prompt-gentle-tarot"].tap()
+        app.buttons["编辑后使用"].tap()
+        XCTAssertTrue(editor.waitForExistence(timeout: 5))
+        XCTAssertTrue((editor.value as? String ?? "").contains("My personal intention."))
+        capture("13-persistent-draft")
+    }
     func testLiveCommunityEditionAndRemotePreviews() throws {
         app.terminate()
         app.launchArguments.removeAll { $0 == "--offline" }

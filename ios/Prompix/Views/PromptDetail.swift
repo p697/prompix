@@ -122,28 +122,62 @@ struct PromptDetail: View {
 struct PromptEditor: View {
     let item: Prompt
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.scenePhase) private var scenePhase
+    @Environment(Library.self) private var library
     @State private var text: String
     @State private var copied = false
+    @State private var initialized = false
+    @State private var saved = true
+    @State private var restorePresented = false
     init(item: Prompt) { self.item = item; _text = State(initialValue: item.prompt) }
     var body: some View {
         NavigationStack {
             VStack(alignment: .leading, spacing: 12) {
-                Text("把方括号里的内容换成你的想法。修改只在这次编辑中保留，原文不会改变。").font(.caption).foregroundStyle(.secondary)
-                    .padding(.horizontal, 20).padding(.top, 14)
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("写进你的想法，变成自己的版本。原始 Prompt 会保留。").font(.caption).foregroundStyle(.secondary)
+                    HStack {
+                        Label(saved ? "已保存到此设备" : library.error == nil ? "正在保存…" : "尚未保存，可先复制保留", systemImage: saved ? "checkmark.circle" : "circle.dotted")
+                            .font(.caption2).foregroundStyle(.secondary).accessibilityIdentifier("draftStatus")
+                        Spacer()
+                        Text("\(text.count) 字符").font(.caption2.monospacedDigit()).foregroundStyle(.tertiary)
+                    }
+                }.padding(.horizontal, 20).padding(.top, 14)
                 TextEditor(text: $text).font(.body).scrollContentBackground(.hidden).padding(.horizontal, 16)
                     .accessibilityIdentifier("promptEditor")
             }.navigationTitle("让它更像你").navigationBarTitleDisplayMode(.inline)
                 .toolbar {
-                    ToolbarItem(placement: .cancellationAction) { Button("完成") { dismiss() } }
+                    ToolbarItem(placement: .cancellationAction) { Button("完成") { if library.saveDraft(text, for: item) { dismiss() } } }
+                    ToolbarItem(placement: .primaryAction) {
+                        Menu {
+                            Button("恢复原始 Prompt", systemImage: "arrow.counterclockwise", role: .destructive) { restorePresented = true }
+                                .disabled(text == item.prompt)
+                        } label: { Label("编辑选项", systemImage: "ellipsis.circle") }
+                    }
                     ToolbarItem(placement: .primaryAction) { ShareLink(item: text) { Label("分享", systemImage: "square.and.arrow.up") }.disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) }
                 }
                 .safeAreaInset(edge: .bottom) {
                     Button {
                         UIPasteboard.general.string = text; copied = true
+                        saved = library.saveDraft(text, for: item)
                     } label: { Label(copied ? "已复制修改后的 Prompt" : "复制修改后的 Prompt", systemImage: copied ? "checkmark" : "doc.on.doc").frame(maxWidth: .infinity).padding(10) }
                         .buttonStyle(.borderedProminent).disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                         .padding().background(.bar).sensoryFeedback(.success, trigger: copied)
-                }.onChange(of: text) { _, _ in copied = false }
+                }
+                .onAppear { text = library.draft(for: item); initialized = true }
+                .onChange(of: text) { _, _ in copied = false; saved = false }
+                .task(id: text) {
+                    guard initialized else { return }
+                    do { try await Task.sleep(for: .milliseconds(400)) } catch { return }
+                    saved = library.saveDraft(text, for: item)
+                }
+                .onDisappear { if initialized { library.saveDraft(text, for: item) } }
+                .onChange(of: scenePhase) { _, phase in
+                    if phase != .active, initialized { saved = library.saveDraft(text, for: item) }
+                }
+                .confirmationDialog("恢复原始 Prompt？", isPresented: $restorePresented, titleVisibility: .visible) {
+                    Button("恢复原文", role: .destructive) { text = item.prompt; saved = library.saveDraft(text, for: item) }
+                    Button("取消", role: .cancel) {}
+                } message: { Text("这会替换你在此设备上保存的修改。") }
         }
     }
 }
