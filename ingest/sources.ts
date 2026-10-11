@@ -32,6 +32,7 @@ export type Repository = (typeof repositories)[number];
 export type Candidate = Prompt & {
   fingerprint: string;
   featured: boolean;
+  editorialRank?: number;
   reviewStatus: "candidate" | "draft";
 };
 export const fingerprint = (text: string) =>
@@ -168,7 +169,7 @@ export function parseCommunityCSV(csv: string, revision: string): Candidate[] {
         media: null,
         fingerprint: hash,
         featured: playful || isWeb,
-        reviewStatus: "candidate",
+        reviewStatus: "draft",
       } as Candidate;
     });
 }
@@ -207,7 +208,7 @@ export function selectEdition(
     if (
       excluded.has(item.id) ||
       seen.has(item.fingerprint) ||
-      item.prompt.length < 80 ||
+      item.prompt.length < (item.editorialRank !== undefined ? 20 : 80) ||
       item.prompt.length > 30000 ||
       item.title.length > 160 ||
       item.reviewStatus !== "candidate"
@@ -222,9 +223,10 @@ export function selectEdition(
     seen.add(item.fingerprint);
     return true;
   });
-  const selected = eligible
-    .filter((x) => x.featured)
-    .slice(0, Math.ceil(limit / 2));
+  const curated = eligible.filter((x) => x.editorialRank !== undefined)
+    .sort((a, b) => (b.editorialRank ?? 0) - (a.editorialRank ?? 0));
+  const selected = [...curated, ...eligible.filter((x) => x.featured && !curated.includes(x))]
+    .slice(0, Math.max(curated.length, Math.ceil(limit / 2)));
   const recent = eligible
     .filter((x) => !selected.includes(x))
     .sort((a, b) => {

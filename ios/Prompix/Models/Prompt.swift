@@ -25,6 +25,7 @@ struct Prompt: Codable, Identifiable, Hashable {
     let previewLabel: String
     let source: Source
     let media: Media?
+    var cover: Cover? = nil
     var searchableText: String { ([title, summary, prompt, model] + tags).joined(separator: " ") }
 
     struct Source: Codable, Hashable {
@@ -35,6 +36,11 @@ struct Prompt: Codable, Identifiable, Hashable {
         var author: String? = nil
         var repository: URL? = nil
         var revision: String? = nil
+    }
+    struct Cover: Codable, Hashable {
+        let text: String
+        let eyebrow: String
+        let tone: String
     }
     struct Media: Codable, Hashable {
         let image: String?
