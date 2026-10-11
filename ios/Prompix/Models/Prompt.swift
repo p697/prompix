@@ -53,8 +53,13 @@ struct Prompt: Codable, Identifiable, Hashable {
         let video: String?
         let demoURL: URL?
         var imageURL: URL? = nil
+        var imageURLs: [URL]? = nil
         var aspectRatio: Double? = nil
         var videoURL: URL? = nil
+        var galleryURLs: [URL] {
+            var seen = Set<URL>()
+            return ([imageURL].compactMap { $0 } + (imageURLs ?? [])).filter { seen.insert($0).inserted }
+        }
     }
 }
 
@@ -73,7 +78,9 @@ struct Catalog: Codable {
                   !item.source.name.isEmpty, !item.source.license.isEmpty else { throw CatalogError.invalidItems }
             guard !(removedIDs ?? []).contains(item.id) else { throw CatalogError.invalidItems }
             if let ratio = item.media?.aspectRatio, !(0.1...10).contains(ratio) { throw CatalogError.invalidItems }
-            let mediaURLs = [item.media?.imageURL, item.media?.videoURL].compactMap { $0 }
+            guard (item.media?.imageURLs?.count ?? 0) <= 8 else { throw CatalogError.invalidItems }
+            if let gallery = item.media?.imageURLs, gallery.isEmpty || gallery.first != item.media?.imageURL { throw CatalogError.invalidItems }
+            let mediaURLs = [item.media?.imageURL, item.media?.videoURL].compactMap { $0 } + (item.media?.imageURLs ?? [])
             guard mediaURLs.allSatisfy({ $0.scheme == "https" && $0.host == "api.prompix.dev" && $0.path.hasPrefix("/media/") }) else { throw CatalogError.invalidItems }
             let urls = [item.toolURL, item.source.url, item.media?.demoURL, item.source.repository].compactMap { $0 }
             guard urls.allSatisfy({ $0.scheme == "https" }) else { throw CatalogError.invalidItems }

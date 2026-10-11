@@ -2304,6 +2304,26 @@
           }
         }
       }
+    },
+    "上一张": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Previous image"
+          }
+        }
+      }
+    },
+    "下一张": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Next image"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

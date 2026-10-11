@@ -72,7 +72,7 @@ struct BundledWebsite: UIViewRepresentable {
             loading.wrappedValue = false
             failure.wrappedValue = String(localized: "作品暂时没有打开成功，请重新尝试。")
         }
-        func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+        func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping @MainActor (WKNavigationActionPolicy) -> Void) {
             guard let url = navigationAction.request.url else { decisionHandler(.cancel); return }
             if url.isFileURL, !root.isEmpty, url.standardizedFileURL.path.hasPrefix(root) { decisionHandler(.allow) }
             else {

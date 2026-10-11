@@ -13,6 +13,7 @@ export const editorialMetadataSchema = promptSchema.pick({
 }).extend({
   demoURL: https.optional(),
   imageURL: https.optional(),
+  imageURLs: z.array(https).min(1).max(8).optional(),
   priority: z.number().int().min(0).max(100).optional(),
 }).strict();
 export const reviewsSchema = z.record(z.string(), z.object({
@@ -28,15 +29,16 @@ export function applyEditorialReviews(items: Candidate[], reviews: Reviews): Can
     const baseline: Candidate = item.id.startsWith("pc-") ? { ...item, reviewStatus: "draft" } : item;
     const review = reviews[item.id];
     if (!review || review.fingerprint !== item.fingerprint) return baseline;
-    const { demoURL, imageURL, priority, ...metadata } = review.metadata;
+    const { demoURL, imageURL, imageURLs, priority, ...metadata } = review.metadata;
     const updated: Candidate = {
       ...baseline,
       ...metadata,
-      media: demoURL || imageURL ? {
+      media: demoURL || imageURL || imageURLs ? {
         image: null, video: null, demoURL: null,
         ...item.media,
         ...(demoURL ? { demoURL } : {}),
         ...(imageURL ? { imageURL } : {}),
+        ...(imageURLs ? { imageURL: imageURLs[0], imageURLs: [...new Set(imageURLs)] } : {}),
       } : item.media,
       reviewStatus: "candidate",
       editorialRank: priority ?? 0,

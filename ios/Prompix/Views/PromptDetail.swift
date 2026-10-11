@@ -29,7 +29,7 @@ struct PromptDetail: View {
                         if item.kind == .video { playerPresented = true } else { imagePresented = true }
                     } label: {
                         hero.overlay(alignment: .bottomTrailing) {
-                            Image(systemName: item.kind == .video ? "play.fill" : "arrow.up.left.and.arrow.down.right")
+                            Image(systemName: item.kind == .video ? "play.fill" : (item.media?.galleryURLs.count ?? 0) > 1 ? "square.stack" : "arrow.up.left.and.arrow.down.right")
                                 .font(.body).padding(14).background(.regularMaterial, in: Circle()).padding(16)
                         }
                     }.buttonStyle(.plain)
@@ -125,7 +125,7 @@ struct PromptDetail: View {
             }.padding(.horizontal, 20).padding(.vertical, 10).background(.bar)
         }
         .sheet(isPresented: $editorPresented) { PromptEditor(item: item) }
-        .fullScreenCover(isPresented: $imagePresented) { ImageViewer(name: item.media?.image ?? item.artwork, url: item.media?.imageURL) }
+        .fullScreenCover(isPresented: $imagePresented) { ImageViewer(name: item.media?.image ?? item.artwork, urls: item.media?.galleryURLs ?? []) }
         .sheet(isPresented: $webPresented) {
             if let filename = WebsiteExamples.files[item.id] { WebExample(filename: filename) }
         }
@@ -211,6 +211,8 @@ struct PromptEditor: View {
     private(set) var player: AVPlayer?
     private(set) var failed = false
     private(set) var loading = true
+    private(set) var hasPlayed = false
+    @ObservationIgnored private var timeObserver: Any?
     private(set) var aspectRatio: CGFloat = 16 / 9
     @ObservationIgnored private var subscriptions = Set<AnyCancellable>()
     @ObservationIgnored private var timeout: Task<Void, Never>?
@@ -220,11 +222,17 @@ struct PromptEditor: View {
 
     func start(url: URL?) {
         stop()
-        failed = false; loading = true; aspectRatio = 16 / 9
+        failed = false; loading = true; hasPlayed = false; aspectRatio = 16 / 9
         guard let url, !url.isFileURL || FileManager.default.isReadableFile(atPath: url.path) else { fail(); return }
         let item = AVPlayerItem(url: url)
         let player = AVPlayer(playerItem: item)
         self.player = player
+        timeObserver = player.addPeriodicTimeObserver(forInterval: CMTime(seconds: 0.25, preferredTimescale: 600), queue: .main) { [weak self, weak player] time in
+            Task { @MainActor in
+                guard let self, let player, self.player === player, time.seconds > 0.25, player.rate > 0 else { return }
+                self.hasPlayed = true
+            }
+        }
         item.publisher(for: \.status).receive(on: RunLoop.main).sink { [weak self] status in
             guard let self, self.player?.currentItem === item else { return }
             if status == .failed { self.fail() }
@@ -262,7 +270,9 @@ struct PromptEditor: View {
     func pause() { player?.pause(); timeout?.cancel(); loading = false }
     func stop() {
         timeout?.cancel(); timeout = nil; subscriptions.removeAll()
-        player?.pause(); player?.replaceCurrentItem(with: nil); player = nil; loading = false
+        if let timeObserver { player?.removeTimeObserver(timeObserver) }
+        timeObserver = nil
+        player?.pause(); player?.replaceCurrentItem(with: nil); player = nil; loading = false; hasPlayed = false
     }
 }
 
@@ -287,6 +297,7 @@ struct MovieView: View {
                     }
                 } else if let player = playback.player {
                     VideoPlayer(player: player).aspectRatio(playback.aspectRatio, contentMode: .fit)
+                        .accessibilityIdentifier(playback.hasPlayed ? "playingVideo" : "loadingVideo")
                         .overlay { if playback.loading { ProgressView(String(localized: "正在加载视频…")).padding(16).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14)).allowsHitTesting(false) } }
                 }
                 Text(caption).font(.caption).foregroundStyle(.secondary).padding(.horizontal, 20)
@@ -301,47 +312,81 @@ struct MovieView: View {
 
 struct ImageViewer: View {
     let name: String
+    let urls: [URL]
+    @State private var selection = 0
+    @Environment(\.dismiss) private var dismiss
+    private var count: Int { max(1, urls.count) }
+    var body: some View {
+        NavigationStack {
+            TabView(selection: $selection) {
+                ForEach(0..<count, id: \.self) { index in
+                    ImagePage(name: name, url: urls.isEmpty ? nil : urls[index], active: selection == index, index: index)
+                        .tag(index)
+                }
+            }.tabViewStyle(.page(indexDisplayMode: count > 1 ? .always : .never))
+                .background(.black)
+                .navigationTitle(count > 1 ? "\(selection + 1) / \(count)" : "")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .confirmationAction) { Button(String(localized: "完成")) { dismiss() } }
+                    if count > 1 {
+                        ToolbarItemGroup(placement: .bottomBar) {
+                            Button(String(localized: "上一张"), systemImage: "chevron.left") { selection -= 1 }
+                                .disabled(selection == 0).accessibilityIdentifier("previousImage")
+                            Spacer()
+                            Button(String(localized: "下一张"), systemImage: "chevron.right") { selection += 1 }
+                                .disabled(selection == count - 1).accessibilityIdentifier("nextImage")
+                        }
+                    }
+                }
+                .toolbarBackground(.visible, for: .navigationBar, .bottomBar)
+                .toolbarBackground(.black, for: .navigationBar, .bottomBar)
+                .toolbarColorScheme(.dark, for: .navigationBar, .bottomBar)
+        }.preferredColorScheme(.dark)
+    }
+}
+
+private struct ImagePage: View {
+    let name: String
     let url: URL?
+    let active: Bool
+    let index: Int
     @State private var remoteImage: UIImage?
     @State private var failed = false
     @State private var offlinePreview = false
     @State private var attempt = 0
-    @Environment(\.dismiss) private var dismiss
     var body: some View {
-        NavigationStack {
-            ZStack {
-                Color.black
-                if url == nil || remoteImage != nil { ZoomImage(image: remoteImage ?? UIImage(named: name)).ignoresSafeArea(edges: .bottom) }
-                else if failed {
-                    ContentUnavailableView {
-                        Label(String(localized: "图片暂不可用"), systemImage: "photo")
-                    } description: { Text(String(localized: "检查网络后可以重新加载。")) }
-                    actions: { Button(String(localized: "重新加载")) { attempt += 1 }.buttonStyle(.bordered).accessibilityIdentifier("retryImage") }
-                    .environment(\.colorScheme, .dark)
-                }
-                else { ProgressView().tint(.white) }
-            }.overlay(alignment: .bottom) {
-                if offlinePreview {
-                    Button { attempt += 1 } label: {
-                        Label(String(localized: "当前为离线预览 · 轻点加载清晰图片"), systemImage: "arrow.clockwise")
-                            .font(.caption).padding(12).foregroundStyle(.white).background(.black.opacity(0.7), in: Capsule())
-                    }.padding().accessibilityIdentifier("loadFullImage")
-                }
-            }.task(id: "\(url?.absoluteString ?? name)-\(attempt)") {
-                guard let url else { return }
-                failed = false
-                if remoteImage == nil { remoteImage = ImageStore.shared.offlineImage(for: url) }
-                do {
-                    remoteImage = try await ImageStore.shared.image(for: url, fullResolution: true)
-                    offlinePreview = false
-                } catch {
-                    guard !Task.isCancelled else { return }
-                    offlinePreview = remoteImage != nil
-                    failed = remoteImage == nil
-                }
+        ZStack {
+            Color.black
+            if url == nil || remoteImage != nil {
+                ZoomImage(image: remoteImage ?? UIImage(named: name))
+                    .accessibilityIdentifier("loadedImage-\(index)")
+            } else if failed {
+                ContentUnavailableView {
+                    Label(String(localized: "图片暂不可用"), systemImage: "photo")
+                } description: { Text(String(localized: "检查网络后可以重新加载。")) }
+                actions: { Button(String(localized: "重新加载")) { attempt += 1 }.buttonStyle(.bordered).accessibilityIdentifier("retryImage") }
+            } else { ProgressView().tint(.white) }
+        }.overlay(alignment: .bottom) {
+            if offlinePreview {
+                Button { attempt += 1 } label: {
+                    Label(String(localized: "当前为离线预览 · 轻点加载清晰图片"), systemImage: "arrow.clockwise")
+                        .font(.caption).padding(12).foregroundStyle(.white).background(.black.opacity(0.7), in: Capsule())
+                }.padding(.bottom, 40).accessibilityIdentifier("loadFullImage")
             }
-                .toolbar { ToolbarItem(placement: .confirmationAction) { Button(String(localized: "完成")) { dismiss() } } }
-                .toolbarBackground(.visible, for: .navigationBar).toolbarBackground(.black, for: .navigationBar).toolbarColorScheme(.dark, for: .navigationBar)
+        }.task(id: "\(url?.absoluteString ?? name)-\(attempt)-\(active)") {
+            guard active, let url else { return }
+            failed = false
+            if remoteImage == nil { remoteImage = ImageStore.shared.offlineImage(for: url) }
+            do {
+                let result = try await ImageStore.shared.image(for: url, fullResolution: true)
+                guard !Task.isCancelled else { return }
+                remoteImage = result; offlinePreview = false
+            } catch {
+                guard !Task.isCancelled else { return }
+                offlinePreview = remoteImage != nil
+                failed = remoteImage == nil
+            }
         }
     }
 }
