@@ -5,8 +5,14 @@ import {
   repositories,
   selectEdition,
   parseCommunityCSV,
+  collectRepository,
 } from "./sources.ts";
 import { download } from "./network.ts";
+test("repository collection rejects unlisted sources and files before starting Git", async () => {
+  await assert.rejects(collectRepository("other/private", "README_zh.md"), /not allowlisted/);
+  await assert.rejects(collectRepository(repositories[0].repo, "../../secret"), /not allowlisted/);
+  await assert.rejects(collectRepository("f/prompts.chat", "README_zh.md"), /not allowlisted/);
+});
 const block =
   '### No. 1: Folded paper city\n\n#### 📖 Description\n\nCreate a city made of folded paper.\n\n#### 📝 Prompt\n\n```\nBuild an original miniature paper city with folded roofs and warm light. Keep the background quiet and make shadows soft.\n```\n<img src="https://cms-assets.youmind.com/media/test.jpg">\n- **Author:** [Studio](https://x.com/studio)\n- **Source:** [Post](https://x.com/studio/status/123)\n';
 test("source parser retains provenance and rejects incomplete cards; editorial gate respects removals", () => {
