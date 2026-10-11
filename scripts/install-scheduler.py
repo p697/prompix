@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Install a versioned runtime and a daily per-user launchd job. No credentials in plist."""
-import os, pathlib, plistlib, shlex, shutil, subprocess, time
+import json, os, pathlib, plistlib, shlex, shutil, subprocess, time
 repo = pathlib.Path(__file__).resolve().parent.parent
 home = pathlib.Path.home()
 base = home / '.local/share/prompix'
@@ -13,6 +13,14 @@ for name in ['ingest', 'packages', 'services']:
     shutil.copytree(repo / name, runtime / name, ignore=shutil.ignore_patterns('node_modules','.wrangler'))
 (runtime/'ios/Prompix/Resources').mkdir(parents=True)
 shutil.copy2(repo/'ios/Prompix/Resources/catalog.json', runtime/'ios/Prompix/Resources/catalog.json')
+# Mirror first-party image outputs for older clients; videos and unrelated assets stay out.
+catalog = json.loads((repo/'ios/Prompix/Resources/catalog.json').read_text())
+for prompt in catalog['prompts']:
+    image = (prompt.get('media') or {}).get('image')
+    if prompt['kind'] == 'image' and image and prompt['source']['name'] == 'Prompix Studio':
+        resource = pathlib.Path('ios/Prompix/Resources/Assets.xcassets') / (image + '.imageset')
+        shutil.copytree(repo/resource, runtime/resource)
+
 for name in ['package.json', 'package-lock.json']:
     shutil.copy2(repo/name,runtime/name)
 subprocess.run(['npm','ci'],cwd=runtime,check=True)

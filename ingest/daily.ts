@@ -1,8 +1,6 @@
 import { mkdir, readFile, writeFile, rm } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import { repo, contentRoot as root, base, atomic, json, lockContent, upload, moderationSchema, currentManifest, remoteCatalog, editionVersion } from "./publication.ts";
 import { catalogSchema, type Prompt } from "../packages/schema/catalog.ts";
 import {
@@ -17,7 +15,7 @@ import {
 import { download } from "./network.ts";
 import { searchX } from "./x.ts";
 import { applyEditorialReviews, reviewsSchema } from "./editorial.ts";
-const exec = promisify(execFile);
+import { aspectRatio, prepareJPEG, publishStudioImages } from "./images.ts";
 const publishing = process.argv.includes("--publish");
 const resumePublishing = process.argv.includes("--resume-publishing");
 if (resumePublishing && !publishing) throw new Error("--resume-publishing requires --publish");
@@ -29,13 +27,6 @@ const mediaHosts = [
   "release-assets.githubusercontent.com",
   "objects.githubusercontent.com",
 ];
-async function aspectRatio(path: string): Promise<number> {
-  const result = await exec('/usr/bin/sips', ['-g','pixelWidth','-g','pixelHeight',path], {timeout:30000});
-  const width = Number(result.stdout.match(/pixelWidth: (\d+)/)?.[1]);
-  const height = Number(result.stdout.match(/pixelHeight: (\d+)/)?.[1]);
-  if (!width || !height) throw new Error('Invalid image dimensions');
-  return width / height;
-}
 async function run() {
   const unlock = await lockContent(root);
   const report: {
@@ -210,24 +201,7 @@ async function run() {
               : join(root, "tmp", `preview-${process.pid}.jpg`);
             try {
               await writeFile(input, data.bytes);
-              if (!video)
-                await exec(
-                  "/usr/bin/sips",
-                  [
-                    "-s",
-                    "format",
-                    "jpeg",
-                    "-s",
-                    "formatOptions",
-                    "82",
-                    "-Z",
-                    "1200",
-                    input,
-                    "--out",
-                    output,
-                  ],
-                  { timeout: 30000 },
-                );
+              if (!video) await prepareJPEG(input, output);
               if (!video) {
                 aspects[url] = await aspectRatio(output); if (cover) media.aspectRatio = aspects[url];
                 await atomic(join(root,'media-aspects.json'),aspects);
@@ -252,7 +226,7 @@ async function run() {
         report.mediaErrors.push(`${prompt.id}: ${String(e)}`);
       }
     }
-    const bundled = catalogSchema
+    let bundled = catalogSchema
       .parse(
         JSON.parse(
           await readFile(
@@ -262,6 +236,20 @@ async function run() {
         ),
       )
       .prompts.filter((x) => !excluded.has(x.id));
+    if (publishing) {
+      bundled = await publishStudioImages(bundled, join(repo, "ios/Prompix/Resources/Assets.xcassets"), mediaMap, async input => {
+        await mkdir(join(root, "tmp"), { recursive: true });
+        const output = join(root, "tmp", `studio-${process.pid}.jpg`);
+        try {
+          await prepareJPEG(input, output);
+          const hash = createHash("sha256").update(await readFile(output)).digest("hex");
+          const key = `media/${hash}.jpg`;
+          await upload(key, output, "image/jpeg");
+          return `${base}/${key}`;
+        } finally { await rm(output, { force: true }); }
+      });
+      await atomic(join(root, "media-map.json"), mediaMap);
+    }
     // New community cards lead, with original ideas interleaved to preserve all four modalities.
     const groups = [
       published.filter((x) => x.kind === "image"),

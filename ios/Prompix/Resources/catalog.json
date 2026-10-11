@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "version": "studio-002",
+  "version": "studio-003",
   "prompts": [
     {
       "id": "summer-citrus",
@@ -234,7 +234,7 @@
       "title": "把抽象的心情，折成一张海报",
       "summary": "用形状与色彩表达，少一点文字，多一点感觉。",
       "prompt": "Create a minimal abstract poster expressing [a feeling]. Use three large organic paper-cut shapes: one muted forest green, one terracotta, one pale golden yellow, on warm uncoated ivory paper. Asymmetric balanced composition, subtle paper texture and realistic cut edges, no gradients, no typography, no frame. Vertical 3:4. Keep a clear visual hierarchy and generous negative space.",
-      "example": "给情绪挑三个关键词，比如“松弛、好奇、温暖”。一次只改颜色或形状中的一个因素，更容易保持系列感。",
+      "example": "本次示例输入：忙碌一周后，安静重新开始的感觉。\n\n给情绪挑三个关键词，比如“松弛、好奇、温暖”。一次只改颜色或形状中的一个因素，更容易保持系列感。",
       "tags": [
         "创作灵感",
         "平面设计"
@@ -242,14 +242,19 @@
       "model": "图像模型",
       "toolURL": "https://gemini.google.com/",
       "artwork": "abstract",
-      "previewLabel": "Prompix 编辑示意 · 非模型实测结果",
+      "previewLabel": "AI 生成图片 · 原创模板实测示例",
       "source": {
         "name": "Prompix Studio",
         "url": null,
         "license": "CC0-1.0",
         "method": "原创"
       },
-      "media": null
+      "media": {
+        "image": "studio-paper-forms",
+        "video": null,
+        "demoURL": null,
+        "aspectRatio": 0.75
+      }
     },
     {
       "id": "sea-breath",
@@ -331,7 +336,7 @@
       "title": "给你的日常物件，办一次小展览",
       "summary": "把杯子、钥匙或耳机当成值得被认真看的设计作品。",
       "prompt": "Create a refined exhibition poster image featuring [one everyday object] as a sculptural hero. Warm gallery lighting, off-white seamless background, a low limestone pedestal, subtle natural shadow. The object should be visually accurate with believable material texture. Editorial product photography, 85mm lens feel, soft depth of field. Leave the upper third empty for a title to be added later. No generated lettering, logos, extra objects or frame. Vertical 4:5.",
-      "example": "可以上传自己拍的物件作为参考。要求模型保留形状与材质，再改变背景和灯光；封面为编辑构图示意。",
+      "example": "本次示例输入：一架象牙白折纸飞机。\n\n可以上传自己拍的物件作为参考。要求模型保留形状与材质，再改变背景和灯光；封面为编辑构图示意。",
       "tags": [
         "创作灵感",
         "产品摄影"
@@ -339,14 +344,19 @@
       "model": "图像模型",
       "toolURL": "https://gemini.google.com/",
       "artwork": "abstract",
-      "previewLabel": "Prompix 编辑示意 · 非模型实测结果",
+      "previewLabel": "AI 生成图片 · 原创模板实测示例",
       "source": {
         "name": "Prompix Studio",
         "url": null,
         "license": "CC0-1.0",
         "method": "原创"
       },
-      "media": null
+      "media": {
+        "image": "studio-object-poster",
+        "video": null,
+        "demoURL": null,
+        "aspectRatio": 0.8
+      }
     },
     {
       "id": "small-orbit",
@@ -405,7 +415,7 @@
       "title": "为还没写完的书，先做一张封面",
       "summary": "一个抽象意象，给故事一个开始的理由。",
       "prompt": "Design a text-free book cover illustration for a literary novel about [theme]. Choose one symbolic everyday object that suggests the theme without literal storytelling. Use a restrained palette of ivory, desaturated olive and burnt orange, elegant paper-cut composition, subtle tactile grain, ample negative space for later typesetting. Vertical 2:3, flat artwork, no book mockup, no readable text. Give the composition a quiet sense of mystery.",
-      "example": "不要让模型生成书名。先确定封面意象，再用排版工具添加准确的文字，通常更可控。",
+      "example": "本次示例输入：离开家，慢慢在新的地方找到归属。\n\n不要让模型生成书名。先确定封面意象，再用排版工具添加准确的文字，通常更可控。",
       "tags": [
         "创作灵感",
         "书籍",
@@ -414,14 +424,19 @@
       "model": "图像模型",
       "toolURL": "https://gemini.google.com/",
       "artwork": "abstract",
-      "previewLabel": "Prompix 编辑示意 · 非模型实测结果",
+      "previewLabel": "AI 生成图片 · 原创模板实测示例",
       "source": {
         "name": "Prompix Studio",
         "url": null,
         "license": "CC0-1.0",
         "method": "原创"
       },
-      "media": null
+      "media": {
+        "image": "studio-quiet-book",
+        "video": null,
+        "demoURL": null,
+        "aspectRatio": 0.6666666666666666
+      }
     },
     {
       "id": "slow-bloom",
@@ -480,7 +495,7 @@
       "title": "把一段回忆，变成一组颜色",
       "summary": "用视觉重现那种难以描述的感觉。",
       "prompt": "Translate this memory into an abstract visual composition: [describe a personal memory without private identifying details]. Select five colors that evoke its light, temperature and emotional rhythm. Create a sophisticated arrangement of overlapping matte organic forms with tactile paper texture. No literal figures, text or charts. Soft natural illumination, museum print quality, vertical 4:5. Keep the palette cohesive with one surprising accent.",
-      "example": "描述“雨后的外婆家，木桌和晒干的床单”，比只说“怀旧”更能帮助模型找到独特的色彩。",
+      "example": "本次示例输入：夏日雨后的窗边，一杯茶和短暂照进来的阳光。\n\n描述“雨后的外婆家，木桌和晒干的床单”，比只说“怀旧”更能帮助模型找到独特的色彩。",
       "tags": [
         "好玩一点",
         "创作灵感",
@@ -489,14 +504,19 @@
       "model": "图像模型",
       "toolURL": "https://gemini.google.com/",
       "artwork": "abstract",
-      "previewLabel": "Prompix 编辑示意 · 非模型实测结果",
+      "previewLabel": "AI 生成图片 · 原创模板实测示例",
       "source": {
         "name": "Prompix Studio",
         "url": null,
         "license": "CC0-1.0",
         "method": "原创"
       },
-      "media": null
+      "media": {
+        "image": "studio-color-memory",
+        "video": null,
+        "demoURL": null,
+        "aspectRatio": 0.8
+      }
     },
     {
       "id": "coffee-pause",

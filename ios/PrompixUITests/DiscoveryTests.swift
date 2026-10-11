@@ -79,6 +79,23 @@ import XCTest
         XCTAssertTrue(app.buttons["prompt-gentle-tarot"].exists)
         capture("05-search")
     }
+    func testOriginalImageExamplesWorkOffline() {
+        app.buttons["kind-image"].tap()
+        for id in ["paper-forms", "object-poster", "quiet-book", "color-memory"] {
+            let card = app.buttons["prompt-\(id)"]
+            for _ in 0..<6 { if card.isHittable { break }; app.swipeUp() }
+            XCTAssertTrue(card.isHittable); card.tap()
+            XCTAssertTrue(app.buttons["previewButton"].waitForExistence(timeout: 5))
+            capture("original-\(id)-detail")
+            app.buttons["previewButton"].tap()
+            XCTAssertTrue(app.descendants(matching: .any)["loadedImage-0"].waitForExistence(timeout: 5))
+            XCTAssertFalse(app.buttons["retryImage"].exists)
+            capture("original-\(id)-image")
+            app.buttons["完成"].tap()
+            app.navigationBars.buttons.element(boundBy: 0).tap()
+        }
+    }
+
     func testImageVideoWebAndCollections() {
         app.buttons["kind-image"].tap()
         app.buttons["prompt-summer-citrus"].tap()

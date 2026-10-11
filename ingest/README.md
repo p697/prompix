@@ -38,6 +38,12 @@ asset before activation. Upgrade the scheduled runtime before using this new
 editorial field. Saved offline thumbnails still cover the primary image only;
 additional images require a connection or an existing browsing cache.
 
+Original image entries are also mirrored during publication. Their local image
+name remains in the bundled catalog; public editions add a content-addressed
+`imageURL` for older app builds. The scheduled runtime includes only the original
+image asset sets needed for this step. A missing or invalid original asset aborts
+publication before activation, preserving the existing online edition.
+
 
 ## Release recovery
 

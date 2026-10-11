@@ -132,7 +132,7 @@ struct PromptDetail: View {
         .sheet(isPresented: $playerPresented) { MovieView(filename: item.media?.video, remoteURL: item.media?.videoURL, caption: item.previewLabel) }
     }
     private var hero: some View {
-        Artwork(item: item).aspectRatio(item.media?.aspectRatio.map { max(0.6, min(1.8, $0)) } ?? (item.kind == .image ? 0.95 : 1.15), contentMode: .fit)
+        Artwork(item: item).aspectRatio(item.media?.aspectRatio.map { max(0.9, min(1.8, $0)) } ?? (item.kind == .image ? 0.95 : 1.15), contentMode: .fit)
     }
 
 }
@@ -355,11 +355,12 @@ private struct ImagePage: View {
     @State private var failed = false
     @State private var offlinePreview = false
     @State private var attempt = 0
+    private var bundledImage: UIImage? { index == 0 ? UIImage(named: name) : nil }
     var body: some View {
         ZStack {
             Color.black
-            if url == nil || remoteImage != nil {
-                ZoomImage(image: remoteImage ?? UIImage(named: name))
+            if url == nil || remoteImage != nil || bundledImage != nil {
+                ZoomImage(image: remoteImage ?? bundledImage)
                     .accessibilityIdentifier("loadedImage-\(index)")
             } else if failed {
                 ContentUnavailableView {
@@ -376,6 +377,7 @@ private struct ImagePage: View {
             }
         }.task(id: "\(url?.absoluteString ?? name)-\(attempt)-\(active)") {
             guard active, let url else { return }
+            if let bundledImage { remoteImage = bundledImage; offlinePreview = false; return }
             failed = false
             if remoteImage == nil { remoteImage = ImageStore.shared.offlineImage(for: url) }
             do {
