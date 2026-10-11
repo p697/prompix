@@ -71,6 +71,11 @@ make a missing clip/poster pair publishable; existing removal IDs still apply.
 The video channel admits up to 12 eligible examples. Watch-page links are never
 treated as downloadable videos, and third-party material stays outside Git.
 
+Reviewed representative video frames may use a content-addressed JPEG on
+`api.prompix.dev` as their editorial `imageURL`. These covers go through the same
+download, media validation, conversion and hashed publication path as other
+reviewed images; they do not bypass the mirror cache or publication checks.
+
 
 ## Release recovery
 

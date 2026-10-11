@@ -22,6 +22,7 @@ const publishing = process.argv.includes("--publish");
 const resumePublishing = process.argv.includes("--resume-publishing");
 if (resumePublishing && !publishing) throw new Error("--resume-publishing requires --publish");
 const mediaHosts = [
+  "api.prompix.dev",
   "cms-assets.youmind.com",
   "cdn.youmind.com",
   "customer-qs6wnyfuv0gcybzj.cloudflarestream.com",
