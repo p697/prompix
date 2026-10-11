@@ -2,7 +2,7 @@
 
 An open-source, native mobile app for discovering interesting AI prompts across text, images, video, and websites. Explore a feed, see what a prompt can do, save it, and use it in your preferred tool.
 
-> Status: native iOS 0.1.0 preview implemented. The approved direction is lightweight discovery: Xiaohongshu-style browsing with restrained Cosmos-inspired presentation. See [iOS setup](ios/README.md) and [acceptance notes](docs/acceptance-0.1.md).
+> Status: native iOS 0.2.0 development build with daily community collection and remote catalog updates. The approved direction is lightweight discovery: Xiaohongshu-style browsing with restrained Cosmos-inspired presentation. See [iOS setup](ios/README.md) and [content operations](docs/content-operations.md).
 
 ## What it is
 
@@ -11,7 +11,7 @@ An open-source, native mobile app for discovering interesting AI prompts across 
 - All four prompt types in v1, with previews suited to each type, keyword search, filters, local favorites, editing, copying, and system sharing.
 - A lightweight, self-built collection and publishing pipeline. No complex operations agent or dedicated admin system is required for v1.
 
-The first installable milestone is an iPhone build for user acceptance. Simulator testing supports development; device installation requires suitable Apple signing and distribution arrangements.
+The 0.1.0 design preview has been installed and tried on an iPhone Air. Current work improves content quality and native polish; it is not yet an App Store release.
 
 ## Scope
 
@@ -36,7 +36,8 @@ Read [docs/README.md](docs/README.md) for the current product, technical plan, r
 | `ios/` | Native iOS app |
 | `ingest/` | Collection, validation, media processing, and publishing scripts |
 | `packages/schema/` | Shared content and manifest schema |
-| `site/` | Product, privacy, and support pages needed for release |
+| `services/content/` | Read-only Cloudflare Worker and R2 configuration |
+| `site/` (planned) | Product, privacy, and support pages needed for release |
 | `docs/` | Product and technical documents |
 | `design/` | Design references and mockups |
 
