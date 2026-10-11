@@ -156,6 +156,35 @@ import CryptoKit
         XCTAssertEqual(try Data(contentsOf: url), bytes)
     }
 
+    func testUnreadableFavoritesSurviveEditsUpdatesAndRecoveryAppliesRemovals() throws {
+        let initial = Library(directory: directory)
+        let removed = try XCTUnwrap(initial.prompts.first)
+        let kept = try XCTUnwrap(initial.prompts.last)
+        let file = directory.appending(path: "favorites.json")
+        let broken = Data("unreadable favorites".utf8)
+        try broken.write(to: file)
+        let library = Library(directory: directory)
+        XCTAssertFalse(library.toggle(kept))
+        XCTAssertNil(library.savedImageURLs, "Unreadable favorites must not trigger thumbnail deletion")
+        var catalog = Catalog(schemaVersion: 1, version: "recovery-test", prompts: initial.prompts.filter { $0.id != removed.id })
+        catalog.removedIDs = [removed.id]
+        let bytes = try JSONEncoder().encode(catalog)
+        let digest = SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined()
+        let manifest = CatalogManifest(schemaVersion: 1, version: catalog.version, sha256: digest, catalog: URL(string: "https://api.prompix.dev/releases/recovery-test/catalog.json")!)
+        try library.install(bytes, manifest: manifest)
+        XCTAssertEqual(try Data(contentsOf: file), broken)
+        let reopened = Library(directory: directory)
+        XCTAssertEqual(try Data(contentsOf: file), broken)
+        XCTAssertFalse(reopened.favoritesReadable)
+        reopened.reloadFavorites()
+        XCTAssertFalse(reopened.favoritesReadable)
+        try JSONEncoder().encode([removed, kept]).write(to: file, options: .atomic)
+        reopened.reloadFavorites()
+        XCTAssertTrue(reopened.favoritesReadable)
+        XCTAssertEqual(reopened.favorites, [kept])
+        XCTAssertEqual(try JSONDecoder().decode([Prompt].self, from: Data(contentsOf: file)), [kept])
+    }
+
     func testBundledMediaExist() throws {
         let library = Library(directory: directory)
         for item in library.prompts {

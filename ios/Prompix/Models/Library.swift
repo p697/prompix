@@ -11,10 +11,12 @@ import Observation
     private(set) var updatedAt: Date?
     private(set) var drafts: [String: String] = [:]
     private var draftsReadable = true
+    private(set) var favoritesReadable = true
+    private var removedIDs = Set<String>()
     private var lastAttempt: Date?
     private let directory: URL
     var savedIDs: Set<String> { Set(favorites.map(\.id)) }
-    var savedImageURLs: Set<URL> { Set(favorites.compactMap { $0.media?.imageURL }) }
+    var savedImageURLs: Set<URL>? { favoritesReadable ? Set(favorites.compactMap { $0.media?.imageURL }) : nil }
 
     init(directory: URL? = nil, catalogURL: URL? = Bundle.main.url(forResource: "catalog", withExtension: "json")) {
         self.directory = directory ?? URL.applicationSupportDirectory.appending(path: "Prompix", directoryHint: .isDirectory)
@@ -24,7 +26,7 @@ import Observation
             if FileManager.default.fileExists(atPath: savedURL.path) {
                 favorites = try JSONDecoder().decode([Prompt].self, from: Data(contentsOf: savedURL))
             }
-        } catch { self.error = "收藏暂时无法读取。原文件已保留，请稍后重试。" }
+        } catch { favoritesReadable = false; self.error = "收藏暂时无法读取。原文件已保留，请稍后重试。" }
         do {
             if FileManager.default.fileExists(atPath: draftFile.path) {
                 drafts = try JSONDecoder().decode([String: String].self, from: Data(contentsOf: draftFile))
@@ -42,9 +44,12 @@ import Observation
             version = catalog.version
             updatedAt = catalog.publishedAt.flatMap(Self.parseDate)
             let removed = Set(catalog.removedIDs ?? [])
+            removedIDs = removed
             if !removed.isEmpty {
-                favorites.removeAll { removed.contains($0.id) }
-                try JSONEncoder().encode(favorites).write(to: savedFile, options: .atomic)
+                if favoritesReadable {
+                    favorites.removeAll { removed.contains($0.id) }
+                    try JSONEncoder().encode(favorites).write(to: savedFile, options: .atomic)
+                }
                 try removeDrafts(ids: removed)
             }
         } catch { self.error = "灵感暂时没有加载成功。你仍然可以查看已保存的收藏。" }
@@ -104,13 +109,27 @@ import Observation
         let removed = Set(catalog.removedIDs ?? [])
         try removeDrafts(ids: removed)
         let updatedFavorites = favorites.filter { !removed.contains($0.id) }
-        try JSONEncoder().encode(updatedFavorites).write(to: savedFile, options: .atomic)
+        if favoritesReadable { try JSONEncoder().encode(updatedFavorites).write(to: savedFile, options: .atomic) }
+        removedIDs = removed
         favorites = updatedFavorites; prompts = catalog.prompts; version = catalog.version
         updatedAt = catalog.publishedAt.flatMap(Self.parseDate)
     }
 
     func isSaved(_ item: Prompt) -> Bool { savedIDs.contains(item.id) }
+    func reloadFavorites() {
+        guard !favoritesReadable else { return }
+        do {
+            let recovered = try JSONDecoder().decode([Prompt].self, from: Data(contentsOf: savedFile))
+            let valid = recovered.filter { !removedIDs.contains($0.id) }
+            if valid != recovered { try JSONEncoder().encode(valid).write(to: savedFile, options: .atomic) }
+            favorites = valid; favoritesReadable = true; error = nil
+        } catch { self.error = "收藏仍然无法读取，原文件与离线预览已保留。" }
+    }
     @discardableResult func toggle(_ item: Prompt) -> Bool {
+        guard favoritesReadable else {
+            error = "已有收藏暂时无法读取。为保留原文件，本次修改未保存。"
+            return false
+        }
         var updated = favorites
         if let index = updated.firstIndex(where: { $0.id == item.id }) { updated.remove(at: index) }
         else { updated.insert(item, at: 0) }
