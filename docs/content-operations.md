@@ -58,4 +58,4 @@ Cloudflare 上传显式使用 `services/content/wrangler.jsonc` 中指定的项�
 2026-10-11 后台发布修复：为 Homebrew Node 的实际目录设置 PATH，并为 R2 上传显式传入包含项目账号的 Wrangler 配置。已通过真实 launchd 重跑完成新媒体上传与清单激活，发布 `edition-47a6001f8b85e023`（56 条），四个公开来源正常，媒体错误为零，X 当日额度保护继续生效。
 
 
-2026-10-11 回滚演练：线上 `edition-47a6001f8b85e023` 的 56 条内容被重建为 `rollback-cf6d201a47711f46`，保留既有下架 ID。真实激活后执行每日任务，采集正常且 `publicationHold` 阻止覆盖；随后显式恢复发布，回到原编辑版本，暂停文件已清除。两阶段部署检查均通过。18 项内容测试覆盖校验失败、媒体缺失、并发锁、上传失败、版本变更、歧义响应和不可变重试。运行证据在开发机 `~/.local/share/prompix/quality-publication-held.log`、`quality-publication-resume.log` 及内容目录的回滚报告中。
+2026-10-11 回滚演练：线上 `edition-47a6001f8b85e023` 的 56 条内容被重建为 `rollback-cf6d201a47711f46`，保留既有下架 ID。真实激活后执行每日任务，采集正常且 `publicationHold` 阻止覆盖；随后显式恢复发布，回到原编辑版本，暂停文件已清除。两阶段部署检查均通过。19 项内容测试覆盖校验失败、媒体缺失、并发锁、上传失败、版本变更、歧义响应、不可变重试，以及大小写／空格编辑必须改变发布版本。运行证据在开发机 `~/.local/share/prompix/quality-publication-held.log`、`quality-publication-resume.log` 及内容目录的回滚报告中。

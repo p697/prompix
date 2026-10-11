@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { repo, contentRoot as root, base, atomic, json, lockContent, upload, moderationSchema, currentManifest, remoteCatalog } from "./publication.ts";
+import { repo, contentRoot as root, base, atomic, json, lockContent, upload, moderationSchema, currentManifest, remoteCatalog, editionVersion } from "./publication.ts";
 import { catalogSchema, type Prompt } from "../packages/schema/catalog.ts";
 import {
   repositories,
@@ -282,10 +282,7 @@ async function run() {
       throw new Error(
         "Too few verified community previews; current release preserved",
       );
-    const contentHash = fingerprint(
-      JSON.stringify({ prompts, removedIDs: moderation.removedIDs }),
-    );
-    const version = `edition-${contentHash.slice(0, 16)}`;
+    const version = editionVersion(prompts, moderation.removedIDs);
     const latestPath = join(root, "latest.json");
     const current = await json<{ version?: string }>(latestPath, {});
     if (current.version === version && publishing) {

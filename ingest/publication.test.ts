@@ -4,7 +4,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type Catalog, type Prompt } from "../packages/schema/catalog.ts";
-import { atomic, json, lockContent, rollbackCatalog, verifyCatalog, manifestSchema, digest, base, type Manifest } from "./publication.ts";
+import { atomic, json, lockContent, rollbackCatalog, editionVersion, verifyCatalog, manifestSchema, digest, base, type Manifest } from "./publication.ts";
 import { recoverRelease, type RecoveryTransport } from "./recovery.ts";
 
 const prompt = (id: string): Prompt => ({ id, kind: "text", title: id, summary: "An original test fixture", prompt: "Write a short story about a teacup.", example: "A teacup grew wings.", tags: ["test"], model: "Any", toolURL: null, artwork: "test", previewLabel: "Test", source: { name: "Prompix", url: null, license: "Original", method: "Written for tests" }, media: null });
@@ -111,4 +111,12 @@ test("successful recovery activates last, holds daily publishing and preserves i
     assert.equal(f.getActive().sha256, active.sha256);
     assert.deepEqual(await readFile(join(f.root, "releases", active.version, "catalog.json")), firstBytes);
   } finally { await f.cleanup(); }
+});
+
+test("edition identity preserves case and spacing edits while normalizing removal order", () => {
+  const original = [prompt("keep")];
+  const version = editionVersion(original, ["b", "a"]);
+  assert.equal(version, editionVersion(original, ["a", "b", "a"]));
+  assert.notEqual(version, editionVersion([{ ...original[0], prompt: original[0].prompt.toLowerCase() }], ["a", "b"]));
+  assert.notEqual(version, editionVersion([{ ...original[0], prompt: original[0].prompt.replace("a teacup", "a  teacup") }], ["a", "b"]));
 });

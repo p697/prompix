@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { z } from "zod";
-import { catalogSchema, type Catalog } from "../packages/schema/catalog.ts";
+import { catalogSchema, type Catalog, type Prompt } from "../packages/schema/catalog.ts";
 import { download } from "./network.ts";
 
 export const repo = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -55,6 +55,11 @@ export const manifestSchema = z.object({
 }).refine(m => m.catalog === `${base}/releases/${m.version}/catalog.json`, "Invalid catalog location");
 export type Manifest = z.infer<typeof manifestSchema>;
 export function digest(bytes: Buffer) { return createHash("sha256").update(bytes).digest("hex"); }
+export function editionVersion(prompts: Prompt[], removedIDs: string[]) {
+  // Prompt deduplication normalizes text; publication identity must preserve every byte of meaning.
+  const content = JSON.stringify({ prompts, removedIDs: [...new Set(removedIDs)].sort() });
+  return `edition-${digest(Buffer.from(content)).slice(0, 16)}`;
+}
 export function verifyCatalog(manifest: Manifest, bytes: Buffer): Catalog {
   manifestSchema.parse(manifest);
   if (digest(bytes) !== manifest.sha256) throw new Error("Catalog checksum mismatch");
