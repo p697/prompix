@@ -27,7 +27,7 @@ Prompix 是一个原生 iOS Prompt 发现应用。浏览精选的文本、图片
 - 留在手边：收藏喜欢的条目。文字与已保存的缩略图可以离线查看。
 - 来源清楚：每条内容展示作者、来源和许可信息，也提供内容反馈入口。
 
-Prompix 不在 App 内生成图片、视频或 AI 回复。复制后可在合适的外部工具中使用；外部工具可能需要账号或付费。不同模型和设置会产生不同结果。原创动态研究与模型输出会分别标明。
+Prompix 不在 App 内生成图片、视频或 AI 回复。复制后可在合适的外部工具中使用；外部工具可能需要账号或付费。不同模型和设置会产生不同结果。首次联网更新后可浏览视频案例；文本、图片与原创网页示例可在首次离线打开时查看。
 
 无需创建 Prompix 账号。原生界面支持简体中文和英文，Prompt 正文保留来源语言。
 
@@ -43,13 +43,13 @@ Prompix is a native iOS home for prompts worth trying. Browse curated text, imag
 - Save favorites for later. Saved text and successfully stored thumbnails are available offline.
 - Check the author, source and license, or report a content issue.
 
-Prompix does not generate images, videos or AI responses inside the app. Use copied prompts in a suitable external tool, which may require its own account or payment. Results vary by model and settings. Original motion studies are labeled separately from model-generated output.
+Prompix does not generate images, videos or AI responses inside the app. Use copied prompts in a suitable external tool, which may require its own account or payment. Results vary by model and settings. Video examples become available after the first online update. Original text, image and website examples are available at first launch offline.
 
 No Prompix account is required. The interface supports English and Simplified Chinese; prompt content retains its original language.
 
 ## 审核说明草稿
 
-No login, purchase or subscription is required. Content updates are delivered from https://api.prompix.dev, with original bundled examples available when offline.
+No login, purchase or subscription is required. Content updates are delivered from https://api.prompix.dev, with 30 original text, image and website examples available on first launch offline. Video examples require a successful online content update; the Video channel offers a retry action before that update.
 
 Suggested review path:
 1. Open Discover and choose Text. Open a prompt, copy it, then choose Edit to change a local draft.

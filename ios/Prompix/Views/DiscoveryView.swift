@@ -20,6 +20,9 @@ struct DiscoverView: View {
     @State private var settingsPresented = false
     private let topics = ["好玩一点", "创作灵感", "日常有用"]
     private var items: [Prompt] { library.prompts.filter { PromptQuery(kind: kind, topic: topic, model: model).matches($0) } }
+    private var needsFirstVideoUpdate: Bool {
+        kind == .video && library.version.hasPrefix("studio-") && !library.prompts.contains { $0.kind == .video }
+    }
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -41,7 +44,21 @@ struct DiscoverView: View {
                     }
                     if let message = library.syncMessage { Text(message).font(.footnote).foregroundStyle(Palette.muted).padding(.horizontal, 20) }
                     if items.isEmpty {
-                        ContentUnavailableView(String(localized: "灵感还在路上"), systemImage: "sparkle", description: Text(String(localized: "试试其他分类，或回到全部精选。")))
+                        if needsFirstVideoUpdate {
+                            ContentUnavailableView {
+                                Label(String(localized: "视频灵感，联网后见"), systemImage: "play.rectangle")
+                            } description: {
+                                Text(String(localized: "首次联网更新后，就能浏览真实的视频案例。现在也可以先逛文本、图片和网页灵感。"))
+                            } actions: {
+                                Button(library.isRefreshing ? String(localized: "正在更新…") : String(localized: "检查内容更新")) {
+                                    Task { await library.refresh(force: true) }
+                                }.buttonStyle(.borderedProminent).disabled(library.isRefreshing).accessibilityIdentifier("loadVideoExamples")
+                                Button(String(localized: "先逛其他灵感")) { kind = nil; topic = nil; model = nil }
+                                    .buttonStyle(.bordered).accessibilityIdentifier("browseOtherIdeas")
+                            }
+                        } else {
+                            ContentUnavailableView(String(localized: "灵感还在路上"), systemImage: "sparkle", description: Text(String(localized: "试试其他分类，或回到全部精选。")))
+                        }
                     } else { PromptGrid(items: items).padding(.horizontal, 16) }
                     HStack { Rectangle().frame(height: 0.5); Text(String(localized: "慢慢逛，会遇见喜欢的")).font(.footnote).fixedSize(horizontal: false, vertical: true).multilineTextAlignment(.center); Rectangle().frame(height: 0.5) }
                         .foregroundStyle(Palette.muted).padding(.horizontal, 40).padding(.vertical, 24)
