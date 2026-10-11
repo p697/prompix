@@ -93,3 +93,5 @@ CI 的较旧模拟器暴露了本地视频缺失时 AVPlayer 失败回调延迟�
 中英文商店文案、审核路径及隐私数据路径已整理在 `app-store.md`。App 加入隐私 manifest，未把服务端抽样运行记录误写为完全不收集数据。Release 构建已通过签名验证并安装、启动到 iPhone Air；开发描述文件包含该设备，有效期至 2027-10-11 UTC。安装与启动记录位于 `~/.local/share/prompix/release-readiness-{install,launch}.json`。这不是最终交付构建，后续代码改动需重新签名验收。
 
 增加可重复的启动与滚动 CPU／内存测试。首次 Release 测试因默认未开启 testability 无法导入模型，改用显式 `ENABLE_TESTABILITY=YES`；随后设备测试 runner 在建立 IDE 连接前退出 code 74，尚无可用真机性能数值，不记为通过。诊断保存在 `Quality-Air-Performance-2.xcresult` 与 `air-performance-diagnostics`。
+
+本轮 CI 的慢速模拟器曾超过旧测试的 10 秒等待，但未达到播放器的 25 秒缓冲期限；验证改为等待真实期限结束后再判断成功或失败，未改变播放器超时和重试行为。
