@@ -3,7 +3,7 @@
 ## 本机运行
 
 - 任务：`dev.prompix.collect`，每天本机时间 08:00；当前 Mac 为 Asia/Tokyo。
-- 安装／升级：在已校验的 checkout 运行 `python3 scripts/install-scheduler.py`。脚本先安装独立运行目录，再原子切换 runtime 链接和重新注册 launchd。
+- 安装／升级：在已校验的 checkout 运行 `python3 scripts/install-scheduler.py`。脚本先安装独立运行目录，再原子切换 runtime 链接和重新注册 launchd；只有注册成功后才执行旧运行目录的保留策略。
 - 手动执行：`launchctl kickstart gui/$(id -u)/dev.prompix.collect`。
 - 状态：`launchctl print gui/$(id -u)/dev.prompix.collect`。
 - 日志：`~/.local/share/prompix/daily.log`，超过 1 MB 保留一份 previous。
@@ -11,7 +11,13 @@
 - 本地预览：`npm run daily`；人工发布：`npm run daily -- --publish`。
 - 下架：`npm run remove -- <id> <reason>`，再发布。不得将包含第三方内容的 JSON、媒体或日志提交到仓库。
 
-launchd 是用户任务，须登录该用户；关机时不会运行。进程锁避免并发，崩溃后的失效锁一小时后可恢复。升级前确认任务未在运行；运行目录保留上次版本以便回退。安装器把实际 Node、Wrangler 和 Git 的可执行目录写入后台 PATH；使用 Homebrew keg-only Node 时同样可被上传工具的 shebang 找到。
+launchd 是用户任务，须登录该用户；关机时不会运行。内容进程锁避免并发，崩溃后的失效锁一小时后可由内容命令恢复。升级前确认任务未在运行；安装器不会自行删除内容锁。安装器把实际 Node、Wrangler 和 Git 的可执行目录写入后台 PATH；使用 Homebrew keg-only Node 时同样可被上传工具的 shebang 找到。
+
+运行目录位于 `~/.local/share/prompix/runtimes/`。安装器与 Python 启动器共用 `runtime.lock`：采集从解析 runtime 链接到子进程退出期间持有共享锁，升级／清理持有独占锁，忙时退出并保留原目录。不要删除锁文件，也不要直接从历史运行目录启动 Node；日常运行使用上面的 launchd 命令或 `run-daily.sh`，从开发 checkout 调试仍可使用 `npm run daily`。
+
+成功升级后只保留 `runtime` 当前目录和 `runtime.previous` 指向的上一个已激活目录。清理只识别 runtimes 下数字命名、结构匹配的 Prompix 目录；未知目录、目录软链接、内容、日志及凭据均不清理。由旧启动器首次迁移时只安装锁保护、暂不删除历史目录；下一次成功升级才收敛到两个版本。安装或 launchd 注册失败时不做历史清理，恢复旧链接与启动文件，并尝试重新注册原任务；恢复失败时也不会删除仍被活动链接引用的新目录。此策略不清理内容版本、媒体和发布回滚数据。
+
+保留策略的隔离测试：`python3 -m unittest discover -s scripts -p 'test_scheduler.py' -v`。测试仅使用临时目录和模拟 npm／launchd，不安装生产任务或执行真实清理。
 
 公开 GitHub 来源使用本机 Git 的 `ls-remote` 解析默认分支，再按不可变 commit 下载文件；运行环境须有 Git。这样不依赖共享出口的匿名 REST API 额度。仓库与文件名均使用显式白名单，解析或网络失败仍保留上次快照。
 
