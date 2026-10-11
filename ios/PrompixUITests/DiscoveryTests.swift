@@ -36,6 +36,153 @@ import XCTest
         capture("air-scroll-after-measurement")
     }
 
+    func testVoiceOverDiscoveryTraversal() throws {
+        #if compiler(>=6.4)
+        guard #available(iOS 27.0, *) else {
+            throw XCTSkip("Actual VoiceOver traversal requires the iOS 27 XCUIVoiceOverService API.")
+        }
+        continueAfterFailure = true
+        let voiceOver = XCUIDevice.shared.voiceOverService
+        var speech: [String] = []
+        defer {
+            do { try voiceOver.disable() }
+            catch { XCTFail("Could not disable VoiceOver after traversal: \(error)") }
+            let transcript = XCTAttachment(string: speech.enumerated().map { "\($0.offset): \($0.element)" }.joined(separator: "\n"))
+            transcript.name = "VoiceOver discovery spoken traversal"
+            transcript.lifetime = .keepAlways
+            add(transcript)
+        }
+        if voiceOver.isEnabled { try voiceOver.disable() }
+        let card = app.buttons["prompt-gentle-tarot"]
+        XCTAssertTrue(card.waitForExistence(timeout: 10))
+        XCTAssertTrue(card.isHittable)
+        try waitForRenderingToSettle()
+
+        func normalized(_ value: String) -> String {
+            value.lowercased().filter { $0.isLetter || $0.isNumber }
+        }
+        let title = normalized("抽一张塔罗，给今天一点新视角")
+        func isCard(_ value: String) -> Bool {
+            let value = normalized(value)
+            return value.contains(title) && !value.contains("收藏")
+        }
+        func isBookmark(_ value: String) -> Bool {
+            let value = normalized(value)
+            return value.contains(title) && value.contains("收藏")
+        }
+        func reachedNavigation() -> Bool {
+            speech.contains { normalized($0).contains("prompix") }
+                && speech.contains { $0.contains("搜索") }
+                && speech.contains { $0.contains("设置") }
+        }
+
+        // This reads VoiceOver's actual output, not the broader XCTest element tree.
+        try voiceOver.enable()
+        XCTAssertTrue(voiceOver.isEnabled)
+        speech.append(try voiceOver.currentSpeech().utterance)
+        let forwardDeadline = Date().addingTimeInterval(45)
+        for _ in 0..<36 {
+            if speech.contains(where: isCard) && speech.contains(where: isBookmark) { break }
+            if Date() >= forwardDeadline { break }
+            speech.append(try voiceOver.moveForward().utterance)
+        }
+        let forwardSpeech = speech
+        XCTAssertTrue(forwardSpeech.contains(where: isCard), "VoiceOver must reach the card title as its own navigation action.")
+        XCTAssertTrue(forwardSpeech.contains(where: isBookmark), "VoiceOver must reach the card's separately labeled bookmark.")
+        if let titleIndex = forwardSpeech.firstIndex(where: isCard), let bookmarkIndex = forwardSpeech.firstIndex(where: isBookmark) {
+            XCTAssertLessThan(titleIndex, bookmarkIndex, "Read the card title before its bookmark action.")
+        }
+
+        // Enabling VoiceOver can restore a previous focus. Walk back from the card
+        // to verify the native header and toolbar actions without assuming a start index.
+        let backwardDeadline = Date().addingTimeInterval(45)
+        for _ in 0..<36 {
+            if reachedNavigation() { break }
+            if Date() >= backwardDeadline { break }
+            speech.append(try voiceOver.moveBackward().utterance)
+        }
+        XCTAssertTrue(reachedNavigation(), "VoiceOver must expose the Prompix heading, Search, and Settings actions.")
+        XCTAssertFalse(speech.contains { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }, "Focused elements must produce meaningful speech.")
+        for decoration in ["A LITTLE PERSPECTIVE", "今天，慢慢来。"] {
+            XCTAssertFalse(speech.contains { normalized($0).contains(normalized(decoration)) }, "Decorative cover text must not become a separate VoiceOver stop: \(decoration)")
+        }
+        #else
+        throw XCTSkip("Actual VoiceOver traversal requires Xcode 27 or later.")
+        #endif
+    }
+
+    private func waitForRenderingToSettle() throws {
+        let deadline = Date().addingTimeInterval(6)
+        var previous: Data?
+        var unchangedSince = Date()
+        while Date() < deadline {
+            let pixels = app.screenshot().pngRepresentation
+            if pixels != previous { previous = pixels; unchangedSince = Date() }
+            if Date().timeIntervalSince(unchangedSince) >= 0.6 { return }
+            Thread.sleep(forTimeInterval: 0.2)
+        }
+        throw NSError(domain: "PrompixRenderingTest", code: 1, userInfo: [NSLocalizedDescriptionKey: "Screen did not settle before inspection."])
+    }
+
+    func testAccessibilityAcrossMainScreens() throws {
+        continueAfterFailure = true
+        XCTAssertTrue(app.buttons["kind-text"].waitForExistence(timeout: 10))
+        try auditScreen("discovery")
+        // XCTest can expose automation-only descendants of hidden artwork.
+        // Gate the native navigation label here; inspect reading order separately.
+        XCTAssertEqual(app.buttons.matching(identifier: "prompt-gentle-tarot").count, 1)
+        XCTAssertEqual(app.buttons["prompt-gentle-tarot"].label, "抽一张塔罗，给今天一点新视角")
+        app.buttons["kind-text"].tap()
+        app.buttons["prompt-gentle-tarot"].tap()
+        try auditScreen("text-detail")
+        let report = app.descendants(matching: .any).matching(identifier: "reportContent").firstMatch
+        let contentBottom = app.buttons["copyPrompt"].frame.minY - 16
+        func sourceIsVisible() -> Bool {
+            report.exists && report.isHittable && report.frame.minY > 100 && report.frame.maxY < contentBottom
+        }
+        for _ in 0..<30 {
+            if sourceIsVisible() { break }
+            app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.7))
+                .press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.4)))
+        }
+        XCTAssertTrue(sourceIsVisible(), "Source actions must be visible above the fixed action bar before auditing")
+        try auditScreen("text-detail-source")
+        if app.buttons["detailFavorite"].label != "取消收藏" { app.buttons["detailFavorite"].tap() }
+        app.buttons["编辑后使用"].tap()
+        XCTAssertTrue(app.textViews["promptEditor"].waitForExistence(timeout: 5))
+        try auditScreen("editor")
+        app.buttons["完成"].tap()
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        app.tabBars.buttons["专题"].tap()
+        try auditScreen("collections")
+        app.tabBars.buttons["收藏"].tap()
+        try auditScreen("favorites")
+        app.tabBars.buttons["发现"].tap()
+        app.buttons["设置"].tap()
+        try auditScreen("settings")
+        app.swipeUp()
+        try auditScreen("settings-support")
+        app.buttons["完成"].tap()
+        app.buttons["searchButton"].tap()
+        try auditScreen("search")
+    }
+
+    private func auditScreen(_ name: String) throws {
+        // Existence can become true before a native push/sheet animation ends.
+        // Audit the rendered destination, not a moving overlap of two screens.
+        try waitForRenderingToSettle()
+        capture("accessibility-\(name)")
+        // Full image-based audits also inspect text printed inside media and native
+        // translucent bars; retain an opt-in diagnostic pass for manual review.
+        // Stable hit targets and element descriptions are the regression gate.
+        let types: XCUIAccessibilityAuditType = ProcessInfo.processInfo.environment["PROMPIX_FULL_ACCESSIBILITY_AUDIT"] == "1"
+            ? .all : [.hitRegion, .sufficientElementDescription]
+        try app.performAccessibilityAudit(for: types) { issue in
+            print("AUDIT \(name) \(issue.auditType) label=\(issue.element?.label ?? "nil") identifier=\(issue.element?.identifier ?? "nil")")
+            return false
+        }
+    }
+
     func testAdaptiveBrowsingAndEditing() throws {
         defer { XCUIDevice.shared.orientation = .portrait }
         XCTAssertTrue(app.buttons["kind-text"].waitForExistence(timeout: 10))

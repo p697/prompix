@@ -25,10 +25,10 @@ struct DiscoverView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
                     HStack(alignment: .firstTextBaseline) {
-                        Text(String(localized: "灵感，随手可得。")).font(.subheadline).foregroundStyle(.secondary)
+                        Text(String(localized: "灵感，随手可得。")).font(.subheadline).foregroundStyle(Palette.muted)
                         Spacer()
-                        if !typeSize.isAccessibilitySize { Text(library.updatedAt == nil ? "STUDIO EDITION" : "DAILY FINDS").font(.system(.caption2, design: .monospaced)).tracking(1.5).foregroundStyle(.tertiary) }
-                    }.padding(.horizontal, 20).dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+                        if !typeSize.isAccessibilitySize { Text(library.updatedAt == nil ? "STUDIO EDITION" : "DAILY FINDS").font(.system(.footnote, design: .monospaced)).tracking(1.5).foregroundStyle(Palette.muted) }
+                    }.padding(.horizontal, 20)
                     KindPicker(selection: $kind)
                     HStack(spacing: 8) {
                         ScrollView(.horizontal, showsIndicators: false) {
@@ -39,19 +39,19 @@ struct DiscoverView: View {
                         }
                         modelPicker.padding(.trailing, 16)
                     }
-                    if let message = library.syncMessage { Text(message).font(.caption).foregroundStyle(.secondary).padding(.horizontal, 20) }
+                    if let message = library.syncMessage { Text(message).font(.footnote).foregroundStyle(Palette.muted).padding(.horizontal, 20) }
                     if items.isEmpty {
                         ContentUnavailableView(String(localized: "灵感还在路上"), systemImage: "sparkle", description: Text(String(localized: "试试其他分类，或回到全部精选。")))
                     } else { PromptGrid(items: items).padding(.horizontal, 16) }
-                    HStack { Rectangle().frame(height: 0.5); Text(String(localized: "慢慢逛，会遇见喜欢的")).font(.caption2).fixedSize(horizontal: false, vertical: true).multilineTextAlignment(.center); Rectangle().frame(height: 0.5) }
-                        .foregroundStyle(.tertiary).padding(.horizontal, 40).padding(.vertical, 24)
+                    HStack { Rectangle().frame(height: 0.5); Text(String(localized: "慢慢逛，会遇见喜欢的")).font(.footnote).fixedSize(horizontal: false, vertical: true).multilineTextAlignment(.center); Rectangle().frame(height: 0.5) }
+                        .foregroundStyle(Palette.muted).padding(.horizontal, 40).padding(.vertical, 24)
                 }.padding(.top, 4).padding(.bottom, 16)
             }
             .refreshable { await library.refresh(force: true) }
             .onChange(of: kind) { _, _ in model = nil }
             .navigationTitle("").navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .principal) { Text("prompix").font(.system(size: 27, weight: .semibold, design: .serif)).fixedSize().accessibilityAddTraits(.isHeader) }
+                ToolbarItem(placement: .principal) { Text("prompix").font(.system(.title, design: .serif, weight: .semibold)).fixedSize().accessibilityAddTraits(.isHeader) }
                 ToolbarItem(placement: .topBarTrailing) { Button(String(localized: "搜索"), systemImage: "magnifyingglass") { searchPresented = true }.accessibilityIdentifier("searchButton") }
                 ToolbarItem(placement: .topBarTrailing) { Button(String(localized: "设置"), systemImage: "slider.horizontal.3") { settingsPresented = true } }
             }
@@ -74,16 +74,16 @@ struct DiscoverView: View {
                     Image(systemName: "line.3.horizontal.decrease").font(.system(size: 22)).frame(width: 44, height: 44)
                 } else {
                     Label(model ?? String(localized: "模型"), systemImage: "line.3.horizontal.decrease")
-                        .font(.caption).lineLimit(1).padding(.horizontal, 12).frame(maxWidth: 120, minHeight: 44)
+                        .font(.footnote).lineLimit(1).padding(.horizontal, 12).frame(maxWidth: 120, minHeight: 44)
                 }
-            }.foregroundStyle(model == nil ? Color.secondary : Palette.accent)
+            }.foregroundStyle(model == nil ? Palette.muted : Palette.accent)
                 .background(Palette.soft, in: Capsule()).contentShape(Capsule())
         }.accessibilityLabel(model ?? String(localized: "全部模型"))
     }
     private func topicButton(_ value: String?, _ title: String) -> some View {
         Button { topic = value } label: {
-            Text(title).font(.caption.weight(topic == value ? .semibold : .regular))
-                .foregroundStyle(topic == value ? Color(uiColor: .systemBackground) : .secondary)
+            Text(title).font(.footnote.weight(topic == value ? .semibold : .regular))
+                .foregroundStyle(topic == value ? Color(uiColor: .systemBackground) : Palette.muted)
                 .padding(.horizontal, 15).padding(.vertical, 9)
                 .background(topic == value ? Color.primary : Palette.soft, in: Capsule())
                 .frame(minHeight: 44).contentShape(Rectangle())
@@ -94,8 +94,11 @@ struct DiscoverView: View {
 struct PromptGrid: View {
     let items: [Prompt]
     @Environment(\.dynamicTypeSize) private var typeSize
+    @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
     var body: some View {
-        if typeSize.isAccessibilitySize {
+        // Separate masonry columns read column-first. A linear native stack
+        // preserves the editorial sequence when navigating with VoiceOver.
+        if typeSize.isAccessibilitySize || voiceOverEnabled {
             LazyVStack(spacing: 24) { ForEach(items) { PromptCard(item: $0) } }
         } else {
             HStack(alignment: .top, spacing: 12) {
@@ -106,8 +109,8 @@ struct PromptGrid: View {
     }
     private func column(_ parity: Int) -> some View {
         LazyVStack(spacing: 23) {
-            ForEach(Array(items.enumerated()).filter { $0.offset % 2 == parity }, id: \.element.id) { index, item in
-                PromptCard(item: item).accessibilitySortPriority(Double(items.count - index))
+            ForEach(Array(items.enumerated()).filter { $0.offset % 2 == parity }, id: \.element.id) { _, item in
+                PromptCard(item: item)
             }
         }.frame(maxWidth: .infinity)
     }
@@ -117,28 +120,29 @@ struct PromptCard: View {
     let item: Prompt
     @Environment(Library.self) private var library
     @State private var savedFeedback = false
+    @Environment(\.dynamicTypeSize) private var typeSize
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             NavigationLink(value: item) {
                 VStack(alignment: .leading, spacing: 10) {
                     Artwork(item: item).aspectRatio(ratio, contentMode: .fit).clipShape(RoundedRectangle(cornerRadius: 12))
                     Text(item.title).font(.system(.subheadline, weight: .medium)).foregroundStyle(.primary)
-                        .lineSpacing(3).lineLimit(3).multilineTextAlignment(.leading).padding(.horizontal, 2)
+                        .lineSpacing(3).lineLimit(typeSize.isAccessibilitySize ? nil : 3).multilineTextAlignment(.leading).padding(.horizontal, 2)
                 }.contentShape(Rectangle())
-            }.buttonStyle(.plain).accessibilityIdentifier("prompt-\(item.id)")
+            }.buttonStyle(.plain).accessibilityLabel(item.title).accessibilityIdentifier("prompt-\(item.id)")
             HStack(spacing: 4) {
-                Image(systemName: item.kind.symbol).font(.system(size: 10))
-                Text(item.kind.title).font(.caption2)
+                Image(systemName: item.kind.symbol).font(.system(size: 10)).accessibilityHidden(true)
+                Text(item.kind.title).font(.footnote)
                 Spacer(minLength: 0)
                 Button {
                     if library.toggle(item) { savedFeedback.toggle() }
                 } label: {
                     Image(systemName: library.isSaved(item) ? "bookmark.fill" : "bookmark")
-                        .font(.system(size: 13)).foregroundStyle(library.isSaved(item) ? Palette.accent : .secondary)
+                        .font(.system(size: 13)).foregroundStyle(library.isSaved(item) ? Palette.accent : Palette.muted)
                         .frame(width: 44, height: 44).contentShape(Rectangle())
                 }.buttonStyle(.plain).accessibilityLabel(library.isSaved(item) ? String(localized: "取消收藏：\(item.title)") : String(localized: "收藏：\(item.title)"))
                     .sensoryFeedback(.selection, trigger: savedFeedback)
-            }.foregroundStyle(.secondary).padding(.leading, 2).padding(.top, 0).padding(.bottom, -10)
+            }.foregroundStyle(Palette.muted).padding(.leading, 2).padding(.top, 0).padding(.bottom, -10)
         }
     }
     private var ratio: CGFloat {
@@ -159,7 +163,7 @@ struct SearchView: View {
                 VStack(alignment: .leading, spacing: 18) {
                     KindPicker(selection: $kind)
                     if query.isEmpty {
-                        Text(String(localized: "从一个小小的念头开始")).font(.subheadline).foregroundStyle(.secondary).padding(.horizontal, 20)
+                        Text(String(localized: "从一个小小的念头开始")).font(.subheadline).foregroundStyle(Palette.muted).padding(.horizontal, 20)
                         HStack { ForEach(["塔罗", "网站", "电影"], id: \.self) { term in Button(NSLocalizedString(term, comment: "Suggested search")) { query = term }.buttonStyle(.bordered).controlSize(.large) } }.padding(.horizontal, 20)
                     }
                     if results.isEmpty { ContentUnavailableView.search(text: query) }
@@ -182,12 +186,12 @@ struct FavoritesView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
-                    Text(String(localized: "留住灵感，等一个想试试的时刻。")).font(.subheadline).foregroundStyle(.secondary).padding(.horizontal, 20)
+                    Text(String(localized: "留住灵感，等一个想试试的时刻。")).font(.subheadline).foregroundStyle(Palette.muted).padding(.horizontal, 20)
                     KindPicker(selection: $kind)
                     if !images.offlineFailures.isEmpty {
                         Button { Task { if let urls = library.savedImageURLs { await images.keepOffline(urls) } } } label: {
                             Label(String(localized: "部分收藏预览尚未下载，轻点重试"), systemImage: "arrow.down.circle")
-                                .font(.caption).foregroundStyle(.secondary)
+                                .font(.footnote).foregroundStyle(Palette.muted)
                         }.padding(.horizontal, 20)
                     }
                     let items = library.favorites.filter { PromptQuery(text: query, kind: kind).matches($0) }

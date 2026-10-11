@@ -82,7 +82,7 @@ struct RemoteImage: View {
             Palette.soft
             if let image { Image(uiImage: image).resizable().scaledToFit() }
             else if failed {
-                Button { attempt += 1 } label: { Image(systemName: "arrow.clockwise").font(.title3.weight(.light)).foregroundStyle(.secondary).frame(width: 44, height: 44) }
+                Button { attempt += 1 } label: { Image(systemName: "arrow.clockwise").font(.title3.weight(.light)).foregroundStyle(Palette.muted).frame(width: 44, height: 44) }
                     .accessibilityLabel(String(localized: "重新加载图片"))
             } else { ProgressView().controlSize(.small) }
         }.task(id: "\(url)-\(attempt)") {

@@ -41,17 +41,17 @@ struct PromptDetail: View {
                         ViewThatFits(in: .horizontal) {
                             HStack {
                                 Label(item.kind.title, systemImage: item.kind.symbol)
-                                Text("·")
+                                Text("·").accessibilityHidden(true)
                                 Text(item.model)
                             }.fixedSize()
                             VStack(alignment: .leading, spacing: 6) {
                                 Label(item.kind.title, systemImage: item.kind.symbol)
                                 Text(item.model).fixedSize(horizontal: false, vertical: true)
                             }
-                        }.font(.caption).foregroundStyle(.secondary)
+                        }.font(.footnote).foregroundStyle(Palette.muted)
                         Text(item.title).font(.title2.weight(.semibold)).lineSpacing(5).fixedSize(horizontal: false, vertical: true)
-                        Text(item.summary).font(.subheadline).lineSpacing(5).foregroundStyle(.secondary)
-                        Text(item.previewLabel).font(.caption2).foregroundStyle(.tertiary)
+                        Text(item.summary).font(.subheadline).lineSpacing(5).foregroundStyle(Palette.muted)
+                        Text(item.previewLabel).font(.footnote).foregroundStyle(Palette.muted)
                     }
                     Divider()
                     VStack(alignment: .leading, spacing: 10) {
@@ -63,37 +63,36 @@ struct PromptDetail: View {
                         HStack {
                             Eyebrow(text: "THE PROMPT")
                             Spacer()
-                            Button(String(localized: "编辑"), systemImage: "square.and.pencil") { editorPresented = true }.font(.subheadline)
+                            Button { editorPresented = true } label: { Label(String(localized: "编辑"), systemImage: "square.and.pencil").frame(minWidth: 44, minHeight: 44).contentShape(Rectangle()) }.font(.subheadline)
                                 .accessibilityIdentifier("editPrompt")
                         }
                         Text(item.prompt).font(.system(.subheadline)).lineSpacing(6).textSelection(.enabled)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }.padding(20).background(Palette.soft, in: RoundedRectangle(cornerRadius: 18))
                     if WebsiteExamples.files[item.id] != nil {
-                        Button(String(localized: "打开原创网页示例"), systemImage: "safari") { webPresented = true }.accessibilityIdentifier("webExample")
+                        Button { webPresented = true } label: { Label(String(localized: "打开原创网页示例"), systemImage: "safari").frame(minHeight: 44).contentShape(Rectangle()) }.accessibilityIdentifier("webExample")
                     }
                     if let toolURL = item.toolURL {
                         Link(destination: toolURL) {
                             HStack {
                                 VStack(alignment: .leading, spacing: 5) {
                                     Text(String(localized: "带着灵感，去试试")).font(.subheadline.weight(.medium))
-                                    Text(String(localized: "复制后打开工具，粘贴使用")).font(.caption).foregroundStyle(.secondary)
+                                    Text(String(localized: "复制后打开工具，粘贴使用")).font(.footnote).foregroundStyle(Palette.muted)
                                 }; Spacer(); Image(systemName: "arrow.up.right")
                             }.padding(.vertical, 5)
                         }
                     }
-                    if let demo = item.media?.demoURL { Link(String(localized: "打开网页示例"), destination: demo).font(.subheadline) }
+                    if let demo = item.media?.demoURL { Link(destination: demo) { Text(String(localized: "打开网页示例")).font(.subheadline).frame(minHeight: 44).contentShape(Rectangle()) } }
                     VStack(alignment: .leading, spacing: 8) {
-                        HStack { Text(item.source.author ?? item.source.name).font(.caption.weight(.medium)); Spacer(); Text(item.source.method).font(.caption).foregroundStyle(.secondary) }
-                        Text("\(item.source.license) · \(item.previewLabel)").font(.caption2).foregroundStyle(.secondary)
-                        if let repository = item.source.repository { Link(String(localized: "收录于 \(item.source.name)"), destination: repository).font(.caption) }
-                        if let source = item.source.url { Link(String(localized: "查看原始来源 ↗"), destination: source).font(.caption) }
-                        Link(String(localized: "反馈这条内容"), destination: SupportLinks.url(.report, contentID: item.id))
-                            .font(.caption).frame(minHeight: 44).accessibilityIdentifier("reportContent")
+                        HStack { Text(item.source.author ?? item.source.name).font(.footnote.weight(.medium)); Spacer(); Text(item.source.method).font(.footnote).foregroundStyle(Palette.muted) }
+                        Text("\(item.source.license) · \(item.previewLabel)").font(.footnote).foregroundStyle(Palette.muted)
+                        if let repository = item.source.repository { Link(destination: repository) { Text(String(localized: "收录于 \(item.source.name)")).font(.footnote).frame(minHeight: 44).contentShape(Rectangle()) } }
+                        if let source = item.source.url { Link(destination: source) { Text(String(localized: "查看原始来源 ↗")).font(.footnote).frame(minHeight: 44).contentShape(Rectangle()) } }
+                        Link(destination: SupportLinks.url(.report, contentID: item.id)) { Text(String(localized: "反馈这条内容")).font(.footnote).frame(minHeight: 44).contentShape(Rectangle()) }.accessibilityIdentifier("reportContent")
                     }
                     if !related.isEmpty {
                         Divider()
-                        HStack { Text(String(localized: "顺着灵感，再逛一点")).font(.headline); Spacer(); Image(systemName: "arrow.down.right").foregroundStyle(.secondary) }
+                        HStack { Text(String(localized: "顺着灵感，再逛一点")).font(.headline); Spacer(); Image(systemName: "arrow.down.right").foregroundStyle(Palette.muted) }
                         PromptGrid(items: related)
                     }
                 }.padding(.horizontal, 22)
@@ -103,11 +102,11 @@ struct PromptDetail: View {
         .toolbar(.hidden, for: .tabBar)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                ShareLink(item: "\(item.title)\n\n\(item.prompt)\n\n\(String(localized: "来自")) \(item.source.author ?? item.source.name) · \(item.source.license)\n\(item.source.url?.absoluteString ?? "https://prompix.dev")") { Label(String(localized: "分享"), systemImage: "square.and.arrow.up") }
+                ShareLink(item: "\(item.title)\n\n\(item.prompt)\n\n\(String(localized: "来自")) \(item.source.author ?? item.source.name) · \(item.source.license)\n\(item.source.url?.absoluteString ?? "https://prompix.dev")") { Label(String(localized: "分享"), systemImage: "square.and.arrow.up").frame(minWidth: 44, minHeight: 44) }
                     .accessibilityIdentifier("sharePrompt")
             }
             ToolbarItem(placement: .topBarTrailing) {
-                Button { library.toggle(item) } label: { Image(systemName: library.isSaved(item) ? "bookmark.fill" : "bookmark") }
+                Button { library.toggle(item) } label: { Image(systemName: library.isSaved(item) ? "bookmark.fill" : "bookmark").frame(minWidth: 44, minHeight: 44) }
                     .accessibilityLabel(library.isSaved(item) ? String(localized: "取消收藏") : String(localized: "收藏 Prompt")).accessibilityIdentifier("detailFavorite")
             }
         }
@@ -154,13 +153,13 @@ struct PromptEditor: View {
             VStack(alignment: .leading, spacing: 12) {
                 VStack(alignment: .leading, spacing: 8) {
                     Text(typeSize.isAccessibilitySize ? String(localized: "原文会保留。") : String(localized: "写进你的想法，变成自己的版本。原始 Prompt 会保留。"))
-                        .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                        .font(.footnote).foregroundStyle(Palette.muted).fixedSize(horizontal: false, vertical: true)
                     HStack {
                         Label(saved ? String(localized: "已保存到此设备") : library.error == nil ? String(localized: "正在保存…") : String(localized: "尚未保存，可先复制保留"), systemImage: saved ? "checkmark.circle" : "circle.dotted")
-                            .font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true).accessibilityIdentifier("draftStatus")
+                            .font(.footnote).foregroundStyle(Palette.muted).fixedSize(horizontal: false, vertical: true).accessibilityIdentifier("draftStatus")
                         if !typeSize.isAccessibilitySize {
                             Spacer()
-                            Text(String(localized: "\(text.count) 字符")).font(.caption2.monospacedDigit()).foregroundStyle(.secondary)
+                            Text(String(localized: "\(text.count) 字符")).font(.footnote.monospacedDigit()).foregroundStyle(Palette.muted)
                         }
                     }
                 }.padding(.horizontal, 20).padding(.top, 14)
@@ -175,7 +174,7 @@ struct PromptEditor: View {
                                 .disabled(text == item.prompt)
                         } label: { Label(String(localized: "编辑选项"), systemImage: "ellipsis.circle") }
                     }
-                    ToolbarItem(placement: .primaryAction) { ShareLink(item: text) { Label(String(localized: "分享"), systemImage: "square.and.arrow.up") }.disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) }
+                    ToolbarItem(placement: .primaryAction) { ShareLink(item: text) { Label(String(localized: "分享"), systemImage: "square.and.arrow.up").frame(minWidth: 44, minHeight: 44) }.disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) }
                 }
                 .safeAreaInset(edge: .bottom) {
                     Button {
@@ -300,7 +299,7 @@ struct MovieView: View {
                         .accessibilityIdentifier(playback.hasPlayed ? "playingVideo" : "loadingVideo")
                         .overlay { if playback.loading { ProgressView(String(localized: "正在加载视频…")).padding(16).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14)).allowsHitTesting(false) } }
                 }
-                Text(caption).font(.caption).foregroundStyle(.secondary).padding(.horizontal, 20)
+                Text(caption).font(.footnote).foregroundStyle(Palette.muted).padding(.horizontal, 20)
             }.frame(maxWidth: .infinity, maxHeight: .infinity).background(.black).navigationTitle(String(localized: "动态灵感")).navigationBarTitleDisplayMode(.inline)
                 .toolbar { ToolbarItem(placement: .confirmationAction) { Button(String(localized: "完成")) { dismiss() } } }
                 .onAppear { playback.start(url: url) }
@@ -372,7 +371,7 @@ private struct ImagePage: View {
             if offlinePreview {
                 Button { attempt += 1 } label: {
                     Label(String(localized: "当前为离线预览 · 轻点加载清晰图片"), systemImage: "arrow.clockwise")
-                        .font(.caption).padding(12).foregroundStyle(.white).background(.black.opacity(0.7), in: Capsule())
+                        .font(.footnote).padding(12).foregroundStyle(.white).background(.black.opacity(0.7), in: Capsule())
                 }.padding(.bottom, 40).accessibilityIdentifier("loadFullImage")
             }
         }.task(id: "\(url?.absoluteString ?? name)-\(attempt)-\(active)") {

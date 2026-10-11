@@ -2,6 +2,7 @@ import SwiftUI
 
 struct Artwork: View {
     let item: Prompt
+    var compact = false
     var body: some View {
         GeometryReader { proxy in
             ZStack {
@@ -29,8 +30,8 @@ struct Artwork: View {
                         Spacer()
                     }.padding(12) }
                 }
-            }.frame(width: proxy.size.width, height: proxy.size.height).clipped()
-        }.accessibilityHidden(true)
+            }.frame(width: proxy.size.width, height: proxy.size.height).clipped().accessibilityHidden(true)
+        }.accessibilityElement(children: .ignore).accessibilityHidden(true)
     }
     private func communityArtwork(size: CGSize) -> some View {
         ZStack {
@@ -62,10 +63,10 @@ struct Artwork: View {
                     Image(systemName: "arrow.up.right").font(.system(size: 12, weight: .light))
                 }
                 Spacer(minLength: 0)
-                Text(cover.text).font(.system(size: min(size.width * 0.15, 32), weight: .regular, design: .serif))
+                Text(cover.text).font(.system(size: min(size.width * (compact ? 0.115 : 0.15), 32), weight: .regular, design: .serif))
                     .lineSpacing(5).fixedSize(horizontal: false, vertical: true)
                 Spacer(minLength: 0)
-                Text(cover.eyebrow).font(.system(size: max(7, size.width * 0.038), design: .monospaced)).tracking(1.1)
+                if !compact { Text(cover.eyebrow).font(.system(size: max(7, size.width * 0.038), design: .monospaced)).tracking(1.1) }
             }.foregroundStyle(palette.1).padding(size.width * 0.12)
         }
     }
@@ -89,7 +90,7 @@ struct Artwork: View {
                 Image(systemName: item.artwork == "tarot" ? "sparkle" : item.artwork == "story" ? "moon" : "asterisk").font(.system(size: min(size.width * 0.23, size.height * 0.20), weight: .ultraLight))
                 Text(copy.1).font(.system(size: min(size.width * 0.14, size.height * 0.12), weight: .regular, design: .serif)).lineSpacing(5).lineLimit(nil).fixedSize(horizontal: false, vertical: true)
                 Spacer(minLength: 0)
-                Text(copy.2).font(.system(size: max(7, size.width * 0.039), design: .monospaced)).tracking(1.1)
+                if !compact { Text(copy.2).font(.system(size: max(7, size.width * 0.039), design: .monospaced)).tracking(1.1) }
             }.foregroundStyle(ink).padding(size.width * 0.12)
         }
     }
