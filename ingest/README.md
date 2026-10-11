@@ -61,11 +61,15 @@ previous archive. To inspect separately from the active pipeline, set
 
 Every archive item requires `npm run review` before entering an edition. Inspect
 the actual clip and a representative poster; a successfully fetched MP4 is not
-an editorial approval. The daily job merges current source records first, using
-stable original-post IDs and prompt fingerprints to avoid duplicates. Current
-text changes invalidate older editorial fingerprints; existing removal IDs still
-apply. The video channel admits up to 12 eligible examples. Watch-page links are
-never treated as downloadable videos, and third-party material stays outside Git.
+an editorial approval. The daily job resolves current source records by stable
+original-post ID before filtering or deduplicating eligible content. Current
+posts with missing media remain drafts, preserving their text fingerprint. An
+unchanged draft may use the complete archived case, retaining the pinned archive
+provenance and editorial requirement. A changed current prompt blocks that older
+case even when the current post has only a watch-page link. Reviewing text cannot
+make a missing clip/poster pair publishable; existing removal IDs still apply.
+The video channel admits up to 12 eligible examples. Watch-page links are never
+treated as downloadable videos, and third-party material stays outside Git.
 
 
 ## Release recovery
