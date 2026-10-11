@@ -9,8 +9,43 @@ import XCTest
         app.launch()
     }
     func capture(_ name: String) {
-        let shot = XCTAttachment(screenshot: app.screenshot())
+        let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         shot.name = name; shot.lifetime = .keepAlways; add(shot)
+    }
+    func testAdaptiveBrowsingAndEditing() throws {
+        defer { XCUIDevice.shared.orientation = .portrait }
+        XCTAssertTrue(app.buttons["kind-text"].waitForExistence(timeout: 10))
+        capture("20-adaptive-discovery")
+        try app.performAccessibilityAudit(for: [.hitRegion, .sufficientElementDescription])
+        app.buttons["kind-text"].tap()
+        let card = app.buttons["prompt-gentle-tarot"]
+        for _ in 0..<5 { if card.isHittable { break }; app.swipeUp() }
+        XCTAssertTrue(card.isHittable); card.tap()
+        XCTAssertTrue(app.buttons["copyPrompt"].waitForExistence(timeout: 5))
+        capture("21-adaptive-detail")
+        app.buttons["copyPrompt"].tap()
+        XCTAssertTrue(app.buttons["copyPrompt"].label.contains("已复制"))
+        app.buttons["编辑后使用"].tap()
+        XCTAssertTrue(app.textViews["promptEditor"].waitForExistence(timeout: 5))
+        capture("22-adaptive-editor")
+        XCTAssertTrue(app.buttons["copyEditedPrompt"].isHittable)
+        app.buttons["copyEditedPrompt"].tap()
+        XCTAssertTrue(app.buttons["copyEditedPrompt"].label.contains("已复制"))
+        app.buttons["完成"].tap()
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        app.tabBars.buttons["专题"].tap()
+        capture("23-adaptive-collections")
+        app.buttons["collection-play"].tap()
+        let collectionCard = app.buttons["prompt-gentle-tarot"]
+        for _ in 0..<5 { if collectionCard.isHittable { break }; app.swipeUp() }
+        XCTAssertTrue(collectionCard.isHittable)
+        capture("25-collection-detail")
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        XCUIDevice.shared.orientation = .landscapeLeft
+        let landscape = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in self.app.frame.width > self.app.frame.height }, object: app)
+        XCTAssertEqual(XCTWaiter.wait(for: [landscape], timeout: 5), .completed)
+        capture("24-landscape-collections")
+        XCUIDevice.shared.orientation = .portrait
     }
     func testFourKindsCopyEditSaveAndSearch() {
         XCTAssertTrue(app.buttons["kind-text"].waitForExistence(timeout: 10))
