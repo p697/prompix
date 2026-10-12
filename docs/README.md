@@ -12,6 +12,7 @@ Prompix 是开源、免费的多模态 Prompt 集合 App。用户像逛手机淘
 | [design-research-2026-10.md](design-research-2026-10.md) | Apple 官方案例、Cosmos 与原生交互实施依据 |
 | [product.md](product.md) | 产品定位、四类内容、发现体验、首版边界 |
 | [tech-plan.md](tech-plan.md) | 原生客户端、内容协议、轻量采集、静态发布 |
+| [content-protocol-v2.md](content-protocol-v2.md) | 按需语言分发的协议与迁移边界，尚未启用线上或客户端 |
 | [app-store.md](app-store.md) | 九语言商店文案草稿、审核路径、隐私申报依据与待办 |
 | [quality-release.md](quality-release.md) | 持续目标、完整交付的质量关口与完成证据 |
 | [roadmap.md](roadmap.md) | 设计关口、模拟器开发、真机交付、上架与分工 |

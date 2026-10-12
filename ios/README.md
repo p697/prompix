@@ -1,6 +1,6 @@
 # Prompix for iOS
 
-Native SwiftUI app, iOS 17+. Version 0.3.0 added creator discovery, Agent Skills and internationalization to the four Prompt kinds and was installed on the user's requested test phone. The current 0.3.1 work adopts the [Granola-inspired paper design](../docs/design-granola-2026-10.md), keeps the unfiltered Discover page's creator entry visible with an older cache, and makes catalog updates observable and retryable. Validate this iteration in the simulator; a further phone installation requires a user request. The published edition contains 345 items in all nine content locales. See [release goals](../docs/next-release.md) for remaining gates.
+Native SwiftUI app, iOS 17+. Version 0.3.0 added creator discovery, Agent Skills and internationalization to the four Prompt kinds and was installed on the user's requested test phone. The current 0.3.1 work adopts the [Granola-inspired paper design](../docs/design-granola-2026-10.md), keeps the unfiltered Discover page's creator entry visible with an older cache, and makes catalog updates observable and retryable. Validate this iteration in the simulator; a further phone installation requires a user request. The published edition contains 346 items in all nine content locales. See [release goals](../docs/next-release.md) for remaining gates.
 
 Open `Prompix.xcodeproj`, choose the Prompix scheme, then run on an iPhone simulator. No third-party Swift dependencies. The app downloads verified editions from api.prompix.dev and falls back to bundled content offline.
 
