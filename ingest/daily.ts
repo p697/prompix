@@ -1,3 +1,4 @@
+import { preparePublisherSkills } from "./publisher-skill-daily.ts";
 import { prepareXAvailability, filterXAvailability, assertXAvailability } from "./x-availability.ts";
 import { mkdir, readFile, writeFile, rm } from "node:fs/promises";
 import { createHash } from "node:crypto";
@@ -116,7 +117,9 @@ async function run() {
       return;
     }
     if (publication?.held !== undefined) { report.publicationHold = publication.held; return; }
-    const all: Candidate[] = [...communitySkills.candidates];
+    const publisherSkills = await preparePublisherSkills(root);
+    report.sources["publisher-skills"] = publisherSkills.report;
+    const all: Candidate[] = [...communitySkills.candidates, ...publisherSkills.candidates];
     const creatorsPath = join(root, "creators.json");
     let creators = await json<CreatorCache>(creatorsPath, {});
     for (const source of [

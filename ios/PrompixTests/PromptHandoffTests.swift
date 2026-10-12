@@ -46,6 +46,22 @@ final class PromptHandoffTests: XCTestCase {
         unpinned.contentType = "skill"; unpinned.skill = prompt.skill
         XCTAssertNil(PromptDestination.installationCommand(for: unpinned))
     }
+    func testOfficialPublisherSkillsCopyTheirExactReviewedPackage() {
+        let revision = String(repeating: "c", count: 40)
+        for (repository, directory, name) in [
+            ("https://github.com/expo/skills", "plugins/expo/skills/expo-native-ui", "expo-native-ui"),
+            ("https://github.com/supabase/agent-skills", "skills/supabase-postgres-best-practices", "supabase-postgres-best-practices")
+        ] {
+            var prompt = item(revision: revision)
+            prompt.contentType = "skill"
+            let url = "\(repository)/tree/\(revision)/\(directory)"
+            prompt.skill = .init(name: name, description: "Original test metadata", format: "agent-skills", entrypoint: "SKILL.md", repository: URL(string: repository)!, directory: directory, installURL: URL(string: url)!)
+            XCTAssertEqual(PromptDestination.installationCommand(for: prompt), "DISABLE_TELEMETRY=1 npx skills add '\(url)' --skill '\(name)'")
+            prompt.skill = .init(name: name, description: "Original test metadata", format: "agent-skills", entrypoint: "SKILL.md", repository: URL(string: repository)!, directory: directory, installURL: URL(string: "\(repository)/tree/main/\(directory)")!)
+            XCTAssertNil(PromptDestination.installationCommand(for: prompt))
+        }
+    }
+
     func testUnverifiedSkillCannotGenerateExecutableInstallText() {
         var prompt = item(revision: String(repeating: "b", count: 40))
         prompt.contentType = "skill"

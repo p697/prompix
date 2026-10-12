@@ -458,6 +458,53 @@ import XCTest
         app.buttons["copyInstallCommand"].tap()
     }
 
+    func testPublisherSkillPackages() throws {
+        guard ProcessInfo.processInfo.environment["PROMPIX_PUBLISHER_ACCEPTANCE"] == "1" else {
+            throw XCTSkip("Requires live reviewed publisher packages on the dedicated simulator.")
+        }
+        let directory = try acceptanceDirectory()
+        let drafts = try? Data(contentsOf: directory.appendingPathComponent("drafts.json"))
+        for id in ["skill-publisher-expo-expo-ui", "skill-publisher-supabase-supabase"] {
+            launch(online: true)
+            let downloaded = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+                guard let current = try? self.acceptanceDirectory(),
+                      let catalog = try? self.readSnapshot(CatalogSnapshot.self, from: current, file: "catalog.json") else { return false }
+                return catalog.prompts.contains { $0.id == id }
+            }, object: nil)
+            XCTAssertEqual(XCTWaiter.wait(for: [downloaded], timeout: 90), .completed)
+            let bytes = try Data(contentsOf: try acceptanceDirectory().appendingPathComponent("catalog.json"))
+            let catalog = try XCTUnwrap(JSONSerialization.jsonObject(with: bytes) as? [String: Any])
+            let prompts = try XCTUnwrap(catalog["prompts"] as? [[String: Any]])
+            let target = try XCTUnwrap(prompts.first { $0["id"] as? String == id })
+            let title = try XCTUnwrap(target["title"] as? String)
+            let skill = try XCTUnwrap(target["skill"] as? [String: Any])
+            let files = try XCTUnwrap(skill["files"] as? [String])
+            XCTAssertGreaterThan(files.count, 1)
+            app.buttons["searchButton"].tap()
+            let search = app.searchFields.firstMatch
+            XCTAssertTrue(search.waitForExistence(timeout: 5)); search.tap(); search.typeText(title)
+            let card = app.scrollViews["searchResults"].buttons["prompt-\(id)"]
+            reveal(card); card.tap()
+            XCTAssertTrue(app.buttons["usePrompt"].waitForExistence(timeout: 5))
+            capture("publisher-\(id)-detail")
+            let inventory = app.buttons["skillFiles"]
+            reveal(inventory); inventory.tap()
+            reveal(app.staticTexts[try XCTUnwrap(files.last)])
+            XCTAssertTrue(app.staticTexts["SKILL.md"].exists)
+            XCTAssertTrue(app.descendants(matching: .any)["skillSource"].exists)
+            capture("publisher-\(id)-files")
+            app.buttons["usePrompt"].tap()
+            let copy = app.buttons["copyInstallCommand"]
+            XCTAssertTrue(copy.waitForExistence(timeout: 5)); copy.tap()
+            XCTAssertTrue(copy.label.contains("已复制"))
+            let settledAt = Date().addingTimeInterval(0.7)
+            XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in Date() >= settledAt }, object: nil)], timeout: 3), .completed)
+            capture("publisher-\(id)-installation")
+            XCTAssertEqual(try? Data(contentsOf: try acceptanceDirectory().appendingPathComponent("drafts.json")), drafts)
+            app.terminate()
+        }
+    }
+
     func testIndependentXImageAndVideoJourney() throws {
         guard ProcessInfo.processInfo.environment["PROMPIX_NATIVE_X_ACCEPTANCE"] == "1" else {
             throw XCTSkip("Requires a published native X image and video, with a backed-up simulator container.")
