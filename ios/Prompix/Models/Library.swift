@@ -253,7 +253,7 @@ enum CatalogSyncState: Equatable, Sendable {
         // A user language selection supersedes an automatic update; its old result
         // must not replace this selection when the network returns out of order.
         cancelRefresh()
-        return await startRefresh(requestedLocales: Array(Set([ContentLanguage.preferred, locale])), target: snapshot,
+        return await startRefresh(requestedLocales: [locale], target: snapshot,
                                   checkLatest: false, session: session, now: Date())
     }
 
@@ -285,6 +285,7 @@ enum CatalogSyncState: Equatable, Sendable {
     private func performRefresh(attempt: UUID, requestedLocales: [String], target: Prompt?, checkLatest: Bool, session: URLSession) async -> Bool {
         defer {
             if refreshID == attempt { isRefreshing = false; refreshID = nil; refreshTask = nil; refreshingLanguage = false }
+            languageCache.pruneInactiveArtifacts()
         }
         do {
             try verifyRefreshOwner(attempt, target: target)
@@ -304,6 +305,7 @@ enum CatalogSyncState: Equatable, Sendable {
             }
             syncState = .installing
             let staged = try await Self.stageLanguageEdition(edition, cache: languageCache, retainingIndex: languagePackIndex)
+            defer { staged.releaseArtifacts() }
             try verifyRefreshOwner(attempt, target: target)
             // Staging repairs damaged artifacts, but a healthy unchanged edition
             // needs no active-pointer or personal-store transaction.
@@ -335,13 +337,15 @@ enum CatalogSyncState: Equatable, Sendable {
     private nonisolated static func stageLanguageEdition(_ edition: LanguagePackEdition, cache: LanguagePackCache,
                                                          retainingIndex: LanguagePackCache.Index?) async throws -> LanguagePackCache.Staged {
         try Task.checkCancellation()
-        let staged = try cache.stage(edition, retainingIndex: retainingIndex)
-        try Task.checkCancellation()
-        return staged
+        // Return the lease even if cancellation arrived during staging, so the
+        // caller can release it and sweep safely after checking ownership.
+        return try cache.stage(edition, retainingIndex: retainingIndex)
     }
     func installLanguagePacks(_ edition: LanguagePackEdition) throws {
         guard !storageRecoveryPending else { throw CocoaError(.fileWriteUnknown) }
+        defer { languageCache.pruneInactiveArtifacts() }
         let staged = try languageCache.stage(edition, retainingIndex: languagePackIndex)
+        defer { staged.releaseArtifacts() }
         try commitLanguageEdition(edition, staged: staged)
         // Explicit installs also supersede a download whose source text happens
         // to match. Its older manifest must not undo this edition's revocations.

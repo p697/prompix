@@ -51,6 +51,35 @@ final class LanguagePackCacheTests: XCTestCase {
         return result
     }
 
+    private func revisedFixture(_ fixture: Fixture, version: String) throws -> Fixture {
+        var result = fixture
+        result.base = try edit(result.base) { base in
+            base["version"] = version
+            var prompts = base["prompts"] as! [[String: Any]]
+            prompts[2]["example"] = "Original example for \(version)"; base["prompts"] = prompts
+        }
+        let baseHash = digest(result.base), baseCount = result.base.count
+        result.manifest = try edit(result.manifest) { manifest in
+            manifest["version"] = version
+            var base = manifest["base"] as! [String: Any]
+            base["sha256"] = baseHash; base["byteCount"] = baseCount
+            base["url"] = "https://api.prompix.dev/releases/\(version)/v2/base.json"; manifest["base"] = base
+            var locales = manifest["locales"] as! [String: [String: Any]]
+            for locale in locales.keys { locales[locale]!["url"] = "https://api.prompix.dev/releases/\(version)/v2/locales/\(locale).json" }
+            manifest["locales"] = locales
+        }
+        for locale in LanguagePackCatalog.supportedLocales {
+            result = try rewriteLocale(result, locale: locale) { $0["version"] = version; $0["baseSha256"] = baseHash }
+        }
+        return result
+    }
+
+    private func writeOrphan(_ character: Character = "a") throws -> URL {
+        let url = artifactURL(String(repeating: String(character), count: 64))
+        try Data("Inactive artifact".utf8).write(to: url)
+        return url
+    }
+
     func testPartialEditionPreservesRawBytesAndAdvertisedAvailabilityWithoutEnglish() throws {
         let fixture = try fixture(), edition = try fixture.edition(["ja", "fr"])
         XCTAssertEqual(edition.manifestBytes, fixture.manifest)
@@ -272,5 +301,254 @@ final class LanguagePackCacheTests: XCTestCase {
         XCTAssertNil(cache.readBase(manifest: edition.manifest))
         XCTAssertThrowsError(try cache.stage(edition))
         XCTAssertThrowsError(try cache.readIndex())
+    }
+
+    @MainActor func testPruningUsesCurrentDiskIndexAndBoundsArtifactsAcrossEditions() throws {
+        let fixture = try fixture(), cache = LanguagePackCache(directory: directory)
+        let staleCache = LanguagePackCache(directory: directory)
+        for number in 0..<5 {
+            let edition = try revisedFixture(fixture, version: "edition-prune-\(number)").edition(Set(LanguagePackCatalog.supportedLocales))
+            let staged = try cache.stage(edition)
+            try staged.indexData.write(to: indexURL, options: .atomic)
+            staged.releaseArtifacts()
+            staleCache.pruneInactiveArtifacts()
+            staleCache.pruneInactiveArtifacts()
+            let names = try FileManager.default.contentsOfDirectory(atPath: artifactsURL.path)
+            let expected = Set([edition.manifest.base.sha256] + Array(staged.index.downloadedLocales.values))
+            XCTAssertEqual(Set(names), Set(expected.map { $0 + ".json" }))
+            XCTAssertEqual(names.count, 10, "Only one base and the nine active packs survive each committed edition")
+            XCTAssertNotNil(cache.load(staged.index, locales: ["ja", "fr"]))
+            XCTAssertEqual(try Data(contentsOf: indexURL), staged.indexData)
+        }
+    }
+
+    @MainActor func testSharedLeasesKeepTheSameHashPinnedUntilEveryStageReleases() throws {
+        let fixture = try fixture(), cache = LanguagePackCache(directory: directory)
+        let active = try cache.stage(fixture.edition())
+        try active.indexData.write(to: indexURL); active.releaseArtifacts()
+        let first = try cache.stage(fixture.edition(["ja"]))
+        let alias = directory.appendingPathComponent("unused").appendingPathComponent("..")
+        let secondCache = LanguagePackCache(directory: alias)
+        let second = try secondCache.stage(fixture.edition(["ja"]))
+        let japanese = artifactURL(first.index.downloadedLocales["ja"]!)
+        cache.pruneInactiveArtifacts()
+        XCTAssertTrue(FileManager.default.fileExists(atPath: japanese.path))
+        first.releaseArtifacts(); first.releaseArtifacts()
+        secondCache.pruneInactiveArtifacts()
+        XCTAssertTrue(FileManager.default.fileExists(atPath: japanese.path), "Releasing one stage cannot release another's same-hash pin")
+        second.releaseArtifacts()
+        cache.pruneInactiveArtifacts()
+        XCTAssertFalse(FileManager.default.fileExists(atPath: japanese.path))
+        XCTAssertNotNil(cache.load(active.index, locales: []))
+    }
+
+    @MainActor func testReturnedStageLeaseProtectsPotentiallyRetainedPacksUntilRejection() throws {
+        let fixture = try fixture(), cache = LanguagePackCache(directory: directory)
+        let previous = try cache.stage(fixture.edition(["ja"]))
+        try previous.indexData.write(to: indexURL); previous.releaseArtifacts()
+        let pending = try cache.stage(fixture.edition(["fr"]), retainingIndex: previous.index)
+        let replacement = try cache.stage(fixture.edition())
+        try replacement.indexData.write(to: indexURL); replacement.releaseArtifacts()
+        cache.pruneInactiveArtifacts()
+        XCTAssertNotNil(cache.load(pending.index, locales: ["ja", "fr"]), "A returned but not committed stage must retain its inherited pack too")
+        pending.releaseArtifacts()
+        cache.pruneInactiveArtifacts()
+        XCTAssertNil(cache.readLocale("ja", base: try fixture.edition().base))
+        XCTAssertNil(cache.readLocale("fr", base: try fixture.edition().base))
+        XCTAssertNotNil(cache.load(replacement.index, locales: []))
+    }
+
+    @MainActor func testAncestorDirectoryAliasesSharePinsWithoutAcceptingFinalSymlinks() throws {
+        let fixture = try fixture(), physicalDirectory = directory.appendingPathComponent("shared-cache")
+        let cache = LanguagePackCache(directory: physicalDirectory)
+        let active = try cache.stage(fixture.edition())
+        try active.indexData.write(to: physicalDirectory.appendingPathComponent(LanguagePackCache.indexFileName))
+        active.releaseArtifacts()
+        let aliasParent = directory.appendingPathComponent("alias-parent")
+        try FileManager.default.createSymbolicLink(at: aliasParent, withDestinationURL: directory)
+        let alias = LanguagePackCache(directory: aliasParent.appendingPathComponent("shared-cache"))
+        let pending = try alias.stage(fixture.edition(["ja"]))
+        cache.pruneInactiveArtifacts()
+        XCTAssertNotNil(cache.load(pending.index, locales: ["ja"]), "Different ancestor paths to the same cache share live pins")
+        pending.releaseArtifacts()
+        cache.pruneInactiveArtifacts()
+        XCTAssertNil(cache.readLocale("ja", base: try fixture.edition().base))
+    }
+
+    @MainActor func testAbandonedStageLeaseReleasesOnDeinit() throws {
+        let fixture = try fixture(), cache = LanguagePackCache(directory: directory)
+        let active = try cache.stage(fixture.edition())
+        try active.indexData.write(to: indexURL); active.releaseArtifacts()
+        func abandonStage() throws {
+            let staged = try cache.stage(fixture.edition(["ja"]))
+            XCTAssertEqual(Set(staged.index.downloadedLocales.keys), ["ja"])
+        }
+        try abandonStage()
+        cache.pruneInactiveArtifacts()
+        XCTAssertNil(cache.readLocale("ja", base: try fixture.edition().base))
+        XCTAssertNotNil(cache.load(active.index, locales: []))
+    }
+
+    @MainActor func testBackgroundStageRemainsPinnedAcrossCancellationAndAnotherCacheSweep() async throws {
+        final class Gate: @unchecked Sendable {
+            private let lock = NSLock()
+            private var entered = false
+            let resume = DispatchSemaphore(value: 0)
+
+            func signalEntry() {
+                lock.lock(); defer { lock.unlock() }
+                entered = true
+            }
+
+            var hasEntered: Bool {
+                lock.lock(); defer { lock.unlock() }
+                return entered
+            }
+        }
+        let fixture = try fixture(), cache = LanguagePackCache(directory: directory)
+        let active = try cache.stage(fixture.edition(["en"]))
+        try active.indexData.write(to: indexURL); active.releaseArtifacts()
+        let candidate = try revisedFixture(fixture, version: "edition-inflight").edition(["ja"])
+        let gate = Gate(), pausedName = candidate.manifest.locales["ja"]!.sha256 + ".json"
+        let backgroundCache = LanguagePackCache(directory: directory) { bytes, url in
+            if url.lastPathComponent == pausedName {
+                gate.signalEntry()
+                guard gate.resume.wait(timeout: .now() + 10) == .success else { throw CocoaError(.fileWriteUnknown) }
+            }
+            try bytes.write(to: url, options: .atomic)
+        }
+        let task = Task.detached { try backgroundCache.stage(candidate) }
+        defer { gate.resume.signal() }
+        let entryDeadline = ContinuousClock.now.advanced(by: .seconds(5))
+        while !gate.hasEntered, ContinuousClock.now < entryDeadline {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertTrue(gate.hasEntered, "Background staging must reach the paused write before pruning")
+        let candidateBase = artifactURL(candidate.manifest.base.sha256)
+        cache.pruneInactiveArtifacts()
+        XCTAssertTrue(FileManager.default.fileExists(atPath: candidateBase.path), "In-flight writes are protected across cache instances")
+        task.cancel()
+        cache.pruneInactiveArtifacts()
+        XCTAssertTrue(FileManager.default.fileExists(atPath: candidateBase.path), "Task cancellation does not release a still-running stage")
+        gate.resume.signal()
+        let staged = try await task.value
+        cache.pruneInactiveArtifacts()
+        XCTAssertNotNil(cache.load(staged.index, locales: ["ja"]), "The returned result stays pinned until its owner rejects it")
+        staged.releaseArtifacts()
+        cache.pruneInactiveArtifacts()
+        XCTAssertFalse(FileManager.default.fileExists(atPath: candidateBase.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: artifactURL(candidate.manifest.locales["ja"]!.sha256).path))
+        XCTAssertNotNil(cache.load(active.index, locales: ["en"]))
+    }
+
+    @MainActor func testFailedStageReleasesPinsButMissingActiveIndexPreventsCleanup() throws {
+        let fixture = try fixture(), candidate = try fixture.edition(["ja"])
+        let failedName = candidate.manifest.locales["ja"]!.sha256 + ".json"
+        let failing = LanguagePackCache(directory: directory) { bytes, url in
+            if url.lastPathComponent == failedName { throw CocoaError(.fileWriteOutOfSpace) }
+            try bytes.write(to: url, options: .atomic)
+        }
+        XCTAssertThrowsError(try failing.stage(candidate))
+        let partialBase = artifactURL(candidate.manifest.base.sha256)
+        failing.pruneInactiveArtifacts()
+        XCTAssertTrue(FileManager.default.fileExists(atPath: partialBase.path), "A failed first install has no committed pointer authorizing cleanup")
+        let cache = LanguagePackCache(directory: directory)
+        let current = try cache.stage(revisedFixture(fixture, version: "edition-after-failure").edition())
+        try current.indexData.write(to: indexURL); current.releaseArtifacts()
+        cache.pruneInactiveArtifacts()
+        XCTAssertFalse(FileManager.default.fileExists(atPath: partialBase.path), "Thrown stages release pins on partial artifacts")
+        XCTAssertNotNil(cache.load(current.index, locales: []))
+    }
+
+    @MainActor func testAnyRollbackJournalAndInvalidOrMissingIndexSuppressPruning() throws {
+        let cache = LanguagePackCache(directory: directory), active = try cache.stage(fixture().edition())
+        try active.indexData.write(to: indexURL); active.releaseArtifacts()
+        let orphan = try writeOrphan(), journal = directory.appendingPathComponent("catalog-transaction.json")
+        let validJournal = try JSONSerialization.data(withJSONObject: ["files": [["name": LanguagePackCache.indexFileName, "data": active.indexData.base64EncodedString()]]])
+        for bytes in [validJournal, Data("false".utf8), Data()] {
+            try bytes.write(to: journal)
+            cache.pruneInactiveArtifacts()
+            XCTAssertTrue(FileManager.default.fileExists(atPath: orphan.path))
+            XCTAssertEqual(try Data(contentsOf: journal), bytes)
+            try FileManager.default.removeItem(at: journal)
+        }
+        try FileManager.default.createSymbolicLink(at: journal, withDestinationURL: directory.appendingPathComponent("missing-journal"))
+        cache.pruneInactiveArtifacts()
+        XCTAssertTrue(FileManager.default.fileExists(atPath: orphan.path), "Even a dangling journal symlink blocks cleanup")
+        try FileManager.default.removeItem(at: journal)
+        for bytes in [Data("broken".utf8), Data("{}".utf8)] {
+            try bytes.write(to: indexURL)
+            cache.pruneInactiveArtifacts()
+            XCTAssertTrue(FileManager.default.fileExists(atPath: orphan.path))
+            XCTAssertEqual(try Data(contentsOf: indexURL), bytes)
+        }
+        try FileManager.default.removeItem(at: indexURL)
+        cache.pruneInactiveArtifacts()
+        XCTAssertTrue(FileManager.default.fileExists(atPath: orphan.path))
+        try active.indexData.write(to: indexURL)
+        cache.pruneInactiveArtifacts()
+        XCTAssertFalse(FileManager.default.fileExists(atPath: orphan.path))
+    }
+
+    @MainActor func testPruningNeverRemovesUnsafeEntriesUnknownNamesOrPersonalFiles() throws {
+        let cache = LanguagePackCache(directory: directory), active = try cache.stage(fixture().edition(["ja", "fr"]))
+        try active.indexData.write(to: indexURL); active.releaseArtifacts()
+        let personalNames = ["favorites.json", "drafts.json", "creators.json", "catalog.json"]
+        for name in personalNames { try Data(name.utf8).write(to: directory.appendingPathComponent(name)) }
+        let symlink = artifactURL(String(repeating: "b", count: 64))
+        try FileManager.default.createSymbolicLink(at: symlink, withDestinationURL: directory.appendingPathComponent("favorites.json"))
+        let fifo = artifactURL(String(repeating: "c", count: 64))
+        XCTAssertEqual(mkfifo(fifo.path, 0o600), 0)
+        let folder = artifactURL(String(repeating: "d", count: 64))
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: false)
+        let nested = folder.appendingPathComponent("keep.json"); try Data("Nested".utf8).write(to: nested)
+        let unknownNames = [String(repeating: "F", count: 64) + ".json", "notes.json", String(repeating: "e", count: 64) + ".json.tmp"]
+        for name in unknownNames { try Data(name.utf8).write(to: artifactsURL.appendingPathComponent(name)) }
+        let orphan = try writeOrphan()
+        cache.pruneInactiveArtifacts()
+        XCTAssertFalse(FileManager.default.fileExists(atPath: orphan.path))
+        for url in [symlink, fifo, folder, nested] { XCTAssertTrue(FileManager.default.fileExists(atPath: url.path)) }
+        for name in unknownNames { XCTAssertEqual(try Data(contentsOf: artifactsURL.appendingPathComponent(name)), Data(name.utf8)) }
+        for name in personalNames { XCTAssertEqual(try Data(contentsOf: directory.appendingPathComponent(name)), Data(name.utf8)) }
+        XCTAssertNotNil(cache.load(active.index, locales: ["ja", "fr"]), "All recorded locales survive, regardless of which locale the UI uses")
+    }
+
+    @MainActor func testPruningRejectsSymlinkCacheRootArtifactDirectoryAndIndex() throws {
+        let cache = LanguagePackCache(directory: directory), active = try cache.stage(fixture().edition())
+        try active.indexData.write(to: indexURL); active.releaseArtifacts()
+        let orphan = try writeOrphan()
+        let rootLink = directory.appendingPathComponent("linked-root")
+        try FileManager.default.createSymbolicLink(at: rootLink, withDestinationURL: directory)
+        LanguagePackCache(directory: rootLink).pruneInactiveArtifacts()
+        XCTAssertTrue(FileManager.default.fileExists(atPath: orphan.path))
+        let outsideIndex = directory.appendingPathComponent("outside-index.json")
+        try active.indexData.write(to: outsideIndex)
+        try FileManager.default.removeItem(at: indexURL)
+        try FileManager.default.createSymbolicLink(at: indexURL, withDestinationURL: outsideIndex)
+        cache.pruneInactiveArtifacts()
+        XCTAssertTrue(FileManager.default.fileExists(atPath: orphan.path))
+        try FileManager.default.removeItem(at: indexURL); try active.indexData.write(to: indexURL)
+        let otherDirectory = directory.appendingPathComponent("other-artifacts")
+        try FileManager.default.moveItem(at: artifactsURL, to: otherDirectory)
+        try FileManager.default.createSymbolicLink(at: artifactsURL, withDestinationURL: otherDirectory)
+        cache.pruneInactiveArtifacts()
+        XCTAssertTrue(FileManager.default.fileExists(atPath: otherDirectory.appendingPathComponent(orphan.lastPathComponent).path))
+        XCTAssertEqual(try Data(contentsOf: outsideIndex), active.indexData)
+    }
+
+    @MainActor func testPruneDeletionFailureIsNonfatalAndCanBeRetried() throws {
+        try XCTSkipIf(geteuid() == 0, "Root can bypass the directory write permission used by this failure test")
+        let cache = LanguagePackCache(directory: directory), active = try cache.stage(fixture().edition())
+        try active.indexData.write(to: indexURL); active.releaseArtifacts()
+        let orphan = try writeOrphan()
+        XCTAssertEqual(chmod(artifactsURL.path, 0o500), 0)
+        defer { _ = chmod(artifactsURL.path, 0o700) }
+        cache.pruneInactiveArtifacts()
+        XCTAssertTrue(FileManager.default.fileExists(atPath: orphan.path))
+        XCTAssertEqual(try Data(contentsOf: indexURL), active.indexData)
+        XCTAssertNotNil(cache.load(active.index, locales: []))
+        XCTAssertEqual(chmod(artifactsURL.path, 0o700), 0)
+        cache.pruneInactiveArtifacts()
+        XCTAssertFalse(FileManager.default.fileExists(atPath: orphan.path))
     }
 }

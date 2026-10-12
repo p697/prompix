@@ -73,13 +73,58 @@ struct LanguagePackCache: Sendable {
     struct Staged: Sendable {
         let index: Index
         let indexData: Data
+        fileprivate let lease: ArtifactLease
+
+        /// Keep the staged files pinned through Library's commit or rejection.
+        /// Copies share one lease; repeated release is harmless.
+        func releaseArtifacts() { lease.release() }
+    }
+
+    fileprivate final class ArtifactLease: Sendable {
+        let directory: String
+        let id: UUID
+
+        init(directory: String, id: UUID) { self.directory = directory; self.id = id }
+        func release() { ArtifactPins.shared.release(directory: directory, id: id) }
+        deinit { release() }
+    }
+
+    /// All cache values for a directory share pins, including background stages
+    /// that outlive a cancelled request or a particular Library instance.
+    private final class ArtifactPins: @unchecked Sendable {
+        static let shared = ArtifactPins()
+        private let lock = NSLock()
+        private var leases: [String: [UUID: Set<String>]] = [:]
+
+        func reserve(directory: String, hashes: Set<String>) -> ArtifactLease {
+            lock.lock(); defer { lock.unlock() }
+            let id = UUID()
+            leases[directory, default: [:]][id] = hashes
+            return ArtifactLease(directory: directory, id: id)
+        }
+
+        func release(directory: String, id: UUID) {
+            lock.lock(); defer { lock.unlock() }
+            leases[directory]?[id] = nil
+            if leases[directory]?.isEmpty == true { leases[directory] = nil }
+        }
+
+        func withPins<T>(directory: String, _ body: (Set<String>) throws -> T) rethrows -> T {
+            lock.lock(); defer { lock.unlock() }
+            let hashes = (leases[directory] ?? [:]).values.reduce(into: Set<String>()) { $0.formUnion($1) }
+            return try body(hashes)
+        }
     }
 
     private let directory: URL
+    private let artifactPinKey: String
     private let artifactWriter: @Sendable (Data, URL) throws -> Void
 
     init(directory: URL, artifactWriter: @escaping @Sendable (Data, URL) throws -> Void = { try $0.write(to: $1, options: .atomic) }) {
         self.directory = directory.standardizedFileURL
+        // Ancestor aliases (including /var versus /private/var) share pins. Keep
+        // the original URL for all filesystem safety checks and actual access.
+        artifactPinKey = directory.standardizedFileURL.resolvingSymlinksInPath().path
         self.artifactWriter = artifactWriter
     }
 
@@ -125,6 +170,17 @@ struct LanguagePackCache: Sendable {
     /// Returns bytes for Library's transaction; never writes the active index.
     /// A failed stage can leave only inactive artifacts, safe to verify and reuse.
     func stage(_ edition: LanguagePackEdition, retainingIndex: Index? = nil) throws -> Staged {
+        var pinned = Set(edition.localeBytes.keys.compactMap { edition.manifest.locales[$0]?.sha256 })
+        pinned.insert(edition.manifest.base.sha256)
+        if let previous = retainingIndex, sameDescriptor(previous.manifest.base, edition.manifest.base) {
+            for locale in previous.downloadedLocales.keys {
+                if let old = previous.manifest.locales[locale], let current = edition.manifest.locales[locale],
+                   sameDescriptor(old, current) { pinned.insert(current.sha256) }
+            }
+        }
+        let lease = ArtifactPins.shared.reserve(directory: artifactPinKey, hashes: pinned)
+        var completed = false
+        defer { if !completed { lease.release() } }
         try createDirectory(directory)
         try createDirectory(artifactDirectory)
         try store(edition.baseBytes, descriptor: edition.manifest.base) {
@@ -146,7 +202,48 @@ struct LanguagePackCache: Sendable {
         let index = try Index(manifestBytes: edition.manifestBytes, downloadedLocales: downloaded)
         let bytes = try JSONEncoder().encode(index)
         guard bytes.count <= Self.indexByteLimit else { throw CacheError.tooLarge }
-        return Staged(index: index, indexData: bytes)
+        completed = true
+        return Staged(index: index, indexData: bytes, lease: lease)
+    }
+
+    /// Library calls this after commit or stage settlement. MainActor serializes
+    /// it with every Library transaction/recovery; the pin lock prevents a new
+    /// background stage from starting between the keep-set snapshot and deletion.
+    /// Cleanup never changes the outcome of a successful catalog transaction.
+    @MainActor func pruneInactiveArtifacts() {
+        try? ArtifactPins.shared.withPins(directory: artifactPinKey) { pinned in
+            guard try existingDirectory(directory), try existingDirectory(artifactDirectory),
+                  try fileType(at: directory.appendingPathComponent("catalog-transaction.json")) == nil,
+                  let active = try readIndex() else { return }
+            var keep = pinned
+            keep.insert(active.manifest.base.sha256)
+            keep.formUnion(active.downloadedLocales.values)
+            try removeInactiveArtifacts(keeping: keep)
+        }
+    }
+
+    private func removeInactiveArtifacts(keeping hashes: Set<String>) throws {
+        let root = open(directory.path, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+        guard root >= 0 else { throw CacheError.unsafeFile }
+        defer { close(root) }
+        let artifacts = openat(root, Self.artifactDirectoryName, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+        guard artifacts >= 0 else { throw CacheError.unsafeFile }
+        guard let entries = fdopendir(artifacts) else { close(artifacts); throw CacheError.unsafeFile }
+        defer { closedir(entries) }
+        while let entry = readdir(entries) {
+            let name = withUnsafePointer(to: entry.pointee.d_name) { pointer in
+                pointer.withMemoryRebound(to: CChar.self, capacity: Int(entry.pointee.d_namlen) + 1) { String(cString: $0) }
+            }
+            guard name.utf8.count == 69, name.hasSuffix(".json") else { continue }
+            let hash = String(name.prefix(64))
+            guard hash.utf8.allSatisfy({ (48...57).contains($0) || (97...102).contains($0) }), !hashes.contains(hash) else { continue }
+            var status = stat()
+            guard fstatat(artifacts, name, &status, AT_SYMLINK_NOFOLLOW) == 0,
+                  status.st_mode & mode_t(S_IFMT) == mode_t(S_IFREG) else { continue }
+            // unlinkat never recurses into a directory or follows a final symlink.
+            // An individual failure is harmless; a later sweep can retry.
+            _ = unlinkat(artifacts, name, 0)
+        }
     }
 
     private var artifactDirectory: URL { directory.appendingPathComponent(Self.artifactDirectoryName, isDirectory: true) }

@@ -116,6 +116,12 @@ import XCTest
         XCTAssertEqual(Set(downloaded.downloadedLocales.keys), ["zh-Hans", "ja"])
         let expected = try XCTUnwrap(after.prompts.first { $0.id == id }?.localization?.translations["ja"]?.prompt)
         XCTAssertFalse(expected.isEmpty)
+        let savedDrafts = draftsBefore.flatMap { try? JSONDecoder().decode([String: String].self, from: $0) } ?? [:]
+        let expectedEditor = savedDrafts[id + "::ja"] ?? expected
+        let clipboardEvidence = XCTAttachment(string: expected)
+        clipboardEvidence.name = "copied-japanese-prompt-expected"
+        clipboardEvidence.lifetime = .keepAlways
+        add(clipboardEvidence)
         capture("language-pack-01-japanese-downloaded")
         app.buttons["copyPrompt"].tap()
         XCTAssertTrue(app.buttons["copyPrompt"].label.contains("已复制"))
@@ -123,7 +129,7 @@ import XCTest
         app.buttons["editPrompt"].tap()
         let editor = app.textViews["promptEditor"]
         XCTAssertTrue(editor.waitForExistence(timeout: 5))
-        XCTAssertTrue(editor.value as? String == expected, "The editor must receive the downloaded language in full.")
+        XCTAssertTrue(editor.value as? String == expectedEditor, "The editor must use the selected language's existing draft, or its full translation when no draft exists.")
         capture("language-pack-02-japanese-editor")
         app.navigationBars.buttons["完成"].tap()
         XCTAssertEqual(try? Data(contentsOf: directory.appendingPathComponent("drafts.json")), draftsBefore)

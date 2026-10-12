@@ -175,6 +175,32 @@ import CryptoKit
         XCTAssertEqual(Set(try prompt(reopened).availableLanguages), [preferred, locale])
     }
 
+    func testCachedLocaleSelectionSucceedsOfflineWhenAppLanguagePackIsMissing() async throws {
+        let fixture = try fixture(), initial = try makeLibrary(fixture), locale = otherLocales[0]
+        try initial.installLanguagePacks(fixture.edition([locale]))
+        let cache = LanguagePackCache(directory: store), before = try XCTUnwrap(cache.readIndex())
+        XCTAssertEqual(Set(before.downloadedLocales.keys), [locale])
+        XCTAssertNil(before.downloadedLocales[preferred])
+        // This is also the state after changing the App language while offline:
+        // the selected pack is cached, but launch can project only originals.
+        let reopened = Library(directory: store, catalogURL: catalogURL)
+        let item = try prompt(reopened)
+        XCTAssertTrue(item.availableLanguages.isEmpty)
+        let (remote, session) = network(fixture)
+        remote.setFailureForAllRequests()
+
+        let success = await reopened.ensureLanguage(locale, for: item, session: session)
+
+        XCTAssertTrue(success)
+        XCTAssertTrue(remote.requests.isEmpty)
+        XCTAssertEqual(reopened.syncState, .current)
+        XCTAssertEqual(try prompt(reopened).availableLanguages, [locale])
+        XCTAssertEqual(try prompt(reopened).content(in: locale), fixture.catalog.prompts[0].content(in: locale))
+        let after = try XCTUnwrap(cache.readIndex())
+        XCTAssertEqual(after.downloadedLocales, before.downloadedLocales)
+        XCTAssertEqual(after.manifestBytes, before.manifestBytes)
+    }
+
     func testHealthyUnchangedRefreshSucceedsWithoutAnyActiveOrPersonalStoreWrite() async throws {
         let fixture = try fixture(), initial = try makeLibrary(fixture)
         try initial.installLanguagePacks(fixture.edition([preferred]))
