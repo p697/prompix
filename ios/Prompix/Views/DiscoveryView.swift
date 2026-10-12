@@ -339,7 +339,7 @@ struct SearchView: View {
                         }
                     }
                 }.padding(.bottom, 24)
-            }.paperScreen().navigationTitle(String(localized: "搜索 Prompt")).navigationBarTitleDisplayMode(.inline)
+            }.accessibilityIdentifier("searchResults").paperScreen().navigationTitle(String(localized: "搜索 Prompt")).navigationBarTitleDisplayMode(.inline)
                 .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: String(localized: "搜索标题、用途或模型"))
                 .autocorrectionDisabled().textInputAutocapitalization(.never)
                 .onSubmit(of: .search) {

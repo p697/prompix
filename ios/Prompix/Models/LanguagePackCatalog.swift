@@ -222,10 +222,22 @@ enum LanguagePackCatalog {
         guard (item["contentType"] as? String == "skill") == (item["skill"] != nil) else { throw ValidationError.invalidMetadata }
         if let value = item["publishedAt"], !(value is String) { throw ValidationError.invalidMetadata }
         if let value = item["cover"] { try validateCover(value, original: true) }
-        let source = try object(item["source"], required: ["name", "url", "license", "method"], optional: ["author", "repository", "revision"])
+        let source = try object(item["source"], required: ["name", "url", "license", "method"], optional: ["author", "repository", "revision", "post"])
         for key in ["name", "license", "method", "author", "revision"] where source[key] != nil { _ = try text(source[key]) }
         try https(source["url"], nullable: true)
         if let value = source["repository"] { try https(value) }
+        if let value = source["post"] {
+            let post = try object(value, required: ["id", "authorID", "text", "createdAt", "checkedAt"])
+            for key in ["id", "authorID"] {
+                let identifier = try text(post[key], maximum: 19)
+                guard identifier.range(of: "^[0-9]{1,19}$", options: .regularExpression) != nil else {
+                    throw ValidationError.invalidMetadata
+                }
+            }
+            _ = try text(post["text"], maximum: 50_000)
+            _ = try timestamp(post["createdAt"])
+            _ = try timestamp(post["checkedAt"])
+        }
         if let value = item["creator"] {
             let creator = try object(value, required: ["id", "platform", "displayName", "profileURL"], optional: ["username", "avatarURL", "externalID", "bio"])
             for key in ["id", "displayName", "username", "externalID", "bio"] where creator[key] != nil {

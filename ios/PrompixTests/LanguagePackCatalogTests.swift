@@ -85,6 +85,33 @@ final class LanguagePackCatalogTests: XCTestCase {
                                                     requestedLocale: locale, localeBytes: bytes ?? locale.flatMap { fixture.locales[$0] })
     }
 
+    func testOriginalPostSurvivesStrictBaseVerificationAndRejectsMalformedMetadata() throws {
+        let fixture = try fixture()
+        let post: [String: Any] = ["id": "1234567890123456789", "authorID": "987654321",
+                                   "text": "Original test post with a complete prompt.",
+                                   "createdAt": "2026-10-12T08:00:00.000Z", "checkedAt": "2026-10-12T09:00:00.000Z"]
+        func withPost(_ post: [String: Any]) throws -> Fixture {
+            try rewritePrompt(fixture) { prompt in
+                var source = prompt["source"] as! [String: Any]
+                source["post"] = post; prompt["source"] = source
+            }
+        }
+        let original = try XCTUnwrap(base(withPost(post)).catalog.prompts.first?.source.post)
+        XCTAssertEqual(original.id, post["id"] as? String)
+        XCTAssertEqual(original.text, post["text"] as? String)
+        XCTAssertNotNil(original.date)
+        for (key, value) in [("id", "x123"), ("authorID", String(repeating: "1", count: 20)),
+                             ("text", ""), ("text", String(repeating: "a", count: 50_001)),
+                             ("createdAt", "yesterday"), ("checkedAt", "invalid"), ("unknown", "field")] {
+            var invalid = post; invalid[key] = value
+            XCTAssertThrowsError(try base(withPost(invalid)))
+        }
+        for key in post.keys {
+            var invalid = post; invalid.removeValue(forKey: key)
+            XCTAssertThrowsError(try base(withPost(invalid)))
+        }
+    }
+
     func testSharedTypeScriptFixtureRoundTripsAllNineLanguagesAndMetadata() throws {
         let fixture = try fixture()
         let expected = try JSONDecoder().decode(Catalog.self, from: fixture.catalog)
