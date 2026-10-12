@@ -5,6 +5,7 @@ import type { Catalog, Prompt } from "../packages/schema/catalog.ts";
 import { atomic, json } from "./publication.ts";
 import { checkXAvailability } from "./x.ts";
 import { convertXDiscovery } from "./x-intake.ts";
+import { readXExcerptReviews } from "./x-excerpts.ts";
 import { isNativeXDraft, nativeXSourceIssue, nativeXPostIDs } from "./x-source.ts";
 import { mergeCreatorCache, type CreatorCache } from "./creators.ts";
 
@@ -50,6 +51,7 @@ export async function prepareXAvailability(root: string, options: { enabled: boo
   const ledger = ledgerSchema.parse(await json(ledgerPath, []));
   if (ledger.some(attempt => attempt.state !== "completed") || ledger.length >= maxRequests) return { state, report: { ...report, status: "daily-limit" } };
   const intake = await readAllXIntake(root);
+  const excerpts = await readXExcerptReviews(root);
   const due = intake.candidates.filter(item => {
     const checked = Math.max(Date.parse(item.source.post?.checkedAt ?? "") || 0, Date.parse(state[item.id]?.checkedAt ?? "") || 0);
     const record = state[item.id];
@@ -70,7 +72,7 @@ export async function prepareXAvailability(root: string, options: { enabled: boo
       const result = await (options.lookup ?? checkXAvailability)(options.bearer, ids);
       const name = `${day}-check-${String(ledger.length).padStart(3, "0")}.json`;
       const snapshot = { capturedAt: now, ...result };
-      const refreshed = convertXDiscovery([{ name, data: snapshot }]).candidates;
+      const refreshed = convertXDiscovery([{ name, data: snapshot }], {}, excerpts).candidates;
       // Also refresh already-known single posts covered by a dependency lookup.
       // Even partial dependency checks withhold a thread until its entire chain is verified.
       // Otherwise a refreshed root could leave an older approved reply visible.

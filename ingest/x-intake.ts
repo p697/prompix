@@ -4,6 +4,7 @@ import { z } from "zod";
 import { creatorSchema, type Prompt } from "../packages/schema/catalog.ts";
 import { fingerprint, type Candidate } from "./sources.ts";
 import type { CreatorCache } from "./creators.ts";
+import { readXExcerptReviews, selectXExcerpt, type XExcerptReview, type XExcerptReviews } from "./x-excerpts.ts";
 
 import { nativeXSourceName, nativeXPublicationBlocker, nativeXSourceDigest, nativeXSourceIssue } from "./x-source.ts";
 export { isNativeXDraft, nativeXPublicationBlocker, nativeXSourceDigest } from "./x-source.ts";
@@ -148,7 +149,7 @@ const standalonePromptMarker = new RegExp(String.raw`${promptMarkerPrefix}${mode
 const decoratedPromptMarker = new RegExp(String.raw`${promptMarkerPrefix}${modelHeadingPrefix}(\*\*|__|)(${promptMarkerLabel})\1[\t ]*(?:[.;；]|(?:below[\t ]*)?${downArrow})[\t ]*[:：]?[\t ]*(?=\r?\n)`, "gimu");
 
 /** Only explicit instruction boundaries qualify. No fetch, continuation guessing or prose generation. */
-export function extractMarkedXPrompt(post: XPost, media: readonly XMedia[] = [], context?: { post: XPost; media: readonly XMedia[] }): { body: string; kind: Prompt["kind"]; model?: string } | { reason: string } {
+export function extractMarkedXPrompt(post: XPost, media: readonly XMedia[] = [], context?: { post: XPost; media: readonly XMedia[] }, excerpt?: XExcerptReview): { body: string; kind: Prompt["kind"]; model?: string } | { reason: string } {
   const source = fullXText(post), text = source.text.trim();
   if (source.truncated) return { reason: "api-truncated" };
   if (truncatedEnding.test(text)) return { reason: "truncated-ending" };
@@ -158,12 +159,15 @@ export function extractMarkedXPrompt(post: XPost, media: readonly XMedia[] = [],
     ...[...text.matchAll(decoratedPromptMarker)].map(match => ({ start: match.index!, end: match.index! + match[0].length, label: match[2] })),
   ];
   const markers = [...new Map(matches.sort((a, b) => a.end - b.end).map(match => [match.start, match])).values()];
-  if (!markers.length) return { reason: "missing-prompt-boundary" };
-  if (markers.length !== 1) return { reason: "multiple-prompt-boundaries" };
-  const marker = markers[0];
-  const label = marker.label.toLowerCase();
-  let body = text.slice(marker.end).trim();
-  if (/^(?:`{3,}|~{3,})/.test(body)) {
+  if (!excerpt && !markers.length) return { reason: "missing-prompt-boundary" };
+  if (!excerpt && markers.length !== 1) return { reason: "multiple-prompt-boundaries" };
+  if (excerpt && (post.referenced_tweets?.length || post.in_reply_to_user_id ||
+      (post.conversation_id && post.conversation_id !== post.id))) return { reason: "excerpt-requires-standalone-post" };
+  const selection = excerpt ? selectXExcerpt(post, source.text, excerpt) : undefined;
+  if (selection && "reason" in selection) return selection;
+  const label = excerpt ? `${excerpt.kind} prompt` : markers[0].label.toLowerCase();
+  let body = selection?.body ?? text.slice(markers[0].end).trim();
+  if (!excerpt && /^(?:`{3,}|~{3,})/.test(body)) {
     const opening = body.match(/^(`{3,}|~{3,})[^\r\n]*\r?\n/);
     if (!opening) return { reason: "incomplete-code-fence" };
     const lines = body.slice(opening[0].length).split(/\r?\n/);
@@ -198,7 +202,7 @@ export function attachedMedia(post: XPost, media: readonly XMedia[]): Prompt["me
     ...(photos.length > 1 ? { imageURLs: photos } : {}), ...(videoURL ? { videoURL } : {}) };
 }
 
-export function convertXDiscovery(snapshots: readonly Snapshot[], creators: CreatorCache = {}) {
+export function convertXDiscovery(snapshots: readonly Snapshot[], creators: CreatorCache = {}, excerpts: XExcerptReviews = {}) {
   const records: XIntakeRecord[] = [], candidates: Candidate[] = [];
   const report: XIntakeReport = { snapshots: snapshots.length, discovered: 0, duplicatePosts: 0, drafted: 0, blocked: 0,
     publicationBlocked: 0, reviewedDrafts: 0, reasons: {}, snapshotErrors: [] };
@@ -231,13 +235,15 @@ export function convertXDiscovery(snapshots: readonly Snapshot[], creators: Crea
       continue;
     }
     const profile = [...profiles, ...Object.values(creators)].find(value => value.platform === "x" && value.externalID === post.author_id);
-    const extracted = extractMarkedXPrompt(post, media);
+    const excerpt = excerpts[post.id];
+    const extracted = extractMarkedXPrompt(post, media, undefined, excerpt);
     const record: XIntakeRecord = { postID: post.id, authorID: post.author_id, sourceURL, snapshot,
       state: "blocked", reason: "", fullTextSource: fullXText(post).source, expandedLinks: sourceLinks(post),
       hasCreatorProfile: !!profile, mediaItems: verifiedMedia(post, media).length, attachedMediaKeys: post.attachments?.media_keys ?? [] };
     if ("reason" in extracted) { records.push({ ...record, reason: extracted.reason }); continue; }
     const id = `x-post-${post.id}`, hash = fingerprint(extracted.body);
-    const candidate = buildXCandidate(post, extracted, media, profile, capturedAt);
+    const candidate = buildXCandidate(post, extracted, excerpt?.includeMedia === false ? [] : media, profile, capturedAt);
+    if (excerpt) candidate.source.method = "X API — reviewed excerpt from the original post";
     candidates.push(candidate);
     records.push({ ...record, state: "draft", reason: nativeXSourceIssue(candidate) ?? "awaiting-editorial-and-preview-review", candidateID: id, fingerprint: hash, sourceDigest: nativeXSourceDigest(candidates.at(-1)!) });
   }
@@ -258,7 +264,8 @@ export function convertXDiscovery(snapshots: readonly Snapshot[], creators: Crea
 }
 
 /** Read cached API results only. No source links, media or paid endpoints are fetched. */
-export async function readXIntake(root: string, creators: CreatorCache = {}) {
+export async function readXIntake(root: string, creators: CreatorCache = {}, excerpts?: XExcerptReviews) {
+  excerpts ??= await readXExcerptReviews(root);
   const directory = join(root, "x-discovery");
   let names: string[];
   try { names = (await readdir(directory)).filter(name => /^\d{4}-\d{2}-\d{2}(?:-(?:feed|check)-\d{3})?\.json$/.test(name)); }
@@ -270,7 +277,7 @@ export async function readXIntake(root: string, creators: CreatorCache = {}) {
       snapshots.push({ name, data: JSON.parse(await readFile(join(directory, name), "utf8")) });
     } catch { errors.push({ snapshot: name, reason: "unreadable-or-oversize-snapshot" }); }
   }
-  const result = convertXDiscovery(snapshots, creators);
+  const result = convertXDiscovery(snapshots, creators, excerpts);
   result.report.snapshots = names.length;
   result.report.snapshotErrors.push(...errors);
   return result;
