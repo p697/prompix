@@ -130,6 +130,21 @@ struct Prompt: Codable, Identifiable, Hashable {
         return tags.contains(topic)
     }
 
+    struct SourcePost: Codable, Hashable {
+        let id: String
+        let authorID: String
+        let text: String
+        let createdAt: String
+        let checkedAt: String
+
+        var date: Date? {
+            let parser = ISO8601DateFormatter()
+            parser.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            if let date = parser.date(from: createdAt) { return date }
+            parser.formatOptions = [.withInternetDateTime]
+            return parser.date(from: createdAt)
+        }
+    }
     struct Source: Codable, Hashable {
         let name: String
         let url: URL?
@@ -138,6 +153,7 @@ struct Prompt: Codable, Identifiable, Hashable {
         var author: String? = nil
         var repository: URL? = nil
         var revision: String? = nil
+        var post: SourcePost? = nil
     }
     struct Cover: Codable, Hashable {
         let text: String

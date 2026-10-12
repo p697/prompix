@@ -15,8 +15,8 @@ app.build_configurations.each do |config|
     'PRODUCT_BUNDLE_IDENTIFIER' => 'com.p697.prompix',
     'PRODUCT_NAME' => 'Prompix', 'INFOPLIST_FILE' => 'Prompix/Info.plist',
     'SWIFT_VERSION' => '6.0', 'TARGETED_DEVICE_FAMILY' => '1,2',
-    'CODE_SIGN_STYLE' => 'Automatic', 'MARKETING_VERSION' => '0.4.0',
-    'CURRENT_PROJECT_VERSION' => '11', 'ASSETCATALOG_COMPILER_APPICON_NAME' => 'AppIcon',
+    'CODE_SIGN_STYLE' => 'Automatic', 'MARKETING_VERSION' => '0.4.1',
+    'CURRENT_PROJECT_VERSION' => '12', 'ASSETCATALOG_COMPILER_APPICON_NAME' => 'AppIcon',
     'ENABLE_USER_SCRIPT_SANDBOXING' => 'YES', 'SWIFT_STRICT_CONCURRENCY' => 'complete'
   })
 end

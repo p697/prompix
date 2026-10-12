@@ -8,10 +8,12 @@ struct PromptDestination: Identifiable, Equatable {
     static func choices(for item: Prompt) -> [Self] {
         guard !item.isSkill else { return [] }
         var choices: [Self] = []
-        if let url = item.toolURL, isSafeURL(url) {
+        if let url = item.toolURL ?? modelDestination(for: item), isSafeURL(url) {
             let known: [String: (String, String)] = [
                 "chatgpt.com": ("chatgpt", "ChatGPT"), "claude.ai": ("claude", "Claude"),
                 "gemini.google.com": ("gemini", "Gemini"), "grok.com": ("grok", "Grok"),
+                "dreamina.capcut.com": ("dreamina", "Dreamina"), "labs.google": ("flow", "Google Flow"),
+                "app.runwayml.com": ("runway", "Runway"),
                 "www.midjourney.com": ("midjourney", "Midjourney"), "v0.app": ("v0", "v0"),
                 "v0.dev": ("v0", "v0"), "lovable.dev": ("lovable", "Lovable"),
             ]
@@ -33,6 +35,25 @@ struct PromptDestination: Identifiable, Equatable {
             if !choices.contains(where: { $0.url.host == url.host }) { choices.append(.init(id: id, name: name, url: url)) }
         }
         return choices
+    }
+    // Official entry points, not private deep links or a promise of automatic submission.
+    private static func modelDestination(for item: Prompt) -> URL? {
+        let model = item.model.lowercased()
+        let address: String?
+        switch item.kind {
+        case .image:
+            if model.contains("nano banana") { address = "https://gemini.google.com/app" }
+            else if model.contains("gpt image") { address = "https://chatgpt.com/" }
+            else if model.contains("midjourney") { address = "https://www.midjourney.com/" }
+            else { address = nil }
+        case .video:
+            if model.contains("seedance") { address = "https://dreamina.capcut.com/" }
+            else if model.range(of: "\\bveo\\b", options: .regularExpression) != nil { address = "https://labs.google/fx/tools/flow" }
+            else if model.contains("runway") { address = "https://app.runwayml.com/" }
+            else { address = nil }
+        case .text, .web: address = nil
+        }
+        return address.flatMap(URL.init(string:))
     }
     static func isSafeURL(_ url: URL) -> Bool {
         url.scheme == "https" && url.host != nil && url.user == nil && url.password == nil && url.port == nil

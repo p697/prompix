@@ -52,6 +52,10 @@ export const promptSchema = z.object({
     author: nonempty.optional(),
     repository: https.optional(),
     revision: nonempty.optional(),
+    post: z.object({
+      id: z.string().regex(/^\d{1,19}$/), authorID: z.string().regex(/^\d{1,19}$/),
+      text: z.string().min(1).max(50000), createdAt: z.iso.datetime(), checkedAt: z.iso.datetime(),
+    }).optional(),
   }),
   media: z
     .object({

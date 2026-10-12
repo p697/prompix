@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { promptSchema } from "../packages/schema/catalog.ts";
 import type { Candidate } from "./sources.ts";
-import { isNativeXDraft } from "./x-intake.ts";
+import { isNativeXDraft, nativeXSourceIssue, nativeXSourceDigest } from "./x-source.ts";
 import { isClawHubItem } from "./clawhub.ts";
 
 const https = z.url().refine((url) => new URL(url).protocol === "https:", "HTTPS required");
@@ -34,12 +34,12 @@ export function applyEditorialReviews(items: Candidate[], reviews: Reviews): Can
     // quality. Every community item needs a review of its current source text.
     const baseline: Candidate = { ...item, reviewStatus: "draft" };
     const review = reviews[item.id];
-    if (!review || review.fingerprint !== item.fingerprint || (isClawHubItem(item) && review.sourceRevision !== item.source.revision)) return baseline;
+    if (!review || review.fingerprint !== item.fingerprint || ((isClawHubItem(item) || isNativeXDraft(item)) && review.sourceRevision !== item.source.revision)) return baseline;
     const { demoURL, imageURL, imageURLs, priority, ...metadata } = review.metadata;
     const updated: Candidate = {
       ...baseline,
       ...metadata,
-      media: demoURL || imageURL || imageURLs ? {
+      media: !isNativeXDraft(item) && (demoURL || imageURL || imageURLs) ? {
         image: null, video: null, demoURL: null,
         ...item.media,
         ...(demoURL ? { demoURL } : {}),
@@ -49,8 +49,8 @@ export function applyEditorialReviews(items: Candidate[], reviews: Reviews): Can
       reviewStatus: "candidate",
       editorialRank: priority ?? 0,
     };
-    // Metadata review cannot grant publication permission to an unspecified X source.
-    if (isNativeXDraft(item)) return { ...updated, reviewStatus: "draft" };
+    // Preserve source attachments; editorial metadata cannot substitute an X post.
+    if (nativeXSourceIssue(item) || (isNativeXDraft(item) && nativeXSourceDigest(item) !== item.source.revision)) return { ...updated, reviewStatus: "draft" };
     // Website cards need an inspectable result, not just a code-generation brief.
     if (updated.kind === "web" && (!updated.media?.demoURL || !updated.media?.imageURL)) return baseline;
     return updated;

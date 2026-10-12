@@ -18,7 +18,7 @@
 |---|---|---|---|
 | ClawHub | 公共 API，免鉴权 | Skill 统一 MIT-0；允许第三方目录，要求回链原页面、遵守限流、不暗示背书、不镜像被隐藏或拦截的内容 | 全文 |
 | Anthropic 等官方 Skill 仓库 | GitHub API | 多为 Apache-2.0；docx、pdf、pptx、xlsx 四个 Skill 是专有许可 | 按文件夹判定；专有许可的只放链接 |
-| YouMind OpenLab 的 Nano Banana Pro、GPT Image 2、GPT Image 1.5、Seedance 2 公开仓库 | 固定 commit 的 README | CC BY 4.0；记录作者、原帖和上游仓库 | 完整条目与镜像预览，保留署名与移除入口 |
+| YouMind OpenLab 的 Nano Banana Pro、GPT Image 2、GPT Image 1.5、Seedance 2 公开仓库 | 固定 commit 的 README | CC BY 4.0；记录作者、原帖和上游仓库 | 仅保留历史已发布条目和署名，不再采集新增 |
 | prompts.chat | CSV、API | 提示词以 CC0 发布 | 全文 |
 | 许可明确的文本、图片、视频、网页提示词仓库（如 EvoLink、freestylefly、jamez-bondos、PicoTrex、MeiGen） | GitHub | CC0、MIT、Apache、CC BY 等，以仓库的 LICENSE 文件为准 | 按条目和媒体的许可范围展示并署名；第三方媒体单独记录依据 |
 | X 官方 API | 关键词检索热帖（按量付费） | 遵守 X 开发者条款和展示要求 | 署名并链接原帖；原帖删除后同步删除 |
@@ -75,4 +75,4 @@
 
 App Store 审核要求出示授权依据时（5.2.2），以台账为准。
 
-当前 X API 结果仅保存在本机发现候选中，不自动发布；发布前需补齐来源和展示信息。当前用户可通过详情来源链接和 GitHub issue 提交问题。
+X 适配器允许完整作者、原帖、时间戳和附图/视频关联齐备的条目进入既有编辑与预览审核；通过后才可发布。来源标识 `X-API-Terms` 表示官方 API 展示条款，不冒充开放版权许可证。原帖全文保留，与摘出的指令及编辑翻译分开显示。每 12 小时尝试复查，独立维护预算每天最多 2 次 / 200 帖；超过 24 小时未核验的条目不进入新发布目录。明确删除、不可访问或被限制的帖子进入移除清单，客户端下次成功刷新时同步；API 故障不当作删除证明。当前用户可通过详情来源链接和 GitHub issue 提交问题。

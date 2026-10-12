@@ -277,3 +277,38 @@ export async function searchXFeed(bearer: string, request: ReturnType<typeof xFe
   const body = await requestX(request.url, bearer, "search", 8_000_000);
   return { ...parseXSearchResponse(body, request.since, request.limit), request };
 }
+
+const availabilityResponseSchema = lookupResponseSchema.extend({
+  data: z.array(searchPostSchema.extend({ author_id: searchIDSchema, created_at: z.iso.datetime() })).max(100).optional(),
+  errors: z.array(z.object({ resource_id: searchIDSchema, type: z.string() }).passthrough()).max(100).optional(),
+});
+function availabilityIDs(ids: readonly string[]) {
+  if (!ids.length || ids.length > 100 || ids.some(id => !searchIDSchema.safeParse(id).success) || new Set(ids).size !== ids.length)
+    throw new Error("X availability requires 1–100 unique post IDs");
+  return [...ids];
+}
+/** Partial responses are useful only when every requested identity is accounted for. */
+export function parseXAvailability(value: unknown, ids: readonly string[]) {
+  const requested = availabilityIDs(ids), body = availabilityResponseSchema.parse(value);
+  const posts = body.data ?? [], errors = body.errors ?? [];
+  const observed = [...posts.map(post => post.id), ...errors.map(error => error.resource_id)];
+  if (observed.length !== requested.length || new Set(observed).size !== observed.length || observed.some(id => !requested.includes(id)))
+    throw new Error("X availability returned inconsistent identities");
+  // Rate limits, authentication failures and unknown errors never prove deletion.
+  if (errors.some(error => !["https://api.twitter.com/2/problems/resource-not-found", "https://api.x.com/2/problems/resource-not-found",
+    "https://api.twitter.com/2/problems/not-authorized-for-resource", "https://api.x.com/2/problems/not-authorized-for-resource"].includes(error.type)))
+    throw new Error("X availability returned an unresolved error");
+  const users = body.includes?.users ?? [], media = body.includes?.media ?? [];
+  if (new Set(users.map(user => user.id)).size !== users.length || new Set(media.map(item => item.media_key)).size !== media.length)
+    throw new Error("X availability returned duplicate expansions");
+  return { posts: posts.filter(post => post.withheld === undefined),
+    unavailable: [...errors.map(error => error.resource_id), ...posts.filter(post => post.withheld !== undefined).map(post => post.id)],
+    creators: parseXUsers(users), media };
+}
+export async function checkXAvailability(bearer: string, ids: readonly string[]) {
+  const url = new URL("https://api.x.com/2/tweets");
+  url.searchParams.set("ids", availabilityIDs(ids).join(","));
+  for (const [field, value] of Object.entries(lookupFields)) url.searchParams.set(field, value);
+  url.searchParams.set("tweet.fields", `${lookupFields["tweet.fields"]},withheld`);
+  return parseXAvailability(await requestX(url.toString(), bearer, "lookup", 8_000_000), ids);
+}

@@ -43,4 +43,17 @@ final class PromptHandoffTests: XCTestCase {
         prompt.skill = .init(name: "sample'; echo injected", description: "Fixture", format: "agent-skills", entrypoint: "SKILL.md", repository: URL(string: "https://github.com/openai/skills")!, directory: "skills/../other", installURL: URL(string: "https://example.com/skill")!)
         XCTAssertNil(PromptDestination.installationCommand(for: prompt))
     }
+    func testModelSpecificVideoEntryAndOriginalPostSurviveCatalogDecoding() throws {
+        var json = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(item(kind: .video, url: nil))) as? [String: Any])
+        json["model"] = "Seedance 2.5"
+        var source = try XCTUnwrap(json["source"] as? [String: Any])
+        source["post"] = ["id": "123", "authorID": "456", "text": "Original source text", "createdAt": "2026-10-12T00:00:00.000Z", "checkedAt": "2026-10-12T01:00:00Z"]
+        json["source"] = source
+        let prompt = try JSONDecoder().decode(Prompt.self, from: JSONSerialization.data(withJSONObject: json))
+        XCTAssertEqual(prompt.source.post?.text, "Original source text")
+        XCTAssertNotNil(prompt.source.post?.date)
+        XCTAssertEqual(PromptDestination.choices(for: prompt).first?.id, "dreamina")
+        XCTAssertEqual(PromptDestination.choices(for: prompt).first?.url.host, "dreamina.capcut.com")
+    }
+
 }
