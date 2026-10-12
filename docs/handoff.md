@@ -53,3 +53,5 @@ Claude 官方目前记录了 [Code 页深链](https://support.claude.com/en/arti
 
 
 0.4.1 补齐已识别模型的官方入口：Nano Banana→Gemini、GPT Image→ChatGPT、Midjourney→官网、Seedance→Dreamina、Veo→Flow、Runway→应用站。仅在内容未自带工具 URL 时采用，未知视频模型不猜链接；仍由用户在目标工具粘贴、选择模型与提交。
+
+0.4.4（15）新增 Expo／Supabase 官方 Skill 的固定 commit 安装命令，限定其公开包根目录。详情显示完整文件清单、原始来源与作者；复制安装命令交给桌面编程助手，不在手机执行安装。

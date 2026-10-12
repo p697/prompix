@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 export const defaultReviewRequests = 4;
-export const maximumReviewRequests = 40;
+export const maximumReviewRequests = 64;
 export type ReviewAttempt = { day: string; requests: 1; state: "reserved" | "completed" | "failed" };
 export type ReviewLedger<Attempt extends ReviewAttempt> = {
   schemaVersion: 2; day: string; requests: number; attempts: Attempt[];

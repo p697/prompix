@@ -81,7 +81,7 @@ test("daily zero budget prevents configured provider and media preparation witho
 test("daily visual budget configuration validates before media or provider work, including dry-run", async () => {
   const root = await mkdtemp(join(tmpdir(), "prompix-visual-budget-"));
   try {
-    for (const value of ["-1", "41", "4.5", "", "four"]) {
+    for (const value of ["-1", "65", "4.5", "", "four"]) {
       await assert.rejects(prepareDailyVisualReview([picture()], [], root, false,
         { PROMPIX_VISUAL_PROVIDER: "codex", PROMPIX_VISUAL_MAX_REQUESTS: value, PROMPIX_CODEX: "/must-not-be-executed" }), /request limit/);
     }

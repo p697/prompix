@@ -413,7 +413,7 @@ test("zero budget skips all preparation and invalid budgets fail before any side
     assert.equal(result.report.requests, 0); assert.equal(result.report.maxRequests, 0);
     assert.equal(result.report.status, "daily-limit"); assert.deepEqual(state.events, []); assert.deepEqual(state.preparedIDs, []);
   }
-  for (const maxRequests of [-1, 41, 1.5, "1.5", "4 ", "all", false, null]) {
+  for (const maxRequests of [-1, 65, 1.5, "1.5", "4 ", "all", false, null]) {
     const { run, state } = harness([prompt("bad-budget")]);
     await assert.rejects(run({ maxRequests }), /request limit/);
     assert.deepEqual(state.events, []); assert.deepEqual(state.preparedIDs, []);
