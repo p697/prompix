@@ -77,6 +77,81 @@ import XCTest
         let translations: [String: TranslationSnapshot]
     }
     private struct TranslationSnapshot: Decodable { let prompt: String }
+    private struct LanguagePackIndexSnapshot: Decodable {
+        let downloadedLocales: [String: String]
+    }
+
+    func testProductionLanguageDownloadAndCachedRelaunch() throws {
+        guard ProcessInfo.processInfo.environment["PROMPIX_LANGUAGE_PACK_ACCEPTANCE"] == "1" else {
+            throw XCTSkip("Stage a production v2 edition containing only Simplified Chinese in the backed-up simulator.")
+        }
+        var directory = try acceptanceDirectory()
+        let before = try readSnapshot(CatalogSnapshot.self, from: directory, file: "catalog.json")
+        let index = try readSnapshot(LanguagePackIndexSnapshot.self, from: directory, file: "language-packs.json")
+        XCTAssertEqual(Set(index.downloadedLocales.keys), ["zh-Hans"])
+        let draftsURL = directory.appendingPathComponent("drafts.json")
+        let draftsBefore = try? Data(contentsOf: draftsURL)
+
+        launch()
+        app.buttons["kind-text"].tap()
+        let card = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'prompt-' ")).firstMatch
+        reveal(card)
+        let id = String(card.identifier.dropFirst("prompt-".count))
+        card.tap()
+        let menu = app.buttons["contentLanguage"]
+        reveal(menu)
+        menu.tap()
+        let japanese = app.buttons["contentLanguage-ja"]
+        XCTAssertTrue(japanese.waitForExistence(timeout: 3))
+        japanese.tap()
+        let ready = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            menu.exists && menu.label.contains("日本語")
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 60), .completed)
+        XCTAssertFalse(app.otherElements["languageDownloadFailure"].exists)
+        directory = try acceptanceDirectory()
+        let after = try readSnapshot(CatalogSnapshot.self, from: directory, file: "catalog.json")
+        let downloaded = try readSnapshot(LanguagePackIndexSnapshot.self, from: directory, file: "language-packs.json")
+        XCTAssertEqual(before.version, after.version, "Selecting another language must work without a new content edition.")
+        XCTAssertEqual(Set(downloaded.downloadedLocales.keys), ["zh-Hans", "ja"])
+        let expected = try XCTUnwrap(after.prompts.first { $0.id == id }?.localization?.translations["ja"]?.prompt)
+        XCTAssertFalse(expected.isEmpty)
+        capture("language-pack-01-japanese-downloaded")
+        app.buttons["copyPrompt"].tap()
+        XCTAssertTrue(app.buttons["copyPrompt"].label.contains("已复制"))
+        reveal(app.buttons["editPrompt"])
+        app.buttons["editPrompt"].tap()
+        let editor = app.textViews["promptEditor"]
+        XCTAssertTrue(editor.waitForExistence(timeout: 5))
+        XCTAssertTrue(editor.value as? String == expected, "The editor must receive the downloaded language in full.")
+        capture("language-pack-02-japanese-editor")
+        app.navigationBars.buttons["完成"].tap()
+        XCTAssertEqual(try? Data(contentsOf: directory.appendingPathComponent("drafts.json")), draftsBefore)
+        app.terminate()
+
+        // No automatic refresh on this relaunch. The Japanese pack remains on
+        // disk while startup loads only the preferred Simplified Chinese pack.
+        launch()
+        app.buttons["kind-text"].tap()
+        let sameCard = app.buttons["prompt-\(id)"]
+        reveal(sameCard)
+        sameCard.tap()
+        reveal(menu)
+        menu.tap()
+        app.buttons["contentLanguage-ja"].tap()
+        let cachedReady = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            menu.exists && menu.label.contains("日本語")
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [cachedReady], timeout: 10), .completed)
+        directory = try acceptanceDirectory()
+        let reloaded = try readSnapshot(CatalogSnapshot.self, from: directory, file: "catalog.json")
+        XCTAssertTrue(reloaded.prompts.first { $0.id == id }?.localization?.translations["ja"]?.prompt == expected)
+        XCTAssertEqual(try? Data(contentsOf: directory.appendingPathComponent("drafts.json")), draftsBefore)
+        menu.tap()
+        app.buttons["contentLanguage-original"].tap()
+        XCTAssertTrue(menu.label.contains("原文"))
+        capture("language-pack-03-cached-switch-and-original")
+    }
 
     private func acceptanceDirectory() throws -> URL {
         let environment = ProcessInfo.processInfo.environment

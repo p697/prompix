@@ -4,23 +4,37 @@ import Combine
 import Observation
 
 struct PromptDetail: View {
-    let item: Prompt
+    private let snapshot: Prompt
+    private let origin: PromptDetailOrigin
     @Environment(Library.self) private var library
-    @State private var editorPresented = false
+    @State private var editorContext: EditorContext?
     @State private var imagePresented = false
     @State private var playerPresented = false
     @State private var copied = false
     @State private var webPresented = false
     @State private var language: String?
+    @State private var hasChosenLanguage = false
+    @State private var pendingLanguage: String?
+    @State private var failedLanguage: String?
+    @State private var languageRequestID: UUID?
+    @State private var languageTask: Task<Void, Never>?
     @State private var fullPrompt = false
-    private var content: Prompt.TranslatedContent { item.content(in: language) }
+    private struct EditorContext: Identifiable {
+        let id = UUID()
+        let item: Prompt
+        let language: String?
+    }
+    private var item: Prompt { library.resolvedDetail(snapshot, origin: origin) }
+    private var effectiveLanguage: String? { language.flatMap { item.availableLanguages.contains($0) ? $0 : nil } }
+    private var content: Prompt.TranslatedContent { item.content(in: effectiveLanguage) }
     private var displaysOriginalContent: Bool { content == item.content(in: nil) }
     private var spokenLicense: String {
         // Give the common abbreviation a pronounceable name for VoiceOver.
         item.source.license == "CC0-1.0" ? "Creative Commons Zero" : item.source.license
     }
-    init(item: Prompt) {
-        self.item = item
+    init(item: Prompt, origin: PromptDetailOrigin = .catalog) {
+        snapshot = item
+        self.origin = origin
         _language = State(initialValue: item.preferredTranslation)
     }
     private var related: [Prompt] {
@@ -79,7 +93,7 @@ struct PromptDetail: View {
                         HStack {
                             Text(item.isSkill ? "SKILL.md" : "Prompt").font(.headline).accessibilityAddTraits(.isHeader)
                             Spacer()
-                            Button { editorPresented = true } label: { Label(String(localized: "编辑"), systemImage: "square.and.pencil").frame(minWidth: 44, minHeight: 44).contentShape(Rectangle()) }.font(.subheadline)
+                            Button { openEditor() } label: { Label(String(localized: "编辑"), systemImage: "square.and.pencil").frame(minWidth: 44, minHeight: 44).contentShape(Rectangle()) }.font(.subheadline)
                                 .accessibilityIdentifier("editPrompt")
                         }
                         Text(fullPrompt ? content.prompt : String(content.prompt.prefix(1100))).font(.system(.subheadline)).lineSpacing(6).textSelection(.enabled)
@@ -134,11 +148,12 @@ struct PromptDetail: View {
             ToolbarItem(placement: .topBarTrailing) {
                 Button { library.toggle(item) } label: { Image(systemName: library.isSaved(item) ? "bookmark.fill" : "bookmark").frame(minWidth: 44, minHeight: 44) }
                     .accessibilityLabel(library.isSaved(item) ? String(localized: "取消收藏") : String(localized: "收藏 Prompt")).accessibilityIdentifier("detailFavorite")
+                    .disabled(library.isRemoved(item))
             }
         }
         .safeAreaInset(edge: .bottom) {
             HStack(spacing: 12) {
-                Button { editorPresented = true } label: { Image(systemName: "square.and.pencil").font(.system(size: 19)).frame(width: 50, height: 50) }
+                Button { openEditor() } label: { Image(systemName: "square.and.pencil").font(.system(size: 19)).frame(width: 50, height: 50) }
                     .buttonStyle(.plain).background(Palette.surface, in: Circle()).accessibilityLabel(String(localized: "编辑后使用"))
                 Button {
                     UIPasteboard.general.string = content.prompt
@@ -150,8 +165,15 @@ struct PromptDetail: View {
             }.padding(.horizontal, 20).padding(.vertical, 10).frame(maxWidth: 700)
                 .frame(maxWidth: .infinity).background(Palette.paper)
         }
-        .onChange(of: language) { _, _ in copied = false; fullPrompt = false }
-        .sheet(isPresented: $editorPresented) { PromptEditor(item: item, language: language) }
+        .onChange(of: content) { _, _ in copied = false; fullPrompt = false }
+        .onChange(of: item.preferredTranslation, initial: true) { _, preferred in
+            if !hasChosenLanguage { language = preferred }
+        }
+        .onChange(of: library.isRemoved(item)) { _, removed in
+            if removed { cancelLanguageSelection(); failedLanguage = nil }
+        }
+        .onDisappear { if languageRequestID != nil { cancelLanguageSelection() } }
+        .sheet(item: $editorContext) { context in PromptEditor(item: context.item, language: context.language) }
         .fullScreenCover(isPresented: $imagePresented) { ImageViewer(name: item.media?.image ?? item.artwork, urls: item.media?.galleryURLs ?? []) }
         .sheet(isPresented: $webPresented) {
             if let filename = WebsiteExamples.files[item.id] { WebExample(filename: filename) }
@@ -166,9 +188,32 @@ struct PromptDetail: View {
             .font(.footnote).foregroundStyle(Palette.muted)
     }
     private var languagePicker: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(alignment: .center, spacing: 12) { languageSummary; Spacer(minLength: 4); languageMenu }
-            VStack(alignment: .leading, spacing: 10) { languageSummary; languageMenu }
+        VStack(alignment: .leading, spacing: 10) {
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .center, spacing: 12) { languageSummary; Spacer(minLength: 4); languageMenu }
+                VStack(alignment: .leading, spacing: 10) { languageSummary; languageMenu }
+            }
+            if library.isRemoved(item) {
+                Text(String(localized: "这条内容已被移除，无法再保存。你仍可复制当前文字。"))
+                    .font(.footnote).foregroundStyle(Palette.muted).fixedSize(horizontal: false, vertical: true)
+            } else if let pendingLanguage {
+                HStack(alignment: .top, spacing: 10) {
+                    ProgressView().controlSize(.small)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(ContentLanguage.name(pendingLanguage)).font(.footnote.weight(.medium))
+                        Text(String(localized: "正在下载此语言，当前内容仍可使用。"))
+                            .font(.caption).foregroundStyle(Palette.muted).fixedSize(horizontal: false, vertical: true)
+                    }
+                }.accessibilityElement(children: .combine).accessibilityIdentifier("languageDownloadProgress")
+            } else if let failedLanguage {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(ContentLanguage.name(failedLanguage)).font(.footnote.weight(.medium))
+                    Text(String(localized: "此语言暂时无法下载，当前内容已保留。"))
+                        .font(.caption).foregroundStyle(Palette.muted).fixedSize(horizontal: false, vertical: true)
+                    Button(String(localized: "重试")) { selectLanguage(failedLanguage) }
+                        .font(.footnote.weight(.medium)).frame(minHeight: 44).accessibilityIdentifier("retryLanguageDownload")
+                }.accessibilityElement(children: .contain).accessibilityIdentifier("languageDownloadFailure")
+            }
         }
     }
     private var languageSummary: some View {
@@ -182,23 +227,52 @@ struct PromptDetail: View {
         }
     }
     @ViewBuilder private var languageMenu: some View {
-            if !item.availableLanguages.isEmpty {
+            if !library.isRemoved(item), !library.advertisedLanguages(for: item).isEmpty {
                 Menu {
-                    Button { language = nil } label: {
-                        if language == nil { Label(String(localized: "原文"), systemImage: "checkmark") }
+                    Button { selectOriginal() } label: {
+                        if effectiveLanguage == nil { Label(String(localized: "原文"), systemImage: "checkmark") }
                         else { Text(String(localized: "原文")) }
-                    }
-                    ForEach(item.availableLanguages, id: \.self) { code in
-                        Button { language = code } label: {
-                            if language == code { Label(ContentLanguage.name(code), systemImage: "checkmark") }
+                    }.accessibilityIdentifier("contentLanguage-original")
+                    ForEach(library.advertisedLanguages(for: item), id: \.self) { code in
+                        Button { selectLanguage(code) } label: {
+                            if effectiveLanguage == code { Label(ContentLanguage.name(code), systemImage: "checkmark") }
+                            else if !item.availableLanguages.contains(code) { Label(ContentLanguage.name(code), systemImage: "arrow.down.circle") }
                             else { Text(ContentLanguage.name(code)) }
-                        }
+                        }.accessibilityIdentifier("contentLanguage-\(code)")
+                            .accessibilityHint(item.availableLanguages.contains(code) ? "" : String(localized: "下载后切换到此语言"))
                     }
                 } label: {
-                    Label(language.map(ContentLanguage.name) ?? String(localized: "原文"), systemImage: "globe")
+                    Label(effectiveLanguage.map(ContentLanguage.name) ?? String(localized: "原文"), systemImage: "globe")
                         .font(.subheadline).frame(minHeight: 44)
                 }.accessibilityIdentifier("contentLanguage")
             }
+    }
+    private func openEditor() {
+        // Capture both together: a catalog or locale install must not change an open editor's baseline.
+        editorContext = EditorContext(item: item, language: effectiveLanguage)
+    }
+    private func cancelLanguageSelection() {
+        languageRequestID = nil
+        languageTask?.cancel(); languageTask = nil; pendingLanguage = nil
+        // Cancelling this caller propagates to its owned Library task. A detail
+        // disappearing late must not cancel a newer detail's language request.
+    }
+    private func selectOriginal() {
+        hasChosenLanguage = true
+        cancelLanguageSelection(); failedLanguage = nil; language = nil
+    }
+    private func selectLanguage(_ code: String) {
+        hasChosenLanguage = true
+        cancelLanguageSelection(); failedLanguage = nil
+        let request = UUID(), requestedItem = item
+        languageRequestID = request; pendingLanguage = code
+        languageTask = Task { @MainActor in
+            let available = await library.ensureLanguage(code, for: requestedItem)
+            guard !Task.isCancelled, languageRequestID == request else { return }
+            languageRequestID = nil; languageTask = nil; pendingLanguage = nil
+            if available && item.availableLanguages.contains(code) && !library.isRemoved(item) { language = code }
+            else { failedLanguage = code }
+        }
     }
     private var hero: some View {
         Artwork(item: item).aspectRatio(item.media?.aspectRatio.map { max(0.9, min(1.8, $0)) } ?? (item.kind == .image ? 0.95 : 1.15), contentMode: .fit)

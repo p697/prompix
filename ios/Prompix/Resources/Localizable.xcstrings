@@ -794,6 +794,64 @@
         }
       }
     },
+    "下载后切换到此语言": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "下载后切换到此语言"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Download and switch to this language"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "下載後切換至此語言"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ダウンロードしてこの言語に切り替える"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "다운로드 후 이 언어로 전환"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Descargar y cambiar a este idioma"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Baixar e mudar para este idioma"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Télécharger et passer à cette langue"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Herunterladen und zu dieser Sprache wechseln"
+          }
+        }
+      }
+    },
     "不同画风、场景设定与视觉实验": {
       "localizations": {
         "en": {
@@ -8885,6 +8943,64 @@
         }
       }
     },
+    "正在下载此语言，当前内容仍可使用。": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在下载此语言，当前内容仍可使用。"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Downloading this language. You can keep using the current content."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在下載此語言，目前內容仍可使用。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "この言語をダウンロード中です。現在の内容は引き続き使えます。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 언어를 다운로드하고 있습니다. 현재 콘텐츠는 계속 사용할 수 있습니다."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Descargando este idioma. Puedes seguir usando el contenido actual."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Baixando este idioma. Você pode continuar usando o conteúdo atual."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Téléchargement de cette langue. Vous pouvez continuer à utiliser le contenu actuel."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diese Sprache wird heruntergeladen. Der aktuelle Inhalt bleibt verfügbar."
+          }
+        }
+      }
+    },
     "正在保存…": {
       "extractionState": "manual",
       "localizations": {
@@ -9235,6 +9351,64 @@
           "stringUnit": {
             "state": "translated",
             "value": "Suche nach Updates…"
+          }
+        }
+      }
+    },
+    "此语言暂时无法下载，当前内容已保留。": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此语言暂时无法下载，当前内容已保留。"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This language could not be downloaded. Your current content is still available."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此語言暫時無法下載，目前內容已保留。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "この言語をダウンロードできませんでした。現在の内容は引き続き使えます。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 언어를 다운로드하지 못했습니다. 현재 콘텐츠는 그대로 유지됩니다."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No se pudo descargar este idioma. El contenido actual sigue disponible."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Não foi possível baixar este idioma. O conteúdo atual continua disponível."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Impossible de télécharger cette langue. Le contenu actuel reste disponible."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diese Sprache konnte nicht heruntergeladen werden. Der aktuelle Inhalt bleibt verfügbar."
           }
         }
       }

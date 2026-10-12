@@ -170,6 +170,7 @@ struct CatalogUpdateStatus: View {
 
 struct PromptGrid: View {
     let items: [Prompt]
+    var origin: PromptDetailOrigin = .catalog
     @Environment(\.dynamicTypeSize) private var typeSize
     @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
     @Environment(\.horizontalSizeClass) private var sizeClass
@@ -178,7 +179,7 @@ struct PromptGrid: View {
         // Separate masonry columns read column-first. A linear native stack
         // preserves the editorial sequence when navigating with VoiceOver.
         if typeSize.isAccessibilitySize || voiceOverEnabled {
-            LazyVStack(spacing: 24) { ForEach(items) { PromptCard(item: $0) } }
+            LazyVStack(spacing: 24) { ForEach(items) { PromptCard(item: $0, origin: origin) } }
         } else {
             HStack(alignment: .top, spacing: 14) {
                 ForEach(0..<columnCount, id: \.self) { column($0) }
@@ -188,7 +189,7 @@ struct PromptGrid: View {
     private func column(_ parity: Int) -> some View {
         LazyVStack(spacing: 22) {
             ForEach(Array(items.enumerated()).filter { $0.offset % columnCount == parity }, id: \.element.id) { _, item in
-                PromptCard(item: item)
+                PromptCard(item: item, origin: origin)
             }
         }.frame(maxWidth: .infinity)
     }
@@ -196,12 +197,13 @@ struct PromptGrid: View {
 
 struct PromptCard: View {
     let item: Prompt
+    var origin: PromptDetailOrigin = .catalog
     @Environment(Library.self) private var library
     @State private var savedFeedback = false
     @Environment(\.dynamicTypeSize) private var typeSize
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            NavigationLink { PromptDetail(item: item) } label: {
+            NavigationLink { PromptDetail(item: item, origin: origin) } label: {
                 VStack(alignment: .leading, spacing: 10) {
                     if typeSize.isAccessibilitySize && (item.kind == .text || item.isSkill) {
                         VStack(alignment: .leading, spacing: 12) {
@@ -363,7 +365,7 @@ struct FavoritesView: View {
                         } else {
                             ContentUnavailableView(String(localized: "暂无收藏"), systemImage: "bookmark", description: Text(String(localized: "轻点卡片上的书签。\n文字保存在本机，缩略图会下载以供离线查看。")))
                         }
-                    } else { PromptGrid(items: items).padding(.horizontal, 16) }
+                    } else { PromptGrid(items: items, origin: .favorite).padding(.horizontal, 16) }
                     }
                 }.padding(.bottom, 24)
             }.paperScreen().navigationTitle(String(localized: "收藏"))
