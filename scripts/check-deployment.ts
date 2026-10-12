@@ -8,6 +8,13 @@ import { localizationLanguages } from "../packages/schema/catalog.ts";
 import { languagePackByteLimit, languagePackManifestByteLimit } from "../packages/schema/language-packs.ts";
 import { joinLanguagePacks, verifyLanguagePackManifest, type LocaleBytes } from "../ingest/language-packs.ts";
 
+function opaqueETag(value: string | null, url: string) {
+  assert.ok(value, `Missing ETag: ${url}`);
+  assert.match(value, /^(?:W\/)?"[\x21\x23-\x7e\x80-\xff]*"$/, `Invalid ETag: ${url}`);
+  // RFC 9110 weak comparison permits compression to change the W/ marker, not the opaque value.
+  return value.startsWith("W/") ? value.slice(2) : value;
+}
+
 export async function checkDeployment(fetcher: typeof fetch = fetch, options: { requireV2?: boolean } = {}) {
   // A redirect to a missing page must not be mistaken for an unbootstrapped v2 channel.
   const request = (url: string, init?: RequestInit) => fetcher(url, {
@@ -16,16 +23,21 @@ export async function checkDeployment(fetcher: typeof fetch = fetch, options: { 
   async function verifyHTTP(url: string, response: Response, pointer = false) {
     const etag = response.headers.get("etag");
     assert.ok(etag, `Missing ETag: ${url}`);
+    const expectedTag = opaqueETag(etag, url);
+    const verifyETag = (candidate: Response) => assert.equal(
+      opaqueETag(candidate.headers.get("etag"), url), expectedTag, `ETag mismatch: ${url}`,
+    );
     assert.equal(response.headers.get("cache-control"), pointer ? "public, max-age=60" : "public, max-age=86400");
     const conditional = await request(url, { headers: { "If-None-Match": etag } });
     assert.equal(conditional.status, 304, `Conditional GET failed: ${url}`);
-    assert.equal(conditional.headers.get("etag"), etag);
+    verifyETag(conditional);
     const head = await request(url, { method: "HEAD" });
     assert.equal(head.status, 200, `HEAD failed: ${url}`);
     assert.equal(head.body, null, `HEAD returned a body: ${url}`);
-    assert.equal(head.headers.get("etag"), etag);
+    verifyETag(head);
     const conditionalHead = await request(url, { method: "HEAD", headers: { "If-None-Match": etag } });
     assert.equal(conditionalHead.status, 304, `Conditional HEAD failed: ${url}`);
+    verifyETag(conditionalHead);
   }
   const manifestResponse = await request(`${base}/v1/latest.json`);
   assert.equal(

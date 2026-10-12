@@ -62,6 +62,44 @@ test("deployment checker validates both independent channels and all nine packs 
   assert.ok(stub.calls.every(call => call.redirect === "manual"));
 });
 
+test("checker accepts weak and strong ETags with identical opaque values across GET, HEAD and 304 responses", async () => {
+  for (const initialWeak of [true, false]) {
+    const stub = fixture();
+    const fetcher: typeof fetch = async (input, init) => {
+      const response = await stub.fetcher(input, init), etag = response.headers.get("etag");
+      if (etag) {
+        const fullGet = (init?.method ?? "GET") === "GET" && !new Headers(init?.headers).has("If-None-Match");
+        const weak = fullGet ? initialWeak : !initialWeak;
+        response.headers.set("ETag", weak ? `W/${etag}` : etag);
+      }
+      return response;
+    };
+    assert.equal((await checkDeployment(fetcher, { requireV2: true })).v2.status, "verified");
+    // Keep the original validator on the wire, including its strength marker.
+    for (const call of stub.calls.filter(call => call.headers.has("If-None-Match"))) {
+      assert.equal(call.headers.get("If-None-Match")!.startsWith("W/"), initialWeak);
+    }
+  }
+});
+
+test("checker rejects different, malformed or missing ETags on HEAD and conditional responses", async () => {
+  for (const [method, conditional] of [["GET", true], ["HEAD", false], ["HEAD", true]] as const) {
+    for (const replacement of ['W/"different"', 'w/"invalid"', 'unquoted', null]) {
+      const stub = fixture();
+      const fetcher: typeof fetch = async (input, init) => {
+        const response = await stub.fetcher(input, init);
+        if (String(input) === latest && (init?.method ?? "GET") === method
+          && new Headers(init?.headers).has("If-None-Match") === conditional) {
+          if (replacement === null) response.headers.delete("ETag");
+          else response.headers.set("ETag", replacement);
+        }
+        return response;
+      };
+      await assert.rejects(checkDeployment(fetcher), /ETag mismatch|Invalid ETag|Missing ETag/);
+    }
+  }
+});
+
 test("only a genuine v2 404 permits bootstrap, and requireV2 rejects it", async () => {
   const absent = () => fixture(call => call.url === latest && call.method === "GET" ? new Response(null, { status: 404 }) : undefined);
   assert.deepEqual((await checkDeployment(absent().fetcher)).v2, { status: "absent" });
