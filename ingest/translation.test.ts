@@ -244,6 +244,7 @@ test("visual lettering remains exact while style quotations and prose still tran
   const visual = protectText(text, true);
   assert.deepEqual(visual.protectedValues, ['“上海早安”', '“从早餐开始”', '“关注”']);
   assert.match(visual.masked, /“爆炸图”/);
+  assert.deepEqual(protectText('标题“上海早安”，采用“爆炸图”风格。', true).protectedValues, ['“上海早安”']);
   assert.equal(restoreText(visual.masked, visual.protectedValues), text);
   assert.deepEqual(protectText(text).protectedValues, []);
   const poster = { ...item, kind: "image" as const, prompt: 'Write the title "GOOD MORNING" above "SHANGHAI".' };
@@ -292,4 +293,115 @@ test("human bracket headings, narrative and descriptor arrays translate while pl
   assert.equal(restoreText(result.masked, result.protectedValues), source);
   const sample = 'My first sentence is "istanbulu cok seviyom burada olmak cok guzel"';
   assert.deepEqual(protectText(sample).protectedValues, ['"istanbulu cok seviyom burada olmak cok guzel"']);
+});
+test("verified same-fingerprint inherited records need no paid rebuilding but untranslated bracket prose does", async () => {
+  const published = attachTranslations([item], fillCache())[0];
+  assert.equal(translationBatches([published], emptyTranslationCache(), ["en"]).length, 0);
+  const report = await runTranslations({ items: [published], cache: emptyTranslationCache(), locales: ["en"], providerName: "codex", persist: async () => {},
+    provider: async () => { throw new Error("Must reuse verified published translation"); } });
+  assert.equal(report.attempted, 0);
+  assert.ok(translationBatches([{ ...published, summary: "An updated summary." }], emptyTranslationCache(), ["en"]).length > 0);
+  const paragraph = '[保持参考图像中人物的外貌，并完整保留所有面部特征。]';
+  const source = { ...item, prompt: `请绘制一幅人物肖像。${paragraph}` };
+  const text = { title: item.title, summary: item.summary, prompt: `Create a cinematic portrait with careful lighting. ${paragraph}`, example: item.example, previewLabel: item.previewLabel, cover: { text: item.cover.text, eyebrow: item.cover.eyebrow } };
+  const falselyCompleted = { ...source, localization: { sourceLanguage: "zh", sourceFingerprint: translationFingerprint(source), translations: { en: text } } };
+  assert.equal(validLocalizedText(source, "en", text), false);
+  assert.equal(attachTranslations([falselyCompleted], emptyTranslationCache())[0].localization, undefined);
+  assert.ok(translationBatches([falselyCompleted], emptyTranslationCache(), ["en"]).length > 0);
+  const reviewed = promptSegments(item)[0];
+  const { createHash } = await import("node:crypto");
+  const reviews = [{ locale: "en", segmentID: reviewed.id, translationSHA256: createHash("sha256").update(reviewed.text).digest("hex"), reason: "Known semantic defect" }];
+  assert.ok(translationBatches([published], emptyTranslationCache(), ["en"], 12000, 160, reviews).length > 0);
+});
+test("semantic rejection survives a new protection mask and blocks inherited and fresh outputs", async () => {
+  const { createHash } = await import("node:crypto");
+  const hash = (value: string) => createHash("sha256").update(value).digest("hex");
+  const source = { ...item, prompt: "Create a portrait using @Image1." };
+  const cache = emptyTranslationCache(); cache.segments.en = Object.fromEntries(promptSegments(source).map(segment => [segment.id, segment.text]));
+  const published = attachTranslations([source], cache)[0];
+  const reviewed = promptSegments(source).find(segment => segment.text.startsWith("Create"))!;
+  const reviews = [{ locale: "en", segmentID: "c".repeat(64), translationSHA256: hash(source.prompt), sourceSHA256: hash(source.prompt), renderedTranslationSHA256: hash(source.prompt), reason: "Previously rejected before reference masking" }];
+  assert.equal(attachTranslations([published], cache, reviews)[0].localization, undefined);
+  assert.ok(translationBatches([published], cache, ["en"], 12000, 160, reviews).length > 0);
+  const report = await runTranslations({ items: [published], cache, reviews, locales: ["en"], providerName: "codex", maxRequests: 1, persist: async () => {},
+    provider: async (_locale, segments) => { assert.ok(segments.find(segment => segment.id === reviewed.id)?.reviewFeedback?.length); return { translations: segments.map(segment => ({ id: segment.id, text: segment.text })) }; } });
+  assert.equal(report.rejected, 1); assert.equal(attachTranslations([published], cache, reviews)[0].localization, undefined);
+});
+test("repeated literal captions and nested placeholders remain atomically valid", () => {
+  const source = { ...item, prompt: '标题“{dishLeft}”，旁边绘制“{dishLeft}”的成品。文字“Focus.”，另一处标有“Focus.”。' };
+  const cache = emptyTranslationCache();cache.segments.en = Object.fromEntries(promptSegments(source).map(segment => [segment.id, segment.text]));
+  const literal = protectText(source.prompt, true);
+  assert.equal(literal.protectedValues.filter(value => value === '“{dishLeft}”').length, 2);
+  assert.equal(literal.protectedValues.filter(value => value === '“Focus.”').length, 2);
+  const text = { title: source.title, summary: source.summary, prompt: 'Title “{dishLeft}”, beside the finished “{dishLeft}” dish. Text “Focus.”, and another label “Focus.”.', example: source.example, previewLabel: source.previewLabel, cover: { text: source.cover.text, eyebrow: source.cover.eyebrow } };
+  assert.equal(validLocalizedText(source, "en", text), true);
+  assert.equal(validLocalizedText(source, "en", { ...text, prompt: text.prompt + ' “Focus.”' }), false);
+});
+test("shared masked IDs retain every restored review context regardless of source order", async () => {
+  const { createHash } = await import("node:crypto");
+  const hash = (value: string) => createHash("sha256").update(value).digest("hex");
+  const first = { ...item, id: "first", prompt: "Create a portrait using @Image1." };
+  const second = { ...item, id: "second", prompt: "Create a portrait using @Image2." };
+  const reviewed = promptSegments(first).find(segment => segment.sourceText === first.prompt)!;
+  assert.equal(promptSegments(second).find(segment => segment.sourceText === second.prompt)!.id, reviewed.id);
+  const reviews = [{ locale: "en", segmentID: "d".repeat(64), translationSHA256: hash(first.prompt), sourceSHA256: hash(first.prompt), renderedTranslationSHA256: hash(first.prompt), reason: "Rejected first source only" }];
+  for (const items of [[first, second], [second, first]]) {
+    const cache = emptyTranslationCache(); cache.segments.en = Object.fromEntries(items.flatMap(promptSegments).map(segment => [segment.id, segment.text]));
+    assert.equal(translationBatches(items, cache, ["en"], 12000, 160, reviews).flatMap(job => job.segments).length, 1);
+    const report = await runTranslations({ items, cache, reviews, locales: ["en"], providerName: "codex", maxRequests: 1, persist: async () => {},
+      provider: async (_locale, segments) => { assert.ok(segments[0].reviewFeedback?.includes("Rejected first source only")); return { translations: segments.map(segment => ({ id: segment.id, text: segment.text })) }; } });
+    assert.equal(report.rejected, 1);
+  }
+});
+test("reviewed minimal corrections bind exact source and output and preserve newer cache work", async () => {
+  const { applyReviewedCorrections } = await import("./translation-corrections.ts");
+  const { createHash } = await import("node:crypto");
+  const hash = (value: string) => createHash("sha256").update(value).digest("hex");
+  const protectedText = protectText(item.prompt, true);
+  const originalMasked = protectedText.masked;
+  const correctedMasked = originalMasked.replace("Create a portrait", "Create a detailed portrait");
+  const correction = { id: item.id, locale: "en", field: "prompt", source: item.prompt, sourceSHA256: hash(item.prompt), segmentID: hash(originalMasked),
+    originalTranslation: item.prompt, originalTranslationSHA256: hash(item.prompt), originalMaskedTranslationSHA256: hash(originalMasked),
+    correctedTranslation: restoreText(correctedMasked, protectedText.protectedValues), correctedMaskedTranslation: correctedMasked, reason: "Reviewed wording correction" };
+  const cache = emptyTranslationCache();cache.segments.en = { [correction.segmentID]: originalMasked };
+  assert.equal(applyReviewedCorrections([item], cache, [correction], "reviewer-model").applied.length, 1);
+  assert.equal(cache.provenance?.en[correction.segmentID].provider, "agent-reviewed");
+  assert.equal(applyReviewedCorrections([item], cache, [correction], "reviewer-model").skipped.length, 1);
+  assert.equal(cache.segments.en[correction.segmentID], correctedMasked);
+  assert.throws(() => applyReviewedCorrections([{ ...item, prompt: item.prompt + " Changed." }], cache, [correction], "reviewer-model"), /source binding/);
+  assert.throws(() => applyReviewedCorrections([item], cache, [{ ...correction, correctedMaskedTranslation: correctedMasked.replace("⟦PP0⟧", "missing") }], "reviewer-model"), /token|protect/);
+});
+test("numeric character limits cannot become word limits", () => {
+  for (const [locale, wrong, correct] of [["en", "words", "characters"], ["es", "palabras", "caracteres"], ["pt-BR", "palavras", "caracteres"], ["fr", "mots", "caractères"], ["de", "Wörter", "Zeichen"], ["ja", "単語", "文字"], ["ko", "단어", "자"]] as const) {
+    const source = "Write approximately ⟦PP0⟧ 字.";
+    assert.throws(() => validateSegment(source, `Use ⟦PP0⟧ ${wrong}.`, locale), /Character limit/);
+    assert.doesNotThrow(() => validateSegment(source, `Use ⟦PP0⟧ ${correct}.`, locale));
+    assert.doesNotThrow(() => validateSegment("Write ⟦PP0⟧ words.", `Use ⟦PP0⟧ ${wrong}.`, locale));
+  }
+  assert.throws(() => validateSegment("Write ⟦PP0⟧ characters.", "Écrivez ⟦PP0⟧ mots.", "fr"), /Character limit/);
+  assert.throws(() => validateSegment("写 ⟦PP0⟧ 字", "⟦PP0⟧ 単語", "ja"), /Character limit/);
+});
+test("same-item masked duplicates preserve every source-field semantic review", async () => {
+  const { createHash } = await import("node:crypto"); const hash = (value: string) => createHash("sha256").update(value).digest("hex");
+  const source = { ...item, title: "Turn 1 time.", prompt: "Turn 2 time.", example: "Turn 2 time.", previewLabel: "Turn 2 time." };
+  const segment = promptSegments(source).find(segment => segment.sourceText === source.title)!;
+  assert.ok(segment.contexts?.some(context => context.sourceText === source.prompt));
+  const cache = emptyTranslationCache(); cache.segments.fr = Object.fromEntries(promptSegments(source).map(segment => [segment.id, segment.text === "Turn ⟦PP0⟧ time." ? "Tourner ⟦PP0⟧ fois." : segment.text]));
+  const reviews = [{ locale: "fr", segmentID: "e".repeat(64), translationSHA256: hash("old mask"), sourceSHA256: hash(source.title), renderedTranslationSHA256: hash("Tourner 1 fois."), reason: "Rejected title only" }];
+  assert.equal(translationBatches([source], cache, ["fr"], 12000, 160, reviews).flatMap(job => job.segments).length, 1);
+});
+test("daily inherits the validated completed local artifact with absent cache and rejects source changes or corruption", async () => {
+  const { mkdtemp, mkdir, writeFile, rm } = await import("node:fs/promises"); const { tmpdir } = await import("node:os"); const { join } = await import("node:path");
+  const { prepareDailyTranslations } = await import("./translation-daily.ts");
+  const root = await mkdtemp(join(tmpdir(), "prompix-local-complete-test-"));
+  try {
+    await mkdir(join(root, "translations"));
+    const template = JSON.parse(await readFile(new URL("../ios/Prompix/Resources/catalog.json", import.meta.url), "utf8"));
+    await writeFile(join(root, "translations/catalog.localized.json"), JSON.stringify({ ...template, prompts: attachTranslations([item], fillCache()) }));
+    const result = await prepareDailyTranslations([item], root, { PROMPIX_TRANSLATION_PROVIDER: "codex", PROMPIX_CODEX: "/must-not-run" }, false);
+    assert.equal(result.report.coverage.en, 1); assert.equal(result.report.status, "cached");
+    assert.equal((await prepareDailyTranslations([{ ...item, prompt: item.prompt + " Changed." }], root, {}, false)).report.coverage.en, 0);
+    await writeFile(join(root, "translations/catalog.localized.json"), "{broken");
+    await assert.rejects(prepareDailyTranslations([item], root, {}, false));
+  } finally { await rm(root, { recursive: true, force: true }); }
 });

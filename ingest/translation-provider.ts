@@ -9,7 +9,7 @@ export const translationOutputSchema = { type: "object", additionalProperties: f
   translations: { type: "array", items: { type: "object", additionalProperties: false, required: ["id", "text"], properties: { id: { type: "string" }, text: { type: "string" } } } },
 } };
 export type TranslationResponse = { translations: { id: string; text: string }[]; inputTokens?: number; outputTokens?: number };
-function compactSegments(segments: readonly Segment[]): Segment[] { return segments.map((segment, index) => ({ ...segment, id: String(index) })); }
+function compactSegments(segments: readonly Segment[]): Segment[] { return segments.map((segment, index) => ({ id: String(index), text: segment.text, ...(segment.numericHints ? { numericHints: segment.numericHints } : {}), ...(segment.reviewFeedback ? { reviewFeedback: segment.reviewFeedback } : {}) })); }
 function restoreSegmentIDs(result: TranslationResponse, segments: readonly Segment[]): TranslationResponse {
   if (!Array.isArray(result.translations)) throw new Error("Missing translations");
   return { ...result, translations: result.translations.map(item => ({ ...item, id: /^(0|[1-9]\d*)$/.test(item.id) && segments[Number(item.id)] ? segments[Number(item.id)].id : `unexpected:${item.id}` })) };

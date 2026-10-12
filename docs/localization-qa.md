@@ -29,3 +29,7 @@ Checker rejection paths were exercised with temporary modified catalogs: a missi
 These checks establish catalog completeness and formatting consistency. They do not constitute professional native-speaker review or prove that every translation fits its rendered control. Simulator verification should cover the nine language settings, discover/search, creator profiles and saved creators, Skill details, content-language switching, edit/restore dialogs, accessibility labels, and narrow-width layouts. Xcode build and rendered UI evidence are tracked with release verification.
 
 Content translations have their own pipeline and review; this file describes the app interface catalog.
+
+## 0.3.0 content review evidence
+
+The first-party `studio-005` offline edition contains 30 original items in all nine content locales. Agent review covered all 240 non-source-language prompt bodies and corresponding titles, summaries, examples and constraints; 21 exact corrections were independently rechecked. This is semantic agent review, not professional native-speaker proofreading. Third-party content and review artifacts stay outside Git. Final rendered interface evidence is recorded in [acceptance-0.3.md](acceptance-0.3.md).

@@ -1,19 +1,37 @@
-import { applyTranslationReviews, validateReviewedTranslation, type TranslationRejection } from "./translation-review.ts";
+import { applyTranslationReviews, validateReviewedTranslation, validateReviewedTranslationField, translationReviewFeedback, type TranslationRejection } from "./translation-review.ts";
 import type { Prompt } from "../packages/schema/catalog.ts";
-import { promptSegments, translationLocales, translationVersion, validateSegment, seedOriginalSegments, type Segment, type TranslationCache, type TranslationLocale } from "./translation.ts";
+import { promptSegments, mergeSegmentContexts, translationFingerprint, validLocalizedText, restoreText, translationLocales, translationVersion, validateSegment, seedOriginalSegments, type Segment, type TranslationCache, type TranslationLocale } from "./translation.ts";
 import { TranslationProviderError, type TranslationProvider } from "./translation-provider.ts";
 
 export type TranslationRunReport = { version: string; provider: string; attempted: number; succeeded: number; rejected: number; failed: number; pendingSegments: number;
   reservedUSD: number; measuredUSD: number | null; inputTokens: number; outputTokens: number; failures: { locale: string; ids: string[]; reason: string }[] };
-export function translationBatches(items: readonly Prompt[], cache: TranslationCache, locales: readonly TranslationLocale[], maxCharacters = 12000, maxSegments = 160) {
-  const unique = new Map<string, Segment>();
-  for (const item of items) for (const segment of promptSegments(item)) unique.set(segment.id, segment);
+function validateForEverySource(segment: Segment, translated: string, locale: TranslationLocale, reviews: readonly TranslationRejection[]) {
+  validateSegment(segment.text, translated, locale, segment.numericHints);
+  validateReviewedTranslation(reviews, locale, segment.id, translated);
+  const contexts = [...(segment.contexts ?? []), ...(segment.sourceText !== undefined && segment.protectedValues ? [{ sourceText: segment.sourceText, protectedValues: segment.protectedValues, numericHints: segment.numericHints }] : [])];
+  for (const context of contexts) {
+    validateSegment(segment.text, translated, locale, context.numericHints);
+    validateReviewedTranslationField(reviews, locale, context.sourceText, restoreText(translated, context.protectedValues));
+  }
+}
+export function translationBatches(items: readonly Prompt[], cache: TranslationCache, locales: readonly TranslationLocale[], maxCharacters = 12000, maxSegments = 160, reviews: readonly TranslationRejection[] = []) {
   const jobs: { locale: TranslationLocale; segments: Segment[] }[] = [];
   for (const locale of locales) {
+    const unique = new Map<string, Segment>();
+    for (const item of items) {
+      const inherited = item.localization?.sourceFingerprint === translationFingerprint(item) ? item.localization.translations[locale] : undefined;
+      if (inherited && validLocalizedText(item, locale, inherited, reviews)) continue;
+      for (const segment of promptSegments(item)) {
+        const previous = unique.get(segment.id);
+        if (!previous) unique.set(segment.id, segment);
+        else mergeSegmentContexts(previous, segment);
+      }
+    }
     let batch: Segment[] = [], characters = 0;
     for (const segment of unique.values()) {
       const existing = cache.version === translationVersion ? cache.segments[locale]?.[segment.id] : undefined;
-      if (existing !== undefined) { try { validateSegment(segment.text, existing, locale, segment.numericHints); continue; } catch { /* Rebuild invalid cached translations. */ } }
+      if (existing !== undefined) { try { validateForEverySource(segment, existing, locale, reviews);
+        continue; } catch { /* Rebuild invalid cached translations. */ } }
       if (segment.text.length > 30000) throw new Error("Translation segment exceeds bounded request size");
       if (batch.length && (characters + segment.text.length > maxCharacters || batch.length >= maxSegments)) {
         jobs.push({ locale, segments: batch }); batch = []; characters = 0;
@@ -36,9 +54,9 @@ export async function runTranslations(options: { items: readonly Prompt[]; cache
   seedOriginalSegments(options.items, cache);
   applyTranslationReviews(cache, options.reviews ?? []);
   const locales = options.locales ?? translationLocales;
-  const batches = translationBatches(options.items, cache, locales, options.maxCharacters);
+  const batches = translationBatches(options.items, cache, locales, options.maxCharacters, 160, options.reviews);
   for (const job of batches) job.segments = job.segments.map(segment => {
-    const feedback = options.reviews?.filter(review => review.locale === job.locale && review.segmentID === segment.id).map(review => review.reason);
+    const feedback = [segment.sourceText, ...(segment.contexts ?? []).map(context => context.sourceText)].flatMap(source => translationReviewFeedback(options.reviews ?? [], job.locale, segment.id, source));
     return feedback?.length ? { ...segment, reviewFeedback: [...new Set(feedback)] } : segment;
   });
   const jobs = options.fairLocales ? (() => {
@@ -89,8 +107,7 @@ export async function runTranslations(options: { items: readonly Prompt[]; cache
             const translated = supplied.get(segment.id);
             try {
               if (typeof translated !== "string") throw new Error("Missing translation");
-              validateSegment(segment.text, translated, job.locale, segment.numericHints);
-              validateReviewedTranslation(options.reviews ?? [], job.locale, segment.id, translated);
+              validateForEverySource(segment, translated, job.locale, options.reviews ?? []);
               (cache.segments[job.locale] ??= {})[segment.id] = translated;
               ((cache.provenance ??= {})[job.locale] ??= {})[segment.id] = { provider: options.providerName, model: options.model ?? "unknown", generatedAt: new Date().toISOString() };
               valid++;

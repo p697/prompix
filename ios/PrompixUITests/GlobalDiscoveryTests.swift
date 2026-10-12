@@ -97,21 +97,28 @@ import XCTest
     }
 
     func testNineInterfaceLanguages() {
-        for language in ["en", "zh-Hans", "zh-Hant", "ja", "ko", "es", "pt-BR", "fr", "de"] {
+        let languages = [("en", "English"), ("zh-Hans", "简体中文"), ("zh-Hant", "繁體中文"),
+                         ("ja", "日本語"), ("ko", "한국어"), ("es", "Español"),
+                         ("pt-BR", "Português (Brasil)"), ("fr", "Français"), ("de", "Deutsch")]
+        for (language, contentLanguage) in languages {
             launch(language)
             XCTAssertTrue(app.buttons["allCreators"].waitForExistence(timeout: 5))
             capture("language-\(language)-home")
             app.buttons["allCreators"].tap()
             XCTAssertTrue(app.searchFields.firstMatch.waitForExistence(timeout: 5))
             capture("language-\(language)-creators")
+            app.searchFields.firstMatch.tap()
+            app.searchFields.firstMatch.typeText("Artingent")
             let creator = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'creator-' ")).firstMatch
+            XCTAssertTrue(creator.waitForExistence(timeout: 5))
             creator.tap()
             XCTAssertTrue(app.buttons["saveCreator"].waitForExistence(timeout: 5))
-            let item = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'prompt-' ")).firstMatch
+            let item = app.buttons["prompt-youmind-nano-326c1a15425d6666"]
             reveal(item)
             item.tap()
             XCTAssertTrue(app.buttons["copyPrompt"].waitForExistence(timeout: 5))
             XCTAssertTrue(app.buttons["contentLanguage"].exists)
+            XCTAssertTrue(app.buttons["contentLanguage"].label.contains(contentLanguage), "Content must follow the selected interface language.")
             capture("language-\(language)-detail")
             let beforeCopy = app.buttons["copyPrompt"].label
             app.buttons["copyPrompt"].tap()

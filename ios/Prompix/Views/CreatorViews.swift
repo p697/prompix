@@ -190,7 +190,8 @@ struct CreatorsView: View {
             }
         }
         .navigationTitle(String(localized: "创作者"))
-        .searchable(text: $query, prompt: String(localized: "搜索姓名或账号"))
+        .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always),
+                    prompt: String(localized: "搜索姓名或账号"))
     }
 }
 

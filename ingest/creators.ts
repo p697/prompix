@@ -52,11 +52,24 @@ export function mergeCreatorCache(previous: CreatorCache, updates: readonly Crea
   return cache;
 }
 
+function platformIdentity(creator: Creator): string | undefined {
+  if (creator.externalID) return creator.externalID;
+  const prefix = `${creator.platform}-id-`;
+  const suffix = creator.id.startsWith(prefix) ? creator.id.slice(prefix.length) : "";
+  return /^\d+$/.test(suffix) ? suffix : undefined;
+}
+
 export function enrichCreators<T extends Prompt>(items: readonly T[], cache: CreatorCache): T[] {
   return items.map(item => {
     const inferred = item.creator ?? inferCreator(item.source);
     if (!inferred) return item;
-    const cached = cache[inferred.id] ?? (inferred.username ? cache[`${inferred.platform}-${inferred.username.toLowerCase()}`] : undefined);
+    const identity = platformIdentity(inferred);
+    const cached = [cache[inferred.id], identity ? cache[`${inferred.platform}-id-${identity}`] : undefined,
+      inferred.username ? cache[`${inferred.platform}-${inferred.username.toLowerCase()}`] : undefined]
+      .find(candidate => candidate && candidate.platform === inferred.platform &&
+        // A restored cache may know only the handle's new owner. Once a post
+        // has a verified account ID, a handle match cannot replace its author.
+        (!identity || platformIdentity(candidate) === identity));
     return { ...item, creator: cached ? { ...inferred, ...cached } : inferred };
   });
 }

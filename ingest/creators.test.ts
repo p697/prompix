@@ -37,6 +37,37 @@ test("X account ID survives renamed handles, and source posts share one enriched
   assert.equal(item.creator, undefined, "Cached enrichment does not rewrite the raw source object");
 });
 
+test("verified authors survive a reassigned handle when the numeric cache entry is missing", () => {
+  const creator = mergeCreatorCache({}, parseXUsers([{ id: "11", username: "shared", name: "Original author" }]))["x-id-11"];
+  const replacement = mergeCreatorCache({}, parseXUsers([{ id: "22", username: "shared", name: "New handle owner" }]))["x-id-22"];
+  for (const original of [creator, { ...creator, externalID: undefined }]) {
+    const input = { ...item, creator: original };
+    const enriched = enrichCreators([input], { "x-shared": replacement })[0];
+    assert.deepEqual(enriched.creator, original, "Neither ID nor attribution may migrate to a different account");
+    assert.deepEqual(enriched.source, input.source);
+    assert.equal(enriched.prompt, input.prompt);
+  }
+  const unverified = creatorFromURL("https://x.com/shared", "Unverified handle owner")!;
+  assert.deepEqual(enrichCreators([{ ...item, creator }], { "x-shared": unverified })[0].creator, creator,
+    "A handle-only cache entry is insufficient to update a verified author's metadata");
+});
+
+test("creator enrichment prefers exact verified identity and accepts only matching fallback metadata", () => {
+  const creator = mergeCreatorCache({}, parseXUsers([{ id: "11", username: "shared", name: "Original author" }]))["x-id-11"];
+  const updated = mergeCreatorCache({}, parseXUsers([{ id: "11", username: "renamed", name: "Updated author" }]))["x-id-11"];
+  const replacement = mergeCreatorCache({}, parseXUsers([{ id: "22", username: "shared", name: "New handle owner" }]))["x-id-22"];
+  const input = { ...item, creator };
+  assert.deepEqual(enrichCreators([input], { "x-id-11": updated, "x-shared": replacement })[0].creator, updated);
+  assert.deepEqual(enrichCreators([{ ...input, creator: { ...creator, id: "x-shared" } }], { "x-id-11": updated, "x-shared": replacement })[0].creator, updated,
+    "A known external ID also resolves a legacy handle-shaped record to its verified cache entry");
+  assert.deepEqual(enrichCreators([input], { "x-shared": updated })[0].creator, updated,
+    "A matching account ID may update a renamed handle even after a partial cache restore");
+  assert.deepEqual(enrichCreators([input], { "x-id-11": replacement, "x-shared": updated })[0].creator, updated,
+    "An inconsistent exact cache key does not override the account ID");
+  assert.deepEqual(enrichCreators([input], { "x-id-11": { ...updated, platform: "github" } })[0].creator, creator);
+  assert.equal(input.creator.displayName, "Original author", "Enrichment does not mutate its input");
+});
+
 test("X author expansions retain real structured fields and validate remote photos", () => {
   const url = xSearchURL("1234");
   assert.equal(url.searchParams.get("expansions"), "author_id");

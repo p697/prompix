@@ -4,7 +4,7 @@ import { mkdir, realpath, rm, readFile } from "node:fs/promises";
 import { join, relative, isAbsolute, resolve } from "node:path";
 import { catalogSchema } from "../packages/schema/catalog.ts";
 import { atomic, contentRoot, json, repo } from "./publication.ts";
-import { attachTranslations, translationLocales, type TranslationCache, type TranslationLocale } from "./translation.ts";
+import { attachTranslations, inheritPreviousTranslations, translationLocales, type TranslationCache, type TranslationLocale } from "./translation.ts";
 import { codexTranslationProvider, openAITranslationProvider } from "./translation-provider.ts";
 import { runTranslations, type TranslationRunReport } from "./translation-runner.ts";
 
@@ -21,6 +21,12 @@ try { await mkdir(lock); } catch { throw new Error("Another translation run is a
 try {
   await atomic(join(lock, "owner.json"), { pid: process.pid, startedAt: new Date().toISOString() });
   const catalog = catalogSchema.parse(JSON.parse(await readFile(resolve(input), "utf8")));
+  const previous = await json<unknown>(join(directory, "catalog.localized.json"), undefined);
+  if (previous !== undefined) {
+    const parsed = catalogSchema.safeParse(previous);
+    if (!parsed.success) throw new Error("Previous localized catalog cannot be read safely");
+    catalog.prompts = inheritPreviousTranslations(catalog.prompts, parsed.data.prompts);
+  }
   const cachePath = join(directory, "cache.json"), reportPath = join(directory, "report.json");
   const cache = await readTranslationCache(cachePath);
   const reviews = await readTranslationReviews(join(directory, "semantic-rejections.json"));

@@ -3,9 +3,9 @@ export { readTranslationCache } from "./translation-cache.ts";
 import { applyTranslationReviews, readTranslationReviews } from "./translation-review.ts";
 import { mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
-import type { Prompt } from "../packages/schema/catalog.ts";
+import { catalogSchema, type Prompt } from "../packages/schema/catalog.ts";
 import { atomic, json } from "./publication.ts";
-import { attachTranslations, translationLocales } from "./translation.ts";
+import { attachTranslations, inheritPreviousTranslations, translationLocales } from "./translation.ts";
 import { codexTranslationProvider, openAITranslationProvider } from "./translation-provider.ts";
 import { runTranslations, type TranslationRunReport } from "./translation-runner.ts";
 
@@ -15,6 +15,11 @@ export async function prepareDailyTranslations(items: readonly Prompt[], root: s
   const directory = join(root, "translations"), cachePath = join(directory, "cache.json"), lock = join(directory, "run.lock");
   let cache = await readTranslationCache(cachePath);
   let reviews = await readTranslationReviews(join(directory, "semantic-rejections.json"));
+  const inheritLocalArtifact = async () => {
+    const artifact = await json<unknown>(join(directory, "catalog.localized.json"), undefined);
+    return artifact === undefined ? [...items] : inheritPreviousTranslations(items, catalogSchema.parse(artifact).prompts);
+  };
+  let prepared = await inheritLocalArtifact();
   applyTranslationReviews(cache, reviews);
   let status: DailyTranslationStatus["status"] = "cached", error: string | undefined;
   let report: TranslationRunReport | undefined;
@@ -31,6 +36,7 @@ export async function prepareDailyTranslations(items: readonly Prompt[], root: s
           // Another writer may have completed between the initial read and lock acquisition.
           cache = await readTranslationCache(cachePath);
           reviews = await readTranslationReviews(join(directory, "semantic-rejections.json"));
+          prepared = await inheritLocalArtifact();
           applyTranslationReviews(cache, reviews);
           await atomic(join(lock, "owner.json"), { pid: process.pid, startedAt: new Date().toISOString(), operation: "daily" });
           const day = new Date().toISOString().slice(0, 10), ledgerPath = join(directory, "daily-budgets", `${day}.json`);
@@ -39,7 +45,7 @@ export async function prepareDailyTranslations(items: readonly Prompt[], root: s
           const prior = await json<TranslationRunReport | undefined>(ledgerPath, undefined);
           const maxOutputTokens = 24000;
           const provider = providerName === "codex" ? codexTranslationProvider(environment.PROMPIX_CODEX ?? "codex", maxOutputTokens, model) : openAITranslationProvider(environment.OPENAI_API_KEY ?? "", maxOutputTokens);
-          report = await runTranslations({ items, cache, provider, providerName, model, locales, fairLocales: true,
+          report = await runTranslations({ items: prepared, cache, provider, providerName, model, locales, fairLocales: true,
             maxRequests: Number(environment.PROMPIX_TRANSLATION_MAX_REQUESTS ?? "12"), maxUSD: Number(environment.PROMPIX_TRANSLATION_MAX_USD ?? "2"), maxOutputTokens,
             persist: async (state, progress) => { await atomic(cachePath, state); await atomic(ledgerPath, { ...progress, day, model, updatedAt: new Date().toISOString() }); }, prior, reviews });
           status = "updated";
@@ -48,7 +54,7 @@ export async function prepareDailyTranslations(items: readonly Prompt[], root: s
       }
     }
   }
-  const prompts = attachTranslations(items, cache, reviews);
+  const prompts = attachTranslations(prepared, cache, reviews);
   const coverage = Object.fromEntries(translationLocales.map(locale => [locale, prompts.filter(item => item.localization?.translations[locale]).length]));
   const pendingRecords = Object.fromEntries(translationLocales.map(locale => [locale, prompts.length - coverage[locale]]));
   const result: DailyTranslationStatus = { status, ...(providerName ? { model } : {}), ...(error ? { error } : {}), total: prompts.length, coverage, pendingRecords,

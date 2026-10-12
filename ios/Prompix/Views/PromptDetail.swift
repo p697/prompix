@@ -14,6 +14,7 @@ struct PromptDetail: View {
     @State private var language: String?
     @State private var fullPrompt = false
     private var content: Prompt.TranslatedContent { item.content(in: language) }
+    private var displaysOriginalContent: Bool { content == item.content(in: nil) }
     init(item: Prompt) {
         self.item = item
         _language = State(initialValue: item.preferredTranslation)
@@ -56,7 +57,7 @@ struct PromptDetail: View {
                                 Text(item.displayModel).fixedSize(horizontal: false, vertical: true)
                             }
                         }.font(.footnote).foregroundStyle(Palette.muted)
-                        Text(content.title).font(.title2.weight(.semibold)).lineSpacing(5).fixedSize(horizontal: false, vertical: true)
+                        Text(content.title).font(.title2.weight(.semibold)).lineSpacing(5).fixedSize(horizontal: false, vertical: true).accessibilityAddTraits(.isHeader)
                         Text(content.summary).font(.subheadline).lineSpacing(5).foregroundStyle(Palette.muted)
                         if let creator = item.creator { CreatorByline(creator: creator) }
                         if item.kind != .text {
@@ -66,13 +67,13 @@ struct PromptDetail: View {
                     languagePicker
                     Divider()
                     VStack(alignment: .leading, spacing: 10) {
-                        Text(String(localized: "说明与示例")).font(.headline)
+                        Text(String(localized: "说明与示例")).font(.headline).accessibilityAddTraits(.isHeader)
                         Text(content.example).font(.subheadline).lineSpacing(6).textSelection(.enabled)
                     }
                     if let skill = item.skill { SkillInformation(skill: skill) }
                     VStack(alignment: .leading, spacing: 14) {
                         HStack {
-                            Text(item.isSkill ? "SKILL.md" : "Prompt").font(.headline)
+                            Text(item.isSkill ? "SKILL.md" : "Prompt").font(.headline).accessibilityAddTraits(.isHeader)
                             Spacer()
                             Button { editorPresented = true } label: { Label(String(localized: "编辑"), systemImage: "square.and.pencil").frame(minWidth: 44, minHeight: 44).contentShape(Rectangle()) }.font(.subheadline)
                                 .accessibilityIdentifier("editPrompt")
@@ -110,7 +111,7 @@ struct PromptDetail: View {
                     }
                     if !related.isEmpty {
                         Divider()
-                        HStack { Text(String(localized: "相关 Prompt")).font(.headline); Spacer(); Image(systemName: "arrow.down.right").foregroundStyle(Palette.muted) }
+                        HStack { Text(String(localized: "相关 Prompt")).font(.headline).accessibilityAddTraits(.isHeader); Spacer(); Image(systemName: "arrow.down.right").foregroundStyle(Palette.muted).accessibilityHidden(true) }
                         PromptGrid(items: related)
                     }
                 }.padding(.horizontal, 22).padding(.top, 12)
@@ -165,9 +166,9 @@ struct PromptDetail: View {
     }
     private var languageSummary: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(language == nil ? String(localized: "当前显示原文") : String(localized: "AI 译文"))
+            Text(displaysOriginalContent ? String(localized: "当前显示原文") : String(localized: "AI 译文"))
                 .font(.footnote.weight(.medium))
-            if language != nil {
+            if !displaysOriginalContent {
                 Text(String(localized: "可随时切回原文，复制和编辑使用当前语言。"))
                     .font(.caption).foregroundStyle(Palette.muted).fixedSize(horizontal: false, vertical: true)
             }

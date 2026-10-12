@@ -1,4 +1,4 @@
-import { validateReviewedTranslation, type TranslationRejection } from "./translation-review.ts";
+import { validateReviewedTranslation, validateReviewedTranslationField, type TranslationRejection } from "./translation-review.ts";
 import { createHash } from "node:crypto";
 import type { Prompt } from "../packages/schema/catalog.ts";
 
@@ -7,7 +7,12 @@ export type TranslationLocale = typeof translationLocales[number];
 export const translationVersion = "prompix-translation-1";
 export type LocalizedText = Pick<Prompt, "title" | "summary" | "prompt" | "example" | "previewLabel"> & { cover?: { text: string; eyebrow: string } };
 export type Localization = { sourceLanguage: string; sourceFingerprint: string; translations: Partial<Record<TranslationLocale, LocalizedText>> };
-export type Segment = { id: string; text: string; numericHints?: Record<string, string>; reviewFeedback?: string[] };
+export type SegmentContext = { sourceText: string; protectedValues: string[]; numericHints?: Record<string, string> };
+export type Segment = { id: string; text: string; numericHints?: Record<string, string>; reviewFeedback?: string[]; sourceText?: string; protectedValues?: string[]; contexts?: SegmentContext[] };
+export function mergeSegmentContexts(target: Segment, incoming: Segment): void {
+  const contexts = [...(incoming.contexts ?? []), ...(incoming.sourceText !== undefined && incoming.protectedValues ? [{ sourceText: incoming.sourceText, protectedValues: incoming.protectedValues, numericHints: incoming.numericHints }] : [])];
+  for (const context of contexts) if (context.sourceText !== target.sourceText && !target.contexts?.some(existing => existing.sourceText === context.sourceText)) (target.contexts ??= []).push(context);
+}
 export type TranslationCache = { version: typeof translationVersion; segments: Record<string, Record<string, string>>;
   provenance?: Record<string, Record<string, { provider: string; model: string; generatedAt: string }>> };
 export const emptyTranslationCache = (): TranslationCache => ({ version: translationVersion, segments: {} });
@@ -55,15 +60,19 @@ function renderedLiterals(text: string, preserveLettering: boolean): { start: nu
   let previousEnd = -1;
   for (const match of text.matchAll(quotes)) {
     const start = match.index!, end = start + match[0].length;
-    const before = text.slice(Math.max(0, start - 85), start).split(/[。.!?;；\n]/).at(-1)!;
+    const before = text.slice(Math.max(0, start - 85), start).split(/[。.!?;；\n”」』"’]/).at(-1)!;
     const after = text.slice(end, end + 20);
-    const caption = /文字|字体|字體|字样|字樣|文本|标语|標語|标注|標註|写着|寫著|标题|標題|标签|標籤|日期|笔记|筆記|\b(?:lettering|text|caption|slogan|label|title|headline|read|reads|say|says|written)\b/iu.test(before)
+    const caption = /文字|字体|字體|字样|字樣|文本|标语|標語|标注|標註|标有|標有|写着|寫著|标题|標題|标签|標籤|日期|笔记|筆記|\b(?:lettering|text|caption|slogan|label|title|headline|read|reads|say|says|written)\b/iu.test(before)
       || /^\s*(?:文字|字样|字樣|标题|標題|标签|標籤|按钮|按鈕|text|caption|label|button)/iu.test(after)
-      || (previousEnd >= 0 && /^[\s,，、/]*(?:(?:and|or|和|与|與)[\s,，、/]*)?$/iu.test(text.slice(previousEnd, start)));
+      || (previousEnd >= 0 && /^[\s,，、/]*(?:(?:and|or|above|below|under|beneath|over|next to|和|与|與|以及|上方|下方)[\s,，、/]*)?$/iu.test(text.slice(previousEnd, start)));
     const input = /(?:my first sentence is|first (?:input|sentence)\s*(?:is|:)|input (?:example|sentence|text)\s*:|我的第一句(?:话|話)?(?:是|：)|输入示例[：:]|輸入示例[：:])\s*$/iu.test(before);
     if (input || (preserveLettering && caption)) { ranges.push({ start, end }); previousEnd = end; }
     else previousEnd = -1;
   }
+  // Treat repeated occurrences of the same literal consistently, including later
+  // references to a caption. Otherwise a whole-quote token overlaps an inner placeholder.
+  const literals = new Set(ranges.map(range => text.slice(range.start, range.end)));
+  for (const match of text.matchAll(quotes)) if (literals.has(match[0]) && !ranges.some(range => range.start === match.index)) ranges.push({ start: match.index!, end: match.index! + match[0].length });
   return ranges;
 }
 /** Literal lettering in visual prompts is part of the image/video specification. */
@@ -131,7 +140,11 @@ export function promptSegments(item: Prompt): Segment[] {
   const segments = new Map<string, Segment>();
   const collect = (text: string) => {
     const { masked, protectedValues } = protectText(text, item.kind === "image" || item.kind === "video");
-    if (/[\p{L}]/u.test(masked.replace(/⟦PP\d+⟧/g, ""))) segments.set(hash(masked), { id: hash(masked), text: masked, ...numericHints(protectedValues) });
+    if (/[\p{L}]/u.test(masked.replace(/⟦PP\d+⟧/g, ""))) {
+      const segment = { id: hash(masked), text: masked, sourceText: text, protectedValues, ...numericHints(protectedValues) };
+      const previous = segments.get(segment.id);
+      if (previous) mergeSegmentContexts(previous, segment); else segments.set(segment.id, segment);
+    }
     return text;
   };
   for (const [key, value] of Object.entries(translationText(item))) {
@@ -175,6 +188,11 @@ export function validateSegment(source: string, translated: string, locale: Tran
   const prose = source.replace(/⟦PP\d+⟧/g, "");
   const outputProse = translated.replace(/⟦PP\d+⟧/g, "");
   for (const language of requiredHumanLanguages(prose)) if (!humanLanguageNames[language].test(outputProse)) throw new Error(`Translation changed explicit ${language} language requirement`);
+  const wordUnits: Partial<Record<TranslationLocale, string>> = { en: "words?", es: "palabras?", "pt-BR": "palavras?", fr: "mots?", de: "W(?:ö|oe)rter|W(?:ö|oe)rtern", ja: "単語", ko: "단어" };
+  if (wordUnits[locale]) for (const match of source.matchAll(/(⟦PP\d+⟧)\s*(?:个|個)?字(?!母|体|體|样|樣)|(?:(⟦PP\d+⟧)\s+characters?\b)/giu)) {
+    const token = match[1] ?? match[2];
+    if (new RegExp(`${token}\\s*(?:${wordUnits[locale]})(?:\\b|(?=[^A-Za-z])|$)`, "iu").test(translated)) throw new Error("Character limit mistranslated as word limit");
+  }
   const sourceLetters = prose.match(/\p{L}/gu)?.length ?? 0;
   const sourceHan = prose.match(/\p{Script=Han}/gu)?.length ?? 0;
   const sourceLatin = prose.match(/\p{Script=Latin}/gu)?.length ?? 0;
@@ -189,6 +207,14 @@ export function validateSegment(source: string, translated: string, locale: Tran
     if (value !== "1") continue;
     const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     if ((locale === "es" && new RegExp(`${escaped}\\s+vueltas\\b`, "u").test(translated)) || (locale === "pt-BR" && new RegExp(`${escaped}\\s+vezes\\b`, "u").test(translated)) || (locale === "fr" && new RegExp(`${escaped}\\s+tours\\b`, "u").test(translated)) || (locale === "de" && new RegExp(`${escaped}\\s+Kreise\\b`, "u").test(translated))) throw new Error("Singular count translated with plural motion unit");
+  }
+  for (const match of source.matchAll(/\[[^\]\n]+\]/gu)) {
+    if (!/\p{Script=Han}/u.test(match[0]) || !translated.includes(match[0])) continue;
+    const body = match[0].slice(1, -1);
+    const simplified = /[这译简观创复转说时种点书开变从让过进应对来将请产维动线场风户镜细关]/u.test(body);
+    if (/^(en|es|pt-BR|fr|de|ko)$/.test(locale) || ((locale === "zh-Hant" || locale === "ja") && simplified)) throw new Error("Translation retained untranslated human bracket prose");
+    // Shared Japanese/Chinese kanji headings can be valid; full Chinese narrative cannot.
+    if (locale === "ja" && knownTextLocale(body) === "zh-Hans") throw new Error("Translation retained untranslated human bracket prose");
   }
   const originalLocale = knownTextLocale(source);
   if (originalLocale && originalLocale !== locale && translated === source) throw new Error("Translation retained foreign-language source prose");
@@ -207,7 +233,9 @@ export function localizePrompt(item: Prompt, locale: TranslationLocale, cache: T
     if (translated === undefined) throw new Error("Missing translation segment");
     validateSegment(masked, translated, locale, numericHints(protectedValues).numericHints);
     validateReviewedTranslation(reviews, locale, hash(masked), translated);
-    return restoreText(translated, protectedValues);
+    const restored = restoreText(translated, protectedValues);
+    validateReviewedTranslationField(reviews, locale, text, restored);
+    return restored;
   };
   try {
     const original = translationText(item);
@@ -222,6 +250,7 @@ export function localizePrompt(item: Prompt, locale: TranslationLocale, cache: T
 export function validLocalizedText(item: Prompt, locale: TranslationLocale, translated: LocalizedText, reviews: readonly TranslationRejection[] = []): boolean {
   const check = (source: string, value: string) => {
     if (typeof value !== "string") throw new Error("Invalid translation field");
+    validateReviewedTranslationField(reviews, locale, source, value);
     const protectedText = protectText(source, item.kind === "image" || item.kind === "video");
     if (/⟦PP\d+⟧/.test(value)) throw new Error("Inherited translation contains reserved syntax");
     const indices = new Map<string, number[]>();

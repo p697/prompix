@@ -156,10 +156,10 @@ import UIKit
             throw NSError(domain: "PrompixVoiceOverTest", code: 1)
         }
         func activate(_ element: XCUIElement) {
-            // VO-Space activates the spoken focus without tapping stale screen
-            // coordinates while the software keyboard changes the layout.
+            // Spoken focus is verified above. XCTest's synthesized pointer
+            // events target the element; they are not physical VO gestures.
             XCTAssertTrue(element.exists)
-            app.typeKey(" ", modifierFlags: [.control, .option])
+            element.doubleTap()
         }
         try focus("card") { $0.contains("抽一张塔罗") && !$0.contains("收藏") }
         activate(app.buttons["prompt-gentle-tarot"])
@@ -175,10 +175,20 @@ import UIKit
         try require(!spokenPrefix.isEmpty, "Editor must have meaningful current content")
         try focus("editor text") { $0.contains(spokenPrefix) }
         activate(editor)
+        try require(app.keyboards.firstMatch.waitForExistence(timeout: 5), "Show the simulator software keyboard for the spoken editor journey")
         let marker = " VoiceOver-\(UUID().uuidString.prefix(8)) "
         editor.typeText(marker)
         try require((editor.value as? String ?? "").contains(marker), "Editor must accept this run's unique note")
         try focus("editor copy") { $0.contains("复制修改后的 Prompt") }
+        var copyFrame = app.buttons["copyEditedPrompt"].frame
+        var unchangedSince = Date()
+        let stableCopy = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            let frame = self.app.buttons["copyEditedPrompt"].frame
+            if frame != copyFrame { copyFrame = frame; unchangedSince = Date() }
+            return Date().timeIntervalSince(unchangedSince) >= 0.6
+        }, object: nil)
+        try require(XCTWaiter.wait(for: [stableCopy], timeout: 5) == .completed, "Copy action must settle above the visible keyboard")
+        try focus("settled editor copy") { $0.contains("复制修改后的 Prompt") }
         let beforeCopy = editor.value as? String
         activate(app.buttons["copyEditedPrompt"])
         let confirmation = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label CONTAINS %@", "已复制"), object: app.buttons["copyEditedPrompt"])

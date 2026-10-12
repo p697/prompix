@@ -1,6 +1,6 @@
 # Prompix for iOS
 
-Native SwiftUI app, iOS 17+. The current 0.3.0 work adds creator discovery, Agent Skills and internationalization to the four Prompt kinds. This iteration is developed and accepted through an actual simulator demo; do not install it on the user’s phone. Full content translation is still running and has not been completed or published. See [release goals](../docs/next-release.md) for remaining gates.
+Native SwiftUI app, iOS 17+. The current 0.3.0 work adds creator discovery, Agent Skills and internationalization to the four Prompt kinds. This iteration is developed and accepted through an actual simulator demo; do not install it on the user’s phone. The published edition contains 345 items in all nine content locales. See [release goals](../docs/next-release.md) for remaining gates.
 
 Open `Prompix.xcodeproj`, choose the Prompix scheme, then run on an iPhone simulator. No third-party Swift dependencies. The app downloads verified editions from api.prompix.dev and falls back to bundled content offline.
 
@@ -38,7 +38,7 @@ Editor drafts save atomically after a short debounce, on dismissal and when the 
 
 Run only `PrompixTests` for deterministic model validation. `GlobalDiscoveryTests` covers creator identity and persistence, locale matching and fallback, Skill/type filtering, independent language drafts, favorite enrichment and offline avatar retention, including write-failure and corrupt-store recovery. UI tests include offline journeys, creator/Skill/localization flows and explicitly selected live community image/video tests; live tests require the content service. Use fresh result bundles and keep Xcode/simulator runs serialized.
 
-The `--offline` launch argument uses the bundled edition for deterministic UI fixtures. The `studio-004` fallback contains 30 original text, image and website prompts. Video examples arrive with the first successful content update; the offline Video channel explains this and offers update and browse actions. Existing downloaded editions, saved snapshots and drafts are preserved. The simulator-only `--cached-only` argument prevents refresh from replacing a staged, validated local catalog with the public edition; it does not bypass catalog validation or create fixture content. Keep third-party staged catalogs and media outside the repository.
+The `--offline` launch argument uses the bundled edition for deterministic UI fixtures. The `studio-005` fallback contains 30 original text, image and website prompts with nine validated content locales. Video examples arrive with the first successful content update; the offline Video channel explains this and offers update and browse actions. Existing downloaded editions, saved snapshots and drafts are preserved. The simulator-only `--cached-only` argument prevents refresh from replacing a staged, validated local catalog with the public edition; it does not bypass catalog validation or create fixture content. Keep third-party staged catalogs and media outside the repository.
 
 First-party assets:
 
@@ -60,7 +60,7 @@ For the largest-text recovery layout, set the simulator to its largest accessibi
 
 A first-party procedural MP4 remains only in `PrompixTests/Resources/playback-fixture.mp4` for AVPlayer recovery tests. It is not bundled in the app or listed as a prompt example. The live UI test still verifies remote community video playback.
 
-All six first-party image prompts have real generated examples in `studio-004`.
+All six first-party image prompts have real generated examples in `studio-005`.
 The publisher also mirrors these images to the content API, allowing older
 installations to display newly added art. New builds prefer the bundled original
 when available; additional community gallery pages remain remote.
@@ -69,7 +69,7 @@ when available; additional community gallery pages remain remote.
 
 The native interface follows the system or app-specific language setting in iOS Settings. UI resources cover nine locales: English (`en`), Simplified Chinese (`zh-Hans`), Traditional Chinese (`zh-Hant`), Japanese (`ja`), Korean (`ko`), Spanish (`es`), Brazilian Portuguese (`pt-BR`), French (`fr`) and German (`de`). Chinese script identifiers take precedence over regions; without an explicit script, Taiwan, Hong Kong and Macao select Traditional Chinese. Portuguese variants use `pt-BR`.
 
-Prompt source fields remain intact. Detail offers the original and available complete translations, identifies AI translations and falls back to the source when a requested translation is missing or unsupported. It never substitutes an unrelated language’s translation. Names, code, placeholders, parameters and URLs must remain usable. Bundled website artifacts retain their original content. Full content translation is still in progress; nine complete UI resources do not imply nine complete content editions or professional native-speaker review.
+Prompt source fields remain intact. Detail offers the original and available complete translations, identifies AI translations and falls back to the source when a requested translation is missing or unsupported. It never substitutes an unrelated language’s translation. Names, code, placeholders, parameters and URLs must remain usable. Bundled website artifacts retain their original content. The published edition and 30-item offline bundle include all nine content locales. Translation validation and agent review do not constitute professional native-speaker proofreading.
 
 UI translations live in `Prompix/Resources/Localizable.xcstrings`. Keep identifiers stable and localize only their displayed labels so filtering remains consistent. From the repository root, run `python3 scripts/check-localizations.py` for coverage, translated states, placeholders and plurals. This resource check does not replace runtime checks for untranslated metadata, long labels or layout. See [translation operations](../docs/translation-operations.md) for the separately budgeted, cached content pipeline and [localization QA](../docs/localization-qa.md) for current evidence.
 
