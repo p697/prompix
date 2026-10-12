@@ -470,7 +470,11 @@ import XCTest
                   let catalog = (try? JSONSerialization.jsonObject(with: bytes)) as? [String: Any],
                   let prompts = catalog["prompts"] as? [[String: Any]] else { return false }
             let native = prompts.filter { ($0["source"] as? [String: Any])?["name"] as? String == "X" }
-            targets = ["image", "video"].compactMap { kind in native.first { $0["kind"] as? String == kind } }
+            // Desktop workflows have their own copy/share journey below. This
+            // journey exercises destinations available to mobile image/video tools.
+            targets = ["image", "video"].compactMap { kind in native.first {
+                $0["kind"] as? String == kind && !($0["model"] as? String ?? "").localizedCaseInsensitiveContains("Remotion")
+            } }
             return targets.count == 2
         }, object: nil)
         XCTAssertEqual(XCTWaiter.wait(for: [downloaded], timeout: 90), .completed)
