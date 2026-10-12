@@ -2,7 +2,7 @@
 
 An open-source, native mobile app for discovering interesting AI prompts across text, images, video, websites, and Agent Skills. Explore a feed, see what a prompt can do, save it, and use it in your preferred tool.
 
-> Status: native iOS 0.3.0 simulator acceptance build with creator discovery, nine interface/content locales, and daily community collection. The approved direction is lightweight discovery: Xiaohongshu-style browsing with restrained Cosmos-inspired presentation. See [iOS setup](ios/README.md) and [content operations](docs/content-operations.md).
+> Status: native iOS 0.3.1 simulator acceptance build with creator discovery, nine interface/content locales, and daily community collection. The current direction combines Xiaohongshu-style browsing with Granola-inspired paper colors, typography, and native controls. See [iOS setup](ios/README.md) and [content operations](docs/content-operations.md).
 
 ## What it is
 
@@ -11,7 +11,7 @@ An open-source, native mobile app for discovering interesting AI prompts across 
 - All four prompt types in v1, with previews suited to each type, keyword search, filters, local favorites, editing, copying, and system sharing.
 - A lightweight, self-built collection and publishing pipeline. No complex operations agent or dedicated admin system is required for v1.
 
-The current simulator acceptance release is documented in [0.3.0 verification](docs/acceptance-0.3.md). It is not yet an App Store release.
+The current simulator acceptance release is documented in [0.3.1 verification](docs/acceptance-0.3.1.md). It is not yet an App Store release.
 
 ## Scope
 

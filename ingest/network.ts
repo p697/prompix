@@ -1,3 +1,25 @@
+/** Count decoded response bytes, including when HTTP advertises a compressed length. */
+export async function readResponseBytes(response: Response, maxBytes: number): Promise<Buffer> {
+  if (Number(response.headers.get("content-length") ?? 0) > maxBytes) {
+    await response.body?.cancel();
+    throw new Error("Download exceeds size limit");
+  }
+  if (!response.body) throw new Error("Empty download");
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > maxBytes) throw new Error("Download exceeds size limit");
+      chunks.push(value);
+    }
+  } finally { await reader.cancel(); }
+  return Buffer.concat(chunks);
+}
+
 /** Bounded downloads with explicit hosts and checked redirects, including GitHub release assets. */
 export async function download(
   url: string,
@@ -32,27 +54,8 @@ export async function download(
         `Download HTTP ${response.status} from ${current.hostname}`,
       );
     }
-    if (Number(response.headers.get("content-length") ?? 0) > maxBytes) {
-      await response.body?.cancel();
-      throw new Error("Download exceeds size limit");
-    }
-    if (!response.body) throw new Error("Empty download");
-    const reader = response.body.getReader();
-    const chunks: Uint8Array[] = [];
-    let size = 0;
-    try {
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        size += value.byteLength;
-        if (size > maxBytes) throw new Error("Download exceeds size limit");
-        chunks.push(value);
-      }
-    } finally {
-      await reader.cancel();
-    }
     return {
-      bytes: Buffer.concat(chunks),
+      bytes: await readResponseBytes(response, maxBytes),
       type: (response.headers.get("content-type") ?? "").split(";")[0],
     };
   }
