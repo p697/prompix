@@ -135,7 +135,7 @@ function inferModality(label: string, context: string, body: string, post: XPost
 }
 
 const promptMarkerPrefix = /^[\t ]*(?:(?:#{1,6}|>|[-+*•▪◦]|\d{1,2}[.)])[\t ]+|(?:\p{Extended_Pictographic}|\p{Emoji_Presentation})[\uFE0F\u200D\p{Emoji_Modifier}]*[\t ]*)*/u.source;
-const promptMarkerLabel = /(?:(?:full|text|image|video|web|website)[\t ]+)?prompt|完整提示词|文本提示词|图片提示词|视频提示词|网页提示词|提示词|(?:(?:画像|動画|テキスト|ウェブサイト|ウェブ|web)[\t ]*)?プロンプト/.source;
+const promptMarkerLabel = /(?:(?:(?:image|video)(?:[\t ]+generation)?|full|text|web|website)[\t ]+)?prompt|完整提示词|文本提示词|图片提示词|视频提示词|网页提示词|提示词|(?:(?:画像|動画|テキスト|ウェブサイト|ウェブ|web)[\t ]*)?プロンプト/.source;
 // Recognize a small, explicit model-qualified heading, never arbitrary prose
 // ending in "prompt". Downward arrows are heading decoration, not instructions.
 const modelHeadingPrefix = /(?:(?:GPT[- ]Image(?:[- ]?[\t ]*\d+(?:\.\d+)*)?|Nano Banana(?: Pro|[\t ]+\d+(?:\.\d+)*)?|Seedance(?:[\t ]+\d+(?:\.\d+)*)?)[\t ]*)?/.source;

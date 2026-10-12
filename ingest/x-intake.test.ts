@@ -62,6 +62,23 @@ test("closed prompt fences separate the instructions from surrounding post metad
     "A phrase in an unverified post must not invent a verified publication grant");
 });
 
+test("explicit image and video generation headings preserve complete instruction bodies", () => {
+  const instruction = "Create a quiet scene of a paper boat floating across a ceramic bowl. Use soft window light and keep the background free of text or decoration.";
+  for (const [heading, kind] of [["Image Generation Prompt:", "image"], ["**Video Generation Prompt**", "video"],
+    ["### image generation prompt ↓", "image"], ["VIDEO\tGENERATION\tPROMPT：", "video"]] as const) {
+    assert.deepEqual(extractMarkedXPrompt(post("123", `An original fixture\n${heading}\n${instruction}`)), { body: instruction, kind });
+  }
+});
+
+test("generation headings do not admit prose, links, truncated text or multiple prompts", () => {
+  for (const heading of ["My image generation prompt:", "Image generation prompt is available below:", "Full generation prompt:"]) {
+    assert.deepEqual(extractMarkedXPrompt(post("123", `${heading}\n${body}`)), { reason: "missing-prompt-boundary" });
+  }
+  assert.deepEqual(extractMarkedXPrompt(post("123", "Image Generation Prompt:\nhttps://example.com/instructions")), { reason: "insufficient-instructions" });
+  assert.deepEqual(extractMarkedXPrompt(post("123", `Video Generation Prompt:\n${body}…`)), { reason: "truncated-ending" });
+  assert.deepEqual(extractMarkedXPrompt(post("123", `Image Generation Prompt:\n${body}\nPrompt:\n${body}`)), { reason: "multiple-prompt-boundaries" });
+});
+
 test("incomplete, unmarked and link-only discoveries stay blocked with specific reasons", () => {
   const cases = [
     [post("1", "A new tool has launched today."), "missing-prompt-boundary"],
