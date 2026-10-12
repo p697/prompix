@@ -112,6 +112,41 @@ final class LanguagePackCatalogTests: XCTestCase {
         }
     }
 
+    func testThreadSourcesPreserveIndependentBodiesAndRejectBrokenChains() throws {
+        let fixture = try fixture()
+        let source = try XCTUnwrap(base(fixture).catalog.prompts[2].source.context)
+        XCTAssertEqual(source.count, 1)
+        XCTAssertEqual(source[0].text, "Original fixture film, with instructions in my reply.")
+        XCTAssertEqual(try base(fixture).catalog.prompts[2].source.post?.parentID, source[0].id)
+        let changes: [(inout [String: Any]) -> Void] = [
+            { $0["mediaPostID"] = "999" },
+            { $0["context"] = [] },
+            { $0["name"] = "Other" },
+            { $0.removeValue(forKey: "post") },
+            { $0.removeValue(forKey: "context") },
+            { source in var post = source["post"] as! [String: Any]; post["parentID"] = "999"; source["post"] = post },
+            { source in var context = source["context"] as! [[String: Any]]; context[0]["authorID"] = "999"; source["context"] = context },
+            { source in var context = source["context"] as! [[String: Any]]; context[0]["id"] = "101"; source["context"] = context },
+            { source in var context = source["context"] as! [[String: Any]]; context[0]["parentID"] = "99"; source["context"] = context },
+            { source in var context = source["context"] as! [[String: Any]]; context[0]["createdAt"] = "2026-10-12T09:00:01Z"; source["context"] = context },
+        ]
+        for change in changes {
+            let invalid = try rewritePrompt(fixture, index: 2) { prompt in
+                var source = prompt["source"] as! [String: Any]; change(&source); prompt["source"] = source
+            }
+            XCTAssertThrowsError(try base(invalid))
+        }
+        // Millisecond ordering matches JavaScript even when the earlier date has no fraction.
+        let fractional = try rewritePrompt(fixture, index: 2) { prompt in
+            var source = prompt["source"] as! [String: Any]
+            var context = source["context"] as! [[String: Any]], post = source["post"] as! [String: Any]
+            context[0]["createdAt"] = "2026-10-12T09:00:00Z"
+            post["createdAt"] = "2026-10-12T09:00:00.001Z"
+            source["context"] = context; source["post"] = post; prompt["source"] = source
+        }
+        XCTAssertNoThrow(try base(fractional))
+    }
+
     func testSharedTypeScriptFixtureRoundTripsAllNineLanguagesAndMetadata() throws {
         let fixture = try fixture()
         let expected = try JSONDecoder().decode(Catalog.self, from: fixture.catalog)

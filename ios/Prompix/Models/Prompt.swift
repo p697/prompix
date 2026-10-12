@@ -136,6 +136,7 @@ struct Prompt: Codable, Identifiable, Hashable {
         let text: String
         let createdAt: String
         let checkedAt: String
+        var parentID: String? = nil
 
         var date: Date? {
             let parser = ISO8601DateFormatter()
@@ -154,6 +155,8 @@ struct Prompt: Codable, Identifiable, Hashable {
         var repository: URL? = nil
         var revision: String? = nil
         var post: SourcePost? = nil
+        var context: [SourcePost]? = nil
+        var mediaPostID: String? = nil
     }
     struct Cover: Codable, Hashable {
         let text: String

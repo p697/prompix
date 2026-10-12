@@ -119,7 +119,7 @@ struct PromptDetail: View {
                             HStack {
                                 VStack(alignment: .leading, spacing: 5) {
                                     Text(String(localized: "使用方法")).font(.subheadline.weight(.medium))
-                                    Text(String(localized: "复制后打开工具，粘贴使用")).font(.footnote).foregroundStyle(Palette.muted)
+                                    Text(PromptDestination.requiresDesktop(for: item) ? String(localized: "此工作流需要电脑上的代码工具。复制或分享内容，在电脑中继续。") : String(localized: "复制后打开工具，粘贴使用")).font(.footnote).foregroundStyle(Palette.muted)
                                 }; Spacer(); Image(systemName: "arrow.up.right")
                             }.padding(.vertical, 5)
                         }
@@ -141,6 +141,19 @@ struct PromptDetail: View {
                                 Text(post.text).font(.subheadline).lineSpacing(5).textSelection(.enabled)
                                     .frame(maxWidth: .infinity, alignment: .leading).padding(.vertical, 10)
                             }.font(.subheadline).accessibilityIdentifier("originalXPost")
+                        }
+                        if let context = item.source.context {
+                            ForEach(context, id: \.id) { source in
+                                DisclosureGroup(source.id == item.source.mediaPostID ? String(localized: "作品原帖") : String(localized: "上下文原帖")) {
+                                    VStack(alignment: .leading, spacing: 10) {
+                                        if let date = source.date { Text(date, format: .dateTime.year().month().day().hour().minute()).foregroundStyle(Palette.muted) }
+                                        Text(source.text).textSelection(.enabled).lineSpacing(5)
+                                        if let url = URL(string: "https://x.com/i/web/status/\(source.id)") {
+                                            Link(String(localized: "在 X 查看"), destination: url).frame(minHeight: 44)
+                                        }
+                                    }.font(.subheadline).frame(maxWidth: .infinity, alignment: .leading).padding(.vertical, 10)
+                                }.font(.subheadline).accessibilityIdentifier("sourceContext-\(source.id)")
+                            }
                         }
                         if let repository = item.source.repository { Link(destination: repository) { Text(String(localized: "收录于 \(item.source.name)")).font(.footnote).frame(minHeight: 44).contentShape(Rectangle()) } }
                         if let source = item.source.url { Link(destination: source) { Text(String(localized: "查看原始来源 ↗")).font(.footnote).frame(minHeight: 44).contentShape(Rectangle()) } }

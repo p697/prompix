@@ -222,13 +222,13 @@ enum LanguagePackCatalog {
         guard (item["contentType"] as? String == "skill") == (item["skill"] != nil) else { throw ValidationError.invalidMetadata }
         if let value = item["publishedAt"], !(value is String) { throw ValidationError.invalidMetadata }
         if let value = item["cover"] { try validateCover(value, original: true) }
-        let source = try object(item["source"], required: ["name", "url", "license", "method"], optional: ["author", "repository", "revision", "post"])
+        let source = try object(item["source"], required: ["name", "url", "license", "method"], optional: ["author", "repository", "revision", "post", "context", "mediaPostID"])
         for key in ["name", "license", "method", "author", "revision"] where source[key] != nil { _ = try text(source[key]) }
         try https(source["url"], nullable: true)
         if let value = source["repository"] { try https(value) }
-        if let value = source["post"] {
-            let post = try object(value, required: ["id", "authorID", "text", "createdAt", "checkedAt"])
-            for key in ["id", "authorID"] {
+        func validatePost(_ value: Any) throws -> [String: Any] {
+            let post = try object(value, required: ["id", "authorID", "text", "createdAt", "checkedAt"], optional: ["parentID"])
+            for key in ["id", "authorID", "parentID"] where post[key] != nil {
                 let identifier = try text(post[key], maximum: 19)
                 guard identifier.range(of: "^[0-9]{1,19}$", options: .regularExpression) != nil else {
                     throw ValidationError.invalidMetadata
@@ -237,7 +237,26 @@ enum LanguagePackCatalog {
             _ = try text(post["text"], maximum: 50_000)
             _ = try timestamp(post["createdAt"])
             _ = try timestamp(post["checkedAt"])
+            return post
         }
+        let post = try source["post"].map { try validatePost($0) }
+        if let value = source["context"] {
+            let context = try array(value, minimum: 1, maximum: 8).map { try validatePost($0) }
+            guard let post, source["name"] as? String == "X",
+                  let mediaPostID = source["mediaPostID"] as? String else { throw ValidationError.invalidMetadata }
+            let chain = context + [post]
+            let ids = chain.compactMap { $0["id"] as? String }
+            guard Set(ids).count == chain.count, ids.contains(mediaPostID) else { throw ValidationError.invalidMetadata }
+            for (index, entry) in chain.enumerated() {
+                guard entry["authorID"] as? String == post["authorID"] as? String else { throw ValidationError.invalidMetadata }
+                if index == 0 {
+                    guard entry["parentID"] == nil else { throw ValidationError.invalidMetadata }
+                } else {
+                    guard entry["parentID"] as? String == ids[index - 1],
+                          try comparableTimestamp(entry["createdAt"]) >= comparableTimestamp(chain[index - 1]["createdAt"]) else { throw ValidationError.invalidMetadata }
+                }
+            }
+        } else if post?["parentID"] != nil || source["mediaPostID"] != nil { throw ValidationError.invalidMetadata }
         if let value = item["creator"] {
             let creator = try object(value, required: ["id", "platform", "displayName", "profileURL"], optional: ["username", "avatarURL", "externalID", "bio"])
             for key in ["id", "displayName", "username", "externalID", "bio"] where creator[key] != nil {
@@ -362,6 +381,12 @@ enum LanguagePackCatalog {
         let days = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
         guard (1...12).contains(month), (1...days[month - 1]).contains(day) else { throw ValidationError.invalidMetadata }
         return string
+    }
+
+    private static func comparableTimestamp(_ value: Any?) throws -> String {
+        let value = try timestamp(value)
+        let fraction = value.dropFirst(19).hasPrefix(".") ? String(value.dropFirst(20).dropLast()) : ""
+        return String(value.prefix(19)) + "." + String((fraction + "000").prefix(3))
     }
 
     private static func https(_ value: Any?, nullable: Bool = false) throws {

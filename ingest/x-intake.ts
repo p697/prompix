@@ -117,6 +117,8 @@ function inferModality(label: string, context: string, body: string, post: XPost
     { pattern: /\b(?:Seedance(?:\s+\d+(?:\.\d+)*)?|Sora(?:\s+\d+)?|Veo(?:\s+\d+(?:\.\d+)*)?|Kling(?:\s+\d+(?:\.\d+)*)?|Runway Gen[- ]\d+)\b/i, kind: "video" },
     { pattern: /\b(?:Claude(?:\s+(?:Opus|Sonnet|Haiku))?(?:\s+\d+(?:\.\d+)*)?|ChatGPT|GPT[- ]\d+(?:\.\d+)*)\b/i, kind: "text" },
   ];
+  const declaredVideo = /^\s*(?:Final output|最终输出)\s*[:：]\s*[^\n]{0,180}\.mp4\b/im.test(body);
+  if (!explicit && declaredVideo) return { kind: "video", model: /\bRemotion\b/i.test(context) ? "Remotion" : "Unspecified" };
   const matched = models.flatMap(model => { const match = context.match(model.pattern); return match ? [{ kind: model.kind, model: match[0] }] : []; });
   if (explicit) return { kind: explicit, ...(matched.find(model => model.kind === explicit) ?? {}) };
   // ChatGPT/Claude can host image generation or website building. Their names
@@ -146,7 +148,7 @@ const standalonePromptMarker = new RegExp(String.raw`${promptMarkerPrefix}${mode
 const decoratedPromptMarker = new RegExp(String.raw`${promptMarkerPrefix}${modelHeadingPrefix}(\*\*|__|)(${promptMarkerLabel})\1[\t ]*(?:[.;；]|(?:below[\t ]*)?${downArrow})[\t ]*[:：]?[\t ]*(?=\r?\n)`, "gimu");
 
 /** Only explicit instruction boundaries qualify. No fetch, continuation guessing or prose generation. */
-export function extractMarkedXPrompt(post: XPost, media: readonly XMedia[] = []): { body: string; kind: Prompt["kind"]; model?: string } | { reason: string } {
+export function extractMarkedXPrompt(post: XPost, media: readonly XMedia[] = [], context?: { post: XPost; media: readonly XMedia[] }): { body: string; kind: Prompt["kind"]; model?: string } | { reason: string } {
   const source = fullXText(post), text = source.text.trim();
   if (source.truncated) return { reason: "api-truncated" };
   if (truncatedEnding.test(text)) return { reason: "truncated-ending" };
@@ -178,11 +180,11 @@ export function extractMarkedXPrompt(post: XPost, media: readonly XMedia[] = [])
   if (/https?:\/\/(?:www\.)?t\.co\//i.test(body)) return { reason: "unresolved-short-link" };
   if (body.replace(/https?:\/\/\S+/g, "").trim().length < 20) return { reason: "insufficient-instructions" };
   if (body.length > 30000) return { reason: "instructions-too-long" };
-  const modality = inferModality(label, text, body, post, media);
+  const modality = inferModality(label, context ? fullXText(context.post).text + "\n" + text : text, body, context?.post ?? post, context?.media ?? media);
   return "reason" in modality ? modality : { body, ...modality };
 }
 
-function attachedMedia(post: XPost, media: readonly XMedia[]): Prompt["media"] {
+export function attachedMedia(post: XPost, media: readonly XMedia[]): Prompt["media"] {
   const attached = verifiedMedia(post, media);
   const photos = attached.filter(item => item.type === "photo").flatMap(item => {
     const url = safeURL(item.url, ["pbs.twimg.com"]); return url ? [url] : [];
@@ -235,26 +237,8 @@ export function convertXDiscovery(snapshots: readonly Snapshot[], creators: Crea
       hasCreatorProfile: !!profile, mediaItems: verifiedMedia(post, media).length, attachedMediaKeys: post.attachments?.media_keys ?? [] };
     if ("reason" in extracted) { records.push({ ...record, reason: extracted.reason }); continue; }
     const id = `x-post-${post.id}`, hash = fingerprint(extracted.body);
-    const author = profile?.displayName ?? `X account ${post.author_id}`;
-    candidates.push({ id, kind: extracted.kind, title: `X prompt ${post.id}`,
-      summary: "Source instructions captured for editorial review; not approved for publication.",
-      prompt: extracted.body, example: "This source draft still needs completeness, attribution and publication review.",
-      tags: ["X discovery"], model: extracted.model ?? "Unspecified", toolURL: null, artwork: "text-editorial", previewLabel: "Unreviewed source draft",
-      creator: profile ? { ...profile, id: `x-id-${post.author_id}` } : {
-        id: `x-id-${post.author_id}`, externalID: post.author_id, platform: "x", displayName: author,
-        profileURL: `https://x.com/i/user/${post.author_id}`,
-      },
-      source: { name: nativeXSourceName, url: sourceURL, author, license: "Unspecified", method: "X API discovery" },
-      media: attachedMedia(post, media), ...(post.created_at ? { publishedAt: post.created_at } : {}),
-      fingerprint: hash, featured: false, reviewStatus: "draft" });
-    const candidate = candidates.at(-1)!;
-    if (capturedAt && post.created_at && profile?.username) {
-      candidate.source.post = { id: post.id, authorID: post.author_id, text: fullXText(post).text,
-        createdAt: post.created_at, checkedAt: capturedAt };
-      candidate.source.license = "X-API-Terms";
-      candidate.source.method = "X API — prompt extracted from the original post";
-      candidate.source.revision = nativeXSourceDigest(candidate);
-    }
+    const candidate = buildXCandidate(post, extracted, media, profile, capturedAt);
+    candidates.push(candidate);
     records.push({ ...record, state: "draft", reason: nativeXSourceIssue(candidate) ?? "awaiting-editorial-and-preview-review", candidateID: id, fingerprint: hash, sourceDigest: nativeXSourceDigest(candidates.at(-1)!) });
   }
   report.discovered = records.length;
@@ -295,4 +279,29 @@ export async function readXIntake(root: string, creators: CreatorCache = {}) {
 export function hasPublicReplyPrompt(text: string): boolean {
   return /\bprompt(?:s)?\s+(?:is\s+|are\s+)?(?:in|below|in the)\s+(?:the\s+)?(?:first\s+)?(?:repl(?:y|ies)|comments?)\b|(?:first\s+)?(?:repl(?:y|ies)|comments?)\s+(?:for|contains?)\s+(?:the\s+)?prompt\b|提示词.{0,8}(?:在|见).{0,5}(?:评论|回复)|プロンプト.{0,8}(?:返信|リプライ)/i.test(text)
     && !/\b(?:DM|direct message|comment.{0,20}(?:send|receive|DM))\b/i.test(text);
+}
+
+export function buildXCandidate(post: XPost, extracted: { body: string; kind: Prompt["kind"]; model?: string },
+  media: readonly XMedia[], profile: z.infer<typeof creatorSchema> | undefined, capturedAt: string | undefined): Candidate {
+  const id = `x-post-${post.id}`, hash = fingerprint(extracted.body), sourceURL = `https://x.com/i/web/status/${post.id}`;
+  const author = profile?.displayName ?? `X account ${post.author_id}`;
+  const candidate: Candidate = { id, kind: extracted.kind, title: `X prompt ${post.id}`,
+    summary: "Source instructions captured for editorial review; not approved for publication.",
+    prompt: extracted.body, example: "This source draft still needs completeness, attribution and publication review.",
+    tags: ["X discovery"], model: extracted.model ?? "Unspecified", toolURL: null, artwork: "text-editorial", previewLabel: "Unreviewed source draft",
+    creator: profile ? { ...profile, id: `x-id-${post.author_id}` } : {
+      id: `x-id-${post.author_id}`, externalID: post.author_id, platform: "x", displayName: author,
+      profileURL: `https://x.com/i/user/${post.author_id}`,
+    },
+    source: { name: nativeXSourceName, url: sourceURL, author, license: "Unspecified", method: "X API discovery" },
+    media: attachedMedia(post, media), ...(post.created_at ? { publishedAt: post.created_at } : {}),
+    fingerprint: hash, featured: false, reviewStatus: "draft" };
+  if (capturedAt && post.created_at && profile?.username) {
+    candidate.source.post = { id: post.id, authorID: post.author_id, text: fullXText(post).text,
+      createdAt: post.created_at, checkedAt: capturedAt };
+    candidate.source.license = "X-API-Terms";
+    candidate.source.method = "X API — prompt extracted from the original post";
+    candidate.source.revision = nativeXSourceDigest(candidate);
+  }
+  return candidate;
 }

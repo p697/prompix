@@ -208,3 +208,8 @@ Missing ancestors are never invented. Original root and reply text remain
 separate, and the regular single-post intake does not read these snapshots.
 Multi-post availability, media attribution and native presentation remain the
 next publication integration step.
+
+
+### Public reply workflows
+
+`x-thread-intake.ts` replays only completed, fingerprint-checked API pagination windows. Reply IDs and bodies remain independent from root media and ordered ancestor context. Fresh lookups must include every dependency; partial checks withhold older approvals, unavailable dependencies withdraw every affected item, and source changes invalidate exact-revision editorial reviews. `PROMPIX_X_AVAILABILITY_MAX_REQUESTS` defaults to 2 and accepts 0–4 requests per UTC day; existing reservations count toward a changed cap. Every lookup contains at most 100 unique post IDs, including ancestors. No additional OpenLab collection or third-party paste crawling is introduced.

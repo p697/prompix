@@ -512,6 +512,49 @@ import XCTest
         }
     }
 
+    func testNativeReplyContextAndDesktopWorkflow() throws {
+        guard ProcessInfo.processInfo.environment["PROMPIX_THREAD_ACCEPTANCE"] == "1" else {
+            throw XCTSkip("Requires a reviewed X reply workflow in the dedicated simulator catalog.")
+        }
+        let directory = try acceptanceDirectory()
+        let drafts = try? Data(contentsOf: directory.appendingPathComponent("drafts.json"))
+        let bytes = try Data(contentsOf: directory.appendingPathComponent("catalog.json"))
+        let catalog = try XCTUnwrap(JSONSerialization.jsonObject(with: bytes) as? [String: Any])
+        let prompts = try XCTUnwrap(catalog["prompts"] as? [[String: Any]])
+        let target = try XCTUnwrap(prompts.first { ($0["source"] as? [String: Any])?["context"] != nil && $0["model"] as? String == "Remotion" })
+        let id = try XCTUnwrap(target["id"] as? String), title = try XCTUnwrap(target["title"] as? String)
+        let source = try XCTUnwrap(target["source"] as? [String: Any])
+        let context = try XCTUnwrap((source["context"] as? [[String: Any]])?.first)
+        let contextID = try XCTUnwrap(context["id"] as? String)
+        launch()
+        app.buttons["searchButton"].tap()
+        let search = app.searchFields.firstMatch
+        XCTAssertTrue(search.waitForExistence(timeout: 5)); search.tap(); search.typeText(title)
+        let card = app.scrollViews["searchResults"].buttons["prompt-\(id)"]
+        reveal(card); card.tap()
+        XCTAssertTrue(app.buttons["usePrompt"].waitForExistence(timeout: 5))
+        capture("thread-01-workflow-detail")
+        app.buttons["previewButton"].tap()
+        XCTAssertTrue(app.descendants(matching: .any)["playingVideo"].waitForExistence(timeout: 35))
+        XCTAssertFalse(app.buttons["retryVideo"].exists)
+        capture("thread-02-original-video")
+        app.buttons["完成"].tap()
+        let original = app.buttons["sourceContext-\(contextID)"]
+        reveal(original); original.tap()
+        capture("thread-03-separate-original-context")
+        original.tap()
+        app.buttons["usePrompt"].tap()
+        XCTAssertTrue(app.staticTexts["desktopWorkflowGuidance"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["handoffOpen"].exists)
+        let copy = app.buttons["copyDesktopWorkflow"]
+        XCTAssertTrue(copy.exists); copy.tap()
+        XCTAssertTrue(copy.label.contains("已复制"))
+        capture("thread-04-desktop-copy-and-share")
+        let expected = XCTAttachment(data: Data(try XCTUnwrap(target["prompt"] as? String).utf8), uniformTypeIdentifier: "public.utf8-plain-text")
+        expected.name = "thread-clipboard-expected"; expected.lifetime = .keepAlways; add(expected)
+        XCTAssertEqual(try? Data(contentsOf: try acceptanceDirectory().appendingPathComponent("drafts.json")), drafts)
+    }
+
     func testPromptAndSkillHandoff() {
         launch()
         app.buttons["kind-text"].tap()
