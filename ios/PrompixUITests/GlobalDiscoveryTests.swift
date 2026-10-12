@@ -490,7 +490,7 @@ import XCTest
             let inventory = app.buttons["skillFiles"]
             reveal(inventory); inventory.tap()
             XCTAssertTrue(app.staticTexts["SKILL.md"].exists)
-            XCTAssertTrue(app.buttons["skillSource"].exists)
+            XCTAssertTrue(app.descendants(matching: .any)["skillSource"].exists)
             capture("publisher-\(id)-files")
             app.buttons["usePrompt"].tap()
             let copy = app.buttons["copyInstallCommand"]
