@@ -137,17 +137,27 @@ function inferModality(label: string, context: string, body: string, post: XPost
   return attachedKinds.size === 1 ? { kind: [...attachedKinds][0] } : { reason: "ambiguous-modality" };
 }
 
+const promptMarkerPrefix = /^[\t ]*(?:(?:#{1,6}|>|[-+*•▪◦]|\d{1,2}[.)])[\t ]+|(?:\p{Extended_Pictographic}|\p{Emoji_Presentation})[\uFE0F\u200D\p{Emoji_Modifier}]*[\t ]*)*/u.source;
+const promptMarkerLabel = /(?:(?:full|text|image|video|web|website)[\t ]+)?prompt|完整提示词|文本提示词|图片提示词|视频提示词|网页提示词|提示词|(?:(?:画像|動画|テキスト|ウェブサイト|ウェブ|web)[\t ]*)?プロンプト/.source;
+const colonPromptMarker = new RegExp(String.raw`${promptMarkerPrefix}(?:\*\*|__)?(${promptMarkerLabel})(?:\*\*|__)?[\t ]*[:：](?:\*\*|__)?[\t ]*`, "gimu");
+// A colon-free label must fill its line and have either matching bold delimiters
+// or no delimiters. The newline stays outside the match so adjacent headings count.
+const standalonePromptMarker = new RegExp(String.raw`${promptMarkerPrefix}(\*\*|__|)(${promptMarkerLabel})\1[\t ]*(?=\r?\n)`, "gimu");
+
 /** Only explicit instruction boundaries qualify. No fetch, continuation guessing or prose generation. */
 export function extractMarkedXPrompt(post: XPost, media: readonly XMedia[] = []): { body: string; kind: Prompt["kind"]; model?: string } | { reason: string } {
   const source = fullText(post), text = source.text.trim();
   if (source.truncated) return { reason: "api-truncated" };
   if (truncatedEnding.test(text)) return { reason: "truncated-ending" };
-  const markers = [...text.matchAll(/^[\t ]*(?:(?:#{1,6}|>|[-+*•▪◦]|\d{1,2}[.)])[\t ]+|(?:\p{Extended_Pictographic}|\p{Emoji_Presentation})[\uFE0F\u200D\p{Emoji_Modifier}]*[\t ]*)*(?:\*\*|__)?((?:(?:full|text|image|video|web|website)[\t ]+)?prompt|完整提示词|文本提示词|图片提示词|视频提示词|网页提示词|提示词|(?:(?:画像|動画|テキスト|ウェブサイト|ウェブ|web)[\t ]*)?プロンプト)(?:\*\*|__)?[\t ]*[:：](?:\*\*|__)?[\t ]*/gimu)];
+  const markers = [
+    ...[...text.matchAll(colonPromptMarker)].map(match => ({ end: match.index! + match[0].length, label: match[1] })),
+    ...[...text.matchAll(standalonePromptMarker)].map(match => ({ end: match.index! + match[0].length, label: match[2] })),
+  ];
   if (!markers.length) return { reason: "missing-prompt-boundary" };
   if (markers.length !== 1) return { reason: "multiple-prompt-boundaries" };
   const marker = markers[0];
-  const label = marker[1].toLowerCase();
-  let body = text.slice(marker.index! + marker[0].length).trim();
+  const label = marker.label.toLowerCase();
+  let body = text.slice(marker.end).trim();
   if (/^(?:`{3,}|~{3,})/.test(body)) {
     const opening = body.match(/^(`{3,}|~{3,})[^\r\n]*\r?\n/);
     if (!opening) return { reason: "incomplete-code-fence" };
