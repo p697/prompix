@@ -58,6 +58,32 @@ export async function writeCatalog(path: string, input: Catalog, options: { reus
     return { bytes, catalog: requested };
   } finally { await rm(temporary, { force: true }); }
 }
+/** Create an immutable artifact, or reuse exactly the existing bytes. */
+export async function writeImmutableBytes(path: string, bytes: Buffer): Promise<Buffer> {
+  const existing = async () => {
+    try {
+      if ((await stat(path)).size !== bytes.length) throw new Error("Immutable artifact already exists with different bytes");
+      const stored = await readFile(path);
+      if (!stored.equals(bytes)) throw new Error("Immutable artifact already exists with different bytes");
+      return stored;
+    } catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return; throw error; }
+  };
+  const stored = await existing();
+  if (stored) return stored;
+  await mkdir(dirname(path), { recursive: true });
+  const temporary = `${path}.${randomUUID()}.tmp`;
+  try {
+    await writeFile(temporary, bytes, { flag: "wx" });
+    try { await link(temporary, path); }
+    catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+      const raced = await existing();
+      if (!raced) throw new Error("Concurrent immutable artifact creation disappeared");
+      return raced;
+    }
+    return bytes;
+  } finally { await rm(temporary, { force: true }); }
+}
 export async function json<T>(path: string, fallback: T): Promise<T> {
   try { return JSON.parse(await readFile(path, "utf8")); }
   catch (e) { if ((e as NodeJS.ErrnoException).code === "ENOENT") return fallback; throw e; }
