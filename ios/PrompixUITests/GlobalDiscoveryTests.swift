@@ -428,6 +428,69 @@ import XCTest
         }
     }
 
+    func testIndependentProductionContentAndNewSkill() throws {
+        guard ProcessInfo.processInfo.environment["PROMPIX_INDEPENDENT_ACCEPTANCE"] == "1" else {
+            throw XCTSkip("This journey verifies the live independent-source edition on the dedicated simulator.")
+        }
+        let before = try acceptanceDirectory()
+        let drafts = try? Data(contentsOf: before.appendingPathComponent("drafts.json"))
+        launch(online: true)
+        let downloaded = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            guard let directory = try? self.acceptanceDirectory(),
+                  let catalog = try? self.readSnapshot(CatalogSnapshot.self, from: directory, file: "catalog.json") else { return false }
+            return catalog.prompts.count >= 387 && catalog.prompts.contains { $0.id == "skill-openai-transcribe" }
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [downloaded], timeout: 90), .completed)
+        XCTAssertEqual(try? Data(contentsOf: try acceptanceDirectory().appendingPathComponent("drafts.json")), drafts)
+        XCTAssertTrue(app.buttons["allCreators"].exists)
+        capture("independent-01-refreshed-discovery")
+        app.buttons["searchButton"].tap()
+        let search = app.searchFields.firstMatch
+        XCTAssertTrue(search.waitForExistence(timeout: 5))
+        search.tap(); search.typeText("transcribe")
+        let card = app.buttons["prompt-skill-openai-transcribe"]
+        reveal(card); card.tap()
+        XCTAssertTrue(app.buttons["usePrompt"].waitForExistence(timeout: 5))
+        capture("independent-02-new-official-skill")
+        app.buttons["usePrompt"].tap()
+        XCTAssertTrue(app.buttons["copyInstallCommand"].waitForExistence(timeout: 5))
+        app.buttons["copyInstallCommand"].tap()
+        capture("independent-03-new-skill-use")
+    }
+
+    func testPromptAndSkillHandoff() {
+        launch()
+        app.buttons["kind-text"].tap()
+        let prompt = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'prompt-' ")).firstMatch
+        reveal(prompt); prompt.tap()
+        let use = app.buttons["usePrompt"]
+        XCTAssertTrue(use.waitForExistence(timeout: 5)); use.tap()
+        XCTAssertTrue(app.buttons["handoffOpen"].waitForExistence(timeout: 5))
+        let alternative = app.buttons["destination-claude"]
+        if alternative.exists { alternative.tap(); XCTAssertTrue(alternative.isSelected) }
+        app.buttons["handoffCopy"].tap()
+        XCTAssertTrue(app.buttons["handoffCopy"].label.contains("已复制"))
+        capture("handoff-01-tool-choice")
+        app.navigationBars.buttons["完成"].tap()
+        use.tap()
+        if alternative.exists { XCTAssertTrue(alternative.isSelected) }
+        app.buttons["handoffOpen"].tap()
+        app.activate()
+        XCTAssertFalse(app.staticTexts["handoffOpenError"].exists)
+        capture("handoff-02-return-after-opening-tool")
+        app.navigationBars.buttons["完成"].tap()
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        selectSkill()
+        let skill = app.buttons["prompt-skill-openai-pdf"]
+        reveal(skill); skill.tap()
+        app.buttons["usePrompt"].tap()
+        XCTAssertTrue(app.buttons["copyInstallCommand"].waitForExistence(timeout: 5))
+        app.buttons["copyInstallCommand"].tap()
+        XCTAssertTrue(app.buttons["copyInstallCommand"].label.contains("已复制"))
+        app.buttons["handoffPreview"].tap()
+        capture("handoff-03-pinned-skill-installation")
+    }
+
     func testCreatorAndSkillJourney() {
         launch()
         XCTAssertTrue(app.buttons["allCreators"].waitForExistence(timeout: 10), "Stage the creator/Skill candidate catalog before running this journey.")

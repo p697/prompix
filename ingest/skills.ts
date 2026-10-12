@@ -9,10 +9,14 @@ const exec = promisify(execFile);
 // Source documents are downloaded into the private content cache, never Git.
 // Each directory must independently carry Apache-2.0 terms before collection succeeds.
 export const skillSources = [
-  ...["frontend-design", "algorithmic-art", "canvas-design", "webapp-testing", "mcp-builder", "theme-factory"].map(name => ({
+  ...["frontend-design", "algorithmic-art", "canvas-design", "webapp-testing", "mcp-builder", "theme-factory",
+    "academy-guide", "brand-guidelines", "discernment-nudge", "internal-comms", "slack-gif-creator", "web-artifacts-builder"].map(name => ({
     id: `anthropic-${name}`, repo: "anthropics/skills", directory: `skills/${name}`, publisher: "Anthropic", model: "Claude Code", tool: "https://claude.ai/",
   })),
-  ...["pdf", "playwright", "jupyter-notebook", "gh-fix-ci"].map(name => ({
+  ...["pdf", "playwright", "jupyter-notebook", "gh-fix-ci", "aspnet-core", "chatgpt-apps", "cli-creator",
+    "define-goal", "gh-address-comments", "linear", "migrate-to-codex", "netlify-deploy",
+    "openai-docs", "render-deploy", "screenshot", "security-best-practices", "security-ownership-map",
+    "security-threat-model", "sentry", "speech", "transcribe", "winui-app", "yeet"].map(name => ({
     id: `openai-${name}`, repo: "openai/skills", directory: `skills/.curated/${name}`, publisher: "OpenAI", model: "Codex", tool: "https://chatgpt.com/codex",
   })),
 ] as const;

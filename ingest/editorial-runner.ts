@@ -32,7 +32,7 @@ export const editorialCacheSchema = z.object({ version: z.literal(editorialVersi
 export type EditorialCache = z.infer<typeof editorialCacheSchema>;
 export const editorialAttemptSchema = z.object({ day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), requests: z.literal(1),
   model: z.literal(editorialModel), reservedAt: z.iso.datetime(), candidateIDs: z.array(z.string()).min(1).max(3),
-  inputCharacters: z.number().int().min(1).max(16000), state: z.enum(["reserved", "completed", "failed"]),
+  inputCharacters: z.number().int().min(1).max(36000), state: z.enum(["reserved", "completed", "failed"]),
   inputTokens: z.number().int().nonnegative().optional(), outputTokens: z.number().int().nonnegative().optional(),
   error: z.string().max(500).optional(),
 }).strict();
@@ -78,7 +78,7 @@ export function automaticReviewEligibility(item: Candidate): string | undefined 
   if (item.kind === "image" && !item.media?.imageURL) return "A real source image is required";
   if (item.kind === "video" && !(item.media?.imageURL && item.media.videoURL)) return "A real source poster and clip are required";
   if (item.kind === "web" && !(item.media?.imageURL && item.media.demoURL)) return "A real webpage preview and demo are required";
-  if (JSON.stringify([editorialInput(item)]).length > 16000) return "Complete source exceeds the bounded review input; manual review required";
+  if (JSON.stringify([editorialInput(item)]).length > 36000) return "Complete source exceeds the bounded review input; manual review required";
 }
 
 /** Published edits first, then stable round-robin across source/modality shelves. */
@@ -142,7 +142,7 @@ export async function runEditorialReview(options: { candidates: readonly Candida
     const selected: Candidate[] = [];
     for (const item of queue) {
       if (selected.length >= 3) break;
-      if (JSON.stringify([...selected, item].map(editorialInput)).length <= 16000) selected.push(item);
+      if (JSON.stringify([...selected, item].map(editorialInput)).length <= 36000) selected.push(item);
     }
     if (!selected.length) break;
     const selectedIDs = new Set(selected.map(item => item.id));

@@ -6,7 +6,6 @@ import { catalogSchema, type Catalog, type Prompt } from "../packages/schema/cat
 import {
   repositories,
   collectRepository,
-  parseYouMind,
   parseCommunityCSV,
   type Candidate,
   mergeCandidates,
@@ -14,6 +13,7 @@ import {
 } from "./sources.ts";
 import { download } from "./network.ts";
 import { discoverX } from "./x-discovery.ts";
+import { collectXFeeds } from "./x-feed.ts";
 import { readXIntake } from "./x-intake.ts";
 import { collectSkill, skillRepositoryRevision, skillSources } from "./skills.ts";
 import { prepareClawHub, filterClawHubAvailability, assertClawHubAvailability } from "./clawhub-daily.ts";
@@ -107,19 +107,15 @@ async function run() {
     const creatorsPath = join(root, "creators.json");
     let creators = await json<CreatorCache>(creatorsPath, {});
     for (const source of [
-      ...repositories,
       { id: "prompts-chat", repo: "f/prompts.chat" },
     ]) {
       const path = join(root, "candidates", `${source.id}.json`);
       try {
         const raw = await collectRepository(
           source.repo,
-          source.id === "prompts-chat" ? "prompts.csv" : "README_zh.md",
+          "prompts.csv",
         );
-        const candidates =
-          "kind" in source
-            ? parseYouMind(raw.text, source, raw.revision)
-            : parseCommunityCSV(raw.text, raw.revision);
+        const candidates = parseCommunityCSV(raw.text, raw.revision);
         if (!candidates.length)
           throw new Error("Empty parsed source; retaining previous snapshot");
         await atomic(path, candidates);
@@ -155,30 +151,31 @@ async function run() {
         report.sources[`skill-${source.id}`] = { status: "failed", message: String(error) };
       }
     }
-    const discovery = await discoverX(root, { publishing, bearer: process.env.X_BEARER_TOKEN,
-      ...(process.env.PROMPIX_X_LOOKUP_IDS !== undefined
-        ? { lookupIDs: process.env.PROMPIX_X_LOOKUP_IDS.split(",").map(id => id.trim()) } : {}) });
-    report.sources.x = discovery.report;
-    if (discovery.result) {
-      creators = mergeCreatorCache(creators, discovery.result.creators);
-      await atomic(creatorsPath, creators);
+    // OpenLab remains historical attribution only; never fetch or grow from it.
+    for (const source of repositories) report.sources[source.id] = { status: "retired", count: 0 };
+    if (process.env.PROMPIX_X_LOOKUP_IDS !== undefined) {
+      const discovery = await discoverX(root, { publishing, bearer: process.env.X_BEARER_TOKEN,
+        lookupIDs: process.env.PROMPIX_X_LOOKUP_IDS.split(",").map(id => id.trim()) });
+      report.sources.x = discovery.report;
+      if (discovery.result) {
+        creators = mergeCreatorCache(creators, discovery.result.creators);
+        await atomic(creatorsPath, creators);
+      }
+    } else {
+      report.sources.x = await collectXFeeds(root, { enabled: publishing, bearer: process.env.X_BEARER_TOKEN });
     }
     // Cached discoveries still enter intake when today's paid search is disabled.
     // Marked source bodies are drafts; incomplete posts keep an explicit reason.
     let reviews = reviewsSchema.parse(await json(join(root, "editorial.json"), {}));
+    creators = await json<CreatorCache>(creatorsPath, creators);
     const xIntake = await readXIntake(root, creators);
     xIntake.report.reviewedDrafts = xIntake.candidates.filter(item => reviews[item.id]?.fingerprint === item.fingerprint).length;
     report.sources["x-intake"] = xIntake.report;
     all.push(...xIntake.candidates);
     await atomic(join(root, "candidates", "x-native.json"), xIntake.candidates);
     await atomic(join(root, "x-intake", "status.json"), { updatedAt: new Date().toISOString(), ...xIntake.report, records: xIntake.records });
-    const archive = await json<Candidate[]>(join(root, "candidates", `${videoArchive.id}.json`), []);
-    report.sources[videoArchive.id] = {
-      status: archive.length ? "staged" : "not-staged",
-      count: archive.length,
-      revision: videoArchive.revision,
-    };
-    const candidates = enrichCreators(mergeCandidates(all, archive), creators);
+    report.sources[videoArchive.id] = { status: "retired", count: 0 };
+    const candidates = enrichCreators(mergeCandidates(all), creators);
     report.counts.candidates = countByKind(candidates);
     const moderation = moderationSchema.parse(await json(join(root, "moderation.json"), { removedIDs: [] }));
     let previous: Catalog | undefined;

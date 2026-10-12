@@ -20,8 +20,8 @@ const postSchema = z.object({
 const mediaSchema = z.object({ media_key: z.string(), type: z.enum(["photo", "video", "animated_gif"]),
   url: z.string().optional(), preview_image_url: z.string().optional(),
   variants: z.array(z.object({ content_type: z.string(), url: z.string(), bit_rate: z.number().optional() })).max(30).optional() });
-const snapshotSchema = z.object({ posts: z.array(z.unknown()).max(100),
-  creators: z.array(creatorSchema).max(100).optional(), media: z.array(z.unknown()).max(100).optional() });
+const snapshotSchema = z.object({ capturedAt: z.iso.datetime().optional(), posts: z.array(z.unknown()).max(100),
+  creators: z.array(creatorSchema).max(100).optional(), media: z.array(z.unknown()).max(400).optional() });
 type XPost = z.infer<typeof postSchema>;
 type XMedia = z.infer<typeof mediaSchema>;
 type XURLEntity = NonNullable<z.infer<typeof entitiesSchema>["urls"]>[number];
@@ -198,7 +198,11 @@ export function convertXDiscovery(snapshots: readonly Snapshot[], creators: Crea
   const report: XIntakeReport = { snapshots: snapshots.length, discovered: 0, duplicatePosts: 0, drafted: 0, blocked: 0,
     publicationBlocked: 0, reviewedDrafts: 0, reasons: {}, snapshotErrors: [] };
   const posts = new Map<string, { post?: XPost; snapshot: string; creators: z.infer<typeof creatorSchema>[]; media: XMedia[] }>();
-  for (const snapshot of [...snapshots].sort((a, b) => a.name.localeCompare(b.name))) {
+  const capturedAt = (snapshot: Snapshot) => {
+    const parsed = snapshotSchema.safeParse(snapshot.data);
+    return parsed.success && parsed.data.capturedAt ? parsed.data.capturedAt : snapshot.name.slice(0, 10) + "T00:00:00.000Z";
+  };
+  for (const snapshot of [...snapshots].sort((a, b) => Date.parse(capturedAt(a)) - Date.parse(capturedAt(b)) || a.name.replace(/\.json$/, "").localeCompare(b.name.replace(/\.json$/, "")))) {
     const parsed = snapshotSchema.safeParse(snapshot.data);
     if (!parsed.success) { report.snapshotErrors.push({ snapshot: snapshot.name, reason: "invalid-snapshot" }); continue; }
     const media = (parsed.data.media ?? []).flatMap(item => { const value = mediaSchema.safeParse(item); return value.success ? [value.data] : []; });
@@ -221,7 +225,7 @@ export function convertXDiscovery(snapshots: readonly Snapshot[], creators: Crea
       records.push({ postID, sourceURL, snapshot, state: "blocked", reason: "invalid-post" });
       continue;
     }
-    const profile = [...Object.values(creators), ...profiles].find(value => value.platform === "x" && value.externalID === post.author_id);
+    const profile = [...profiles, ...Object.values(creators)].find(value => value.platform === "x" && value.externalID === post.author_id);
     const extracted = extractMarkedXPrompt(post, media);
     const record: XIntakeRecord = { postID: post.id, authorID: post.author_id, sourceURL, snapshot,
       state: "blocked", reason: "", fullTextSource: fullText(post).source, expandedLinks: sourceLinks(post),
@@ -254,12 +258,12 @@ export function convertXDiscovery(snapshots: readonly Snapshot[], creators: Crea
 export async function readXIntake(root: string, creators: CreatorCache = {}) {
   const directory = join(root, "x-discovery");
   let names: string[];
-  try { names = (await readdir(directory)).filter(name => /^\d{4}-\d{2}-\d{2}\.json$/.test(name)); }
+  try { names = (await readdir(directory)).filter(name => /^\d{4}-\d{2}-\d{2}(?:-feed-\d{3})?\.json$/.test(name)); }
   catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return convertXDiscovery([], creators); throw error; }
   const snapshots: Snapshot[] = [], errors: XIntakeReport["snapshotErrors"] = [];
   for (const name of names.sort()) {
     try {
-      if ((await stat(join(directory, name))).size > 1_000_000) throw new Error("oversize-snapshot");
+      if ((await stat(join(directory, name))).size > 8_000_000) throw new Error("oversize-snapshot");
       snapshots.push({ name, data: JSON.parse(await readFile(join(directory, name), "utf8")) });
     } catch { errors.push({ snapshot: name, reason: "unreadable-or-oversize-snapshot" }); }
   }
