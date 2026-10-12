@@ -1,4 +1,4 @@
-import { execFile } from "node:child_process";
+import { execFile, type ExecFileOptionsWithStringEncoding } from "node:child_process";
 import { promisify } from "node:util";
 import { z } from "zod";
 import { download } from "./network.ts";
@@ -45,7 +45,7 @@ function frontmatterValue(frontmatter: string, key: string): string | undefined 
 
 export function parseSkill(markdown: string, license: string, source: SkillSource, revision: string): Candidate {
   assertSource(source);
-  if (!/^[a-f0-9]{40}$/.test(revision)) throw new Error("Skill requires an immutable Git revision");
+  if (revision.length !== 40 || !/^[a-f0-9]{40}$/.test(revision)) throw new Error("Skill requires an immutable Git revision");
   if (!/^\s*Apache License\s+Version 2\.0, January 2004/.test(license) || !license.includes("END OF TERMS AND CONDITIONS")) throw new Error("Skill directory does not have the expected Apache-2.0 license");
   const header = markdown.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/)?.[1];
   if (!header) throw new Error("Skill is missing YAML frontmatter");
@@ -98,17 +98,36 @@ export function skillFilesFromTree(value: unknown, source: SkillSource): string[
   return [...core, ...files.filter(path => !core.includes(path)).sort()];
 }
 
-/** Share a single bounded public tree request across all Skills at the same repository revision. */
-export function createSkillFileInventory(downloadTree: typeof download = download) {
+type SkillTreeExecutor = (command: string, args: string[], options: ExecFileOptionsWithStringEncoding) => Promise<{ stdout: string }>;
+const treeResponseLimit = 7_000_000;
+
+async function requestSkillTree(repo: string, revision: string, run: SkillTreeExecutor): Promise<unknown> {
+  let stdout: string;
+  try {
+    ({ stdout } = await run("gh", ["api", "--hostname", "github.com", `repos/${repo}/git/trees/${revision}?recursive=1`,
+      "--header", "Accept: application/vnd.github+json", "--header", "X-GitHub-Api-Version: 2026-03-10"], {
+      encoding: "utf8", timeout: 60_000, maxBuffer: treeResponseLimit, killSignal: "SIGKILL", shell: false,
+      env: { ...process.env, GH_PROMPT_DISABLED: "1", GH_DEBUG: "", DEBUG: "", GH_FORCE_TTY: "",
+        GH_PAGER: "cat", PAGER: "cat", GH_NO_UPDATE_NOTIFIER: "1", GH_NO_EXTENSION_UPDATE_NOTIFIER: "1" },
+    }));
+  } catch {
+    // Child-process errors contain stdout/stderr; never expose CLI diagnostics or credentials.
+    throw new Error("Skill repository tree request failed");
+  }
+  if (Buffer.byteLength(stdout, "utf8") > treeResponseLimit) throw new Error("Skill repository tree exceeds size limit");
+  try { return JSON.parse(stdout); }
+  catch { throw new Error("Skill repository tree response is not valid JSON"); }
+}
+
+/** Share one bounded authenticated request across all Skills at the same repository revision. */
+export function createSkillFileInventory(run: SkillTreeExecutor = exec) {
   const trees = new Map<string, Promise<unknown>>();
   return async (source: SkillSource, revision: string): Promise<string[]> => {
     assertSource(source);
-    if (!/^[a-f0-9]{40}$/.test(revision)) throw new Error("Skill inventory requires an immutable Git revision");
+    if (revision.length !== 40 || !/^[a-f0-9]{40}$/.test(revision)) throw new Error("Skill inventory requires an immutable Git revision");
     const key = `${source.repo}:${revision}`;
     if (!trees.has(key)) {
-      trees.set(key, downloadTree(`https://api.github.com/repos/${source.repo}/git/trees/${revision}?recursive=1`,
-        ["api.github.com"], 7_000_000, { Accept: "application/vnd.github+json", "User-Agent": "Prompix-Collector", "X-GitHub-Api-Version": "2026-03-10" })
-        .then(response => JSON.parse(response.bytes.toString())));
+      trees.set(key, requestSkillTree(source.repo, revision, run));
     }
     return skillFilesFromTree(await trees.get(key), source);
   };
@@ -117,7 +136,7 @@ const skillFileInventory = createSkillFileInventory();
 
 export async function collectSkill(source: SkillSource, revision: string): Promise<Candidate> {
   assertSource(source);
-  if (!/^[a-f0-9]{40}$/.test(revision)) throw new Error("Invalid Skill repository revision");
+  if (revision.length !== 40 || !/^[a-f0-9]{40}$/.test(revision)) throw new Error("Invalid Skill repository revision");
   const raw = `https://raw.githubusercontent.com/${source.repo}/${revision}/${source.directory}`;
   const [body, license, files] = await Promise.all([
     download(`${raw}/SKILL.md`, ["raw.githubusercontent.com"], 100_000),

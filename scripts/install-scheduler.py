@@ -90,7 +90,7 @@ def install(repo, home):
             copy_runtime(repo, runtime)
             collection_idle(base)
             command_paths = [str(Path(node).parent)]
-            for command in ['wrangler', 'git']:
+            for command in ['wrangler', 'git', 'gh']:
                 executable = shutil.which(command)
                 if executable:
                     command_paths.append(str(Path(executable).parent))

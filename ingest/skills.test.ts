@@ -54,12 +54,17 @@ test("Skills at one immutable repository revision share one request even when co
   const second = skillSources[1];
   const response = { truncated: false, tree: [...tree(["SKILL.md", "LICENSE.txt"]).tree,
     ...tree(["SKILL.md", "LICENSE.txt", "scripts/run.py"], second.directory).tree] };
-  const load = createSkillFileInventory(async (url, hosts, maximum, headers) => {
+  const load = createSkillFileInventory(async (command, args, options) => {
     requests++;
-    assert.equal(url, `https://api.github.com/repos/${source.repo}/git/trees/${revision}?recursive=1`);
-    assert.deepEqual(hosts, ["api.github.com"]); assert.equal(maximum, 7_000_000);
-    assert.equal(headers?.Accept, "application/vnd.github+json");
-    return { bytes: Buffer.from(JSON.stringify(response)), type: "application/json" };
+    assert.equal(command, "gh");
+    assert.deepEqual(args, ["api", "--hostname", "github.com", `repos/${source.repo}/git/trees/${revision}?recursive=1`,
+      "--header", "Accept: application/vnd.github+json", "--header", "X-GitHub-Api-Version: 2026-03-10"]);
+    assert.equal(options.encoding, "utf8"); assert.equal(options.timeout, 60_000); assert.equal(options.maxBuffer, 7_000_000);
+    assert.equal(options.killSignal, "SIGKILL"); assert.equal(options.shell, false);
+    assert.equal(options.env?.GH_PROMPT_DISABLED, "1"); assert.equal(options.env?.GH_DEBUG, ""); assert.equal(options.env?.DEBUG, "");
+    assert.equal(options.env?.GH_FORCE_TTY, ""); assert.equal(options.env?.GH_PAGER, "cat"); assert.equal(options.env?.PAGER, "cat");
+    assert.equal(options.env?.GH_NO_UPDATE_NOTIFIER, "1"); assert.equal(options.env?.GH_NO_EXTENSION_UPDATE_NOTIFIER, "1");
+    return { stdout: JSON.stringify(response) };
   });
   const [firstFiles, secondFiles] = await Promise.all([load(source, revision), load(second, revision)]);
   assert.equal(requests, 1); assert.equal(firstFiles.length, 2); assert.equal(secondFiles.length, 3);
@@ -73,8 +78,78 @@ test("a failed repository tree request is not repeated once for every package in
   let requests = 0;
   const load = createSkillFileInventory(async () => { requests++; throw new Error("GitHub unavailable"); });
   for (const entry of skillSources.filter(entry => entry.repo === source.repo))
-    await assert.rejects(load(entry, revision), /GitHub unavailable/);
+    await assert.rejects(load(entry, revision), /^Error: Skill repository tree request failed$/);
   assert.equal(requests, 1);
+});
+
+test("tree requests are separated by repository and exact immutable revision", async () => {
+  const endpoints: string[] = [], otherSource = skillSources.find(entry => entry.repo !== source.repo)!;
+  const response = { truncated: false, tree: [...tree(["SKILL.md", "LICENSE.txt"]).tree,
+    ...tree(["SKILL.md", "LICENSE.txt"], otherSource.directory).tree] };
+  const load = createSkillFileInventory(async (_command, args) => {
+    endpoints.push(args[3]);
+    return { stdout: JSON.stringify(response) };
+  });
+  await Promise.all([load(source, revision), load(source, "b".repeat(40)), load(otherSource, revision)]);
+  assert.deepEqual(endpoints, [
+    `repos/${source.repo}/git/trees/${revision}?recursive=1`,
+    `repos/${source.repo}/git/trees/${"b".repeat(40)}?recursive=1`,
+    `repos/${otherSource.repo}/git/trees/${revision}?recursive=1`,
+  ]);
+});
+
+test("unallowlisted sources and nonexact revisions fail before starting the CLI", async () => {
+  let requests = 0;
+  const load = createSkillFileInventory(async () => { requests++; throw new Error("Unexpected CLI call"); });
+  for (const invalidSource of [{ ...source, id: "unknown" }, { ...source, repo: "unknown/private" }, { ...source, directory: "../private" }])
+    await assert.rejects(load(invalidSource, revision), /not allowlisted/);
+  for (const invalidRevision of ["main", "a".repeat(39), "a".repeat(41), "A".repeat(40), `${revision}\n`, `${revision}?recursive=0`]) {
+    await assert.rejects(load(source, invalidRevision), /immutable/);
+    await assert.rejects(collectSkill(source, invalidRevision), /Invalid Skill repository revision/);
+  }
+  assert.equal(requests, 0);
+});
+
+test("CLI failures including timeouts and output overflow expose no raw diagnostics", async () => {
+  for (const properties of [{ code: "ENOENT" }, { killed: true, signal: "SIGKILL" }, { code: "ERR_CHILD_PROCESS_STDIO_MAXBUFFER" }, { code: 1 }]) {
+    const diagnostic = "synthetic-private-diagnostic";
+    const failure = Object.assign(new Error(diagnostic), properties, { stdout: diagnostic, stderr: diagnostic, cause: new Error(diagnostic) });
+    let requests = 0;
+    const load = createSkillFileInventory(async () => { requests++; throw failure; });
+    for (const entry of [source, skillSources[1]]) {
+      await assert.rejects(load(entry, revision), error => {
+        assert.ok(error instanceof Error);
+        assert.equal(error.message, "Skill repository tree request failed");
+        assert.equal(error.cause, undefined);
+        assert.deepEqual(Object.keys(error), []);
+        assert.ok(!String(error.stack).includes(diagnostic));
+        return true;
+      });
+    }
+    assert.equal(requests, 1, "A failed authenticated request must not fall back to another request");
+  }
+});
+
+test("malformed JSON is redacted and complete tree validation still applies to CLI output", async () => {
+  for (const stdout of ["", "synthetic-private-diagnostic", '{"truncated": false, "tree": [']) {
+    const load = createSkillFileInventory(async () => ({ stdout }));
+    await assert.rejects(load(source, revision), /^Error: Skill repository tree response is not valid JSON$/);
+  }
+  for (const value of [null, {}, { ...tree(["SKILL.md", "LICENSE.txt"]), truncated: true }]) {
+    const load = createSkillFileInventory(async () => ({ stdout: JSON.stringify(value) }));
+    await assert.rejects(load(source, revision), /malformed or truncated/);
+  }
+});
+
+test("decoded tree output accepts exactly 7 MB and rejects a multibyte overflow", async () => {
+  const value = tree(["SKILL.md", "LICENSE.txt"]), json = JSON.stringify(value);
+  const exact = json + " ".repeat(7_000_000 - Buffer.byteLength(json));
+  assert.equal(Buffer.byteLength(exact), 7_000_000);
+  assert.deepEqual(await createSkillFileInventory(async () => ({ stdout: exact }))(source, revision), ["SKILL.md", "LICENSE.txt"]);
+  const overflow = JSON.stringify({ ...value, padding: "é".repeat(3_500_000) });
+  assert.ok(overflow.length < 7_000_000);
+  assert.ok(Buffer.byteLength(overflow) > 7_000_000);
+  await assert.rejects(createSkillFileInventory(async () => ({ stdout: overflow }))(source, revision), /exceeds size limit/);
 });
 
 test("unknown Skill sources, changed licensing and malformed metadata fail before publication", async () => {
