@@ -293,6 +293,50 @@ final class LanguagePackCatalogTests: XCTestCase {
         XCTAssertThrowsError(try LanguagePackCatalog.verifyBase(Data(repeating: 0x20, count: 10_000_001), manifest: LanguagePackCatalog.verifyManifest(fixture.manifest)))
     }
 
+    func testManifestRejectsFoundationUTF16AndUTF32Autodetection() throws {
+        let text = try XCTUnwrap(String(data: fixture().manifest, encoding: .utf8))
+        let encodings: [String.Encoding] = [.utf16LittleEndian, .utf16BigEndian, .utf32LittleEndian, .utf32BigEndian]
+        for encoding in encodings {
+            let bytes = try XCTUnwrap(text.data(using: encoding))
+            XCTAssertTrue(bytes.contains(0))
+            XCTAssertThrowsError(try LanguagePackCatalog.verifyManifest(bytes))
+        }
+    }
+
+    func testEscapedUnpairedSurrogatesFailEvenWithMatchingArtifactDescriptors() throws {
+        for invalid in [#"Invalid \ud800 source"#, #"Invalid \udc00 source"#] {
+            var fixture = try rewritePrompt(fixture(), index: 2) { $0["example"] = "unicode-marker" }
+            fixture.base = Data(String(decoding: fixture.base, as: UTF8.self).replacingOccurrences(of: "unicode-marker", with: invalid).utf8)
+            fixture.manifest = try edit(fixture.manifest) { value in
+                var descriptor = value["base"] as! [String: Any]
+                descriptor["sha256"] = digest(fixture.base); descriptor["byteCount"] = fixture.base.count; value["base"] = descriptor
+            }
+            XCTAssertThrowsError(try base(fixture))
+
+            fixture = try rewriteEntry(self.fixture()) { entry in
+                var content = entry["content"] as! [String: Any]; content["prompt"] = "unicode-marker"; entry["content"] = content
+            }
+            let bytes = Data(String(decoding: fixture.locales["ja"]!, as: UTF8.self).replacingOccurrences(of: "unicode-marker", with: invalid).utf8)
+            fixture.locales["ja"] = bytes
+            fixture.manifest = try edit(fixture.manifest) { value in
+                var locales = value["locales"] as! [String: [String: Any]]
+                locales["ja"]!["sha256"] = digest(bytes); locales["ja"]!["byteCount"] = bytes.count; value["locales"] = locales
+            }
+            XCTAssertThrowsError(try requested(fixture))
+        }
+    }
+
+    func testValidUnicodeAndEscapedNULRemainIntact() throws {
+        let text = "Unicode \u{10000} \u{10ffff} 🌙 Cafe\u{0301} and \u{0000} remain intact"
+        var fixture = try rewritePrompt(fixture(), index: 2) { $0["example"] = text }
+        XCTAssertEqual(Data(try base(fixture).catalog.prompts[2].example.utf8), Data(text.utf8))
+        fixture = try rewriteEntry(self.fixture()) { entry in
+            var content = entry["content"] as! [String: Any]; content["prompt"] = text; entry["content"] = content
+        }
+        let decoded = try XCTUnwrap(requested(fixture).prompts[0].localization?.translations["ja"]?.prompt)
+        XCTAssertEqual(Data(decoded.utf8), Data(text.utf8))
+    }
+
     private func onlyJapaneseOrOriginals(_ fixture: Fixture, includeJapanese: Bool) throws -> Fixture {
         var result = try rewriteBase(fixture) { value in
             var prompts = value["prompts"] as! [[String: Any]]

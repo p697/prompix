@@ -136,3 +136,13 @@ Supply these variables through the UI test runner environment (for example an
 external `.xctestrun` file). Keep fixtures, screenshots, logs and result bundles
 outside Git. Restore the simulator data and settings after acceptance work; never
 stage these fixtures in a user's physical-device container.
+
+`LanguagePackCatalog` is an inactive, pure v2 decoder. The shared original
+synthetic fixture in `PrompixTests/Resources/language-pack-fixture.json` is also
+verified by TypeScript. The decoder checks immutable descriptors, exact locale
+coverage, source fingerprints, UTF-8 text and byte limits before producing the
+existing `Catalog` model. It does not change Library networking, caches or UI.
+All 86 model tests pass; an external native harness also reconstructed the real
+346-item, nine-language edition byte-for-byte. See the
+[protocol migration record](../docs/content-protocol-v2.md) for evidence and the
+remaining network, cache and language-switch acceptance work.

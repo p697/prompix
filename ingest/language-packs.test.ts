@@ -212,3 +212,37 @@ test("source fingerprint golden vector preserves field order, Unicode, JSON esca
   item.localization = { sourceLanguage: "und", sourceFingerprint: translationFingerprint(item), translations: {} };
   assert.deepEqual(join(splitLanguagePacks(catalog([item]))), catalog([item]));
 });
+
+test("publishing rejects unpaired UTF-16 surrogates in originals, translations, metadata and keys", () => {
+  for (const invalid of ["\ud800", "\udc00", "\ud800A", "A\udc00", "\ud800\ud800", "\udc00\ud800"]) {
+    const source = fixture();
+    source.prompts[0].prompt += invalid;
+    source.prompts[0].localization!.sourceFingerprint = translationFingerprint(source.prompts[0]);
+    assert.throws(() => splitLanguagePacks(source), /Unpaired Unicode surrogate/);
+    const translated = fixture();
+    translated.prompts[0].localization!.translations.ja!.prompt += invalid;
+    assert.throws(() => splitLanguagePacks(translated), /Unpaired Unicode surrogate/);
+    const metadata = fixture(); metadata.prompts[0].source.author = invalid;
+    assert.throws(() => splitLanguagePacks(metadata), /Unpaired Unicode surrogate/);
+    const key = fixture(); (key.prompts[0].source as unknown as Record<string, unknown>)[invalid] = "Unsupported";
+    assert.throws(() => splitLanguagePacks(key), /Unpaired Unicode surrogate/);
+  }
+});
+
+test("verified artifacts reject escaped unpaired surrogates even with matching byte counts and hashes", () => {
+  const bundle = splitLanguagePacks(fixture());
+  const base = rewriteBase(bundle, value => { value.prompts[3].example = "Invalid \ud800 source"; });
+  assert.throws(() => verifyOriginalBase(base.manifest, base.baseBytes), /Unpaired Unicode surrogate/);
+  const pack = rewriteJapanese(bundle, value => { value.entries[0].content.prompt = "Invalid \udc00 translation"; });
+  assert.throws(() => verifyLocalePack(pack.manifest, pack.baseBytes, "ja", pack.localeBytes.ja!), /Unpaired Unicode surrogate/);
+  const manifest = { ...bundle.manifest, ["invalid\ud800"]: true };
+  assert.throws(() => verifyLanguagePackManifest(encode(manifest)), /Unpaired Unicode surrogate/);
+});
+
+test("valid surrogate pairs, escaped NUL and decomposed Unicode round-trip unchanged", () => {
+  const input = fixture(), text = "Unicode \ud800\udc00 \udbff\udfff 🌙 Cafe\u0301 and \u0000 remain intact";
+  input.prompts[0].prompt = text;
+  input.prompts[0].localization!.sourceFingerprint = translationFingerprint(input.prompts[0]);
+  input.prompts[0].localization!.translations.ja!.prompt = text;
+  assert.deepEqual(join(splitLanguagePacks(input)), input);
+});

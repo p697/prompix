@@ -282,7 +282,9 @@ enum LanguagePackCatalog {
 
     private static func decode(_ bytes: Data, maximum: Int) throws -> Any {
         guard bytes.count <= maximum else { throw ValidationError.tooLarge }
-        guard String(data: bytes, encoding: .utf8) != nil else { throw ValidationError.invalidMetadata }
+        // Foundation autodetects UTF-16/32 even without a BOM. Raw NUL is illegal
+        // in UTF-8 JSON; rejecting it prevents accepting another wire encoding.
+        guard !bytes.contains(0), String(data: bytes, encoding: .utf8) != nil else { throw ValidationError.invalidMetadata }
         return try JSONSerialization.jsonObject(with: bytes)
     }
 

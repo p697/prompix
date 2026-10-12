@@ -21,6 +21,15 @@ function canonical(value: unknown): unknown {
   return value;
 }
 function encode(value: unknown): Buffer { return Buffer.from(JSON.stringify(canonical(value)) + "\n"); }
+// JSON permits escaped lone UTF-16 surrogates, but native UTF-8 decoders cannot
+// represent them. Reject instead of silently replacing source or translated text.
+function assertUnicode(value: unknown): void {
+  if (typeof value === "string") {
+    if (/[\uD800-\uDFFF]/u.test(value)) throw new Error("Unpaired Unicode surrogate in artifact");
+  } else if (value && typeof value === "object") {
+    for (const [key, child] of Object.entries(value)) { assertUnicode(key); assertUnicode(child); }
+  }
+}
 function assertUnchangedShape(raw: unknown, parsed: unknown): void {
   if (typeof raw === "string" && typeof parsed === "string" && (raw === parsed || raw.trim() === parsed)) return;
   if (raw && parsed && typeof raw === "object" && typeof parsed === "object") {
@@ -34,6 +43,7 @@ function assertUnchangedShape(raw: unknown, parsed: unknown): void {
 // Existing schemas trim strings. Preserve source/translated bytes but reject every
 // structural normalization, including nested unknown fields those schemas strip.
 function validate<T>(schema: z.ZodType<T>, value: unknown): T {
+  assertUnicode(value);
   assertUnchangedShape(value, schema.parse(value));
   return value as T;
 }
