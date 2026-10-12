@@ -1,3 +1,5 @@
+import { websiteArtifactByteLimit, websiteContentSecurityPolicy } from "../../packages/schema/website-artifact";
+
 export default {
   async fetch(request, env): Promise<Response> {
     const url = new URL(request.url);
@@ -16,12 +18,21 @@ export default {
       });
     // Only published objects are reachable. Drafts, credentials and logs never leave the Mac.
     const key = url.pathname.slice(1);
+    const isExample = /^examples\/[a-f0-9]{64}\.html$(?![\s\S])/.test(key);
     if (
-      !/^(v[12]\/latest\.json|releases\/[a-z0-9-]+\/(catalog\.json|v2\/(base\.json|locales\/(en|zh-Hans|zh-Hant|ja|ko|es|fr|de|pt-BR)\.json))|media\/[a-f0-9]{64}\.(jpg|png|webp|mp4))$(?![\s\S])/.test(
+      (isExample && (url.search || url.hash)) ||
+      (!isExample && !/^(v[12]\/latest\.json|releases\/[a-z0-9-]+\/(catalog\.json|v2\/(base\.json|locales\/(en|zh-Hans|zh-Hant|ja|ko|es|fr|de|pt-BR)\.json))|media\/[a-f0-9]{64}\.(jpg|png|webp|mp4))$(?![\s\S])/.test(
         key,
-      )
+      ))
     ) {
       return new Response(request.method === "HEAD" ? null : "Not found", { status: 404, headers });
+    }
+    if (isExample) {
+      headers.set("Content-Type", "text/html; charset=utf-8");
+      headers.set("Content-Security-Policy", websiteContentSecurityPolicy);
+      headers.set("Referrer-Policy", "no-referrer");
+      headers.set("X-Frame-Options", "DENY");
+      headers.set("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=(), usb=(), clipboard-read=(), clipboard-write=(), display-capture=(), fullscreen=()");
     }
     try {
       const object = await env.CONTENT.get(key, {
@@ -29,7 +40,14 @@ export default {
         ...(request.method === "GET" && request.headers.has("range") ? { range: request.headers } : {}),
       });
       if (!object) return new Response(request.method === "HEAD" ? null : "Not found", { status: 404, headers });
-      object.writeHttpMetadata(headers);
+      // R2 size describes the whole object, including when only a range is returned.
+      if (isExample && (!Number.isSafeInteger(object.size) || object.size < 0 || object.size > websiteArtifactByteLimit)) {
+        if ("body" in object) await object.body.cancel();
+        headers.set("Cache-Control", "no-store");
+        return new Response(request.method === "HEAD" ? null : "Example exceeds the size limit", { status: 413, headers });
+      }
+      // HTML has a fixed serving policy; stored HTTP metadata cannot override it.
+      if (!isExample) object.writeHttpMetadata(headers);
       headers.set("ETag", object.httpEtag);
       headers.set("Accept-Ranges", "bytes");
       headers.set(
@@ -68,6 +86,7 @@ export default {
       return new Response(object.body, { status, headers });
     } catch {
       console.error(JSON.stringify({ event: "content_read_failed", key }));
+      if (isExample) headers.set("Cache-Control", "no-store");
       return new Response(request.method === "HEAD" ? null : "Content temporarily unavailable", {
         status: 503,
         headers,

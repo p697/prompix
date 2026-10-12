@@ -7,6 +7,7 @@ import { runVisualReview, visualCacheSchema, visualLedgerSchema, visualReviewVer
 import { codexVisualProvider } from "./visual-provider.ts";
 import { prepareVisualMedia } from "./visual-media.ts";
 import { reviewRequestLimit } from "./review-budget.ts";
+import { websiteReviewer } from "./website-review.ts";
 
 /** Runs under the daily content lock, after immutable media preparation. */
 export async function prepareDailyVisualReview(prompts: Prompt[], previous: Prompt[], root: string,
@@ -20,10 +21,13 @@ export async function prepareDailyVisualReview(prompts: Prompt[], previous: Prom
   const configured = environment.PROMPIX_VISUAL_PROVIDER;
   if (configured && configured !== "codex") throw new Error("Unsupported visual provider; publication stopped");
   const maxRequests = reviewRequestLimit(environment.PROMPIX_VISUAL_MAX_REQUESTS);
+  // Dry-run remains offline for review media. Trusted website reviews never use
+  // a model or spend the image-review request budget.
+  const reviewWebsite = publishing && prompts.some(item => item.kind === "web") ? await websiteReviewer(root) : undefined;
   let requestSequence = ledger?.requests ?? 0;
   let temporary: string | undefined;
   try {
-    return await runVisualReview({ prompts, previous, cache, ledger, day, maxRequests,
+    return await runVisualReview({ prompts, previous, cache, ledger, day, maxRequests, reviewWebsite,
       provider: publishing && configured === "codex" ? async items => {
         if (clock().toISOString().slice(0, 10) !== day) throw new Error("UTC visual review day changed; reserved attempt remains consumed");
         const sequence = requestSequence;

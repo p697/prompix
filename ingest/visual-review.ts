@@ -101,9 +101,9 @@ export function visualInputCharacters(items: readonly VisualInput[]): number {
 }
 
 export type VisualItemReport = { id: string; identity: string;
-  status: "not-required" | "previous-snapshot" | "cached-approved" | "approved" | "deferred"; reason?: string };
+  status: "not-required" | "previous-snapshot" | "cached-approved" | "website-reviewed" | "approved" | "deferred"; reason?: string };
 export type VisualReport = { status: "disabled" | "no-pending" | "daily-limit" | "reviewed" | "failed";
-  considered: number; notRequired: number; previousSnapshots: number; cachedApproved: number; cachedDeferred: number;
+  considered: number; notRequired: number; previousSnapshots: number; cachedApproved: number; cachedDeferred: number; websitesReviewed: number;
   pending: number; prepared: number; requests: number; dailyRequests: number; maxRequests: number; attemptedCandidates: number; approved: number; deferred: number;
   preflightDeferred: number; inputCharacters: number; attachments: number; attachmentBytes: number; model: string;
   items: VisualItemReport[]; error?: string };
@@ -126,7 +126,6 @@ function mediaIdentityError(item: Prompt): string | undefined {
     return "Gallery must contain one to eight images and start with its selected cover";
 }
 function eligibilityError(item: Prompt): string | undefined {
-  if (item.kind === "web") return "A real webpage result inspection is required; image-only review cannot approve a website";
   if (item.media?.image || item.media?.video) return "New local media resources require a separately verified published snapshot";
   if (!imageURLs(item).length) return "A selected source image or video poster is required";
   if (item.kind === "video" && !item.media?.videoURL) return "A source video is required";
@@ -185,6 +184,7 @@ const errorText = (error: unknown) => (error instanceof Error ? error.message : 
 export async function runVisualReview(options: {
   prompts: readonly Prompt[]; previous: readonly Prompt[]; cache: VisualCache; ledger?: VisualLedger | VisualAttempt; day: string; now?: string;
   maxRequests?: unknown;
+  reviewWebsite?: (prompt: Prompt) => Promise<void>;
   provider?: VisualProvider; prepareMedia: (prompt: Prompt) => Promise<PreparedVisualMedia>;
   persistCache: (cache: VisualCache) => Promise<void>; persistLedger: (ledger: VisualLedger) => Promise<void>;
 }): Promise<{ prompts: Prompt[]; withheldIDs: string[]; report: VisualReport }> {
@@ -202,7 +202,7 @@ export async function runVisualReview(options: {
   const accepted = new Set<string>();
   const pending: Prompt[] = [];
   const report: VisualReport = { status: options.provider ? "no-pending" : "disabled", considered: options.prompts.length,
-    notRequired: 0, previousSnapshots: 0, cachedApproved: 0, cachedDeferred: 0, pending: 0, prepared: 0, requests: 0,
+    notRequired: 0, previousSnapshots: 0, cachedApproved: 0, cachedDeferred: 0, websitesReviewed: 0, pending: 0, prepared: 0, requests: 0,
     dailyRequests: ledger?.requests ?? 0, maxRequests,
     attemptedCandidates: 0, approved: 0, deferred: 0, preflightDeferred: 0, inputCharacters: 0, attachments: 0,
     attachmentBytes: 0, model: visualReviewModel, items: [] };
@@ -220,6 +220,16 @@ export async function runVisualReview(options: {
   for (const item of options.prompts) {
     const invalidURL = mediaIdentityError(item);
     if (invalidURL) { update(item, "deferred", invalidURL); report.preflightDeferred++; continue; }
+    // An old screenshot or even a prior website snapshot cannot prove today's
+    // hosted bytes. A failed replacement is retained by the outer catalog merger.
+    if (item.kind === "web") {
+      try {
+        if (!options.reviewWebsite) throw new Error("A real webpage result inspection is required; image-only review cannot approve a website");
+        await options.reviewWebsite(item);
+        update(item, "website-reviewed"); report.websitesReviewed++;
+      } catch (error) { update(item, "deferred", errorText(error)); report.preflightDeferred++; }
+      continue;
+    }
     if (item.kind === "text" && !hasVisualMedia(item)) { update(item, "not-required"); report.notRequired++; continue; }
     const identity = visualReviewIdentity(item), old = previous.get(item.id);
     if (old && visualReviewIdentity(old) === identity) {
