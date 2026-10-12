@@ -119,43 +119,52 @@ struct CreatorRail: View {
     private var entries: [CreatorEntry] { CreatorDirectory.entries(in: library.prompts) }
 
     var body: some View {
-        if !entries.isEmpty {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack {
-                    Text(String(localized: "创作者")).font(.headline).accessibilityAddTraits(.isHeader)
-                    Spacer()
-                    NavigationLink { CreatorsView() } label: {
-                        Text(String(localized: "查看全部")).font(.footnote).foregroundStyle(Palette.muted)
-                            .frame(minHeight: 44).contentShape(Rectangle())
-                    }.accessibilityIdentifier("allCreators")
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(String(localized: "创作者")).font(Typography.editorial(.title3))
+                    .foregroundStyle(Palette.ink).accessibilityAddTraits(.isHeader)
+                Spacer(minLength: 12)
+                NavigationLink { CreatorsView() } label: {
+                    Text(String(localized: "查看全部")).font(.footnote).foregroundStyle(Palette.muted)
+                        .frame(minHeight: 44).contentShape(Rectangle())
+                }.accessibilityIdentifier("allCreators")
+            }.padding(.horizontal, 20)
+            if entries.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(String(localized: "作者信息会随内容更新出现。"))
+                        .font(.subheadline).foregroundStyle(Palette.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                    CreatorUpdateButton(identifier: "loadCreators")
+                }
+                .frame(maxWidth: .infinity, alignment: .leading).padding(16)
+                .background(Palette.soft, in: RoundedRectangle(cornerRadius: 14))
+                .padding(.horizontal, 20)
+            } else if typeSize.isAccessibilitySize || voiceOverEnabled {
+                VStack(spacing: 16) {
+                    ForEach(Array(entries.prefix(1))) { entry in
+                        NavigationLink { CreatorDetail(creator: entry.creator) } label: {
+                            CreatorRow(entry: entry)
+                        }.buttonStyle(.plain).accessibilityIdentifier("creator-\(entry.id)")
+                    }
                 }.padding(.horizontal, 20)
-                if typeSize.isAccessibilitySize || voiceOverEnabled {
-                    VStack(spacing: 16) {
-                        ForEach(Array(entries.prefix(1))) { entry in
+            } else {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(alignment: .top, spacing: 16) {
+                        ForEach(Array(entries.prefix(10))) { entry in
                             NavigationLink { CreatorDetail(creator: entry.creator) } label: {
-                                CreatorRow(entry: entry)
-                            }.buttonStyle(.plain).accessibilityIdentifier("creator-\(entry.id)")
+                                VStack(spacing: 6) {
+                                    CreatorAvatar(creator: entry.creator, size: 44)
+                                    Text(entry.creator.displayName).font(.caption)
+                                        .lineLimit(1).multilineTextAlignment(.center).foregroundStyle(Palette.ink)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }.frame(width: 82).contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel(entry.creator.displayName)
+                            .accessibilityValue(String(localized: "\(entry.count) 条内容"))
+                            .accessibilityIdentifier("creator-\(entry.id)")
                         }
                     }.padding(.horizontal, 20)
-                } else {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(alignment: .top, spacing: 20) {
-                            ForEach(Array(entries.prefix(10))) { entry in
-                                NavigationLink { CreatorDetail(creator: entry.creator) } label: {
-                                    VStack(spacing: 7) {
-                                        CreatorAvatar(creator: entry.creator, size: 52)
-                                        Text(entry.creator.displayName).font(.caption.weight(.medium))
-                                            .lineLimit(2).multilineTextAlignment(.center).foregroundStyle(.primary)
-                                            .fixedSize(horizontal: false, vertical: true)
-                                    }.frame(width: 82).contentShape(Rectangle())
-                                }
-                                .buttonStyle(.plain)
-                                .accessibilityLabel(entry.creator.displayName)
-                                .accessibilityValue(String(localized: "\(entry.count) 条内容"))
-                                .accessibilityIdentifier("creator-\(entry.id)")
-                            }
-                        }.padding(.horizontal, 20)
-                    }
                 }
             }
         }
@@ -175,8 +184,13 @@ struct CreatorsView: View {
                 if !query.isEmpty {
                     ContentUnavailableView.search(text: query)
                 } else {
-                    ContentUnavailableView(String(localized: "暂无创作者"), systemImage: "person.crop.circle",
-                        description: Text(String(localized: "作者信息会随内容更新出现。")))
+                    ContentUnavailableView {
+                        Label(String(localized: "暂无创作者"), systemImage: "person.crop.circle")
+                    } description: {
+                        Text(String(localized: "作者信息会随内容更新出现。"))
+                    } actions: {
+                        CreatorUpdateButton(identifier: "loadCreatorsDirectory")
+                    }
                 }
             } else {
                 LazyVStack(spacing: 0) {
@@ -184,14 +198,35 @@ struct CreatorsView: View {
                         NavigationLink { CreatorDetail(creator: entry.creator) } label: {
                             CreatorRow(entry: entry).padding(.vertical, 14)
                         }.buttonStyle(.plain).accessibilityIdentifier("creator-\(entry.id)")
-                        if entry.id != entries.last?.id { Divider().padding(.leading, 64) }
+                        if entry.id != entries.last?.id { Rectangle().fill(Palette.line).frame(height: 0.5).padding(.leading, 64) }
                     }
                 }.padding(.horizontal, 20).padding(.bottom, 24)
             }
         }
+        .background(Palette.paper)
         .navigationTitle(String(localized: "创作者"))
+        .refreshable { await library.refresh(force: true) }
         .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always),
                     prompt: String(localized: "搜索姓名或账号"))
+    }
+}
+
+private struct CreatorUpdateButton: View {
+    let identifier: String
+    @Environment(Library.self) private var library
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Button(library.isRefreshing ? String(localized: "正在更新…") : String(localized: "检查内容更新")) {
+                Task { await library.refresh(force: true) }
+            }
+            .buttonStyle(.bordered).controlSize(.regular)
+            .disabled(library.isRefreshing).accessibilityIdentifier(identifier)
+            if let message = library.syncMessage {
+                Text(message).font(.footnote).foregroundStyle(Palette.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
     }
 }
 
@@ -204,7 +239,7 @@ private struct CreatorRow: View {
             if typeSize.isAccessibilitySize {
                 VStack(alignment: .leading, spacing: 10) {
                     CreatorAvatar(creator: entry.creator, size: 40)
-                    Text(entry.creator.displayName).font(.body.weight(.medium)).foregroundStyle(.primary)
+                    Text(entry.creator.displayName).font(.body).foregroundStyle(Palette.ink)
                         .fixedSize(horizontal: false, vertical: true)
                     Text(CreatorIdentity.subtitle(entry.creator)).font(.caption).foregroundStyle(Palette.muted)
                         .fixedSize(horizontal: false, vertical: true)
@@ -219,14 +254,14 @@ private struct CreatorRow: View {
         HStack(alignment: .center, spacing: 14) {
             CreatorAvatar(creator: entry.creator, size: 50)
             VStack(alignment: .leading, spacing: 5) {
-                Text(entry.creator.displayName).font(.body.weight(.medium)).foregroundStyle(.primary)
+                Text(entry.creator.displayName).font(.body).foregroundStyle(Palette.ink)
                     .fixedSize(horizontal: false, vertical: true)
                 Text(CreatorIdentity.subtitle(entry.creator)).font(.footnote).foregroundStyle(Palette.muted)
                     .lineLimit(typeSize.isAccessibilitySize ? nil : 1)
                 Text(String(localized: "\(entry.count) 条内容")).font(.footnote).foregroundStyle(Palette.muted)
             }
             Spacer(minLength: 0)
-            Image(systemName: "chevron.right").font(.footnote.weight(.semibold)).foregroundStyle(.tertiary)
+            Image(systemName: "chevron.right").font(.caption).foregroundStyle(Palette.muted)
                 .accessibilityHidden(true)
         }
     }
@@ -244,7 +279,7 @@ struct CreatorByline: View {
                     Text(CreatorIdentity.subtitle(creator)).font(.caption).foregroundStyle(Palette.muted)
                 }
                 Spacer(minLength: 0)
-                Image(systemName: "chevron.right").font(.footnote.weight(.semibold)).foregroundStyle(.tertiary)
+                Image(systemName: "chevron.right").font(.caption).foregroundStyle(Palette.muted)
                     .accessibilityHidden(true)
             }.frame(minHeight: 44).contentShape(Rectangle())
         }.buttonStyle(.plain).accessibilityIdentifier("creatorByline")
@@ -269,14 +304,14 @@ struct CreatorDetail: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 28) {
-                VStack(alignment: .leading, spacing: 18) {
+                VStack(alignment: .leading, spacing: 20) {
                     ViewThatFits(in: .horizontal) {
                         HStack(alignment: .center, spacing: 16) {
-                            CreatorAvatar(creator: creator, size: 72)
+                            CreatorAvatar(creator: creator, size: 64)
                             identity
                         }
                         VStack(alignment: .leading, spacing: 14) {
-                            CreatorAvatar(creator: creator, size: 72)
+                            CreatorAvatar(creator: creator, size: 64)
                             identity
                         }
                     }
@@ -294,9 +329,14 @@ struct CreatorDetail: View {
                     }
                     Link(destination: creator.profileURL) {
                         Label(String(localized: "查看 \(creator.platformName) 主页"), systemImage: "arrow.up.right")
-                            .font(.subheadline.weight(.medium)).frame(minHeight: 44)
-                    }.accessibilityIdentifier("creatorExternalProfile")
-                }.padding(.horizontal, 20)
+                            .font(.subheadline).frame(minHeight: 28)
+                    }.buttonStyle(.bordered).controlSize(.regular)
+                        .accessibilityIdentifier("creatorExternalProfile")
+                }.padding(20)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Palette.surface, in: RoundedRectangle(cornerRadius: 16))
+                    .overlay(RoundedRectangle(cornerRadius: 16).stroke(Palette.line, lineWidth: 0.5).allowsHitTesting(false))
+                    .padding(.horizontal, 16)
                 VStack(alignment: .leading, spacing: 14) {
                     ViewThatFits(in: .horizontal) {
                         HStack { contentHeading; Spacer(); filterPicker }
@@ -311,6 +351,7 @@ struct CreatorDetail: View {
                 }
             }.padding(.top, 12).padding(.bottom, 28)
         }
+        .background(Palette.paper)
         .navigationTitle(creator.displayName).navigationBarTitleDisplayMode(.inline)
         .toolbar(.hidden, for: .tabBar)
         .toolbar {
@@ -336,7 +377,7 @@ struct CreatorDetail: View {
 
     private var identity: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(creator.displayName).font(.title2.weight(.semibold)).fixedSize(horizontal: false, vertical: true)
+            Text(creator.displayName).font(Typography.editorial(.title)).fixedSize(horizontal: false, vertical: true)
             Text(CreatorIdentity.subtitle(creator)).font(.subheadline).foregroundStyle(Palette.muted)
                 .fixedSize(horizontal: false, vertical: true)
             Text(String(localized: "\(allItems.count) 条内容")).font(.footnote).foregroundStyle(Palette.muted)
@@ -346,7 +387,7 @@ struct CreatorDetail: View {
     private var contentHeading: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(filter == .all ? String(localized: "全部内容") : filter.title)
-                .font(.headline).accessibilityAddTraits(.isHeader)
+                .font(Typography.editorial(.title3)).accessibilityAddTraits(.isHeader)
             if filter != .all {
                 Text(String(localized: "\(items.count) 条内容")).font(.footnote).foregroundStyle(Palette.muted)
             }

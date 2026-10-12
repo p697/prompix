@@ -29,9 +29,15 @@ import XCTest
 
     private func reveal(_ element: XCUIElement, attempts: Int = 8) {
         for _ in 0..<attempts {
-            if element.exists && element.isHittable { return }
-            if element.exists && element.frame.maxY < 110 { app.swipeDown() }
-            else { app.swipeUp() }
+            // XCTest can report partially covered controls as hittable. Keep
+            // their entire target above the detail screen's fixed action bar.
+            let copy = app.buttons["copyPrompt"]
+            let bottom = copy.exists ? copy.frame.minY - 12 : app.frame.maxY - 100
+            if element.exists && element.isHittable && element.frame.minY >= 110 && element.frame.maxY <= bottom { return }
+            let scrollDown = element.exists && element.frame.minY < 110
+            let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: scrollDown ? 0.4 : 0.7))
+            let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: scrollDown ? 0.7 : 0.4))
+            start.press(forDuration: 0.05, thenDragTo: end)
         }
         XCTAssertTrue(element.isHittable)
     }
@@ -49,6 +55,41 @@ import XCTest
         XCTAssertTrue(skill.isHittable)
         skill.tap()
         XCTAssertTrue(skill.isSelected)
+    }
+
+    func testLegacyCatalogKeepsCreatorEntry() throws {
+        guard ProcessInfo.processInfo.environment["PROMPIX_LEGACY_CATALOG_TEST"] == "1" else {
+            throw XCTSkip("Stage the legacy creatorless catalog in a dedicated simulator before this test.")
+        }
+        launch()
+        XCTAssertTrue(app.staticTexts["68"].exists)
+        XCTAssertTrue(app.buttons["allCreators"].isHittable)
+        XCTAssertTrue(app.buttons["loadCreators"].isHittable)
+        capture("legacy-catalog-creator-entry")
+        app.buttons["allCreators"].tap()
+        XCTAssertTrue(app.buttons["loadCreatorsDirectory"].waitForExistence(timeout: 5))
+        capture("legacy-catalog-creator-directory")
+    }
+
+    func testEditorialReadingScreens() {
+        for language in ["zh-Hans", "en", "de"] {
+            launch(language)
+            capture("editorial-\(language)-home")
+            let note = app.buttons["prompt-gentle-tarot"]
+            reveal(note)
+            capture("editorial-\(language)-notes")
+            note.tap()
+            XCTAssertTrue(app.buttons["copyPrompt"].waitForExistence(timeout: 5))
+            capture("editorial-\(language)-detail")
+            let oldLabel = app.buttons["copyPrompt"].label
+            app.buttons["copyPrompt"].tap()
+            XCTAssertNotEqual(app.buttons["copyPrompt"].label, oldLabel)
+            reveal(app.buttons["editPrompt"])
+            app.buttons["editPrompt"].tap()
+            XCTAssertTrue(app.textViews["promptEditor"].waitForExistence(timeout: 5))
+            capture("editorial-\(language)-editor")
+            app.terminate()
+        }
     }
 
     func testCreatorAndSkillJourney() {

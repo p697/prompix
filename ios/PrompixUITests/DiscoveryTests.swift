@@ -258,8 +258,13 @@ import UIKit
         XCTAssertTrue(expected.contains("PROMPIX-END-Y"))
         XCTAssertGreaterThan(expected.count, 1600)
         if requireVisibleKeyboard {
-            XCTAssertTrue(keyboard.isHittable)
-            XCTAssertGreaterThan(keyboard.frame.height, 200, "Software keyboard must occupy visible layout space")
+            // Refocus after bulk text injection before checking the on-screen
+            // keyboard; XCTest may use hardware input for the long insertion.
+            editor.tap()
+            let visibleKeyboard = app.keyboards.firstMatch
+            capture("long-editor-keyboard-check")
+            XCTAssertTrue(visibleKeyboard.waitForExistence(timeout: 5) && visibleKeyboard.isHittable)
+            XCTAssertGreaterThan(visibleKeyboard.frame.height, 200, "Software keyboard must occupy visible layout space")
         }
         let layout = XCTAttachment(string: "Keyboard frame: \(keyboard.frame); editor frame: \(editor.frame); copy frame: \(app.buttons["copyEditedPrompt"].frame)")
         layout.name = "Long editor keyboard layout"; layout.lifetime = .keepAlways; add(layout)
@@ -283,9 +288,16 @@ import UIKit
         // Restore this simulator-only draft so later VoiceOver traversal remains concise.
         app.buttons["prompt-gentle-tarot"].tap()
         app.buttons["编辑后使用"].tap()
+        XCTAssertTrue(editor.waitForExistence(timeout: 5))
         app.buttons["编辑选项"].tap()
-        app.buttons["恢复原始 Prompt"].tap()
-        app.buttons["恢复原文"].tap()
+        let original = app.buttons["恢复原始 Prompt"]
+        if original.exists {
+            original.tap()
+            app.buttons["恢复原文"].tap()
+        } else {
+            app.buttons["恢复当前语言的内容"].tap()
+            app.buttons["恢复译文"].tap()
+        }
         XCTAssertFalse((editor.value as? String ?? "").contains("PROMPIX-END-Y"))
         app.buttons["完成"].tap()
     }

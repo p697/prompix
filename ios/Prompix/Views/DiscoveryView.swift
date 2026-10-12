@@ -6,7 +6,7 @@ struct RootView: View {
             DiscoverView().tabItem { Label { Text(String(localized: "发现")) } icon: { TabSymbol.image("square.grid.2x2") } }
             CollectionsView().tabItem { Label { Text(String(localized: "专题")) } icon: { TabSymbol.image("rectangle.stack") } }
             FavoritesView().tabItem { Label { Text(String(localized: "收藏")) } icon: { TabSymbol.image("bookmark") } }
-        }
+        }.tint(Palette.accent)
     }
 }
 
@@ -28,8 +28,9 @@ struct DiscoverView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: 18) {
                     KindPicker(selection: $kind, skillsOnly: $skillsOnly)
+                    if library.isRefreshing || library.syncMessage != nil { CatalogUpdateStatus().padding(.horizontal, 20) }
                     if !isFiltered {
                         CreatorRail()
                         CollectionRail()
@@ -42,7 +43,6 @@ struct DiscoverView: View {
                         Text(String(localized: "可带到编程助手中使用的技能，包含完整说明与源文件。"))
                             .font(.subheadline).foregroundStyle(Palette.muted).padding(.horizontal, 20)
                     }
-                    if let message = library.syncMessage { Text(message).font(.footnote).foregroundStyle(Palette.muted).padding(.horizontal, 20) }
                     if items.isEmpty {
                         if needsFirstVideoUpdate {
                             ContentUnavailableView {
@@ -60,26 +60,38 @@ struct DiscoverView: View {
                             ContentUnavailableView(String(localized: "暂无匹配内容"), systemImage: "sparkle", description: Text(String(localized: "试试其他分类，或清除筛选条件。")))
                         }
                     } else { PromptGrid(items: items).padding(.horizontal, 16) }
-                }.padding(.top, 4).padding(.bottom, 16)
+                }.padding(.top, 12).padding(.bottom, 24)
             }
+            .paperScreen()
             .refreshable { await library.refresh(force: true) }
             .onChange(of: kind) { _, _ in model = nil; topic = nil }
             .onChange(of: skillsOnly) { _, _ in model = nil; topic = nil }
             .navigationTitle("").navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .principal) { Text("prompix").font(.system(.title, design: .serif, weight: .semibold)).fixedSize().accessibilityAddTraits(.isHeader) }
+                brandTitle
                 ToolbarItem(placement: .topBarTrailing) { Button(String(localized: "搜索"), systemImage: "magnifyingglass") { searchPresented = true }.accessibilityIdentifier("searchButton") }
-                ToolbarItem(placement: .topBarTrailing) { Button(String(localized: "设置"), systemImage: "slider.horizontal.3") { settingsPresented = true } }
+                ToolbarItem(placement: .topBarTrailing) { Button(String(localized: "设置"), systemImage: "gearshape") { settingsPresented = true } }
             }
             .sheet(isPresented: $searchPresented) { SearchView() }
             .sheet(isPresented: $settingsPresented) { SettingsView() }
         }
     }
+    @ToolbarContentBuilder private var brandTitle: some ToolbarContent {
+        if #available(iOS 26, *) {
+            ToolbarItem(placement: .topBarLeading) { wordmark }.sharedBackgroundVisibility(.hidden)
+        } else {
+            ToolbarItem(placement: .topBarLeading) { wordmark }
+        }
+    }
+    private var wordmark: some View {
+        Text("Prompix").font(Typography.editorial(.title2)).foregroundStyle(Palette.ink)
+            .fixedSize().accessibilityAddTraits(.isHeader)
+    }
     private var resultHeading: some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             Text(skillsOnly ? String(localized: "Agent Skills") : isFiltered ? String(localized: "筛选结果") : String(localized: "全部内容"))
-                .font(.title3.weight(.semibold))
-            Text(items.count.formatted()).font(.subheadline.monospacedDigit()).foregroundStyle(Palette.muted)
+                .font(Typography.editorial(.title2))
+            Text(items.count.formatted()).font(.caption.monospacedDigit()).foregroundStyle(Palette.muted)
         }
     }
     private var resultActions: some View {
@@ -119,6 +131,43 @@ struct DiscoverView: View {
 
 }
 
+struct CatalogUpdateStatus: View {
+    @Environment(Library.self) private var library
+    var body: some View {
+        if library.isRefreshing || library.syncMessage != nil {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 10) {
+                    if library.isRefreshing { ProgressView().controlSize(.small) }
+                    else { Image(systemName: "arrow.clockwise").foregroundStyle(Palette.accent) }
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(title).font(.footnote.weight(.medium))
+                        Text(library.isRefreshing ? String(localized: "更新期间可继续浏览已下载内容。") : String(localized: "已下载内容仍可浏览，轻点重试。"))
+                            .font(.caption).foregroundStyle(Palette.muted).fixedSize(horizontal: false, vertical: true)
+                    }
+                    Spacer(minLength: 0)
+                    if !library.isRefreshing {
+                        Button(String(localized: "重试")) { Task { await library.refresh(force: true) } }
+                            .font(.footnote.weight(.medium)).frame(minWidth: 44, minHeight: 44)
+                            .accessibilityIdentifier("retryCatalogUpdate")
+                    }
+                }
+                if let fraction = library.syncState.fractionCompleted {
+                    ProgressView(value: fraction).tint(Palette.accent)
+                }
+            }.padding(14).background(Palette.soft, in: RoundedRectangle(cornerRadius: 14))
+                .accessibilityElement(children: .contain).accessibilityIdentifier("catalogUpdateStatus")
+        }
+    }
+    private var title: String {
+        switch library.syncState {
+        case .checking: String(localized: "正在检查内容更新…")
+        case .downloading: String(localized: "正在下载新内容…")
+        case .installing: String(localized: "正在整理新内容…")
+        default: library.isRefreshing ? String(localized: "正在更新…") : String(localized: "内容更新未完成")
+        }
+    }
+}
+
 struct PromptGrid: View {
     let items: [Prompt]
     @Environment(\.dynamicTypeSize) private var typeSize
@@ -131,13 +180,13 @@ struct PromptGrid: View {
         if typeSize.isAccessibilitySize || voiceOverEnabled {
             LazyVStack(spacing: 24) { ForEach(items) { PromptCard(item: $0) } }
         } else {
-            HStack(alignment: .top, spacing: 12) {
+            HStack(alignment: .top, spacing: 14) {
                 ForEach(0..<columnCount, id: \.self) { column($0) }
             }
         }
     }
     private func column(_ parity: Int) -> some View {
-        LazyVStack(spacing: 23) {
+        LazyVStack(spacing: 22) {
             ForEach(Array(items.enumerated()).filter { $0.offset % columnCount == parity }, id: \.element.id) { _, item in
                 PromptCard(item: item)
             }
@@ -159,9 +208,9 @@ struct PromptCard: View {
                             Text(item.displayTitle).font(.headline).foregroundStyle(.primary)
                             Text(item.displaySummary).font(.subheadline).foregroundStyle(Palette.muted)
                         }.fixedSize(horizontal: false, vertical: true).frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(20).background(Palette.soft, in: RoundedRectangle(cornerRadius: 12))
+                            .padding(20).background(Palette.soft, in: RoundedRectangle(cornerRadius: 16))
                     } else {
-                        Artwork(item: item).aspectRatio(ratio, contentMode: .fit).clipShape(RoundedRectangle(cornerRadius: 12))
+                        Artwork(item: item).aspectRatio(ratio, contentMode: .fit).clipShape(RoundedRectangle(cornerRadius: 16))
                     }
                     if !titleIsInArtwork {
                         Text(item.displayTitle).font(.system(.subheadline, weight: .medium)).foregroundStyle(.primary)
@@ -177,6 +226,8 @@ struct PromptCard: View {
                             Text(creator.displayName).font(.caption).lineLimit(1)
                         }.frame(minHeight: 44).contentShape(Rectangle())
                     }.buttonStyle(.plain).accessibilityLabel(creator.displayName)
+                } else if titleIsInArtwork {
+                    Text(item.source.author ?? item.source.name).font(.caption).lineLimit(1)
                 } else {
                     Image(systemName: item.displaySymbol).font(.system(size: 10)).accessibilityHidden(true)
                     Text(item.displayKind).font(.footnote)
@@ -193,13 +244,9 @@ struct PromptCard: View {
             }.foregroundStyle(Palette.muted).padding(.leading, 2).padding(.top, 0).padding(.bottom, -10)
         }
     }
-    private var titleIsInArtwork: Bool {
-        if item.isSkill || (typeSize.isAccessibilitySize && item.kind == .text) { return true }
-        return item.kind == .text && item.cover == nil && item.media == nil
-            && ["tarot", "letter", "roast", "story", "learn", "journal", "text-editorial"].contains(item.artwork)
-    }
+    private var titleIsInArtwork: Bool { item.isSkill || item.kind == .text }
     private var ratio: CGFloat {
-        if item.isSkill { return 0.78 }
+        if item.isSkill { return 0.82 }
         if let ratio = item.media?.aspectRatio { return max(0.65, min(1.5, ratio)) }
         return switch item.kind { case .text: 0.84; case .image: item.artwork == "lake" ? 1.02 : 0.76; case .video: 0.94; case .web: WebsiteExamples.files[item.id] != nil ? 0.62 : 0.87 }
     }
@@ -264,7 +311,7 @@ struct SearchView: View {
                         }
                     }
                 }.padding(.bottom, 24)
-            }.navigationTitle(String(localized: "搜索 Prompt")).navigationBarTitleDisplayMode(.inline)
+            }.paperScreen().navigationTitle(String(localized: "搜索 Prompt")).navigationBarTitleDisplayMode(.inline)
                 .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: String(localized: "搜索标题、用途或模型"))
                 .autocorrectionDisabled().textInputAutocapitalization(.never)
                 .onSubmit(of: .search) {
@@ -319,7 +366,7 @@ struct FavoritesView: View {
                     } else { PromptGrid(items: items).padding(.horizontal, 16) }
                     }
                 }.padding(.bottom, 24)
-            }.navigationTitle(String(localized: "收藏"))
+            }.paperScreen().navigationTitle(String(localized: "收藏"))
                 .searchable(text: $query, prompt: String(localized: "搜索收藏"))
         }
     }

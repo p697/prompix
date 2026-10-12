@@ -348,6 +348,137 @@ import CryptoKit
         try await assertRefreshPreservesSavedDataAndRecovers(failure: "damaged-catalog")
     }
 
+    func testCreatorless68ItemCacheUpdatesTo345ItemsWithoutLosingPersonalData() async throws {
+        let fixture = try JSONDecoder().decode(Catalog.self, from: CatalogRefreshProtocol.catalogData)
+        let legacyItems = (0..<68).map { index in
+            let source = fixture.prompts[0]
+            return Prompt(id: "legacy-\(index)", kind: source.kind, title: source.title, summary: source.summary,
+                          prompt: source.prompt, example: source.example, tags: source.tags, model: source.model,
+                          toolURL: nil, artwork: source.artwork, previewLabel: source.previewLabel, source: source.source, media: nil)
+        }
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let legacy = Catalog(schemaVersion: 1, version: "legacy-68", prompts: legacyItems)
+        try JSONEncoder().encode(legacy).write(to: directory.appending(path: "catalog.json"))
+        let library = Library(directory: directory)
+        XCTAssertEqual(library.prompts.count, 68)
+        XCTAssertTrue(CreatorDirectory.entries(in: library.prompts).isEmpty)
+        XCTAssertTrue(library.toggle(legacyItems[0]))
+        XCTAssertTrue(library.saveDraft("Keep this personal draft", for: legacyItems[0]))
+        let session = refreshSession(response: "expanded")
+        defer { session.invalidateAndCancel() }
+
+        await library.refresh(session: session)
+
+        XCTAssertEqual(library.syncState, .current)
+        XCTAssertEqual(library.prompts.count, 345)
+        XCTAssertEqual(CreatorDirectory.entries(in: library.prompts).count, 1)
+        XCTAssertEqual(CreatorDirectory.entries(in: library.prompts).first?.count, 345)
+        XCTAssertEqual(library.favorites, [legacyItems[0]])
+        XCTAssertEqual(library.draft(for: legacyItems[0]), "Keep this personal draft")
+        XCTAssertEqual(Library(directory: directory).prompts.count, 345)
+    }
+
+    func testFailedAutomaticRefreshRetriesAfterThirtySecondsWithoutWaitingFifteenMinutes() async throws {
+        var now = Date(timeIntervalSince1970: 1_000)
+        let library = Library(directory: directory)
+        let offline = refreshSession(response: "offline")
+        let recovery = refreshSession(response: "success")
+        defer { offline.invalidateAndCancel(); recovery.invalidateAndCancel() }
+        await library.refresh(session: offline, now: now)
+        XCTAssertEqual(library.syncState, .failed)
+        now = now.addingTimeInterval(29)
+        await library.refresh(session: recovery, now: now)
+        XCTAssertEqual(library.syncState, .failed, "Repeated foreground events must not retry continuously")
+        now = now.addingTimeInterval(1)
+        await library.refresh(session: recovery, now: now)
+        XCTAssertEqual(library.syncState, .current)
+        XCTAssertEqual(library.version, "edition-after-refresh")
+        now = now.addingTimeInterval(30)
+        await library.refresh(session: offline, now: now)
+        XCTAssertEqual(library.syncState, .current, "Successful automatic checks retain the 15-minute interval")
+    }
+
+    func testInterruptedCatalogDownloadExposesStateAndCanImmediatelyResume() async throws {
+        let library = Library(directory: directory)
+        let original = library.prompts
+        let slow = refreshSession(response: "suspended-catalog")
+        let recovery = refreshSession(response: "success")
+        defer { slow.invalidateAndCancel(); recovery.invalidateAndCancel() }
+        let refresh = Task { await library.refresh(session: slow) }
+        for _ in 0..<100 {
+            if case .downloading(_, .some) = library.syncState { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        guard case let .downloading(received, total) = library.syncState else {
+            refresh.cancel(); await refresh.value
+            return XCTFail("The old cache must be accompanied by an observable download state")
+        }
+        XCTAssertEqual(received, 0)
+        XCTAssertEqual(total, CatalogRefreshProtocol.catalogData.count)
+        XCTAssertEqual(library.syncState.fractionCompleted, 0)
+        XCTAssertTrue(library.isRefreshing)
+        XCTAssertEqual(library.prompts, original)
+        refresh.cancel()
+        await refresh.value
+        XCTAssertEqual(library.syncState, .idle)
+        XCTAssertFalse(library.isRefreshing)
+        XCTAssertNil(library.syncMessage)
+        XCTAssertEqual(library.prompts, original)
+        await library.refresh(session: recovery)
+        XCTAssertEqual(library.syncState, .current)
+        XCTAssertEqual(library.version, "edition-after-refresh")
+    }
+
+    func testChunkedCatalogTransportReportsBoundedProgressAndPreservesEveryByte() async throws {
+        let session = transportSession(response: "chunks")
+        defer { session.invalidateAndCancel() }
+        let samples = DownloadProgressSamples()
+        let expected = Data(repeating: 42, count: 262_144)
+        let bytes = try await CatalogSync.fetch(CatalogSync.endpoint, maximum: expected.count, session: session) { samples.append($0) }
+        XCTAssertEqual(bytes, expected)
+        XCTAssertEqual(samples.values.first, CatalogDownloadProgress(receivedBytes: 0, totalBytes: expected.count))
+        XCTAssertEqual(samples.values.last, CatalogDownloadProgress(receivedBytes: expected.count, totalBytes: expected.count))
+        XCTAssertEqual(samples.values.map(\.receivedBytes), samples.values.map(\.receivedBytes).sorted())
+        XCTAssertLessThan(samples.values.count, 20, "Progress must be coalesced instead of emitted for every byte")
+    }
+
+    func testCatalogTransportRejectsOversizeHeadersUnknownLengthsAndDishonestLengths() async throws {
+        for mode in ["oversize-header", "unknown-length", "dishonest-length"] {
+            let session = transportSession(response: mode)
+            defer { session.invalidateAndCancel() }
+            let samples = DownloadProgressSamples()
+            do {
+                _ = try await CatalogSync.fetch(CatalogSync.endpoint, maximum: 1_000, session: session) { samples.append($0) }
+                XCTFail("The byte cap must reject \(mode)")
+            } catch SyncError.tooLarge { }
+            catch { XCTFail("Unexpected error for \(mode): \(error)") }
+            XCTAssertTrue(samples.values.allSatisfy { $0.receivedBytes <= 1_000 })
+        }
+    }
+
+    func testCompressedCatalogProgressDoesNotUseCompressedLengthForDecodedBytes() async throws {
+        let session = transportSession(response: "compressed")
+        defer { session.invalidateAndCancel() }
+        let samples = DownloadProgressSamples()
+        let bytes = try await CatalogSync.fetch(CatalogSync.endpoint, maximum: 2_048, session: session) { samples.append($0) }
+        XCTAssertEqual(bytes.count, 2_048)
+        XCTAssertEqual(samples.values.first, CatalogDownloadProgress(receivedBytes: 0, totalBytes: nil))
+        XCTAssertTrue(samples.values.dropLast().allSatisfy { $0.totalBytes == nil })
+        XCTAssertEqual(samples.values.last, CatalogDownloadProgress(receivedBytes: 2_048, totalBytes: 2_048))
+    }
+
+    func testCatalogTransportRejectsUntrustedResponseAndHTTPFailure() async throws {
+        for mode in ["untrusted-response", "http-failure"] {
+            let session = transportSession(response: mode)
+            defer { session.invalidateAndCancel() }
+            do {
+                _ = try await CatalogSync.fetch(CatalogSync.endpoint, maximum: 1_000, session: session)
+                XCTFail("The response must reject \(mode)")
+            } catch SyncError.invalidResponse { }
+            catch { XCTFail("Unexpected error for \(mode): \(error)") }
+        }
+    }
+
     private func assertRefreshPreservesSavedDataAndRecovers(failure: String) async throws {
         let library = Library(directory: directory)
         let favorite = try XCTUnwrap(library.prompts.first)
@@ -370,6 +501,7 @@ import CryptoKit
         await library.refresh(force: true, session: failingSession)
 
         XCTAssertFalse(library.isRefreshing)
+        XCTAssertEqual(library.syncState, .failed)
         XCTAssertNotNil(library.syncMessage)
         XCTAssertNil(library.error)
         XCTAssertEqual(library.version, initial.version)
@@ -391,6 +523,7 @@ import CryptoKit
 
         let expected = try JSONDecoder().decode(Catalog.self, from: CatalogRefreshProtocol.catalogData).validated()
         XCTAssertFalse(library.isRefreshing)
+        XCTAssertEqual(library.syncState, .current)
         XCTAssertNil(library.syncMessage)
         XCTAssertNil(library.error)
         XCTAssertEqual(library.version, expected.version)
@@ -413,6 +546,13 @@ import CryptoKit
         configuration.httpAdditionalHeaders = ["X-Prompix-Test-Response": response]
         return URLSession(configuration: configuration)
     }
+
+    private func transportSession(response: String) -> URLSession {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [CatalogTransportProtocol.self]
+        configuration.httpAdditionalHeaders = ["X-Prompix-Test-Response": response]
+        return URLSession(configuration: configuration)
+    }
 }
 
 private final class CatalogRefreshProtocol: URLProtocol, @unchecked Sendable {
@@ -421,9 +561,20 @@ private final class CatalogRefreshProtocol: URLProtocol, @unchecked Sendable {
           {"id":"refresh-fixture","kind":"text","title":"Fresh inspiration","summary":"An original transport test fixture.",
            "prompt":"Describe a calm morning in two sentences.","example":"Sunlight crosses the room. The kettle begins to sing.",
            "tags":["Test"],"model":"Text model","artwork":"text","previewLabel":"Original example",
-           "source":{"name":"Prompix tests","license":"Original test fixture","method":"original"}}
+           "source":{"name":"Prompix tests","license":"Original test fixture","method":"original"},
+           "creator":{"id":"test-creator","platform":"web","displayName":"Fixture Author","profileURL":"https://example.com/author"}}
         ]}
         """.utf8)
+    static let expandedCatalogData: Data = {
+        var catalog = try! JSONSerialization.jsonObject(with: catalogData) as! [String: Any]
+        let prototype = (catalog["prompts"] as! [[String: Any]])[0]
+        catalog["prompts"] = (0..<345).map { index in
+            var item = prototype
+            item["id"] = "expanded-\(index)"
+            return item
+        }
+        return try! JSONSerialization.data(withJSONObject: catalog)
+    }()
 
     override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
@@ -433,13 +584,14 @@ private final class CatalogRefreshProtocol: URLProtocol, @unchecked Sendable {
             return
         }
         let mode = request.value(forHTTPHeaderField: "X-Prompix-Test-Response")
+        let catalog = mode == "expanded" ? Self.expandedCatalogData : Self.catalogData
         if mode == "offline" {
             client?.urlProtocol(self, didFailWithError: URLError(.notConnectedToInternet))
             return
         }
         let bytes: Data
         if url.path == "/v1/latest.json" {
-            let digest = SHA256.hash(data: Self.catalogData).map { String(format: "%02x", $0) }.joined()
+            let digest = SHA256.hash(data: catalog).map { String(format: "%02x", $0) }.joined()
             bytes = Data("""
                 {"schemaVersion":1,"version":"edition-after-refresh","sha256":"\(digest)",
                  "catalog":"https://api.prompix.dev/releases/edition-after-refresh/catalog.json"}
@@ -451,7 +603,7 @@ private final class CatalogRefreshProtocol: URLProtocol, @unchecked Sendable {
                 return
             }
             // Still valid JSON, but different bytes must fail the manifest's integrity check.
-            bytes = mode == "damaged-catalog" ? Self.catalogData + Data("\n".utf8) : Self.catalogData
+            bytes = mode == "damaged-catalog" ? catalog + Data("\n".utf8) : catalog
         } else {
             client?.urlProtocol(self, didFailWithError: URLError(.unsupportedURL))
             return
@@ -459,7 +611,34 @@ private final class CatalogRefreshProtocol: URLProtocol, @unchecked Sendable {
         let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil,
             headerFields: ["Content-Type": "application/json", "Content-Length": String(bytes.count)])!
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        if mode == "suspended-catalog", url.path != "/v1/latest.json" { return }
         client?.urlProtocol(self, didLoad: bytes)
+        client?.urlProtocolDidFinishLoading(self)
+    }
+    override func stopLoading() {}
+}
+
+private final class DownloadProgressSamples: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storage: [CatalogDownloadProgress] = []
+    var values: [CatalogDownloadProgress] { lock.withLock { storage } }
+    func append(_ value: CatalogDownloadProgress) { lock.withLock { storage.append(value) } }
+}
+
+private final class CatalogTransportProtocol: URLProtocol, @unchecked Sendable {
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func startLoading() {
+        let mode = request.value(forHTTPHeaderField: "X-Prompix-Test-Response")
+        let url = mode == "untrusted-response" ? URL(string: "https://example.com/catalog.json")! : request.url!
+        let length: String? = mode == "chunks" ? "262144" : mode == "oversize-header" ? "1001" : ["dishonest-length", "compressed"].contains(mode) ? "8" : nil
+        var headers = length.map { ["Content-Length": $0] } ?? [:]
+        if mode == "compressed" { headers["Content-Encoding"] = "gzip" }
+        let response = HTTPURLResponse(url: url, statusCode: mode == "http-failure" ? 503 : 200, httpVersion: nil,
+                                       headerFields: headers)!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        let size = mode == "chunks" ? 262_144 : 2_048
+        for _ in 0..<(size / 512) { client?.urlProtocol(self, didLoad: Data(repeating: 42, count: 512)) }
         client?.urlProtocolDidFinishLoading(self)
     }
     override func stopLoading() {}

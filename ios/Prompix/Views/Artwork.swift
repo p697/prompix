@@ -6,7 +6,7 @@ struct Artwork: View {
     var body: some View {
         GeometryReader { proxy in
             ZStack {
-                if item.isSkill { skillArtwork(size: proxy.size) }
+                if item.kind == .text || item.isSkill { noteArtwork(size: proxy.size) }
                 else if let name = item.media?.image, UIImage(named: name) != nil { photo(name, size: proxy.size) }
                 else if let url = item.media?.imageURL { RemoteImage(url: url).frame(width: proxy.size.width, height: proxy.size.height).clipped() }
                 else if item.kind == .web, UIImage(named: "web-\(item.id)") != nil {
@@ -18,7 +18,7 @@ struct Artwork: View {
                 switch item.artwork {
                 case "citrus": photo("citrus", size: proxy.size)
                 case "lake": photo("lake", size: proxy.size)
-                case "tarot", "letter", "roast", "story", "learn", "journal": textArtwork(size: proxy.size)
+                case "tarot", "letter", "roast", "story", "learn", "journal": noteArtwork(size: proxy.size)
                 case "portfolio", "studio", "recipe", "travel", "timer", "gallery": communityArtwork(size: proxy.size)
                 default: abstractArtwork(size: proxy.size)
                 }
@@ -70,41 +70,43 @@ struct Artwork: View {
             }.foregroundStyle(palette.1).padding(size.width * 0.12)
         }
     }
-    private func skillArtwork(size: CGSize) -> some View {
+    private func noteArtwork(size: CGSize) -> some View {
         ZStack {
-            Palette.soft
-            VStack(alignment: .leading, spacing: 10) {
-                HStack {
-                    Image(systemName: "square.stack.3d.up").font(.system(size: compact ? 18 : 23, weight: .light)).foregroundStyle(Palette.accent)
-                    Spacer()
-                    Image(systemName: "arrow.up.right").font(.caption).foregroundStyle(Palette.muted)
-                }
-                Spacer(minLength: 0)
-                Text(item.displayTitle).font(.system(size: min(size.width * 0.095, 23), weight: .medium))
-                    .lineLimit(3).minimumScaleFactor(0.85).fixedSize(horizontal: false, vertical: true)
+            noteColor
+            VStack(alignment: .leading, spacing: compact ? 6 : 12) {
+                HStack(spacing: 6) {
+                    Image(systemName: item.isSkill ? "curlybraces" : "text.quote")
+                    if !compact { Text(item.isSkill ? "SKILL.md" : item.displayKind) }
+                    Spacer(minLength: 0)
+                }.font(.system(size: compact ? 12 : 10, weight: .medium))
+                    .foregroundStyle(Palette.highlightInk.opacity(0.70))
+                Text(item.displayTitle)
+                    .font(.system(size: min(size.width * (compact ? 0.14 : 0.12), 25), weight: .regular, design: .serif))
+                    .lineSpacing(3).lineLimit(3).fixedSize(horizontal: false, vertical: true).layoutPriority(1)
                 if !compact {
-                    Text(item.displaySummary).font(.system(size: max(11, size.width * 0.065))).foregroundStyle(Palette.muted).lineLimit(2)
+                    Text(noteExcerpt).font(.system(size: max(11, min(size.width * 0.073, 14))))
+                        .lineSpacing(4).lineLimit(3)
+                        .foregroundStyle(Palette.highlightInk.opacity(0.78))
                 }
                 Spacer(minLength: 0)
-                Text("SKILL.md").font(.system(size: 10, weight: .medium, design: .monospaced)).foregroundStyle(Palette.muted)
-            }.padding(size.width * 0.10)
+            }.foregroundStyle(Palette.highlightInk).padding(size.width * 0.10)
+        }
+    }
+    private var noteExcerpt: String {
+        let text = item.isSkill ? item.displaySummary : item.displayContent.prompt
+        return text.replacingOccurrences(of: "\n", with: " ").trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+    private var noteColor: Color {
+        if item.isSkill { return Color(red: 0.88, green: 0.89, blue: 0.82) }
+        switch item.cover?.tone ?? item.artwork {
+        case "sage", "tarot": return Color(red: 0.90, green: 0.92, blue: 0.81)
+        case "clay", "letter": return Color(red: 0.93, green: 0.85, blue: 0.85)
+        case "sky", "learn": return Color(red: 0.87, green: 0.88, blue: 0.95)
+        default: return Color(red: 0.91, green: 0.92, blue: 0.86)
         }
     }
     private func photo(_ name: String, size: CGSize) -> some View {
         Image(name).resizable().scaledToFill().frame(width: size.width, height: size.height).clipped()
-    }
-    private func textArtwork(size: CGSize) -> some View {
-        let isDark = item.artwork == "roast"
-        let ink = isDark ? Color(red: 0.91, green: 0.94, blue: 0.75) : Color(red: 0.31, green: 0.32, blue: 0.26)
-        return ZStack {
-            (isDark ? Color(red: 0.27, green: 0.32, blue: 0.22) : Color(red: 0.94, green: 0.92, blue: 0.86))
-            VStack(alignment: .leading, spacing: size.height * 0.09) {
-                Image(systemName: item.artwork == "tarot" ? "sparkle" : item.artwork == "story" ? "moon" : "asterisk").font(.system(size: min(size.width * 0.23, size.height * 0.20), weight: .ultraLight))
-                Text(item.displayTitle).font(.system(size: min(size.width * 0.14, size.height * 0.12), weight: .regular, design: .serif)).lineSpacing(5).lineLimit(5).minimumScaleFactor(0.65)
-                Spacer(minLength: 0)
-                if !compact { Text(item.displayKind).font(.system(size: max(10, size.width * 0.05))) }
-            }.foregroundStyle(ink).padding(size.width * 0.12)
-        }
     }
     private func abstractArtwork(size: CGSize) -> some View {
         ZStack {
