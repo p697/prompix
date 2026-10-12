@@ -362,6 +362,51 @@ import XCTest
         capture("legacy-catalog-creator-directory")
     }
 
+    func testRefinedDiscoveryNavigationAndQuickCopy() {
+        launch()
+        capture("polish-01-home")
+        let creator = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'creator-' ")).firstMatch
+        XCTAssertTrue(creator.isHittable)
+        creator.tap()
+        XCTAssertTrue(app.buttons["saveCreator"].waitForExistence(timeout: 5))
+        capture("polish-02-creator")
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+
+        app.swipeUp(); app.swipeUp()
+        let textChannel = app.buttons["kind-text"]
+        XCTAssertTrue(textChannel.isHittable, "Content channels stay available while browsing.")
+        capture("polish-03-pinned-channels")
+        textChannel.tap()
+        XCTAssertTrue(textChannel.isSelected)
+        let firstNote = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'prompt-' ")).firstMatch
+        XCTAssertTrue(firstNote.isHittable, "Changing channel returns to its first result.")
+        capture("polish-04-text")
+        firstNote.press(forDuration: 0.8)
+        let copy = app.buttons["复制 Prompt"]
+        XCTAssertTrue(copy.waitForExistence(timeout: 5))
+        capture("polish-05-quick-actions")
+        copy.tap()
+        XCTAssertTrue(firstNote.waitForExistence(timeout: 5))
+        let copiedID = XCTAttachment(string: firstNote.identifier)
+        copiedID.name = "polish-copied-prompt-id"; copiedID.lifetime = .keepAlways; add(copiedID)
+        firstNote.tap()
+        XCTAssertTrue(app.buttons["copyPrompt"].waitForExistence(timeout: 5))
+        capture("polish-06-reading")
+        app.buttons["编辑后使用"].tap()
+        XCTAssertTrue(app.textViews["promptEditor"].waitForExistence(timeout: 5))
+        capture("polish-07-editor")
+        app.buttons["完成"].tap()
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        XCTAssertTrue(app.buttons["kind-text"].isSelected)
+        app.selectPrompixTab("专题")
+        capture("polish-08-collections")
+        app.selectPrompixTab("收藏")
+        capture("polish-09-saved")
+        app.selectPrompixTab("发现")
+        app.buttons["kind-all"].tap()
+        capture("polish-10-home-return")
+    }
+
     func testEditorialReadingScreens() {
         for language in ["zh-Hans", "en", "de"] {
             launch(language)

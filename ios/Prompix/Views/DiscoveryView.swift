@@ -3,7 +3,7 @@ import SwiftUI
 struct RootView: View {
     var body: some View {
         TabView {
-            DiscoverView().tabItem { Label { Text(String(localized: "发现")) } icon: { TabSymbol.image("square.grid.2x2") } }
+            DiscoverView().tabItem { Label { Text(String(localized: "发现")) } icon: { TabSymbol.image("rectangle.grid.1x2") } }
             CollectionsView().tabItem { Label { Text(String(localized: "专题")) } icon: { TabSymbol.image("rectangle.stack") } }
             FavoritesView().tabItem { Label { Text(String(localized: "收藏")) } icon: { TabSymbol.image("bookmark") } }
         }.tint(Palette.accent)
@@ -27,45 +27,59 @@ struct DiscoverView: View {
     }
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
-                    KindPicker(selection: $kind, skillsOnly: $skillsOnly)
-                    if library.isRefreshing || library.syncMessage != nil { CatalogUpdateStatus().padding(.horizontal, 20) }
-                    if !isFiltered {
-                        CreatorRail()
-                        CollectionRail()
-                    }
-                    ViewThatFits(in: .horizontal) {
-                        HStack(alignment: .firstTextBaseline) { resultHeading; Spacer(); resultActions }
-                        VStack(alignment: .leading, spacing: 4) { resultHeading; resultActions }
-                    }.padding(.horizontal, 20)
-                    if skillsOnly {
-                        Text(String(localized: "可带到编程助手中使用的技能，包含完整说明与源文件。"))
-                            .font(.subheadline).foregroundStyle(Palette.muted).padding(.horizontal, 20)
-                    }
-                    if items.isEmpty {
-                        if needsFirstVideoUpdate {
-                            ContentUnavailableView {
-                                Label(String(localized: "视频内容需要联网更新"), systemImage: "play.rectangle")
-                            } description: {
-                                Text(String(localized: "首次联网更新后可浏览视频 Prompt。你也可以先查看其他类型的内容。"))
-                            } actions: {
-                                Button(library.isRefreshing ? String(localized: "正在更新…") : String(localized: "检查内容更新")) {
-                                    Task { await library.refresh(force: true) }
-                                }.buttonStyle(.borderedProminent).disabled(library.isRefreshing).accessibilityIdentifier("loadVideoExamples")
-                                Button(String(localized: "查看其他内容")) { kind = nil; skillsOnly = false; topic = nil; model = nil }
-                                    .buttonStyle(.bordered).accessibilityIdentifier("browseOtherIdeas")
+            ScrollViewReader { scroll in
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 14, pinnedViews: [.sectionHeaders]) {
+                        Section {
+                            if library.isRefreshing || library.syncMessage != nil { CatalogUpdateStatus().padding(.horizontal, 20) }
+                            if !isFiltered {
+                                CreatorRail()
                             }
-                        } else {
-                            ContentUnavailableView(String(localized: "暂无匹配内容"), systemImage: "sparkle", description: Text(String(localized: "试试其他分类，或清除筛选条件。")))
+                            ViewThatFits(in: .horizontal) {
+                                HStack(alignment: .firstTextBaseline) { resultHeading; Spacer(); resultActions }
+                                VStack(alignment: .leading, spacing: 4) { resultHeading; resultActions }
+                            }.padding(.horizontal, 20)
+                            if skillsOnly {
+                                Text(String(localized: "可带到编程助手中使用的技能，包含完整说明与源文件。"))
+                                    .font(.subheadline).foregroundStyle(Palette.muted).padding(.horizontal, 20)
+                            }
+                            if items.isEmpty {
+                                if needsFirstVideoUpdate {
+                                    ContentUnavailableView {
+                                        Label(String(localized: "视频内容需要联网更新"), systemImage: "play.rectangle")
+                                    } description: {
+                                        Text(String(localized: "首次联网更新后可浏览视频 Prompt。你也可以先查看其他类型的内容。"))
+                                    } actions: {
+                                        Button(library.isRefreshing ? String(localized: "正在更新…") : String(localized: "检查内容更新")) {
+                                            Task { await library.refresh(force: true) }
+                                        }.buttonStyle(.borderedProminent).disabled(library.isRefreshing).accessibilityIdentifier("loadVideoExamples")
+                                        Button(String(localized: "查看其他内容")) { kind = nil; skillsOnly = false; topic = nil; model = nil }
+                                            .buttonStyle(.bordered).accessibilityIdentifier("browseOtherIdeas")
+                                    }
+                                } else {
+                                    ContentUnavailableView(String(localized: "暂无匹配内容"), systemImage: "sparkle", description: Text(String(localized: "试试其他分类，或清除筛选条件。")))
+                                }
+                            } else if !isFiltered {
+                                PromptGrid(items: Array(items.prefix(6))).padding(.horizontal, 16)
+                                CollectionRail().padding(.vertical, 8)
+                                PromptGrid(items: Array(items.dropFirst(6))).padding(.horizontal, 16)
+                            } else {
+                                PromptGrid(items: items).padding(.horizontal, 16)
+                            }
+                        } header: {
+                            KindPicker(selection: $kind, skillsOnly: $skillsOnly)
+                                .padding(.vertical, 4).background(Palette.paper)
+                                .id("discovery-top")
                         }
-                    } else { PromptGrid(items: items).padding(.horizontal, 16) }
-                }.padding(.top, 12).padding(.bottom, 24)
+                    }.padding(.bottom, 24)
+                }
+                .paperScreen()
+                .refreshable { await library.refresh(force: true) }
+                .onChange(of: kind) { _, _ in model = nil; topic = nil; scroll.scrollTo("discovery-top", anchor: .top) }
+                .onChange(of: skillsOnly) { _, _ in model = nil; topic = nil; scroll.scrollTo("discovery-top", anchor: .top) }
+                .onChange(of: topic) { _, _ in scroll.scrollTo("discovery-top", anchor: .top) }
+                .onChange(of: model) { _, _ in scroll.scrollTo("discovery-top", anchor: .top) }
             }
-            .paperScreen()
-            .refreshable { await library.refresh(force: true) }
-            .onChange(of: kind) { _, _ in model = nil; topic = nil }
-            .onChange(of: skillsOnly) { _, _ in model = nil; topic = nil }
             .navigationTitle("").navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 brandTitle
@@ -90,7 +104,7 @@ struct DiscoverView: View {
     private var resultHeading: some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             Text(skillsOnly ? String(localized: "Agent Skills") : isFiltered ? String(localized: "筛选结果") : String(localized: "全部内容"))
-                .font(Typography.editorial(.title2))
+                .font(.subheadline.weight(.medium))
             Text(items.count.formatted()).font(.caption.monospacedDigit()).foregroundStyle(Palette.muted)
         }
     }
@@ -187,7 +201,7 @@ struct PromptGrid: View {
         }
     }
     private func column(_ parity: Int) -> some View {
-        LazyVStack(spacing: 22) {
+        LazyVStack(spacing: 14) {
             ForEach(Array(items.enumerated()).filter { $0.offset % columnCount == parity }, id: \.element.id) { _, item in
                 PromptCard(item: item, origin: origin)
             }
@@ -200,11 +214,13 @@ struct PromptCard: View {
     var origin: PromptDetailOrigin = .catalog
     @Environment(Library.self) private var library
     @State private var savedFeedback = false
+    @State private var copiedFeedback = false
+    @Namespace private var transition
     @Environment(\.dynamicTypeSize) private var typeSize
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            NavigationLink { PromptDetail(item: item, origin: origin) } label: {
-                VStack(alignment: .leading, spacing: 10) {
+            NavigationLink { PromptDetail(item: item, origin: origin).promptTransitionDestination(id: item.id, in: transition) } label: {
+                VStack(alignment: .leading, spacing: 8) {
                     if typeSize.isAccessibilitySize && (item.kind == .text || item.isSkill) {
                         VStack(alignment: .leading, spacing: 12) {
                             Text(item.displayTitle).font(.headline).foregroundStyle(.primary)
@@ -212,14 +228,24 @@ struct PromptCard: View {
                         }.fixedSize(horizontal: false, vertical: true).frame(maxWidth: .infinity, alignment: .leading)
                             .padding(20).background(Palette.soft, in: RoundedRectangle(cornerRadius: 16))
                     } else {
-                        Artwork(item: item).aspectRatio(ratio, contentMode: .fit).clipShape(RoundedRectangle(cornerRadius: 16))
+                        Artwork(item: item).aspectRatio(ratio, contentMode: .fit).clipShape(RoundedRectangle(cornerRadius: 12))
                     }
                     if !titleIsInArtwork {
-                        Text(item.displayTitle).font(.system(.subheadline, weight: .medium)).foregroundStyle(.primary)
-                            .lineSpacing(3).lineLimit(typeSize.isAccessibilitySize ? nil : 3).multilineTextAlignment(.leading).padding(.horizontal, 2)
+                        Text(item.displayTitle).font(.subheadline).foregroundStyle(Palette.ink)
+                            .lineSpacing(2).lineLimit(typeSize.isAccessibilitySize ? nil : 2).multilineTextAlignment(.leading).padding(.horizontal, 2)
                     }
-                }.contentShape(Rectangle())
+                }.contentShape(Rectangle()).promptTransitionSource(id: item.id, in: transition)
             }.buttonStyle(.plain).accessibilityLabel(item.displayTitle).accessibilityIdentifier("prompt-\(item.id)")
+                .contextMenu {
+                    Button {
+                        UIPasteboard.general.string = item.displayContent.prompt
+                        copiedFeedback.toggle()
+                    } label: { Label(item.isSkill ? String(localized: "复制 Skill") : String(localized: "复制 Prompt"), systemImage: "doc.on.doc") }
+                    Button {
+                        if library.toggle(item) { savedFeedback.toggle() }
+                    } label: { Label(library.isSaved(item) ? String(localized: "取消收藏") : String(localized: "收藏 Prompt"), systemImage: library.isSaved(item) ? "bookmark.slash" : "bookmark") }
+                }
+                .sensoryFeedback(.success, trigger: copiedFeedback)
             HStack(spacing: 4) {
                 if let creator = item.creator {
                     NavigationLink { CreatorDetail(creator: creator) } label: {
@@ -243,14 +269,14 @@ struct PromptCard: View {
                         .frame(width: 44, height: 44).contentShape(Rectangle())
                 }.buttonStyle(.plain).accessibilityLabel(library.isSaved(item) ? String(localized: "取消收藏：\(item.displayTitle)") : String(localized: "收藏：\(item.displayTitle)"))
                     .sensoryFeedback(.selection, trigger: savedFeedback)
-            }.foregroundStyle(Palette.muted).padding(.leading, 2).padding(.top, 0).padding(.bottom, -10)
+            }.foregroundStyle(Palette.muted).padding(.leading, 2)
         }
     }
     private var titleIsInArtwork: Bool { item.isSkill || item.kind == .text }
     private var ratio: CGFloat {
-        if item.isSkill { return 0.82 }
+        if item.isSkill { return 0.95 }
         if let ratio = item.media?.aspectRatio { return max(0.65, min(1.5, ratio)) }
-        return switch item.kind { case .text: 0.84; case .image: item.artwork == "lake" ? 1.02 : 0.76; case .video: 0.94; case .web: WebsiteExamples.files[item.id] != nil ? 0.62 : 0.87 }
+        return switch item.kind { case .text: 0.95; case .image: item.artwork == "lake" ? 1.02 : 0.76; case .video: 0.94; case .web: WebsiteExamples.files[item.id] != nil ? 0.62 : 0.87 }
     }
 }
 

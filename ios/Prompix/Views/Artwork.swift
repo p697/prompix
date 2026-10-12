@@ -79,17 +79,17 @@ struct Artwork: View {
                     if !compact { Text(item.isSkill ? "SKILL.md" : item.displayKind) }
                     Spacer(minLength: 0)
                 }.font(.system(size: compact ? 12 : 10, weight: .medium))
-                    .foregroundStyle(Palette.highlightInk.opacity(0.70))
+                    .foregroundStyle(Palette.muted)
                 Text(item.displayTitle)
-                    .font(.system(size: min(size.width * (compact ? 0.14 : 0.12), 25), weight: .regular, design: .serif))
-                    .lineSpacing(3).lineLimit(3).fixedSize(horizontal: false, vertical: true).layoutPriority(1)
+                    .font(.system(size: min(size.width * (compact ? 0.14 : 0.108), 23), weight: .regular, design: .serif))
+                    .lineSpacing(3).lineLimit(4).fixedSize(horizontal: false, vertical: true).layoutPriority(1)
                 if !compact {
-                    Text(noteExcerpt).font(.system(size: max(11, min(size.width * 0.073, 14))))
+                    Text(noteExcerpt).font(.system(size: max(11, min(size.width * 0.068, 13))))
                         .lineSpacing(4).lineLimit(3)
-                        .foregroundStyle(Palette.highlightInk.opacity(0.78))
+                        .foregroundStyle(Palette.muted)
                 }
                 Spacer(minLength: 0)
-            }.foregroundStyle(Palette.highlightInk).padding(size.width * 0.10)
+            }.foregroundStyle(Palette.ink).padding(size.width * 0.10)
         }
     }
     private var noteExcerpt: String {
@@ -97,12 +97,12 @@ struct Artwork: View {
         return text.replacingOccurrences(of: "\n", with: " ").trimmingCharacters(in: .whitespacesAndNewlines)
     }
     private var noteColor: Color {
-        if item.isSkill { return Color(red: 0.88, green: 0.89, blue: 0.82) }
+        if item.isSkill { return Palette.soft }
         switch item.cover?.tone ?? item.artwork {
-        case "sage", "tarot": return Color(red: 0.90, green: 0.92, blue: 0.81)
-        case "clay", "letter": return Color(red: 0.93, green: 0.85, blue: 0.85)
-        case "sky", "learn": return Color(red: 0.87, green: 0.88, blue: 0.95)
-        default: return Color(red: 0.91, green: 0.92, blue: 0.86)
+        case "sage", "tarot": return Palette.noteSage
+        case "clay", "letter": return Palette.noteRose
+        case "sky", "learn": return Palette.noteLavender
+        default: return Palette.soft
         }
     }
     private func photo(_ name: String, size: CGSize) -> some View {

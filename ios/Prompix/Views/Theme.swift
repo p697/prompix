@@ -18,6 +18,9 @@ enum Palette {
     static let accent = adaptive(0x435332, 0xD1E190)
     static let highlight = adaptive(0xD6E579, 0xC8D974)
     static let highlightInk = Color(red: 0.15, green: 0.18, blue: 0.11)
+    static let noteSage = adaptive(0xEEF0E4, 0x2B3427)
+    static let noteRose = adaptive(0xF3EAE5, 0x382D29)
+    static let noteLavender = adaptive(0xECEBF2, 0x302F3B)
     static let line = adaptive(0xDCE0D2, 0x434A3B)
 }
 
@@ -88,5 +91,29 @@ struct PrimaryActionLabel: View {
             .background(Palette.highlight, in: Capsule())
             .opacity(isEnabled ? 1 : 0.45)
             .accessibilityLabel(title)
+    }
+}
+
+// Native zoom keeps the card connected to its detail and supplies the system's
+// interactive dismissal. Older systems and Reduce Motion use the normal push.
+private struct PromptTransition: ViewModifier {
+    let id: String
+    let namespace: Namespace.ID
+    let source: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @ViewBuilder func body(content: Content) -> some View {
+        if #available(iOS 18, *), !reduceMotion {
+            if source { content.matchedTransitionSource(id: id, in: namespace) }
+            else { content.navigationTransition(.zoom(sourceID: id, in: namespace)) }
+        } else { content }
+    }
+}
+
+extension View {
+    func promptTransitionSource(id: String, in namespace: Namespace.ID) -> some View {
+        modifier(PromptTransition(id: id, namespace: namespace, source: true))
+    }
+    func promptTransitionDestination(id: String, in namespace: Namespace.ID) -> some View {
+        modifier(PromptTransition(id: id, namespace: namespace, source: false))
     }
 }
