@@ -76,7 +76,7 @@ struct PromptDetail: View {
                         Link(destination: toolURL) {
                             HStack {
                                 VStack(alignment: .leading, spacing: 5) {
-                                    Text(String(localized: "带着灵感，去试试")).font(.subheadline.weight(.medium))
+                                    Text(String(localized: "使用方法")).font(.subheadline.weight(.medium))
                                     Text(String(localized: "复制后打开工具，粘贴使用")).font(.footnote).foregroundStyle(Palette.muted)
                                 }; Spacer(); Image(systemName: "arrow.up.right")
                             }.padding(.vertical, 5)
@@ -92,7 +92,7 @@ struct PromptDetail: View {
                     }
                     if !related.isEmpty {
                         Divider()
-                        HStack { Text(String(localized: "顺着灵感，再逛一点")).font(.headline); Spacer(); Image(systemName: "arrow.down.right").foregroundStyle(Palette.muted) }
+                        HStack { Text(String(localized: "相关 Prompt")).font(.headline); Spacer(); Image(systemName: "arrow.down.right").foregroundStyle(Palette.muted) }
                         PromptGrid(items: related)
                     }
                 }.padding(.horizontal, 22)
@@ -118,7 +118,7 @@ struct PromptDetail: View {
                     UIPasteboard.general.string = item.prompt
                     copied = true
                 } label: {
-                    PrimaryActionLabel(title: copied ? String(localized: "已复制，去创造吧") : String(localized: "复制 Prompt"),
+                    PrimaryActionLabel(title: copied ? String(localized: "已复制") : String(localized: "复制 Prompt"),
                         compactTitle: copied ? String(localized: "已复制") : String(localized: "复制"), symbol: copied ? "checkmark" : "doc.on.doc")
                 }.buttonStyle(.plain).accessibilityIdentifier("copyPrompt").sensoryFeedback(.success, trigger: copied)
             }.padding(.horizontal, 20).padding(.vertical, 10).background(.bar)
@@ -358,7 +358,7 @@ struct MovieView: View {
                         .overlay { if playback.loading { ProgressView(String(localized: "正在加载视频…")).padding(16).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14)).allowsHitTesting(false) } }
                 }
                 Text(caption).font(.footnote).foregroundStyle(Palette.muted).padding(.horizontal, 20)
-            }.frame(maxWidth: .infinity, maxHeight: .infinity).background(.black).navigationTitle(String(localized: "动态灵感")).navigationBarTitleDisplayMode(.inline)
+            }.frame(maxWidth: .infinity, maxHeight: .infinity).background(.black).navigationTitle(String(localized: "视频预览")).navigationBarTitleDisplayMode(.inline)
                 .toolbar { ToolbarItem(placement: .confirmationAction) { Button(String(localized: "完成")) { dismiss() } } }
                 .onAppear { playback.start(url: url) }
                 .onDisappear { playback.stop() }

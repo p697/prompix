@@ -1,9 +1,9 @@
+import { selectLibrary } from "./library.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   parseYouMind,
   repositories,
-  selectEdition,
   parseCommunityCSV,
   collectRepository,
   parseVideoArchive,
@@ -27,7 +27,7 @@ test("source parser retains provenance and rejects incomplete cards; editorial g
     parsed[0].media?.imageURL,
     "https://cms-assets.youmind.com/media/test.jpg",
   );
-  assert.equal(selectEdition(parsed, new Set([parsed[0].id]), 10).length, 0);
+  assert.equal(selectLibrary(parsed, new Set([parsed[0].id])).length, 0);
   assert.equal(
     parseYouMind(
       block.replace("- **Source:**", "- Removed:"),
@@ -81,7 +81,7 @@ test("video parser accepts both archive headings and blockquote summaries withou
   assert.equal(archive[0].source.author, "Studio");
   assert.equal(archive[0].source.license, "CC-BY-4.0");
   assert.equal(archive[0].reviewStatus, "draft");
-  assert.equal(selectEdition(archive, new Set(), 12).length, 0);
+  assert.equal(selectLibrary(archive, new Set()).length, 0);
   const watchPage = videoBlock.replace(/https:[^\"]+123\.mp4/, "https://youmind.com/seedance-2-0-prompts?id=123");
   assert.deepEqual(parseVideoArchive(watchPage), []);
   assert.equal(parseVideoArchive(watchPage + "\n" + videoBlock.replaceAll("123", "456")).length, 1);
@@ -95,7 +95,7 @@ test("current source wins archive duplicates; reviews bind to exact text and rem
   assert.equal(merged[0].prompt, live[0].prompt);
   assert.equal(merged[0].source.revision, "new-revision");
   assert.equal(mergeCandidates(archive, [duplicate]).length, 2);
-  assert.equal(selectEdition([archive[0], duplicate].map(item => ({ ...item, reviewStatus: "candidate" as const })), new Set(), 12).length, 1);
+  assert.equal(selectLibrary([archive[0], duplicate].map(item => ({ ...item, reviewStatus: "candidate" as const })), new Set()).length, 1);
   const reviews = {
     [archive[0].id]: {
       fingerprint: archive[0].fingerprint,
@@ -108,8 +108,8 @@ test("current source wins archive duplicates; reviews bind to exact text and rem
     },
   };
   const approved = applyEditorialReviews(archive, reviews);
-  assert.equal(selectEdition(approved, new Set(), 12).length, 1);
-  assert.equal(selectEdition(approved, new Set([live[0].id]), 12).length, 0);
+  assert.equal(selectLibrary(approved, new Set()).length, 1);
+  assert.equal(selectLibrary(approved, new Set([live[0].id])).length, 0);
   assert.equal(applyEditorialReviews(merged, reviews)[0].editorialRank, undefined);
 });
 
@@ -136,7 +136,7 @@ test("every current post owns its ID before fingerprint deduplication", () => {
   assert.equal(originalPost.prompt, live[1].prompt);
   assert.equal(originalPost.source.revision, "new-revision");
   assert.notEqual(originalPost.fingerprint, archive[0].fingerprint);
-  assert.equal(selectEdition(merged, new Set(), 12).length, 1, "Eligible duplicates are removed within their channel");
+  assert.equal(selectLibrary(merged, new Set()).length, 1, "Eligible duplicates are removed within their channel");
 });
 
 test("watch-page drafts block changed archive text and reuse only unchanged complete examples", () => {
@@ -146,7 +146,7 @@ test("watch-page drafts block changed archive text and reuse only unchanged comp
   assert.equal(live.length, 1);
   assert.equal(live[0].reviewStatus, "draft");
   assert.equal(live[0].media?.videoURL, undefined);
-  assert.equal(selectEdition(live, new Set(), 12).length, 0);
+  assert.equal(selectLibrary(live, new Set()).length, 0);
   const unchanged = mergeCandidates(live, archive);
   assert.equal(unchanged[0].source.revision, videoArchive.revision);
   assert.equal(unchanged[0].reviewStatus, "draft");
@@ -157,15 +157,15 @@ test("watch-page drafts block changed archive text and reuse only unchanged comp
     },
   };
   const approved = applyEditorialReviews(unchanged, reviews);
-  assert.equal(selectEdition(approved, new Set(), 12).length, 1);
-  assert.equal(selectEdition(approved, new Set([archive[0].id]), 12).length, 0);
+  assert.equal(selectLibrary(approved, new Set()).length, 1);
+  assert.equal(selectLibrary(approved, new Set([archive[0].id])).length, 0);
   const changed = parseYouMind(watchPage.replace("paper city with", "paper village with").replace(/<img[^>]+>/, ""), repositories[2], "changed-revision");
   assert.equal(changed.length, 1, "Missing poster and MP4 must still preserve current identity");
   const merged = mergeCandidates(changed, archive);
   assert.equal(merged[0].source.revision, "changed-revision");
   assert.equal(applyEditorialReviews(merged, reviews)[0].reviewStatus, "draft");
-  assert.equal(selectEdition(applyEditorialReviews(merged, reviews), new Set(), 12).length, 0);
+  assert.equal(selectLibrary(applyEditorialReviews(merged, reviews), new Set()).length, 0);
   reviews[archive[0].id].fingerprint = changed[0].fingerprint;
-  assert.equal(selectEdition(applyEditorialReviews(merged, reviews), new Set(), 12).length, 0,
+  assert.equal(selectLibrary(applyEditorialReviews(merged, reviews), new Set()).length, 0,
     "Reviewing changed text cannot invent a missing video/poster pair");
 });

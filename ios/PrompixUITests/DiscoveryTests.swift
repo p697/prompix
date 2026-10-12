@@ -649,7 +649,7 @@ import UIKit
     }
     func testFirstVideoUpdateExplainsOfflineAvailabilityAndReturnsToIdeas() throws {
         app.buttons["kind-video"].tap()
-        XCTAssertTrue(app.staticTexts["视频灵感，联网后见"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["视频内容需要联网更新"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["loadVideoExamples"].isHittable)
         XCTAssertFalse(app.buttons["prompt-slow-road"].exists)
         try waitForRenderingToSettle()
@@ -757,13 +757,12 @@ import UIKit
         app.terminate()
         app.launchArguments.removeAll { $0 == "--offline" }
         app.launch()
-        XCTAssertTrue(app.staticTexts["DAILY FINDS"].waitForExistence(timeout: 35))
         app.buttons["searchButton"].tap()
         let search = app.searchFields.firstMatch
         XCTAssertTrue(search.waitForExistence(timeout: 3))
         search.tap(); search.typeText("发明")
         let card = app.buttons.containing(NSPredicate(format: "identifier BEGINSWITH %@", "prompt-youmind-nano-")).firstMatch
-        XCTAssertTrue(card.waitForExistence(timeout: 5)); card.tap()
+        XCTAssertTrue(card.waitForExistence(timeout: 35), "The requested community gallery must be loaded"); card.tap()
         app.buttons["previewButton"].tap()
         XCTAssertTrue(app.navigationBars["1 / 4"].waitForExistence(timeout: 10))
         XCTAssertFalse(app.buttons["previousImage"].isEnabled)
@@ -789,9 +788,8 @@ import UIKit
         app.terminate()
         app.launchArguments.removeAll { $0 == "--offline" }
         app.launch()
-        XCTAssertTrue(app.staticTexts["DAILY FINDS"].waitForExistence(timeout: 35))
         let imageCard = app.buttons.containing(NSPredicate(format: "identifier BEGINSWITH %@", "prompt-youmind-nano-")).firstMatch
-        XCTAssertTrue(imageCard.waitForExistence(timeout: 10))
+        XCTAssertTrue(imageCard.waitForExistence(timeout: 35), "A published community image must be loaded")
         capture("10-live-discovery")
         imageCard.tap()
         app.buttons["previewButton"].tap()
@@ -803,7 +801,7 @@ import UIKit
         let videoCard = app.buttons.containing(NSPredicate(format: "identifier BEGINSWITH %@", "prompt-youmind-seedance-")).firstMatch
         XCTAssertTrue(videoCard.waitForExistence(timeout: 10)); videoCard.tap()
         app.buttons["previewButton"].tap()
-        XCTAssertTrue(app.navigationBars["动态灵感"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.navigationBars["视频预览"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.descendants(matching: .any)["playingVideo"].waitForExistence(timeout: 35))
         XCTAssertFalse(app.buttons["retryVideo"].exists)
         capture("12-live-video-playing")
@@ -835,7 +833,7 @@ import UIKit
         app.buttons["prompt-gentle-tarot"].tap()
         app.buttons["copyPrompt"].tap()
         XCTAssertTrue(app.buttons["copyPrompt"].label.contains("已复制"))
-        let tool = app.links.containing(NSPredicate(format: "label BEGINSWITH %@", "带着灵感，去试试")).firstMatch
+        let tool = app.links.containing(NSPredicate(format: "label BEGINSWITH %@", "使用方法")).firstMatch
         for _ in 0..<6 {
             if tool.isHittable { break }
             app.swipeUp()
@@ -860,7 +858,8 @@ import UIKit
         app.terminate()
         app.launchArguments.removeAll { $0 == "--offline" }
         app.launch()
-        XCTAssertTrue(app.staticTexts["DAILY FINDS"].waitForExistence(timeout: 35))
+        let communityCard = app.buttons.containing(NSPredicate(format: "identifier BEGINSWITH %@", "prompt-youmind-nano-")).firstMatch
+        XCTAssertTrue(communityCard.waitForExistence(timeout: 35), "The published community catalog must be loaded before browsing")
         for page in 1...5 {
             try waitForRenderingToSettle()
             capture("release-discovery-page-\(page)")
@@ -878,6 +877,52 @@ import UIKit
             XCTAssertEqual(app.buttons[identifier].frame.minY, originalY, accuracy: 3, "Returning must preserve the browsing position")
             if page < 5 { app.swipeUp() }
         }
+    }
+
+    func testExpandedLibraryBrowsingAndSearch() throws {
+        app.terminate()
+        app.launchArguments.removeAll { $0 == "--offline" }
+        app.launch()
+        let community = app.buttons.containing(NSPredicate(format: "identifier BEGINSWITH %@", "prompt-youmind-")).firstMatch
+        XCTAssertTrue(community.waitForExistence(timeout: 35))
+        XCTAssertFalse(app.staticTexts["DAILY FINDS"].exists)
+        XCTAssertFalse(app.staticTexts["灵感，随手可得。"].exists)
+        capture("expanded-discovery-top")
+        var seen = Set<String>()
+        for page in 0..<75 {
+            let cards = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "prompt-"))
+                .allElementsBoundByIndex.filter { $0.isHittable && $0.frame.minY > 100 && $0.frame.maxY < app.frame.maxY - 90 }
+            for card in cards { seen.insert(card.identifier) }
+            if page % 12 == 0, let card = cards.first {
+                let id = card.identifier
+                let y = card.frame.minY
+                capture("expanded-browse-\(page)")
+                card.tap()
+                XCTAssertTrue(app.buttons["copyPrompt"].waitForExistence(timeout: 5))
+                app.navigationBars.buttons.element(boundBy: 0).tap()
+                XCTAssertEqual(app.buttons[id].frame.minY, y, accuracy: 4)
+            }
+            if seen.count >= 100 { break }
+            app.swipeUp()
+        }
+        let evidence = XCTAttachment(string: seen.sorted().joined(separator: "\n"))
+        evidence.name = "Distinct cards actually visible while browsing"
+        evidence.lifetime = .keepAlways
+        add(evidence)
+        XCTAssertGreaterThanOrEqual(seen.count, 100, "The library must support browsing beyond the old 68-item edition")
+        app.buttons["searchButton"].tap()
+        let search = app.searchFields.firstMatch
+        XCTAssertTrue(search.waitForExistence(timeout: 5))
+        search.tap(); search.typeText("十五个问题")
+        let matching = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "prompt-pc-"))
+        let visibleResult = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in matching.allElementsBoundByIndex.contains { $0.isHittable } }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [visibleResult], timeout: 5), .completed)
+        let game = try XCTUnwrap(matching.allElementsBoundByIndex.first { $0.isHittable }, "A newly added text prompt must be searchable")
+        game.tap()
+        XCTAssertTrue(app.buttons["copyPrompt"].waitForExistence(timeout: 5))
+        capture("expanded-new-text-detail")
+        app.buttons["copyPrompt"].tap()
+        XCTAssertTrue(app.buttons["copyPrompt"].label.contains("已复制"))
     }
 
     func testEveryPublishedVideoPlaysAndBackgroundPauses() async throws {
@@ -905,14 +950,13 @@ import UIKit
         app.launchArguments.removeAll { $0 == "--offline" }
         for (index, video) in videos.enumerated() {
             app.launch()
-            XCTAssertTrue(app.staticTexts["DAILY FINDS"].waitForExistence(timeout: 35))
             app.buttons["searchButton"].tap()
             let search = app.searchFields.firstMatch
             XCTAssertTrue(search.waitForExistence(timeout: 5))
             search.tap()
             search.typeText(video.title)
             let matchingCards = app.buttons.matching(identifier: "prompt-\(video.id)")
-            XCTAssertTrue(matchingCards.firstMatch.waitForExistence(timeout: 5), video.id)
+            XCTAssertTrue(matchingCards.firstMatch.waitForExistence(timeout: 35), "The published video must be loaded: \(video.id)")
             // The presenting feed remains in XCTest's tree beneath the search sheet.
             let card = try XCTUnwrap(matchingCards.allElementsBoundByIndex.first { $0.isHittable }, video.id)
             card.tap()

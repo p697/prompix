@@ -1,6 +1,7 @@
+import { selectLibrary } from "./library.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { parseCommunityCSV, selectEdition } from "./sources.ts";
+import { parseCommunityCSV } from "./sources.ts";
 import { applyEditorialReviews, reviewsSchema, type Reviews } from "./editorial.ts";
 
 const candidates = parseCommunityCSV('act,prompt,type,contributor\n"A tiny tale","Write a gentle story about an ordinary object. Give it a small wish, one obstacle and a surprising but kind ending. Keep the story below 150 words.",TEXT,studio\n', 'test-revision');
@@ -17,10 +18,10 @@ test("only an explicit editorial gallery adds images, keeps its order and choose
   assert.equal(reviewsSchema.safeParse({ [item.id]: { ...reviews[item.id], metadata: { ...metadata, imageURLs: Array(9).fill(images[0]) } } }).success, false);
 });
 test("raw role prompts cannot enter an edition until edited; provenance and source text survive approval", () => {
-  assert.equal(selectEdition(candidates, new Set(), 10).length, 0);
-  assert.equal(selectEdition(applyEditorialReviews([{ ...item, reviewStatus: "candidate" }], {}), new Set(), 10).length, 0);
+  assert.equal(selectLibrary(candidates, new Set()).length, 0);
+  assert.equal(selectLibrary(applyEditorialReviews([{ ...item, reviewStatus: "candidate" }], {}), new Set()).length, 0);
   const approved = applyEditorialReviews(candidates, reviews);
-  assert.equal(selectEdition(approved, new Set(), 10).length, 1);
+  assert.equal(selectLibrary(approved, new Set()).length, 1);
   assert.equal(approved[0].title, metadata.title);
   assert.deepEqual(approved[0].source, item.source);
   assert.equal(approved[0].prompt, item.prompt);
@@ -37,9 +38,9 @@ test("website approval requires both a demo and preview; edits cannot alter prov
 test("reviewed concise prompts and editorial order survive selection and removals", () => {
   const short = { ...item, id: "short", prompt: "绘制一座漂浮在茶杯里的迷你气象站，使用淡绿色水彩和柔和的晨光。", fingerprint: "b".repeat(64) };
   const ranked = applyEditorialReviews([item, short], { ...reviews, short: { fingerprint: short.fingerprint, reviewedAt: "2026-10-11T00:00:00Z", metadata: { ...metadata, priority: 90 } } });
-  assert.deepEqual(selectEdition(ranked, new Set(), 2).map((x) => x.id), ["short", item.id]);
-  assert.equal(selectEdition([{ ...short, reviewStatus: "candidate" }], new Set(), 1).length, 0);
-  assert.equal(selectEdition(ranked, new Set(["short"]), 2).length, 1);
+  assert.deepEqual(selectLibrary(ranked, new Set()).map((x) => x.id), ["short", item.id]);
+  assert.equal(selectLibrary([{ ...short, reviewStatus: "candidate" }], new Set()).length, 0);
+  assert.equal(selectLibrary(ranked, new Set(["short"])).length, 1);
   assert.equal(reviewsSchema.safeParse({ short: { fingerprint: short.fingerprint, reviewedAt: "2026-10-11T00:00:00Z", metadata: { ...metadata, priority: 101 } } }).success, false);
 });
 
@@ -50,17 +51,17 @@ test("image and video publication requires a review of the exact current text", 
       media: { image: null, video: null, demoURL: null, imageURL: "https://example.com/preview.jpg", ...(kind === "video" ? { videoURL: "https://example.com/clip.mp4" } : {}) },
     };
     const matching = { [candidate.id]: reviews[item.id] };
-    assert.equal(selectEdition(applyEditorialReviews([candidate], {}), new Set(), 10).length, 0);
+    assert.equal(selectLibrary(applyEditorialReviews([candidate], {}), new Set()).length, 0);
     const changed = { ...candidate, prompt: candidate.prompt + " Use blue.", fingerprint: "c".repeat(64) };
-    assert.equal(selectEdition(applyEditorialReviews([changed], matching), new Set(), 10).length, 0);
-    assert.equal(selectEdition(applyEditorialReviews([candidate], matching), new Set(), 10).length, 1);
+    assert.equal(selectLibrary(applyEditorialReviews([changed], matching), new Set()).length, 0);
+    assert.equal(selectLibrary(applyEditorialReviews([candidate], matching), new Set()).length, 1);
     // A cached snapshot of the same text remains eligible; collection itself
     // remains inspectable and is not mutated by the publication gate.
-    assert.equal(selectEdition(applyEditorialReviews([structuredClone(candidate)], matching), new Set(), 10).length, 1);
+    assert.equal(selectLibrary(applyEditorialReviews([structuredClone(candidate)], matching), new Set()).length, 1);
     assert.equal(candidate.reviewStatus, "candidate");
     if (kind === "video") {
       const watchOnly = { ...candidate, media: { image: null, video: null, demoURL: null, imageURL: "https://example.com/preview.jpg" } };
-      assert.equal(selectEdition(applyEditorialReviews([watchOnly], matching), new Set(), 10).length, 0);
+      assert.equal(selectLibrary(applyEditorialReviews([watchOnly], matching), new Set()).length, 0);
     }
   }
 });

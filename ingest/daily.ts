@@ -2,15 +2,13 @@ import { mkdir, readFile, writeFile, rm } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { repo, contentRoot as root, base, atomic, json, lockContent, upload, moderationSchema, currentManifest, remoteCatalog, editionVersion } from "./publication.ts";
-import { catalogSchema, type Prompt } from "../packages/schema/catalog.ts";
+import { catalogSchema, type Catalog, type Prompt } from "../packages/schema/catalog.ts";
 import {
   repositories,
   collectRepository,
   parseYouMind,
   parseCommunityCSV,
-  selectEdition,
   type Candidate,
-  fingerprint,
   mergeCandidates,
   videoArchive,
 } from "./sources.ts";
@@ -19,6 +17,7 @@ import { searchX } from "./x.ts";
 import { applyEditorialReviews, reviewsSchema } from "./editorial.ts";
 import { aspectRatio, prepareJPEG, publishStudioImages } from "./images.ts";
 import { publicationText } from "./templates.ts";
+import { assertLibraryDownloadSize, countByKind, interleaveLibrary, libraryDelta, selectLibrary, type KindCounts } from "./library.ts";
 const publishing = process.argv.includes("--publish");
 const resumePublishing = process.argv.includes("--resume-publishing");
 if (resumePublishing && !publishing) throw new Error("--resume-publishing requires --publish");
@@ -41,11 +40,24 @@ async function run() {
     error?: string;
     sources: Record<string, unknown>;
     mediaErrors: string[];
+    changed?: boolean;
+    comparisonVersion?: string;
+    changes?: ReturnType<typeof libraryDelta>;
+    counts: {
+      candidates: KindCounts | null;
+      reviewed: KindCounts | null;
+      eligible: KindCounts | null;
+      bundled: KindCounts | null;
+      prepared: KindCounts | null;
+      published: KindCounts | null;
+      mediaFailed: KindCounts;
+    };
   } = {
     startedAt: new Date().toISOString(),
     published: false,
     sources: {},
     mediaErrors: [],
+    counts: { candidates: null, reviewed: null, eligible: null, bundled: null, prepared: null, published: null, mediaFailed: countByKind([]) },
   };
   try {
     const all: Candidate[] = [];
@@ -104,19 +116,6 @@ async function run() {
       report.sources.x = {
         status: process.env.X_BEARER_TOKEN ? "daily-limit" : "not-configured",
       };
-    const hold = await json<unknown | null>(join(root, "publication-hold.json"), null);
-    if (publishing && hold && !resumePublishing) {
-      report.publicationHold = hold;
-      return;
-    }
-    const moderation = moderationSchema.parse(await json(join(root, "moderation.json"), { removedIDs: [] }));
-    if (publishing) {
-      // Preserve remote tombstones even if local moderation state has been restored from an older backup.
-      const remote = await remoteCatalog(await currentManifest());
-      moderation.removedIDs = [...new Set([...moderation.removedIDs, ...(remote.removedIDs ?? [])])].sort();
-      await atomic(join(root, "moderation.json"), moderation);
-    }
-    const excluded = new Set(moderation.removedIDs);
     const archive = await json<Candidate[]>(join(root, "candidates", `${videoArchive.id}.json`), []);
     report.sources[videoArchive.id] = {
       status: archive.length ? "staged" : "not-staged",
@@ -124,41 +123,45 @@ async function run() {
       revision: videoArchive.revision,
     };
     const reviews = reviewsSchema.parse(await json(join(root, "editorial.json"), {}));
-    const reviewed = applyEditorialReviews(mergeCandidates(all, archive), reviews);
-    const picked: Candidate[] = [];
-    // Balanced mix: original text/web ideas remain available alongside real community imagery.
-    for (const source of repositories)
-      picked.push(
-        ...selectEdition(
-          reviewed.filter((x) => x.id.startsWith(source.id)),
-          excluded,
-          12,
-        ),
-      );
-    for (const kind of ["text", "web"] as const)
-      picked.push(
-        ...selectEdition(
-          reviewed.filter((x) => x.id.startsWith("pc-") && x.kind === kind),
-          excluded,
-          kind === "text" ? 16 : 8,
-        ),
-      );
-    picked.sort((a, b) => (b.editorialRank ?? -1) - (a.editorialRank ?? -1));
+    const candidates = mergeCandidates(all, archive);
+    const reviewed = applyEditorialReviews(candidates, reviews);
+    report.counts.candidates = countByKind(candidates);
+    report.counts.reviewed = countByKind(reviewed.filter((item) => item.reviewStatus === "candidate"));
+    const hold = await json<unknown | null>(join(root, "publication-hold.json"), null);
+    if (publishing && hold && !resumePublishing) {
+      report.publicationHold = hold;
+      return;
+    }
+    const moderation = moderationSchema.parse(await json(join(root, "moderation.json"), { removedIDs: [] }));
+    let previous: Catalog | undefined;
+    let previousManifest: Awaited<ReturnType<typeof currentManifest>> | undefined;
+    if (publishing) {
+      // Compare against the verified online library, not a possibly stale local latest.json.
+      previousManifest = await currentManifest();
+      previous = await remoteCatalog(previousManifest);
+      report.comparisonVersion = previous.version;
+      moderation.removedIDs = [...new Set([...moderation.removedIDs, ...(previous.removedIDs ?? [])])].sort();
+      await atomic(join(root, "moderation.json"), moderation);
+    }
+    const excluded = new Set(moderation.removedIDs);
+    const picked = selectLibrary(reviewed, excluded);
+    report.counts.eligible = countByKind(picked);
+    const planned = picked.map((candidate): Prompt => {
+      const { fingerprint: _, featured: __, reviewStatus: ___, editorialRank: ____, ...prompt } = candidate;
+      return { ...prompt, prompt: publicationText(candidate, reviews) };
+    });
+    let bundled = catalogSchema.parse(JSON.parse(await readFile(join(repo, "ios/Prompix/Resources/catalog.json"), "utf8")))
+      .prompts.filter((item) => !excluded.has(item.id));
+    report.counts.bundled = countByKind(bundled);
+    // Fail before uploading media if the complete library exceeds the current client protocol.
+    interleaveLibrary(planned, bundled, excluded);
     const mediaMap = await json<Record<string, string>>(
       join(root, "media-map.json"),
       {},
     );
     const aspects = await json<Record<string,number>>(join(root,"media-aspects.json"),{});
     const published: Prompt[] = [];
-    for (const candidate of picked) {
-      const {
-        fingerprint: _,
-        featured: __,
-        reviewStatus: ___,
-        editorialRank: ____,
-        ...prompt
-      } = candidate;
-      prompt.prompt = publicationText(candidate, reviews);
+    for (const prompt of planned) {
       try {
         if (prompt.media && publishing) {
           const media = { ...prompt.media, ...(prompt.media.imageURLs ? { imageURLs: [...prompt.media.imageURLs] } : {}) };
@@ -236,18 +239,10 @@ async function run() {
         published.push(prompt);
       } catch (e) {
         report.mediaErrors.push(`${prompt.id}: ${String(e)}`);
+        report.counts.mediaFailed.total++;
+        report.counts.mediaFailed[prompt.kind]++;
       }
     }
-    let bundled = catalogSchema
-      .parse(
-        JSON.parse(
-          await readFile(
-            join(repo, "ios/Prompix/Resources/catalog.json"),
-            "utf8",
-          ),
-        ),
-      )
-      .prompts.filter((x) => !excluded.has(x.id));
     if (publishing) {
       bundled = await publishStudioImages(bundled, join(repo, "ios/Prompix/Resources/Assets.xcassets"), mediaMap, async input => {
         await mkdir(join(root, "tmp"), { recursive: true });
@@ -262,27 +257,9 @@ async function run() {
       });
       await atomic(join(root, "media-map.json"), mediaMap);
     }
-    // New community cards lead, with original ideas interleaved to preserve all four modalities.
-    const groups = [
-      published.filter((x) => x.kind === "image"),
-      bundled.filter((x) => x.kind === "text"),
-      published.filter((x) => x.kind === "video"),
-      bundled.filter((x) => x.kind === "web"),
-      published.filter((x) => x.kind === "text"),
-      published.filter((x) => x.kind === "web"),
-      // Keep development motion studies and abstract placeholders out of public editions.
-      bundled.filter((x) => x.kind === "image" && x.media?.image),
-    ];
-    const prompts: Prompt[] = [];
-    const seen = new Set<string>();
-    for (let row = 0; groups.some((g) => g.length > row); row++)
-      for (const group of groups) {
-        const p = group[row];
-        if (p && !seen.has(fingerprint(p.prompt))) {
-          prompts.push(p);
-          seen.add(fingerprint(p.prompt));
-        }
-      }
+    const prompts = interleaveLibrary(published, bundled, excluded);
+    report.counts.prepared = countByKind(prompts);
+    if (previous) report.changes = libraryDelta(previous.prompts, prompts);
     if (
       publishing &&
       published.filter((p) => p.source.name === "YouMind OpenLab").length < 6
@@ -292,16 +269,19 @@ async function run() {
       );
     const version = editionVersion(prompts, moderation.removedIDs);
     const latestPath = join(root, "latest.json");
-    const current = await json<{ version?: string }>(latestPath, {});
-    if (current.version === version && publishing) {
+    if (publishing && previousManifest?.version === version) {
       const active = await currentManifest();
-      if (active.version === version) {
+      if (active.version === version && active.sha256 === previousManifest.sha256) {
         await remoteCatalog(active);
+        await atomic(latestPath, active);
         report.version = version;
         report.published = true;
+        report.changed = false;
+        report.counts.published = countByKind(prompts);
         if (resumePublishing) await rm(join(root, "publication-hold.json"), { force: true });
         return;
       }
+      throw new Error("The active library changed during preparation; refusing to overwrite it");
     }
     const catalog = catalogSchema.parse({
       schemaVersion: 1,
@@ -317,6 +297,7 @@ async function run() {
     const existing = await json<unknown | null>(catalogPath, null);
     if (!existing) await atomic(catalogPath, catalog);
     const bytes = await readFile(catalogPath);
+    assertLibraryDownloadSize(bytes);
     const manifest = {
       schemaVersion: 1,
       version,
@@ -345,6 +326,8 @@ async function run() {
       const active = await currentManifest();
       if (active.version !== version || active.sha256 !== manifest.sha256) throw new Error("Activation verification failed");
       report.published = true;
+      report.changed = true;
+      report.counts.published = countByKind(prompts);
       if (resumePublishing) await rm(join(root, "publication-hold.json"), { force: true });
     }
     report.version = version;

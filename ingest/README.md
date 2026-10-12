@@ -78,7 +78,7 @@ unchanged draft may use the complete archived case, retaining the pinned archive
 provenance and editorial requirement. A changed current prompt blocks that older
 case even when the current post has only a watch-page link. Reviewing text cannot
 make a missing clip/poster pair publishable; existing removal IDs still apply.
-The video channel admits up to 12 eligible examples. Watch-page links are never
+The video channel includes every eligible, reviewed example without a source quota. Watch-page links are never
 treated as downloadable videos, and third-party material stays outside Git.
 
 Reviewed representative video frames may use a content-addressed JPEG on
