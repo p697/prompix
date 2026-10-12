@@ -486,6 +486,18 @@ import XCTest
             reveal(card); card.tap()
             XCTAssertTrue(app.buttons["usePrompt"].waitForExistence(timeout: 5))
             capture("native-x-\(kind)-detail")
+            app.buttons["previewButton"].tap()
+            let preview = app.descendants(matching: .any)[kind == "video" ? "playingVideo" : "loadedImage-0"]
+            XCTAssertTrue(preview.waitForExistence(timeout: 35))
+            XCTAssertFalse(app.buttons[kind == "video" ? "retryVideo" : "retryImage"].exists)
+            capture("native-x-\(kind)-loaded-preview")
+            app.buttons["完成"].tap()
+            let byline = app.buttons["creatorByline"]
+            reveal(byline); byline.tap()
+            XCTAssertTrue(app.buttons["saveCreator"].waitForExistence(timeout: 5))
+            XCTAssertTrue(app.links["creatorExternalProfile"].exists || app.buttons["creatorExternalProfile"].exists)
+            capture("native-x-\(kind)-creator-profile")
+            app.navigationBars.buttons.element(boundBy: 0).tap()
             let original = app.buttons["originalXPost"]
             reveal(original); original.tap()
             capture("native-x-\(kind)-original-post")

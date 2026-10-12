@@ -426,3 +426,20 @@ test("preparation failures are bounded by the remaining daily slots without spen
   assert.equal(state.preparedIDs.length, 12); assert.equal(result.report.preflightDeferred, 12);
   assert.equal(result.report.requests, 0); assert.deepEqual(state.events, []);
 });
+
+test("video policy migration preserves old evidence without reinterpreting it as new approval", async () => {
+  const item = prompt("policy-migration", "video");
+  // The pre-0.4.1 cache contract had no video review policy discriminator.
+  const legacyIdentity = hash(JSON.stringify({ id: item.id, prompt: item.prompt, kind: item.kind, model: item.model,
+    contentType: item.contentType ?? "prompt", source: { url: item.source.url, repository: item.source.repository ?? null, license: item.source.license },
+    media: { image: null, video: null, imageURL: item.media!.imageURL, imageURLs: [], videoURL: item.media!.videoURL, demoURL: null } }));
+  const { run, state } = harness([item]);
+  await run();
+  const evidence = state.cache.decisions[visualReviewIdentity(item)];
+  state.cache = { version: 1, decisions: { [legacyIdentity]: { ...evidence, identity: legacyIdentity } } };
+  const result = await run({ provider: null });
+  assert.equal(result.prompts.length, 0);
+  assert.equal(result.report.cachedApproved, 0);
+  assert.equal(result.report.pending, 1);
+  assert.ok(state.cache.decisions[legacyIdentity], "Historical evidence is retained for audit");
+});

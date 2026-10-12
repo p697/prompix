@@ -55,4 +55,7 @@ YouMind OpenLab 公开的 [README 同步工作流](https://github.com/YouMind-Op
 
 官方入口核对：[Dreamina](https://dreamina.capcut.com/seedance/seedance-2-5)、[Google Flow](https://labs.google/fx/tools/flow)、[Runway](https://app.runwayml.com/)。API 依据：[X 开发者指南](https://docs.x.com/developer-guidelines)、[帖子批量查询](https://docs.x.com/x-api/posts/lookup/introduction)。
 
-本机第二轮运营额度：X 搜索 8 请求 / 400 帖每日；复查独立 2 请求 / 200 帖；编辑审核 32 请求、预览审核 12 请求每日。代码审核额度可配置上界调整到 40，默认仍为 4；已有 20 次编辑审核记录完整保留，只开放当天余下 12 次，不重置日期或失败记录。翻译本轮保持 120 请求上限。
+本机第二轮运营额度：X 搜索 8 请求 / 400 帖每日；复查独立 2 请求 / 200 帖；编辑审核 32 请求、预览审核 16 请求每日。代码审核额度可配置上界调整到 40，默认仍为 4；已有 20 次编辑审核记录完整保留，只开放当天余下 12 次，不重置日期或失败记录。翻译本轮保持 120 请求上限。
+
+
+第三轮实际校准：旧视频规则把完整时序/音频要求施加到六张采样帧，令相关视频持续暂缓。新规则区分画面相关性与完整执行证明，并使用新的审批身份重新核验。真实三例使用两次、21 个实际图片附件：香水广告画面相关性通过；服装错配仍拒绝；闽南语配音/口型同步因音频不可观测仍暂缓。旧证据与每日账本保留，没有把旧的 uncertain 改成 approved。
