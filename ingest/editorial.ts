@@ -2,6 +2,7 @@ import { z } from "zod";
 import { promptSchema } from "../packages/schema/catalog.ts";
 import type { Candidate } from "./sources.ts";
 import { isNativeXDraft } from "./x-intake.ts";
+import { isClawHubItem } from "./clawhub.ts";
 
 const https = z.url().refine((url) => new URL(url).protocol === "https:", "HTTPS required");
 // Picking from a refined object is rejected by Zod. Reuse the exact field
@@ -20,6 +21,7 @@ export const editorialMetadataSchema = z.object({
 }).strict();
 export const reviewsSchema = z.record(z.string(), z.object({
   fingerprint: z.string().regex(/^[a-f0-9]{64}$/),
+  sourceRevision: z.string().min(1).max(200).optional(),
   reviewedAt: z.iso.datetime(),
   metadata: editorialMetadataSchema,
 }));
@@ -32,7 +34,7 @@ export function applyEditorialReviews(items: Candidate[], reviews: Reviews): Can
     // quality. Every community item needs a review of its current source text.
     const baseline: Candidate = { ...item, reviewStatus: "draft" };
     const review = reviews[item.id];
-    if (!review || review.fingerprint !== item.fingerprint) return baseline;
+    if (!review || review.fingerprint !== item.fingerprint || (isClawHubItem(item) && review.sourceRevision !== item.source.revision)) return baseline;
     const { demoURL, imageURL, imageURLs, priority, ...metadata } = review.metadata;
     const updated: Candidate = {
       ...baseline,

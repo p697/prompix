@@ -16,6 +16,7 @@ import { download } from "./network.ts";
 import { discoverX } from "./x-discovery.ts";
 import { readXIntake } from "./x-intake.ts";
 import { collectSkill, skillRepositoryRevision, skillSources } from "./skills.ts";
+import { prepareClawHub, filterClawHubAvailability, assertClawHubAvailability } from "./clawhub-daily.ts";
 import { enrichCreators, mergeCreatorCache, mirrorCreatorAvatars, type CreatorCache } from "./creators.ts";
 import { publishAvatar } from "./creator-images.ts";
 import { refreshCreatorProfiles } from "./creator-refresh.ts";
@@ -66,6 +67,7 @@ async function run() {
     editorial?: EditorialReport;
     visualReview?: VisualReport;
     qualityHeldIDs?: string[];
+    registryWithheldIDs?: string[];
     counts: {
       candidates: KindCounts | null;
       reviewed: KindCounts | null;
@@ -85,6 +87,9 @@ async function run() {
   };
   try {
     const qualityHolds = await readQualityHolds(root);
+    // Registry availability must be fresh even when resuming a retained target.
+    const communitySkills = await prepareClawHub(root);
+    report.sources.clawhub = communitySkills.report;
     // Reconcile retained publication work before any collectors or paid models run.
     const publication = publishing ? await beginDailyPublication(root, { resumePublishing }) : await prepareDailyStaging(root);
     if (publication?.recovered) {
@@ -98,7 +103,7 @@ async function run() {
       return;
     }
     if (publication?.held !== undefined) { report.publicationHold = publication.held; return; }
-    const all: Candidate[] = [];
+    const all: Candidate[] = [...communitySkills.candidates];
     const creatorsPath = join(root, "creators.json");
     let creators = await json<CreatorCache>(creatorsPath, {});
     for (const source of [
@@ -329,7 +334,9 @@ async function run() {
     // A quality hold removes public discovery only, after retention can restore old snapshots.
     const visible = applyQualityHolds(retained.prompts, qualityHolds);
     report.qualityHeldIDs = visible.withheldIDs;
-    let complete = enrichCreators(visible.prompts, creators);
+    const registryVisible = filterClawHubAvailability(visible.prompts, communitySkills.state);
+    report.registryWithheldIDs = registryVisible.withheldIDs;
+    let complete = enrichCreators(registryVisible.prompts, creators);
     if (publishing) complete = await mirrorCreatorAvatars(complete, async url => {
       const mirrored = await publishAvatar(url, root, mediaMap, upload);
       await atomic(join(root, "media-map.json"), mediaMap);
@@ -404,6 +411,7 @@ async function run() {
     await atomic(manifestPath, manifest);
     if (publishing) {
       assertNoQualityHolds(stored, await readQualityHolds(root));
+      await assertClawHubAvailability(root, stored);
       await upload(
         `releases/${version}/catalog.json`,
         catalogPath,
@@ -411,6 +419,7 @@ async function run() {
       );
       await remoteCatalog(manifest);
       assertNoQualityHolds(stored, await readQualityHolds(root));
+      await assertClawHubAvailability(root, stored);
       // Activate LAST. Any earlier failure leaves clients on the previous complete edition.
       await upload("v1/latest.json", manifestPath, "application/json");
       await atomic(latestPath, manifest);

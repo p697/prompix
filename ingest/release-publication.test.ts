@@ -3,11 +3,12 @@ import assert from "node:assert/strict";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { catalogSchema, localizationLanguages, type Catalog, type Prompt } from "../packages/schema/catalog.ts";
-import { base, digest, editionVersion, manifestSchema, rollbackCatalog, serializeCatalog, type Manifest } from "./publication.ts";
+import { catalogSchema, promptSchema, localizationLanguages, type Catalog, type Prompt } from "../packages/schema/catalog.ts";
+import { atomic, base, digest, editionVersion, manifestSchema, rollbackCatalog, serializeCatalog, type Manifest } from "./publication.ts";
 import { splitLanguagePacks } from "./language-packs.ts";
 import { translationFingerprint } from "./translation.ts";
 import { loadPublicationState, PendingRemovalsError, preserveCatalogText, preservedRollbackCatalog, publicationIdentity, publishRelease, readLocalRelease, readPublishedState, resumePublication, stageRelease, type ReleaseTransport } from "./release-publication.ts";
+import { clawHubCandidateIdentity, clawHubSources, parseClawHubSkill } from "./clawhub.ts";
 
 const encode = (value: unknown) => Buffer.from(JSON.stringify(value) + "\n");
 function prompt(id: string): Prompt {
@@ -52,6 +53,122 @@ async function fixture() {
     cleanup: () => rm(root, { recursive: true, force: true }) };
 }
 const uploadCalls = (calls: string[]) => calls.filter(value => value.startsWith("upload:"));
+
+function registryPrompt(): Prompt {
+  const source = clawHubSources[0];
+  const bytes = Buffer.from("---\nname: fixture-skill\ndescription: An original publication test skill.\n---\nAsk for a fictional town and describe its imaginary library.");
+  const candidate = parseClawHubSkill(source, {
+    skill: { slug: source.slug, displayName: "Fixture skill" }, latestVersion: { version: "1.0.0", license: null },
+    owner: { handle: source.owner, userId: "fixture-author", displayName: "Fixture author" }, moderation: null,
+  }, {
+    skill: { slug: source.slug }, version: { version: "1.0.0", license: null,
+      files: [{ path: "SKILL.md", size: bytes.length, sha256: digest(bytes) }],
+      security: { status: "clean", hasWarnings: false, hasScanResult: true, scanners: {} } },
+  }, bytes);
+  const item = promptSchema.parse(candidate);
+  item.localization = prompt(item.id).localization;
+  item.localization!.sourceFingerprint = translationFingerprint(item);
+  return item;
+}
+async function registryState(root: string, item: Prompt, status: "ready" | "withheld" = "ready", stale = false) {
+  await atomic(join(root, "clawhub", "state.json"), { schemaVersion: 1, records: {
+    [item.id]: { status, identity: clawHubCandidateIdentity(item), checkedAt: new Date(Date.now() - (stale ? 25 * 3_600_000 : 0)).toISOString() },
+  } });
+}
+
+test("a ready registry skill preserves source identity and all locales through schema and dual publication", async () => {
+  const f = await fixture();
+  try {
+    const item = registryPrompt(), next = catalog([...f.original.prompts, item]);
+    const parsed = catalogSchema.parse(next).prompts.at(-1)!;
+    assert.equal(clawHubCandidateIdentity(parsed), clawHubCandidateIdentity(item));
+    await registryState(f.root, item);
+    const staged = await stageRelease(f.root, next, f.previous);
+    assert.equal(Object.keys(staged.targets.v2.locales).length, 9);
+    assert.deepEqual((await readLocalRelease(f.root, next.version)).prompts.at(-1), item);
+    const published = await publishRelease(f.root, staged, f.previous.observed, { operation: "daily" }, f.transport);
+    assert.deepEqual(published.authoritative.prompts.at(-1), item);
+    assert.deepEqual(published.v1.catalog.prompts.at(-1), item);
+    assert.equal(clawHubCandidateIdentity(published.authoritative.prompts.at(-1)!), clawHubCandidateIdentity(item));
+    assert.deepEqual(published.authoritative.removedIDs, []);
+  } finally { await f.cleanup(); }
+});
+
+for (const unavailable of ["withheld", "stale"] as const) test(`a ${unavailable} registry skill cannot stage artifacts or activate pointers`, async () => {
+  const f = await fixture();
+  try {
+    const item = registryPrompt(), next = catalog([...f.original.prompts, item]);
+    await registryState(f.root, item, unavailable === "withheld" ? "withheld" : "ready", unavailable === "stale");
+    const before = new Map(f.files);
+    await assert.rejects(stageRelease(f.root, next, f.previous), /ClawHub source is unavailable/);
+    assert.deepEqual(f.files, before);
+    assert.deepEqual(uploadCalls(f.calls), []);
+    assert.equal((await loadPublicationState(f.root)).pending, undefined);
+    await assert.rejects(readFile(join(f.root, "releases", next.version, "catalog.json")), { code: "ENOENT" });
+  } finally { await f.cleanup(); }
+});
+
+for (const operation of ["daily", "rollback"] as const) for (const unavailable of ["withheld", "stale"] as const)
+  test(`pending ${operation} refuses a now-${unavailable} registry skill before any pointer activation`, async () => {
+    const f = await fixture();
+    try {
+      const item = registryPrompt(), next = catalog([...f.original.prompts, item]);
+      await registryState(f.root, item);
+      const staged = await stageRelease(f.root, next, f.previous);
+      f.beforeUpload(key => { if (key.endsWith("/v2/base.json")) throw new Error("Synthetic interrupted artifact upload"); });
+      await assert.rejects(publishRelease(f.root, staged, f.previous.observed,
+        { operation, beforeActivation: async () => {} }, f.transport), /interrupted artifact upload/);
+      const pending = (await loadPublicationState(f.root)).pending;
+      assert.equal(pending?.operation, operation);
+      const pointers = [f.files.get(`${base}/v1/latest.json`), f.files.get(`${base}/v2/latest.json`)];
+      await registryState(f.root, item, unavailable === "withheld" ? "withheld" : "ready", unavailable === "stale");
+      f.beforeUpload(); f.calls.length = 0;
+      let activationHookCalls = 0;
+      await assert.rejects(resumePublication(f.root, { beforeActivation: async () => { activationHookCalls++; } }, f.transport), /ClawHub source is unavailable/);
+      assert.equal(activationHookCalls, 0);
+      assert.deepEqual(uploadCalls(f.calls), []);
+      assert.deepEqual([f.files.get(`${base}/v1/latest.json`), f.files.get(`${base}/v2/latest.json`)], pointers);
+      assert.deepEqual((await loadPublicationState(f.root)).pending, pending, "The immutable pending intent remains available for explicit recovery");
+    } finally { await f.cleanup(); }
+  });
+
+test("registry availability is rechecked after activation hooks before either latest pointer changes", async () => {
+  const f = await fixture();
+  try {
+    const item = registryPrompt(), next = catalog([...f.original.prompts, item]);
+    await registryState(f.root, item);
+    const staged = await stageRelease(f.root, next, f.previous);
+    const previousPointer = Buffer.from(f.files.get(`${base}/v1/latest.json`)!);
+    await assert.rejects(publishRelease(f.root, staged, f.previous.observed, { operation: "daily",
+      beforeActivation: () => registryState(f.root, item, "withheld"),
+    }, f.transport), /ClawHub source is unavailable/);
+    assert.deepEqual(f.files.get(`${base}/v1/latest.json`), previousPointer);
+    assert.equal(f.files.has(`${base}/v2/latest.json`), false);
+    assert.equal(uploadCalls(f.calls).some(key => key.endsWith("latest.json")), false);
+  } finally { await f.cleanup(); }
+});
+
+test("frozen v1 drops unavailable historical registry skills without creating removal tombstones", async () => {
+  const f = await fixture();
+  try {
+    const item = registryPrompt(), original = catalog([...f.original.prompts, item], ["historical-removal"]);
+    await registryState(f.root, item);
+    const first = await stageRelease(f.root, original, f.previous);
+    await publishRelease(f.root, first, f.previous.observed, { operation: "daily" }, f.transport);
+    await atomic(join(f.root, "publication-state.json"), { schemaVersion: 1, v2Initialized: true, v1Frozen: true });
+    const previous = await readPublishedState(f.root, {}, f.transport);
+    assert.equal(previous.state.v1Frozen, true);
+    await registryState(f.root, item, "withheld");
+    const next = catalog([...f.original.prompts, prompt("v2-only-addition")], ["historical-removal"]);
+    const staged = await stageRelease(f.root, next, previous);
+    const published = await publishRelease(f.root, staged, previous.observed, { operation: "daily" }, f.transport);
+    assert.equal(published.state.v1Frozen, true);
+    assert.deepEqual(published.v1.catalog.prompts, f.original.prompts);
+    assert.deepEqual(published.v1.catalog.removedIDs, ["historical-removal"]);
+    assert.deepEqual(published.authoritative, next);
+    assert.equal(published.authoritative.removedIDs!.includes(item.id), false);
+  } finally { await f.cleanup(); }
+});
 
 test("bootstrap stages without activating, uploads complete artifacts first and initializes both channels", async () => {
   const f = await fixture();

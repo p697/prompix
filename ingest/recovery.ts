@@ -6,6 +6,7 @@ import { assertPublicationReconciled, defaultReleaseTransport, loadPublicationSt
 import { languagePackPublishingEnabled } from "./daily-publication.ts";
 import { recoveryPublicationHooks, verifyRecoveryMedia as verifyMedia } from "./recovery-publication.ts";
 import { assertNoQualityHolds, readQualityHolds } from "./quality-holds.ts";
+import { assertClawHubAvailability } from "./clawhub-daily.ts";
 
 export interface RecoveryTransport {
   currentManifest: typeof currentManifest;
@@ -64,6 +65,7 @@ export async function recoverRelease(root: string, version: string, publishing: 
     const moderation = moderationSchema.parse(await json(join(root, "moderation.json"), { removedIDs: [] }));
     const catalog = rollbackCatalog(target, [...(current.removedIDs ?? []), ...moderation.removedIDs]);
     assertNoQualityHolds(catalog, await readQualityHolds(root));
+    await assertClawHubAvailability(root, catalog);
     const release = join(root, "releases", catalog.version);
     const catalogPath = join(release, "catalog.json");
     // Check actual immutable bytes before media probes, uploads, hold or latest changes.
@@ -75,11 +77,13 @@ export async function recoverRelease(root: string, version: string, publishing: 
     if (!publishing) return;
     // Fail before changing latest if the older release has missing remote previews.
     await transport.verifyMedia(stored);
+    await assertClawHubAvailability(root, stored);
     await transport.upload(`releases/${stored.version}/catalog.json`, catalogPath, "application/json");
     await transport.remoteCatalog(manifest);
     const active = await transport.currentManifest();
     if (active.version !== before.version || active.sha256 !== before.sha256) throw new Error("Active edition changed during rollback");
     assertNoQualityHolds(stored, await readQualityHolds(root));
+    await assertClawHubAvailability(root, stored);
     // Persist removals and the hold before activation, including on an ambiguous upload response.
     moderation.removedIDs = stored.removedIDs ?? [];
     await atomic(join(root, "moderation.json"), moderation);

@@ -7,6 +7,8 @@ import { repositories, videoArchive, type Candidate } from "./sources.ts";
 import { skillSources } from "./skills.ts";
 import { lockContent } from "./publication.ts";
 import { isNativeXDraft } from "./x-intake.ts";
+import { isClawHubItem } from "./clawhub.ts";
+import { assertClawHubAvailability } from "./clawhub-daily.ts";
 
 const [id, metadataFile] = process.argv.slice(2);
 if (!id || !/^[a-z0-9-]+$/.test(id) || !metadataFile)
@@ -20,7 +22,7 @@ if (!relativeRoot || (!relativeRoot.startsWith("..") && !isAbsolute(relativeRoot
 const unlock = await lockContent(root);
 try {
 let candidate: Candidate | undefined;
-for (const source of [...repositories.map((source) => source.id), "prompts-chat", "x-native", videoArchive.id, ...skillSources.map(source => `skill-${source.id}`)]) {
+for (const source of [...repositories.map((source) => source.id), "prompts-chat", "x-native", "clawhub-community", videoArchive.id, ...skillSources.map(source => `skill-${source.id}`)]) {
   try {
     const items: Candidate[] = JSON.parse(await readFile(join(root, "candidates", `${source}.json`), "utf8"));
     candidate = items.find((item) => item.id === id);
@@ -28,12 +30,14 @@ for (const source of [...repositories.map((source) => source.id), "prompts-chat"
   } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
 }
 if (!candidate) throw new Error("Candidate not found; collect its allowlisted source first");
+await assertClawHubAvailability(root, { prompts: [candidate] });
 const metadata = editorialMetadataSchema.parse(JSON.parse(await readFile(resolve(metadataFile), "utf8")));
 const file = join(root, "editorial.json");
 let reviews = reviewsSchema.parse({});
 try { reviews = reviewsSchema.parse(JSON.parse(await readFile(file, "utf8"))); }
 catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
-reviews[id] = { fingerprint: candidate.fingerprint, reviewedAt: new Date().toISOString(), metadata };
+reviews[id] = { fingerprint: candidate.fingerprint, reviewedAt: new Date().toISOString(), metadata,
+  ...(isClawHubItem(candidate) ? { sourceRevision: candidate.source.revision } : {}) };
 const approved = applyEditorialReviews([candidate], reviews)[0];
 if (approved.reviewStatus !== "candidate" && !isNativeXDraft(candidate)) throw new Error("Website review requires both a working demo URL and a real preview image URL");
 await writeFile(`${file}.tmp`, JSON.stringify(reviews, null, 2) + "\n");
