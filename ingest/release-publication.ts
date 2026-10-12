@@ -1,7 +1,7 @@
 import { readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { z } from "zod";
-import { catalogSchema, localizationLanguages, type Catalog } from "../packages/schema/catalog.ts";
+import { catalogSchema, localizationLanguages, type Catalog, type Prompt } from "../packages/schema/catalog.ts";
 import { languagePackManifestSchema, languagePackManifestByteLimit, languagePackByteLimit, type LanguagePackManifest } from "../packages/schema/language-packs.ts";
 import { joinLanguagePacks, splitLanguagePacks, verifyLanguagePackManifest, type LocaleBytes } from "./language-packs.ts";
 import { atomic, base, digest, editionVersion, manifestSchema, upload, verifyCatalog, verifyManifest, writeImmutableBytes, type Manifest } from "./publication.ts";
@@ -58,6 +58,10 @@ function stable(value: unknown): unknown {
 }
 /** Formatting-independent identity, also usable for an authorized hold snapshot. */
 export function publicationIdentity(value: unknown): string { return digest(Buffer.from(JSON.stringify(stable(value)))); }
+/** Raw v2 content must not reuse legacy IDs computed before the v1 writer trimmed text. */
+export function languagePackEditionVersion(prompts: readonly Prompt[], removedIDs: readonly string[]): string {
+  return `edition-v2-${publicationIdentity({ prompts, removedIDs: [...new Set(removedIDs)].sort() }).slice(0, 16)}`;
+}
 function originalValues(raw: unknown, parsed: unknown): unknown {
   if (Array.isArray(parsed)) return parsed.map((value, index) => originalValues((raw as unknown[])[index], value));
   if (parsed && typeof parsed === "object") return Object.fromEntries(Object.entries(parsed)

@@ -30,7 +30,7 @@ import { aspectRatio, prepareJPEG, publishStudioImages } from "./images.ts";
 import { publicationText } from "./templates.ts";
 import { countByKind, interleaveLibrary, libraryDelta, retainPublishedLibrary, selectLibrary, type KindCounts, type RetentionReport } from "./library.ts";
 import { beginDailyPublication, clearMatchingPublicationHold, prepareDailyStaging, publishDailyCatalog } from "./daily-publication.ts";
-import { preserveCatalogText, stageRelease } from "./release-publication.ts";
+import { languagePackEditionVersion, preserveCatalogText, stageRelease } from "./release-publication.ts";
 const publishing = process.argv.includes("--publish");
 const resumePublishing = process.argv.includes("--resume-publishing");
 if (resumePublishing && !publishing) throw new Error("--resume-publishing requires --publish");
@@ -340,7 +340,7 @@ async function run() {
       throw new Error(
         "Too few verified community previews; current release preserved",
       );
-    const version = editionVersion(prompts, moderation.removedIDs);
+    const version = (publication.enabled ? languagePackEditionVersion : editionVersion)(prompts, moderation.removedIDs);
     const latestPath = join(root, "latest.json");
     if (publishing && !publication?.enabled && previousManifest?.version === version) {
       const active = await currentManifest();
