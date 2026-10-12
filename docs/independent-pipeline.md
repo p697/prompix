@@ -54,3 +54,5 @@ X 原生稿的来源展示、可用性重查、删除同步及发布审核仍未
 - 本轮部署与真实发布结果在 `content-operations.md` 另行记录，代码允许发布不代表候选已通过预览审核。
 
 官方入口核对：[Dreamina](https://dreamina.capcut.com/seedance/seedance-2-5)、[Google Flow](https://labs.google/fx/tools/flow)、[Runway](https://app.runwayml.com/)。API 依据：[X 开发者指南](https://docs.x.com/developer-guidelines)、[帖子批量查询](https://docs.x.com/x-api/posts/lookup/introduction)。
+
+本机第二轮运营额度：X 搜索 8 请求 / 400 帖每日；复查独立 2 请求 / 200 帖；编辑审核 32 请求、预览审核 12 请求每日。代码审核额度可配置上界调整到 40，默认仍为 4；已有 20 次编辑审核记录完整保留，只开放当天余下 12 次，不重置日期或失败记录。翻译本轮保持 120 请求上限。
