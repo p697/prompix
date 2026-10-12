@@ -458,6 +458,61 @@ import XCTest
         app.buttons["copyInstallCommand"].tap()
     }
 
+    func testWebsitePrefillHandoff() throws {
+        guard ProcessInfo.processInfo.environment["PROMPIX_MOBILE_HANDOFF_ACCEPTANCE"] == "1" else {
+            throw XCTSkip("Dedicated simulator verifies the public website Prompt handoff.")
+        }
+        let directory = try acceptanceDirectory()
+        let drafts = try? Data(contentsOf: directory.appendingPathComponent("drafts.json"))
+        let saved = try readSnapshot([String: String].self, from: directory, file: "drafts.json")
+        XCTAssertFalse(saved.keys.contains { $0 == "quiet-portfolio" || $0.hasPrefix("quiet-portfolio::") }, "Use an original public Prompt, never a personal draft, for external handoff acceptance.")
+        launch()
+        app.buttons["kind-web"].tap()
+        let card = app.buttons["prompt-quiet-portfolio"]
+        reveal(card); card.tap()
+        let language = app.buttons["contentLanguage"]
+        if language.exists {
+            language.tap()
+            app.buttons["contentLanguage-original"].tap()
+        }
+        app.buttons["usePrompt"].tap()
+        let choice = app.buttons["destination-lovable"]
+        reveal(choice); choice.tap()
+        XCTAssertTrue(choice.isSelected)
+        let open = app.buttons["handoffOpen"]
+        XCTAssertTrue(open.label.contains("打开并填入"))
+        capture("mobile-01-website-prefill-choice")
+        open.tap()
+        app.activate()
+        XCTAssertFalse(app.staticTexts["handoffOpenError"].exists)
+        XCTAssertEqual(try? Data(contentsOf: try acceptanceDirectory().appendingPathComponent("drafts.json")), drafts)
+        capture("mobile-02-return-with-full-copy")
+    }
+
+    func testSkillMobileCodeHandoff() throws {
+        guard ProcessInfo.processInfo.environment["PROMPIX_MOBILE_HANDOFF_ACCEPTANCE"] == "1" else {
+            throw XCTSkip("Dedicated simulator verifies the official Skill's Code composer handoff.")
+        }
+        let directory = try acceptanceDirectory()
+        let drafts = try? Data(contentsOf: directory.appendingPathComponent("drafts.json"))
+        launch()
+        app.buttons["searchButton"].tap()
+        let search = app.searchFields.firstMatch
+        XCTAssertTrue(search.waitForExistence(timeout: 5)); search.tap(); search.typeText("Supabase")
+        let card = app.scrollViews["searchResults"].buttons["prompt-skill-publisher-supabase-supabase"]
+        reveal(card); card.tap()
+        app.buttons["usePrompt"].tap()
+        let code = app.buttons["skillCodeOpen"]
+        XCTAssertTrue(code.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["skillCodeGuidance"].exists)
+        XCTAssertTrue(app.buttons["copyInstallCommand"].exists)
+        capture("mobile-03-skill-code-and-copy")
+        code.tap()
+        app.activate()
+        XCTAssertFalse(app.staticTexts["handoffOpenError"].exists)
+        XCTAssertEqual(try? Data(contentsOf: try acceptanceDirectory().appendingPathComponent("drafts.json")), drafts)
+    }
+
     func testPublisherSkillPackages() throws {
         guard ProcessInfo.processInfo.environment["PROMPIX_PUBLISHER_ACCEPTANCE"] == "1" else {
             throw XCTSkip("Requires live reviewed publisher packages on the dedicated simulator.")

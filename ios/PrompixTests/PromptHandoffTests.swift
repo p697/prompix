@@ -15,6 +15,67 @@ final class PromptHandoffTests: XCTestCase {
         XCTAssertEqual(Set(choices.map(\.url.host)).count, 3)
         XCTAssertTrue(choices.allSatisfy { !($0.url.query ?? "").contains("Write") })
     }
+    func testWebsiteDestinationsKeepChatAndCodeDistinct() {
+        let choices = PromptDestination.choices(for: item(kind: .web))
+        XCTAssertTrue(choices.contains { $0.id == "claude" && !$0.supportsPrefill })
+        XCTAssertTrue(choices.contains(PromptDestination.claudeCode))
+        XCTAssertLessThan(choices.firstIndex(of: .lovable)!, choices.firstIndex { $0.id == "claude" }!)
+        XCTAssertTrue(choices.contains(PromptDestination.lovable))
+        XCTAssertEqual(Set(choices.map(\.id)).count, choices.count)
+        XCTAssertFalse(PromptDestination.choices(for: item(kind: .image)).contains(PromptDestination.claudeCode))
+        XCTAssertFalse(PromptDestination.choices(for: item()).contains(PromptDestination.lovable))
+    }
+    func testComposerLinksPreserveUnicodeAndDelimitersWithoutSubmittingOrChoosingARepository() throws {
+        let original = "  Original + prompt & repo=wrong/project #anchor? \n 日本語 café 100% \t"
+        for destination in [PromptDestination.claudeCode, .lovable] {
+            let transfer = destination.transfer(original)
+            XCTAssertTrue(transfer.includesPrompt)
+            XCTAssertEqual(transfer.text, original)
+            let parts = try XCTUnwrap(URLComponents(url: transfer.url, resolvingAgainstBaseURL: false))
+            let payload: String
+            if destination.id == "claude-code" {
+                XCTAssertEqual(parts.queryItems?.map(\.name), ["q"])
+                XCTAssertEqual(parts.queryItems?.first?.value, original)
+                XCTAssertNil(parts.fragment)
+                payload = String(try XCTUnwrap(parts.percentEncodedQuery).dropFirst(2))
+            } else {
+                XCTAssertNil(parts.query)
+                let fragment = try XCTUnwrap(parts.percentEncodedFragment)
+                XCTAssertTrue(fragment.hasPrefix("prompt="))
+                payload = String(fragment.dropFirst("prompt=".count))
+            }
+            XCTAssertEqual(payload.removingPercentEncoding, original)
+            XCTAssertFalse(payload.contains("+"))
+            XCTAssertFalse(payload.contains("&"))
+            XCTAssertFalse(transfer.url.absoluteString.contains("autosubmit"))
+        }
+    }
+    func testPrefillBoundNeverTruncatesLongContentAndAccountsForEncodedBytes() {
+        let destination = PromptDestination.claudeCode
+        let prefix = "https://claude.ai/code/new?q="
+        let exact = String(repeating: "a", count: PromptDestination.maximumPrefillURLBytes - prefix.utf8.count)
+        XCTAssertTrue(destination.transfer(exact).includesPrompt)
+        for original in [exact + "b", String(repeating: "文", count: 1_000)] {
+            let transfer = destination.transfer(original)
+            XCTAssertFalse(transfer.includesPrompt)
+            XCTAssertEqual(transfer.url, destination.url)
+            XCTAssertEqual(transfer.text, original)
+        }
+        XCTAssertFalse(destination.transfer(" \n ").includesPrompt)
+    }
+    func testUnsupportedDestinationsNeverReceiveTextInTheirURL() {
+        for destination in [
+            PromptDestination(id: "claude", name: "Claude", url: URL(string: "https://claude.ai/new")!),
+            .init(id: "claude-code", name: "Claude Code", url: URL(string: "https://example.com/code/new")!),
+            .init(id: "lovable", name: "Lovable", url: URL(string: "https://lovable.dev/projects/existing")!),
+            .init(id: "lovable", name: "Lovable", url: URL(string: "https://lovable.dev/?existing=value")!)
+        ] {
+            let transfer = destination.transfer("Original local draft")
+            XCTAssertFalse(transfer.includesPrompt)
+            XCTAssertEqual(transfer.url, destination.url)
+            XCTAssertEqual(transfer.text, "Original local draft")
+        }
+    }
     func testVideoDoesNotInventAnUnsupportedChatToolAndUnsafeLinksAreOmitted() {
         XCTAssertTrue(PromptDestination.choices(for: item(kind: .video, url: nil)).isEmpty)
         for url in ["javascript:alert(1)", "https://name:password@example.com/", "https://example.com:8443/"] {

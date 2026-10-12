@@ -5,6 +5,34 @@ struct PromptDestination: Identifiable, Equatable {
     let name: String
     let url: URL
 
+    static let claudeCode = Self(id: "claude-code", name: "Claude Code", url: URL(string: "https://claude.ai/code/new")!)
+    static let lovable = Self(id: "lovable", name: "Lovable", url: URL(string: "https://lovable.dev/")!)
+    // A conservative transport bound, not the provider's maximum prompt length.
+    static let maximumPrefillURLBytes = 8_192
+    struct Transfer: Equatable {
+        let url: URL
+        let text: String
+        let includesPrompt: Bool
+    }
+    private var prefillPrefix: String? {
+        if self == Self.claudeCode { return "https://claude.ai/code/new?q=" }
+        if id == "lovable", url.host == "lovable.dev", ["", "/"].contains(url.path),
+           url.query == nil, url.fragment == nil, Self.isSafeURL(url) { return "https://lovable.dev/#prompt=" }
+        return nil
+    }
+    var supportsPrefill: Bool { prefillPrefix != nil }
+    /// Official composer links only. Never submit, shorten the text, or select a repository for the user.
+    func transfer(_ text: String) -> Transfer {
+        let fallback = Transfer(url: url, text: text, includesPrompt: false)
+        guard let prefix = prefillPrefix, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              text.utf8.count <= Self.maximumPrefillURLBytes else { return fallback }
+        let unreserved = CharacterSet(charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~")
+        guard let encoded = text.addingPercentEncoding(withAllowedCharacters: unreserved),
+              (prefix + encoded).utf8.count <= Self.maximumPrefillURLBytes,
+              let target = URL(string: prefix + encoded) else { return fallback }
+        return Transfer(url: target, text: text, includesPrompt: true)
+    }
+
     static func requiresDesktop(for item: Prompt) -> Bool {
         item.kind == .video && item.model.localizedCaseInsensitiveContains("Remotion")
     }
@@ -24,6 +52,10 @@ struct PromptDestination: Identifiable, Equatable {
             let identity = known[url.host ?? ""]
             choices.append(.init(id: identity?.0 ?? "source:\(url.host ?? "")", name: identity?.1 ?? item.displayModel, url: url))
         }
+        if item.kind == .web {
+            if !choices.contains(where: { $0.id == Self.lovable.id }) { choices.append(Self.lovable) }
+            choices.append(Self.claudeCode)
+        }
         // Alternatives reflect supported tasks, not a promise of identical model output.
         let common: [(String, String, String)]
         switch item.kind {
@@ -36,7 +68,7 @@ struct PromptDestination: Identifiable, Equatable {
         }
         for (id, name, address) in common {
             let url = URL(string: address)!
-            if !choices.contains(where: { $0.url.host == url.host }) { choices.append(.init(id: id, name: name, url: url)) }
+            if !choices.contains(where: { $0.id == id }) { choices.append(.init(id: id, name: name, url: url)) }
         }
         return choices
     }

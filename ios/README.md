@@ -1,6 +1,6 @@
 # Prompix for iOS
 
-Native SwiftUI app, iOS 17+. Development version **0.4.3 (14)** adds original X posts, verified creator links, model-specific tool destinations and the native Prompt/Skill use sheet. Current production has 422 items and 32 Skills. This iteration uses only the dedicated simulator; no user phone installation. Reply workflows separately attribute the instruction post, ancestor context and media owner; the shared strict codec validates the entire chain. Remotion video workflows show desktop prerequisites and copy/share actions. See the [independent pipeline](../docs/independent-pipeline.md) for source and language coverage.
+Native SwiftUI app, iOS 17+. Development version **0.4.5 (16)** adds documented website prefill links and mobile Claude Code handoff for pinned Skill commands, while retaining original X posts, verified creator links and copy/share fallback. Current production has 448 items and 42 Skills. This iteration uses only the dedicated simulator; no user phone installation. Reply workflows separately attribute the instruction post, ancestor context and media owner; the shared strict codec validates the entire chain. Remotion video workflows show desktop prerequisites and copy/share actions. See the [independent pipeline](../docs/independent-pipeline.md) for source and language coverage.
 
 Version 0.3.3 (10) refines discovery density, pinned kind navigation, compact creator discovery, native card context menus and motion-aware detail transitions. See the [visual review](../docs/design-polish-2026-10.md). It has not been signed or installed on a user device.
 
@@ -162,3 +162,5 @@ existing `Catalog` model. An earlier external native harness reconstructed all
 separate from the Library/pruning integration runs and the passing live UI journeys.
 See the [protocol migration record](../docs/content-protocol-v2.md) for evidence
 and the remaining physical-device acceptance.
+
+Version 0.4.5 adds documented Lovable and Claude Code composer links for website prompts, plus a Code composer action for verified pinned Skill installation commands. Every open retains the complete clipboard text. URL payloads use strict UTF-8 percent encoding and a conservative 8192-byte transport bound; longer text falls back without truncation. No repository, branch or automatic-send parameter is supplied. Nine-language UI guidance distinguishes account prerequisites, prefill and copy fallback. Browser verification is not evidence of installed native Claude behavior; device acceptance remains a release gate.

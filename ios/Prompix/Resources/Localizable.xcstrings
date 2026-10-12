@@ -13868,6 +13868,470 @@
           }
         }
       }
+    },
+    "复制安装命令到编程助手，或在手机上的 Claude Code 中继续。完整文件夹会一并获取。": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "复制安装命令到编程助手，或在手机上的 Claude Code 中继续。完整文件夹会一并获取。"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copy the install command to a coding assistant, or continue in Claude Code on your phone. The full folder is included."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "複製安裝指令到程式助理，或在手機上的 Claude Code 中繼續。完整資料夾會一併取得。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "インストールコマンドをコーディングアシスタントにコピーするか、スマートフォンの Claude Code で続けます。フォルダ全体が取得されます。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "설치 명령을 코딩 도우미에 복사하거나 휴대폰의 Claude Code에서 계속하세요. 전체 폴더가 함께 제공됩니다."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copia el comando en un asistente de programación o continúa en Claude Code desde el móvil. Se incluye la carpeta completa."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copie o comando para um assistente de programação ou continue no Claude Code pelo celular. A pasta completa está incluída."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copiez la commande dans un assistant de programmation ou continuez dans Claude Code sur votre téléphone. Le dossier complet est inclus."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kopiere den Installationsbefehl in einen Programmierassistenten oder fahre in Claude Code auf deinem Smartphone fort. Der vollständige Ordner wird übernommen."
+          }
+        }
+      }
+    },
+    "内容将填入目标工具，由你确认发送。参考图片和文件需另行添加。": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "内容将填入目标工具，由你确认发送。参考图片和文件需另行添加。"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The text opens ready to send. Review it in the destination tool before sending. Add reference images and files separately."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "內容將填入目標工具，由你確認傳送。參考圖片和檔案需另外加入。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "内容が入力欄に入ります。送信先のツールで確認してから送信してください。参考画像やファイルは別途追加してください。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "내용이 대상 도구에 입력됩니다. 확인 후 직접 전송하세요. 참고 이미지와 파일은 별도로 추가해야 합니다."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El texto se abrirá listo para enviar. Revísalo antes de enviarlo. Añade las imágenes y los archivos de referencia por separado."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O texto será preenchido na ferramenta. Confira antes de enviar. Adicione imagens e arquivos de referência separadamente."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le texte sera prérempli dans l’outil. Vérifiez-le avant de l’envoyer. Ajoutez les images et fichiers de référence séparément."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Text wird im Zieltool eingefügt. Prüfe ihn vor dem Senden. Füge Referenzbilder und Dateien separat hinzu."
+          }
+        }
+      }
+    },
+    "内容较长，将复制全文；打开工具后粘贴即可。": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "内容较长，将复制全文；打开工具后粘贴即可。"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This text is long. The full text will be copied so you can paste it after opening the tool."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "內容較長，將複製全文；開啟工具後貼上即可。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "内容が長いため、全文をコピーします。ツールを開いてから貼り付けてください。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "내용이 길어 전문을 복사합니다. 도구를 연 후 붙여넣으세요."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El texto es largo. Se copiará completo para que lo pegues al abrir la herramienta."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O texto é longo. Ele será copiado por completo para você colar após abrir a ferramenta."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le texte est long. Il sera copié en entier pour que vous puissiez le coller après avoir ouvert l’outil."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Text ist lang. Er wird vollständig kopiert, damit du ihn nach dem Öffnen des Tools einfügen kannst."
+          }
+        }
+      }
+    },
+    "需要 Claude Code 权限，并在目标工具中选择你的项目。": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "需要 Claude Code 权限，并在目标工具中选择你的项目。"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Requires Claude Code access. Choose your own project in the destination tool."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "需要 Claude Code 權限，並在目標工具中選擇你的專案。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Claude Code を利用できるアカウントが必要です。移動先で自分のプロジェクトを選択してください。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Claude Code 이용 권한이 필요합니다. 대상 도구에서 본인의 프로젝트를 선택하세요."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Requiere acceso a Claude Code. Elige tu propio proyecto en la herramienta de destino."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "É necessário ter acesso ao Claude Code. Escolha seu próprio projeto na ferramenta de destino."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "L’accès à Claude Code est requis. Choisissez votre propre projet dans l’outil de destination."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Claude-Code-Zugriff erforderlich. Wähle im Zieltool dein eigenes Projekt aus."
+          }
+        }
+      }
+    },
+    "在 Claude Code 中准备安装": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在 Claude Code 中准备安装"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Prepare installation in Claude Code"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在 Claude Code 中準備安裝"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Claude Code でインストールを準備"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Claude Code에서 설치 준비"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Preparar la instalación en Claude Code"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Preparar instalação no Claude Code"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Préparer l’installation dans Claude Code"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Installation in Claude Code vorbereiten"
+          }
+        }
+      }
+    },
+    "在手机上继续": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在手机上继续"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Continue on your phone"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在手機上繼續"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "スマートフォンで続ける"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "휴대폰에서 계속"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Continuar en el móvil"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Continuar no celular"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Continuer sur votre téléphone"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Auf dem Smartphone fortfahren"
+          }
+        }
+      }
+    },
+    "需要 Claude Code 权限。安装命令会填入输入框，请选择自己的项目并确认发送。": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "需要 Claude Code 权限。安装命令会填入输入框，请选择自己的项目并确认发送。"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Requires Claude Code access. The install command opens in the composer. Choose your own project and review it before sending."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "需要 Claude Code 權限。安裝指令會填入輸入框，請選擇自己的專案並確認傳送。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Claude Code を利用できるアカウントが必要です。インストールコマンドが入力欄に入ります。自分のプロジェクトを選び、確認してから送信してください。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Claude Code 이용 권한이 필요합니다. 설치 명령이 입력창에 채워집니다. 본인의 프로젝트를 선택하고 확인 후 전송하세요."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Requiere acceso a Claude Code. El comando se rellenará en el cuadro de texto. Elige tu propio proyecto y revísalo antes de enviarlo."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "É necessário ter acesso ao Claude Code. O comando será preenchido no campo de texto. Escolha seu próprio projeto e confira antes de enviar."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "L’accès à Claude Code est requis. La commande sera préremplie. Choisissez votre propre projet et vérifiez-la avant de l’envoyer."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Claude-Code-Zugriff erforderlich. Der Installationsbefehl wird eingefügt. Wähle dein eigenes Projekt und prüfe ihn vor dem Senden."
+          }
+        }
+      }
+    },
+    "打开并填入": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "打开并填入"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open with prompt"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "開啟並填入"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "内容を入力して開く"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "내용을 채워 열기"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Abrir con el prompt"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Abrir com o prompt"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ouvrir avec le prompt"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mit Prompt öffnen"
+          }
+        }
+      }
     }
   },
   "version": "1.0"
