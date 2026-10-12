@@ -15,7 +15,9 @@
     "quality:hold": "tsx ingest/quality-hold.ts",
     "check:deployment": "tsx scripts/check-deployment.ts",
     "review": "tsx ingest/review.ts",
-    "rollback": "tsx ingest/rollback.ts"
+    "rollback": "tsx ingest/rollback.ts",
+    "collect:x": "tsx ingest/x-feed-cli.ts",
+    "collect:skills": "tsx ingest/skill-intake.ts"
   },
   "dependencies": {
     "csv-parse": "^7.0.3",

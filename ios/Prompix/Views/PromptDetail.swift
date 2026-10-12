@@ -8,6 +8,7 @@ struct PromptDetail: View {
     private let origin: PromptDetailOrigin
     @Environment(Library.self) private var library
     @State private var editorContext: EditorContext?
+    @State private var useContext: UseContext?
     @State private var imagePresented = false
     @State private var playerPresented = false
     @State private var copied = false
@@ -19,6 +20,12 @@ struct PromptDetail: View {
     @State private var languageRequestID: UUID?
     @State private var languageTask: Task<Void, Never>?
     @State private var fullPrompt = false
+    private struct UseContext: Identifiable {
+        let id = UUID()
+        let item: Prompt
+        let text: String
+        let title: String
+    }
     private struct EditorContext: Identifiable {
         let id = UUID()
         let item: Prompt
@@ -107,8 +114,8 @@ struct PromptDetail: View {
                     if WebsiteExamples.files[item.id] != nil {
                         Button { webPresented = true } label: { Label(String(localized: "打开原创网页示例"), systemImage: "safari").frame(minHeight: 44).contentShape(Rectangle()) }.accessibilityIdentifier("webExample")
                     }
-                    if let toolURL = item.toolURL {
-                        Link(destination: toolURL) {
+                    if !item.isSkill {
+                        Button { openUseSheet() } label: {
                             HStack {
                                 VStack(alignment: .leading, spacing: 5) {
                                     Text(String(localized: "使用方法")).font(.subheadline.weight(.medium))
@@ -159,9 +166,14 @@ struct PromptDetail: View {
                     UIPasteboard.general.string = content.prompt
                     copied = true
                 } label: {
-                    PrimaryActionLabel(title: copied ? String(localized: "已复制") : item.isSkill ? String(localized: "复制 Skill") : String(localized: "复制 Prompt"),
-                        compactTitle: copied ? String(localized: "已复制") : String(localized: "复制"), symbol: copied ? "checkmark" : "doc.on.doc")
-                }.buttonStyle(.plain).accessibilityIdentifier("copyPrompt").sensoryFeedback(.success, trigger: copied)
+                    Image(systemName: copied ? "checkmark" : "doc.on.doc").font(.system(size: 19)).frame(width: 50, height: 50)
+                }.buttonStyle(.plain).background(Palette.surface, in: Circle())
+                    .accessibilityLabel(copied ? String(localized: "已复制") : String(localized: "复制 Prompt"))
+                    .accessibilityIdentifier("copyPrompt").sensoryFeedback(.success, trigger: copied)
+                Button { openUseSheet() } label: {
+                    PrimaryActionLabel(title: item.isSkill ? String(localized: "使用这个 Skill") : String(localized: "使用 Prompt"),
+                        compactTitle: String(localized: "使用"), symbol: "arrow.up.right")
+                }.buttonStyle(.plain).accessibilityIdentifier("usePrompt")
             }.padding(.horizontal, 20).padding(.vertical, 10).frame(maxWidth: 700)
                 .frame(maxWidth: .infinity).background(Palette.paper)
         }
@@ -173,12 +185,18 @@ struct PromptDetail: View {
             if removed { cancelLanguageSelection(); failedLanguage = nil }
         }
         .onDisappear { if languageRequestID != nil { cancelLanguageSelection() } }
+        .sheet(item: $useContext) { context in PromptUseSheet(item: context.item, text: context.text, title: context.title) }
         .sheet(item: $editorContext) { context in PromptEditor(item: context.item, language: context.language) }
         .fullScreenCover(isPresented: $imagePresented) { ImageViewer(name: item.media?.image ?? item.artwork, urls: item.media?.galleryURLs ?? []) }
         .sheet(isPresented: $webPresented) {
             if let filename = WebsiteExamples.files[item.id] { WebExample(filename: filename) }
         }
         .sheet(isPresented: $playerPresented) { MovieView(filename: item.media?.video, remoteURL: item.media?.videoURL, caption: content.previewLabel) }
+    }
+    private func openUseSheet() {
+        let prepared = library.draft(for: item, language: effectiveLanguage)
+        guard !prepared.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { openEditor(); return }
+        useContext = UseContext(item: item, text: prepared, title: content.title)
     }
     private var sourceAuthor: some View {
         Text(item.source.author ?? item.source.name).font(.footnote.weight(.medium))
@@ -294,6 +312,7 @@ struct PromptEditor: View {
     @State private var saved = true
     @State private var saveError: String?
     @State private var restorePresented = false
+    @State private var usePresented = false
     @State private var leavePresented = false
     @State private var leavingWithoutSaving = false
     @State private var headerHeight: CGFloat?
@@ -326,6 +345,13 @@ struct PromptEditor: View {
                     }
                     ToolbarItem(placement: .primaryAction) { ShareLink(item: text) { Label(String(localized: "分享"), systemImage: "square.and.arrow.up").frame(minWidth: 44, minHeight: 44) }.disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) }
                 }
+                .toolbar {
+                    ToolbarItem(placement: .primaryAction) {
+                        Button { usePresented = true } label: { Label(String(localized: "使用"), systemImage: "arrow.up.right") }
+                            .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty).accessibilityIdentifier("useEditedPrompt")
+                    }
+                }
+                .sheet(isPresented: $usePresented) { PromptUseSheet(item: item, text: text, title: item.content(in: language).title) }
                 .safeAreaInset(edge: .bottom) {
                     Button {
                         UIPasteboard.general.string = text; copied = true

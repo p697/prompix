@@ -18,6 +18,7 @@
 		307A71B798E2BC808FF2B820 /* WebExamples in Resources */ = {isa = PBXBuildFile; fileRef = DAD3758DD77E4B43A90D10E3 /* WebExamples */; };
 		31495E04F522B7DBE9DA9FC2 /* catalog.json in Resources */ = {isa = PBXBuildFile; fileRef = 3D483177B8C5492C1F15BA9A /* catalog.json */; };
 		3D5B5349650B699D7BB77F81 /* GlobalDiscoveryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A11CDB8845617D526DEBCCC /* GlobalDiscoveryTests.swift */; };
+		7058876D14A863CAF7C45017 /* PromptUseSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F000455453046C545687F92 /* PromptUseSheet.swift */; };
 		7449F578C62EC99C89686519 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 7B88D170C6ACFA7B5AC85E30 /* Assets.xcassets */; };
 		767341277B3CF99DF8E08093 /* CatalogSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = 971CE8E18BF3DC4B0FDB0752 /* CatalogSync.swift */; };
 		768528DEF66C2D1E7EE2E5E4 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 1E21261F4D5A685A541FD907 /* Foundation.framework */; };
@@ -25,8 +26,10 @@
 		84CCD61CDE494DC0ABABFAB2 /* LanguagePackCatalogTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 181F10CC14B9CCA0F7D65F88 /* LanguagePackCatalogTests.swift */; };
 		85122144F03FBE33A13A113A /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 1E21261F4D5A685A541FD907 /* Foundation.framework */; };
 		86F197139BBEE0BBB344F092 /* Artwork.swift in Sources */ = {isa = PBXBuildFile; fileRef = C913EA7CF73EA826D476B61F /* Artwork.swift */; };
+		8A1D677FF5D7B9ACDE6B2E69 /* PromptHandoffTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6BB6DB6812418AEA087AA4C /* PromptHandoffTests.swift */; };
 		8B525338B41278A85B706D1C /* PromptDetail.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F3939B85D87E08D47655CC4 /* PromptDetail.swift */; };
 		8BECB2B6F59BCB430F8AC99E /* PrompixApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15EDB3D11A7E77A9C2601D07 /* PrompixApp.swift */; };
+		8E1C4C628D7F6C025D8373F6 /* PromptHandoff.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A2A489905D972D04B94140B /* PromptHandoff.swift */; };
 		9E60534B1E8D0A04BA2FCF95 /* LanguagePackCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = D884CB2F241ACA13A323696C /* LanguagePackCache.swift */; };
 		9F89A427B2C42B8D1C098141 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 1E21261F4D5A685A541FD907 /* Foundation.framework */; };
 		ADE26CE39D84C234CC0C15C6 /* LanguagePackSyncTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A20EA5CEEF44B4D47C56403 /* LanguagePackSyncTests.swift */; };
@@ -71,11 +74,13 @@
 		1E2C056B19ECC4C3925366AD /* Localizable.xcstrings */ = {isa = PBXFileReference; includeInIndex = 1; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		243EFE6F0844D0EF888FE71F /* DiscoveryTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DiscoveryTests.swift; sourceTree = "<group>"; };
 		3D483177B8C5492C1F15BA9A /* catalog.json */ = {isa = PBXFileReference; includeInIndex = 1; path = catalog.json; sourceTree = "<group>"; };
+		3F000455453046C545687F92 /* PromptUseSheet.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = PromptUseSheet.swift; path = Views/PromptUseSheet.swift; sourceTree = "<group>"; };
 		418BCEB58EAD4602BDCA4D1F /* DiscoveryView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = DiscoveryView.swift; path = Views/DiscoveryView.swift; sourceTree = "<group>"; };
 		56132BA164AC4C48DAEDFEC0 /* LanguagePackCacheTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LanguagePackCacheTests.swift; sourceTree = "<group>"; };
 		5F354051DCBAB4AB6BBF74FE /* CollectionsView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = CollectionsView.swift; path = Views/CollectionsView.swift; sourceTree = "<group>"; };
 		677CBB7564C450F9D6E919D2 /* TabSymbol.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = TabSymbol.swift; path = Views/TabSymbol.swift; sourceTree = "<group>"; };
 		6A20EA5CEEF44B4D47C56403 /* LanguagePackSyncTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LanguagePackSyncTests.swift; sourceTree = "<group>"; };
+		6A2A489905D972D04B94140B /* PromptHandoff.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = PromptHandoff.swift; path = Models/PromptHandoff.swift; sourceTree = "<group>"; };
 		73DD13F54EED35BA0C0493C3 /* RemoteImage.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = RemoteImage.swift; path = Views/RemoteImage.swift; sourceTree = "<group>"; };
 		77543AF7CF1B4AB210D15633 /* WebExample.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = WebExample.swift; path = Views/WebExample.swift; sourceTree = "<group>"; };
 		79833C437CE4BD603EC0EEF8 /* Library.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = Library.swift; path = Models/Library.swift; sourceTree = "<group>"; };
@@ -96,6 +101,7 @@
 		E2C8EB92C5F7A296F45257D2 /* LanguagePackCatalog.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = LanguagePackCatalog.swift; path = Models/LanguagePackCatalog.swift; sourceTree = "<group>"; };
 		E64E60E95FE9245A77FC6D5D /* GlobalDiscoveryTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GlobalDiscoveryTests.swift; sourceTree = "<group>"; };
 		F25927E3A42CA9CBF1DF125A /* playback-fixture.mp4 */ = {isa = PBXFileReference; includeInIndex = 1; path = "playback-fixture.mp4"; sourceTree = "<group>"; };
+		F6BB6DB6812418AEA087AA4C /* PromptHandoffTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PromptHandoffTests.swift; sourceTree = "<group>"; };
 		F7FEA8CDF7268B83623B5A3C /* CreatorViews.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = CreatorViews.swift; path = Views/CreatorViews.swift; sourceTree = "<group>"; };
 		FDED15EF12D7E7108F3D500C /* PrompixUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PrompixUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -198,6 +204,8 @@
 				3DF0BD821DD657FAC88B0052 /* Resources */,
 				E2C8EB92C5F7A296F45257D2 /* LanguagePackCatalog.swift */,
 				D884CB2F241ACA13A323696C /* LanguagePackCache.swift */,
+				6A2A489905D972D04B94140B /* PromptHandoff.swift */,
+				3F000455453046C545687F92 /* PromptUseSheet.swift */,
 			);
 			name = Prompix;
 			path = Prompix;
@@ -234,6 +242,7 @@
 				56132BA164AC4C48DAEDFEC0 /* LanguagePackCacheTests.swift */,
 				6A20EA5CEEF44B4D47C56403 /* LanguagePackSyncTests.swift */,
 				108AED3C1FBA2407DA591066 /* LanguagePackLibraryTests.swift */,
+				F6BB6DB6812418AEA087AA4C /* PromptHandoffTests.swift */,
 			);
 			name = PrompixTests;
 			path = PrompixTests;
@@ -396,6 +405,8 @@
 				B03561E28402FF05206EB45A /* WebExample.swift in Sources */,
 				D0B230595110AEDBD78B9E99 /* LanguagePackCatalog.swift in Sources */,
 				9E60534B1E8D0A04BA2FCF95 /* LanguagePackCache.swift in Sources */,
+				8E1C4C628D7F6C025D8373F6 /* PromptHandoff.swift in Sources */,
+				7058876D14A863CAF7C45017 /* PromptUseSheet.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -409,6 +420,7 @@
 				F3F5AE59AC45DFED38C01B3A /* LanguagePackCacheTests.swift in Sources */,
 				ADE26CE39D84C234CC0C15C6 /* LanguagePackSyncTests.swift in Sources */,
 				08C5A86CF8E336487AB8819E /* LanguagePackLibraryTests.swift in Sources */,
+				8A1D677FF5D7B9ACDE6B2E69 /* PromptHandoffTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -468,12 +480,12 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CLANG_ENABLE_OBJC_WEAK = NO;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 10;
+				CURRENT_PROJECT_VERSION = 11;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				INFOPLIST_FILE = Prompix/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
-				MARKETING_VERSION = 0.3.3;
+				MARKETING_VERSION = 0.4.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.p697.prompix;
 				PRODUCT_NAME = Prompix;
 				SDKROOT = iphoneos;
@@ -637,12 +649,12 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CLANG_ENABLE_OBJC_WEAK = NO;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 10;
+				CURRENT_PROJECT_VERSION = 11;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				INFOPLIST_FILE = Prompix/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
-				MARKETING_VERSION = 0.3.3;
+				MARKETING_VERSION = 0.4.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.p697.prompix;
 				PRODUCT_NAME = Prompix;
 				SDKROOT = iphoneos;

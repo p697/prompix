@@ -137,12 +137,12 @@ test("allowlist, license, source fingerprint and missing real webpage evidence d
 
 test("full source input is never truncated to fit the character budget", async () => {
   const items = [candidate("a", "A useful complete instruction. " + "x".repeat(7900)), candidate("b", "A second complete instruction. " + "y".repeat(5900)),
-    candidate("c", "A third complete instruction. " + "z".repeat(2900)), candidate("too-large", "Copy every step. " + "q".repeat(16000))];
+    candidate("c", "A third complete instruction. " + "z".repeat(2900)), candidate("too-large", "Copy every step. " + "q".repeat(36000))];
   let sent: EditorialInput[] = [];
   const { run } = harness(items, async input => { sent = input; return approve(input); });
   const result = await run();
   assert.equal(result.report.requests, 1); assert.equal(result.report.preflightDeferred, 1);
-  assert.ok(sent.length <= 3); assert.ok(JSON.stringify(sent).length <= 16000);
+  assert.ok(sent.length <= 3); assert.ok(JSON.stringify(sent).length <= 36000);
   for (const input of sent) assert.equal(input.prompt, items.find(item => item.id === input.id)?.prompt);
   assert.match(automaticReviewEligibility(items[3])!, /Complete source exceeds/);
 });
@@ -209,7 +209,7 @@ test("one invocation processes four bounded batches by default, then rotates bud
   // Call the runner without maxRequests to exercise the real default.
   const result = await runEditorialReview({ candidates: items, previous: [], reviews: state.reviews, cache: state.cache, day,
     provider: async input => {
-      assert.ok(input.length <= 3); assert.ok(JSON.stringify(input).length <= 16000);
+      assert.ok(input.length <= 3); assert.ok(JSON.stringify(input).length <= 36000);
       assert.equal(state.ledger?.attempts.at(-1)?.state, "reserved");
       assert.equal(state.ledger?.requests, batches.length + 1);
       batches.push(input.map(item => item.id));

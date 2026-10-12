@@ -132,13 +132,13 @@ const searchMediaSchema = z.object({
   variants: z.array(z.object({ content_type: z.string(), url: z.string(), bit_rate: z.number().optional() }).passthrough()).max(30).optional(),
 }).passthrough();
 const searchResponseSchema = z.object({
-  data: z.array(searchPostSchema).max(searchConfiguration.maxResults).optional(),
+  data: z.array(searchPostSchema).max(100).optional(),
   errors: z.array(z.unknown()).optional(),
   includes: z.object({
-    users: z.array(userSchema).max(100).optional(), media: z.array(searchMediaSchema).max(100).optional(),
+    users: z.array(userSchema).max(100).optional(), media: z.array(searchMediaSchema).max(400).optional(),
   }).passthrough().optional(),
   meta: z.object({
-    result_count: z.number().int().min(0).max(searchConfiguration.maxResults),
+    result_count: z.number().int().min(0).max(100),
     newest_id: searchIDSchema.optional(), oldest_id: searchIDSchema.optional(), next_token: z.string().min(1).optional(),
   }).passthrough(),
 }).passthrough();
@@ -175,10 +175,11 @@ function searchCoverage(body: z.infer<typeof searchResponseSchema>) {
 }
 
 /** Pure parser so response validation and coverage can be tested without paid calls. */
-export function parseXSearchResponse(value: unknown, since?: string) {
+export function parseXSearchResponse(value: unknown, since?: string, limit = 10) {
+  if (!Number.isInteger(limit) || limit < 10 || limit > 100) throw new Error("Invalid X page size");
   if (since !== undefined && !searchIDSchema.safeParse(since).success) throw new Error("Invalid X search cursor");
   const parsed = searchResponseSchema.safeParse(value);
-  if (!parsed.success) throw new Error("X search returned an invalid response; cursor unchanged");
+  if (!parsed.success || parsed.data.meta.result_count > limit) throw new Error("X search returned an invalid response; cursor unchanged");
   const body = parsed.data, posts = body.data ?? [];
   if (body.errors?.length) throw new Error("X returned partial errors; cursor unchanged");
   if (posts.length !== body.meta.result_count || new Set(posts.map(post => post.id)).size !== posts.length)
@@ -196,7 +197,7 @@ export function parseXSearchResponse(value: unknown, since?: string) {
   } else if (body.meta.newest_id !== undefined || body.meta.oldest_id !== undefined || body.meta.next_token !== undefined) {
     throw new Error("X search returned an inconsistent empty page; cursor unchanged");
   }
-  return { posts, creators: parseXUsers(users), media, newest: body.meta.newest_id, coverage: searchCoverage(body) };
+  return { posts, creators: parseXUsers(users), media, newest: body.meta.newest_id, ...(body.meta.next_token ? { nextToken: body.meta.next_token } : {}), coverage: searchCoverage(body) };
 }
 
 const lookupResponseSchema = z.object({
@@ -222,7 +223,7 @@ export function parseXLookupResponse(value: unknown, ids: readonly string[]) {
 }
 
 /** One bounded request. Never retry a paid read or probe another field convention. */
-async function requestX(url: string, bearer: string, operation: "search" | "lookup") {
+async function requestX(url: string, bearer: string, operation: "search" | "lookup", maxBytes = 500_000) {
   const unchanged = operation === "search" ? "cursor unchanged" : "cached posts unchanged";
   let response: Response;
   try {
@@ -235,7 +236,7 @@ async function requestX(url: string, bearer: string, operation: "search" | "look
     throw new Error(`X ${operation} returned HTTP ${response.status}; ${unchanged}`);
   }
   let bytes: Buffer;
-  try { bytes = await readResponseBytes(response, 500_000); }
+  try { bytes = await readResponseBytes(response, maxBytes); }
   catch { throw new Error(`X ${operation} response exceeded its limit or was interrupted; ${unchanged}`); }
   let body: unknown;
   try { body = JSON.parse(bytes.toString()); }
@@ -255,4 +256,24 @@ export async function lookupX(bearer: string, ids: readonly string[]) {
   const request = xLookupRequest(ids);
   const body = await requestX(request.url, bearer, "lookup");
   return { ...parseXLookupResponse(body, ids), request };
+}
+
+
+/** Direct multi-topic discovery uses the same validated API contract. */
+export function xFeedRequest(query: string, options: { since?: string; nextToken?: string; limit: number }) {
+  if (!query.trim() || query.length > 512 || !Number.isInteger(options.limit) || options.limit < 10 || options.limit > 100)
+    throw new Error("Invalid X feed request");
+  if (options.since && !searchIDSchema.safeParse(options.since).success) throw new Error("Invalid X feed cursor");
+  if (options.nextToken !== undefined && (!options.nextToken.length || options.nextToken.length > 2000)) throw new Error("Invalid X page token");
+  const url = xSearchURL(options.since);
+  url.searchParams.set("query", query);
+  url.searchParams.set("max_results", String(options.limit));
+  if (options.nextToken) url.searchParams.set("next_token", options.nextToken);
+  // Pagination and page size do not change the identity of the searched stream.
+  const fingerprint = digest(JSON.stringify([searchConfiguration.endpoint, query, searchConfiguration.fields]));
+  return { fingerprint, query, ...options, url: url.toString(), requestFingerprint: digest(url.toString()) };
+}
+export async function searchXFeed(bearer: string, request: ReturnType<typeof xFeedRequest>) {
+  const body = await requestX(request.url, bearer, "search", 8_000_000);
+  return { ...parseXSearchResponse(body, request.since, request.limit), request };
 }

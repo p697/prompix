@@ -166,3 +166,15 @@ The daily job also reads the owner-qualified ClawHub allowlist in `clawhub.ts`. 
 Complete file inventories and exact entrypoint bytes bind the immutable registry revision. Editorial approvals and cached decisions include that revision, so changed supporting files cannot reuse a text-only approval. ClawHub's registry-wide MIT-0 policy is recorded separately from nullable API license fields. Conflicting moderation or a non-clean version scan prevents intake; upstream scans do not replace editorial review or promise safety.
 
 Only matching source identities checked within 24 hours can enter publication. Collection errors and withdrawals cannot revive retained snapshots. Staging, frozen v1 snapshots, pending activation and both rollback protocols enforce the same availability rule without personal-data removal tombstones. If an old pending target no longer qualifies, refresh intake and prepare a corrected edition; immutable targets are never silently edited. See [source contract and actual research](../docs/community-skills.md).
+
+## Independent intake (2026-10-13)
+
+The scheduled pipeline no longer fetches OpenLab repositories or their video archive. Their already-published IDs and attribution survive retention; they are not an expanding upstream. This supersedes the earlier creator-scoped, one-request search description above.
+
+- `npm run collect:x -- --fetch` performs budgeted official X searches across image, video, text, web and Skill topics. Without `--fetch` it processes only local snapshots. Load `X_BEARER_TOKEN` from the external env file.
+- `PROMPIX_X_MAX_REQUESTS` defaults to 4 (0–20); `PROMPIX_X_MAX_POSTS` defaults to 200 (0–1000). Each request reserves at most 50 posts before calling. Existing legacy spend is retained. These limits do not include optional creator refresh; X user expansions may also incur resource charges, so the post allowance is not a dollar estimate.
+- `x-feed-state.json` stores a cursor per query fingerprint and the next topic. `x-feed-attempts/YYYY-MM-DD.json` preserves reserved/completed/failed requests. Never erase these ledgers to rerun a paid operation. `x-discovery/YYYY-MM-DD-feed-NNN.json` contains source snapshots outside Git.
+- `npm run collect:skills` collects the 35 allowlisted official Skill directories directly into the external candidate cache. It does not publish. Each directory is pinned, licensed and inventoried independently; scripts are never executed.
+- Native X candidates remain drafts pending the source/publication work described in [the upgrade plan](../docs/independent-pipeline.md). Counts of raw posts are not counts of usable App content.
+
+The larger official Skills require a complete review input: the metadata batch now allows 36,000 characters and at most three records. External runtime configuration currently allows 20 metadata requests and 120 translation requests daily; those totals include earlier attempts that day. Translation availability is published per item, so incomplete language sets fall back to the original instead of advertising a missing translation.

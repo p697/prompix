@@ -379,3 +379,13 @@ test("source digests bind exact body, author, modality and source assets without
     creator: { ...original.creator!, displayName: "New display name", username: "new-handle", avatarURL: "https://api.prompix.dev/media/new.jpg" } };
   assert.equal(nativeXSourceDigest(enriched), digest);
 });
+
+test("same-day feed and legacy snapshots use capture time, with fresh profile expansions first", () => {
+  const creator = { id: "x-fresh", externalID: "456", platform: "x" as const, displayName: "Fresh Name", username: "fresh", profileURL: "https://x.com/fresh" };
+  const fresh = snapshot([post("123", `Prompt:\n${body} Add a final sentence.`)], "2026-10-12-feed-001.json",
+    { capturedAt: "2026-10-12T03:00:00.500Z", creators: [creator] });
+  const old = snapshot([post()], "2026-10-12.json", { capturedAt: "2026-10-12T03:00:00Z" });
+  const result = convertXDiscovery([fresh, old], { old: { ...creator, displayName: "Old Name" } });
+  assert.equal(result.candidates[0].prompt, `${body} Add a final sentence.`);
+  assert.equal(result.candidates[0].creator?.displayName, "Fresh Name");
+});
