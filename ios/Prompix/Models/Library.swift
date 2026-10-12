@@ -1,6 +1,8 @@
 import Foundation
 import Observation
 
+enum PromptDetailOrigin { case catalog, favorite }
+
 enum CatalogSyncState: Equatable, Sendable {
     case idle, checking, downloading(receivedBytes: Int, totalBytes: Int?), installing, current, failed
 
@@ -28,9 +30,15 @@ enum CatalogSyncState: Equatable, Sendable {
     private var creatorAliases: [String: Prompt.Creator] = [:]
     private var lastAttempt: Date?
     private var refreshID: UUID?
+    private var refreshTask: Task<Bool, Never>?
+    private var refreshingLanguage = false
+    private var lastAttemptLanguage: String?
+    private var languagePackIndex: LanguagePackCache.Index?
+    private var languagePackBase: LanguagePackCatalog.Base?
     private let directory: URL
     private let installFileWriter: (Data, URL) throws -> Void
     private var storageRecoveryPending = false
+    private var languageCache: LanguagePackCache { LanguagePackCache(directory: directory) }
     var savedIDs: Set<String> { Set(favorites.map(\.id)) }
     var savedImageURLs: Set<URL>? {
         guard favoritesReadable, savedCreatorsReadable, !storageRecoveryPending else { return nil }
@@ -72,11 +80,32 @@ enum CatalogSyncState: Equatable, Sendable {
         do {
             guard let catalogURL else { throw CocoaError(.fileNoSuchFile) }
             let cachedURL = self.directory.appending(path: "catalog.json")
-            let cached = ProcessInfo.processInfo.arguments.contains("--offline") ? nil : try? JSONDecoder().decode(Catalog.self, from: Data(contentsOf: cachedURL)).validated()
-            let catalog = try cached ?? JSONDecoder().decode(Catalog.self, from: Data(contentsOf: catalogURL)).validated()
+            let offlineFixture = ProcessInfo.processInfo.arguments.contains("--offline")
+            let cached = offlineFixture ? nil : try? JSONDecoder().decode(Catalog.self, from: Data(contentsOf: cachedURL)).validated()
+            let indexExists = !offlineFixture && FileManager.default.fileExists(atPath: self.directory.appending(path: LanguagePackCache.indexFileName).path)
+            var catalog: Catalog?
+            if indexExists {
+                // Recover the transaction before consulting this pointer. A damaged
+                // pack may use this same edition's projection, never an older bundle.
+                if let index = try? languageCache.readIndex() {
+                    languagePackIndex = index
+                    let requested = Set([ContentLanguage.preferred].filter { index.downloadedLocales[$0] != nil })
+                    if let edition = languageCache.load(index, locales: requested) {
+                        catalog = edition.catalog; languagePackBase = edition.base
+                    } else if let originals = languageCache.load(index, locales: []) {
+                        languagePackBase = originals.base
+                        catalog = cached?.version == index.manifest.version ? cached : originals.catalog
+                    }
+                    if catalog == nil, cached?.version == index.manifest.version { catalog = cached }
+                } else { catalog = cached }
+                guard catalog != nil else { throw CocoaError(.fileReadCorruptFile) }
+            } else {
+                catalog = try cached ?? JSONDecoder().decode(Catalog.self, from: Data(contentsOf: catalogURL)).validated()
+            }
+            let loadedCatalog = catalog!
             // Resolve legacy creator identities before replacing saved snapshots.
-            let aliases = Self.creatorAliases(from: favorites, to: catalog.prompts)
-            try applyCatalog(catalog, data: nil, aliases: aliases)
+            let aliases = Self.creatorAliases(from: favorites, to: loadedCatalog.prompts)
+            try applyCatalog(loadedCatalog, data: nil, aliases: aliases, availability: languagePackBase?.availableLanguages)
         } catch { self.error = String(localized: "灵感暂时没有加载成功。你仍然可以查看已保存的收藏。") }
     }
 
@@ -88,6 +117,33 @@ enum CatalogSyncState: Equatable, Sendable {
     private var savedFile: URL { directory.appending(path: "favorites.json") }
     private var draftFile: URL { directory.appending(path: "drafts.json") }
     private var creatorsFile: URL { directory.appending(path: "creators.json") }
+    func isRemoved(_ item: Prompt) -> Bool { removedIDs.contains(item.id) }
+    func resolvedDetail(_ snapshot: Prompt, origin: PromptDetailOrigin) -> Prompt {
+        switch origin {
+        case .catalog: return prompts.first { $0.id == snapshot.id } ?? snapshot
+        case .favorite:
+            return favorites.first {
+                $0.id == snapshot.id && LanguagePackCatalog.sourceFingerprint($0) == LanguagePackCatalog.sourceFingerprint(snapshot)
+            } ?? Self.enrichedFavorites([snapshot], from: prompts, availability: languagePackBase?.availableLanguages)[0]
+        }
+    }
+    func advertisedLanguages(for snapshot: Prompt) -> [String] {
+        guard !isRemoved(snapshot) else { return [] }
+        if let base = languagePackBase, let current = base.catalog.prompts.first(where: { $0.id == snapshot.id }),
+           LanguagePackCatalog.sourceFingerprint(current) == LanguagePackCatalog.sourceFingerprint(snapshot) {
+            return base.availableLanguages[snapshot.id] ?? []
+        }
+        return snapshot.availableLanguages
+    }
+    func cancelLanguageRequest() {
+        guard refreshingLanguage else { return }
+        cancelRefresh()
+    }
+    private func cancelRefresh() {
+        refreshTask?.cancel(); refreshTask = nil; refreshID = nil
+        isRefreshing = false; refreshingLanguage = false; lastAttempt = nil
+        syncState = .idle; syncMessage = nil
+    }
     func currentCreator(_ creator: Prompt.Creator) -> Prompt.Creator {
         Self.resolveCreator(creator, in: prompts, aliases: creatorAliases)
     }
@@ -172,47 +228,147 @@ enum CatalogSyncState: Equatable, Sendable {
         // with the public edition while a release is being prepared.
         if ProcessInfo.processInfo.arguments.contains("--cached-only") { return }
         #endif
-        guard !isRefreshing, !ProcessInfo.processInfo.arguments.contains("--offline") else { return }
+        guard !Task.isCancelled, !isRefreshing, !ProcessInfo.processInfo.arguments.contains("--offline"), !storageRecoveryPending else { return }
         // A failed first refresh must not strand an upgraded installation on its
         // previous edition for fifteen minutes. Successful checks retain the
         // longer interval; explicit retry always bypasses either interval.
         let retryInterval: TimeInterval = syncState == .failed ? 30 : 900
-        if !force, let lastAttempt, now.timeIntervalSince(lastAttempt) < retryInterval { return }
+        if !force, lastAttemptLanguage == ContentLanguage.preferred,
+           let lastAttempt, now.timeIntervalSince(lastAttempt) < retryInterval { return }
+        _ = await startRefresh(requestedLocales: [ContentLanguage.preferred], target: nil, checkLatest: true,
+                               session: session, now: now)
+    }
+
+    @discardableResult func ensureLanguage(_ locale: String?, for snapshot: Prompt, session: URLSession = .shared) async -> Bool {
+        guard !Task.isCancelled else { return false }
+        cancelLanguageRequest()
+        guard let locale else { return true }
+        guard LanguagePackCatalog.supportedLocales.contains(locale), !isRemoved(snapshot), !storageRecoveryPending else { return false }
+        let current = prompts.first { $0.id == snapshot.id }
+        let matchesCurrent = current.map { LanguagePackCatalog.sourceFingerprint($0) == LanguagePackCatalog.sourceFingerprint(snapshot) } == true
+        let available = advertisedLanguages(for: snapshot)
+        guard available.contains(locale) else { return false }
+        if snapshot.availableLanguages.contains(locale) || (matchesCurrent && current?.availableLanguages.contains(locale) == true) { return true }
+        guard matchesCurrent, languagePackIndex != nil, !ProcessInfo.processInfo.arguments.contains("--offline") else { return false }
+        // A user language selection supersedes an automatic update; its old result
+        // must not replace this selection when the network returns out of order.
+        cancelRefresh()
+        return await startRefresh(requestedLocales: [locale], target: snapshot,
+                                  checkLatest: false, session: session, now: Date())
+    }
+
+    private func startRefresh(requestedLocales: [String], target: Prompt?, checkLatest: Bool, session: URLSession, now: Date) async -> Bool {
         let attempt = UUID()
-        lastAttempt = now; isRefreshing = true; refreshID = attempt
+        if checkLatest { lastAttempt = now; lastAttemptLanguage = ContentLanguage.preferred }
+        isRefreshing = true; refreshID = attempt; refreshingLanguage = target != nil
         syncState = .checking; syncMessage = nil
-        defer { isRefreshing = false; refreshID = nil }
+        let task = Task { [weak self] in
+            guard let self else { return false }
+            return await self.performRefresh(attempt: attempt, requestedLocales: requestedLocales, target: target,
+                                             checkLatest: checkLatest, session: session)
+        }
+        refreshTask = task
+        return await withTaskCancellationHandler { await task.value } onCancel: { task.cancel() }
+    }
+
+    private func verifyRefreshOwner(_ attempt: UUID, target: Prompt?) throws {
+        try Task.checkCancellation()
+        guard refreshID == attempt else { throw CancellationError() }
+        if let target {
+            guard !isRemoved(target), let current = prompts.first(where: { $0.id == target.id }),
+                  LanguagePackCatalog.sourceFingerprint(current) == LanguagePackCatalog.sourceFingerprint(target) else {
+                throw CancellationError()
+            }
+        }
+    }
+
+    private func performRefresh(attempt: UUID, requestedLocales: [String], target: Prompt?, checkLatest: Bool, session: URLSession) async -> Bool {
+        defer {
+            if refreshID == attempt { isRefreshing = false; refreshID = nil; refreshTask = nil; refreshingLanguage = false }
+            languageCache.pruneInactiveArtifacts()
+        }
         do {
-            let data = try await CatalogSync.fetch(CatalogSync.endpoint, maximum: 32_000, session: session)
-            let manifest = try JSONDecoder().decode(CatalogManifest.self, from: data).validated()
-            try Task.checkCancellation()
-            if manifest.version == version { syncState = .current; return }
-            syncState = .downloading(receivedBytes: 0, totalBytes: nil)
-            let content = try await CatalogSync.fetch(manifest.catalog, maximum: 10_000_000, session: session) { [weak self] progress in
+            try verifyRefreshOwner(attempt, target: target)
+            let edition = try await CatalogSync.prepareLanguagePacks(requestedLocales: requestedLocales, cache: languageCache,
+                active: languagePackIndex, checkLatest: checkLatest, session: session) { [weak self] progress in
                 Task { @MainActor in
-                    guard let self, self.refreshID == attempt,
-                          case let .downloading(received, _) = self.syncState,
-                          progress.receivedBytes >= received else { return }
+                    guard let self, self.refreshID == attempt else { return }
+                    switch self.syncState { case .checking, .downloading: break; default: return }
+                    if case let .downloading(received, _) = self.syncState, progress.receivedBytes < received { return }
                     self.syncState = .downloading(receivedBytes: progress.receivedBytes, totalBytes: progress.totalBytes)
                 }
             }
+            try verifyRefreshOwner(attempt, target: target)
+            if let target {
+                guard let incoming = edition.catalog.prompts.first(where: { $0.id == target.id }),
+                      LanguagePackCatalog.sourceFingerprint(incoming) == LanguagePackCatalog.sourceFingerprint(target) else { throw CancellationError() }
+            }
             syncState = .installing
-            let catalog = try await CatalogSync.verified(content, manifest: manifest)
-            try Task.checkCancellation()
-            try installVerified(catalog, data: content)
+            let staged = try await Self.stageLanguageEdition(edition, cache: languageCache, retainingIndex: languagePackIndex)
+            defer { staged.releaseArtifacts() }
+            try verifyRefreshOwner(attempt, target: target)
+            // Staging repairs damaged artifacts, but a healthy unchanged edition
+            // needs no active-pointer or personal-store transaction.
+            if let active = languagePackIndex,
+               active.manifestBytes == staged.index.manifestBytes,
+               active.downloadedLocales == staged.index.downloadedLocales,
+               version == edition.catalog.version, prompts == edition.catalog.prompts,
+               removedIDs == Set(edition.catalog.removedIDs ?? []) {
+                languagePackBase = edition.base
+                syncState = .current
+                return true
+            }
+            try commitLanguageEdition(edition, staged: staged)
             syncState = .current
+            return true
         } catch is CancellationError {
             // Returning to the foreground should immediately resume an interrupted
             // update, without showing a failure for a user-initiated cancellation.
-            lastAttempt = nil; syncState = .idle
+            if refreshID == attempt { lastAttempt = nil; syncState = .idle; syncMessage = nil }
         } catch {
-            syncState = .failed
-            syncMessage = String(localized: "暂时无法更新，仍可浏览已下载的灵感。")
+            if refreshID == attempt {
+                syncState = .failed
+                syncMessage = String(localized: "暂时无法更新，仍可浏览已下载的灵感。")
+            }
         }
+        return false
+    }
+
+    private nonisolated static func stageLanguageEdition(_ edition: LanguagePackEdition, cache: LanguagePackCache,
+                                                         retainingIndex: LanguagePackCache.Index?) async throws -> LanguagePackCache.Staged {
+        try Task.checkCancellation()
+        // Return the lease even if cancellation arrived during staging, so the
+        // caller can release it and sweep safely after checking ownership.
+        return try cache.stage(edition, retainingIndex: retainingIndex)
+    }
+    func installLanguagePacks(_ edition: LanguagePackEdition) throws {
+        guard !storageRecoveryPending else { throw CocoaError(.fileWriteUnknown) }
+        defer { languageCache.pruneInactiveArtifacts() }
+        let staged = try languageCache.stage(edition, retainingIndex: languagePackIndex)
+        defer { staged.releaseArtifacts() }
+        try commitLanguageEdition(edition, staged: staged)
+        // Explicit installs also supersede a download whose source text happens
+        // to match. Its older manifest must not undo this edition's revocations.
+        cancelRefresh()
+        syncState = .current
+    }
+    private func commitLanguageEdition(_ edition: LanguagePackEdition, staged: LanguagePackCache.Staged) throws {
+        guard removedIDs.isSubset(of: Set(edition.catalog.removedIDs ?? [])) else { throw SyncError.invalidManifest }
+        var aliases = Self.creatorAliases(from: prompts + favorites, to: edition.catalog.prompts)
+        for (key, previous) in creatorAliases where aliases[key] == nil {
+            aliases[key] = Self.resolveCreator(previous, in: edition.catalog.prompts, aliases: aliases)
+        }
+        try applyCatalog(edition.catalog, data: JSONEncoder().encode(edition.catalog), aliases: aliases,
+                         availability: edition.base.availableLanguages, additionalFiles: [(LanguagePackCache.indexFileName, staged.indexData)])
+        languagePackIndex = staged.index; languagePackBase = edition.base
     }
     func install(_ data: Data, manifest: CatalogManifest) throws {
+        guard languagePackIndex == nil,
+              !FileManager.default.fileExists(atPath: directory.appending(path: LanguagePackCache.indexFileName).path) else { throw SyncError.invalidManifest }
         let catalog = try CatalogSync.verify(data, manifest: manifest.validated())
         try installVerified(catalog, data: data)
+        cancelRefresh()
+        syncState = .current
     }
     private func installVerified(_ catalog: Catalog, data: Data) throws {
         var aliases = Self.creatorAliases(from: prompts + favorites, to: catalog.prompts)
@@ -222,13 +378,14 @@ enum CatalogSyncState: Equatable, Sendable {
         try applyCatalog(catalog, data: data, aliases: aliases)
     }
 
-    private func applyCatalog(_ catalog: Catalog, data: Data?, aliases: [String: Prompt.Creator]) throws {
+    private func applyCatalog(_ catalog: Catalog, data: Data?, aliases: [String: Prompt.Creator],
+                              availability: [String: [String]]? = nil, additionalFiles: [(name: String, data: Data)] = []) throws {
         guard !storageRecoveryPending else { throw CocoaError(.fileWriteUnknown) }
         let removed = Set(catalog.removedIDs ?? [])
         let reconciled = savedCreatorsReadable ? Self.reconciledCreators(savedCreators, in: catalog.prompts, aliases: aliases) : savedCreators
         let updatedDrafts = draftsReadable ? drafts.filter { !removed.contains(String($0.key.components(separatedBy: "::")[0])) } : drafts
-        let updatedFavorites = favoritesReadable ? Self.enrichedFavorites(favorites.filter { !removed.contains($0.id) }, from: catalog.prompts) : favorites
-        var changes: [(name: String, data: Data)] = []
+        let updatedFavorites = favoritesReadable ? Self.enrichedFavorites(favorites.filter { !removed.contains($0.id) }, from: catalog.prompts, availability: availability) : favorites
+        var changes: [(name: String, data: Data)] = additionalFiles
         if reconciled != savedCreators { changes.append(("creators.json", try JSONEncoder().encode(reconciled))) }
         if let data { changes.append(("catalog.json", data)) }
         if updatedDrafts != drafts { changes.append(("drafts.json", try JSONEncoder().encode(updatedDrafts))) }
@@ -249,7 +406,7 @@ enum CatalogSyncState: Equatable, Sendable {
         let files: [File]
     }
     private static let transactionName = "catalog-transaction.json"
-    private static let catalogFileNames: Set<String> = ["catalog.json", "favorites.json", "drafts.json", "creators.json"]
+    private static let catalogFileNames: Set<String> = ["catalog.json", "favorites.json", "drafts.json", "creators.json", LanguagePackCache.indexFileName]
 
     private func commitCatalogFiles(_ changes: [(name: String, data: Data)]) throws {
         guard !changes.isEmpty else { return }
@@ -345,13 +502,22 @@ enum CatalogSyncState: Equatable, Sendable {
         (creator.platformIdentity == nil ? 0 : 8) + (creator.avatarURL == nil ? 0 : 4)
             + (creator.bio == nil ? 0 : 2) + (creator.username == nil ? 0 : 1)
     }
-    private static func enrichedFavorites(_ saved: [Prompt], from catalog: [Prompt]) -> [Prompt] {
+    private static func enrichedFavorites(_ saved: [Prompt], from catalog: [Prompt], availability: [String: [String]]? = nil) -> [Prompt] {
         let current = Dictionary(uniqueKeysWithValues: catalog.map { ($0.id, $0) })
         return saved.map { snapshot in
             // Add translations and creator details without silently changing the
             // instruction the user saved. Edited drafts are stored separately.
-            guard let item = current[snapshot.id], item.prompt == snapshot.prompt else { return snapshot }
-            return item
+            guard let item = current[snapshot.id],
+                  LanguagePackCatalog.sourceFingerprint(item) == LanguagePackCatalog.sourceFingerprint(snapshot) else { return snapshot }
+            var updated = item
+            var translations = snapshot.localization?.translations ?? [:]
+            for (locale, content) in item.localization?.translations ?? [:] { translations[locale] = content }
+            if let available = availability?[item.id] { translations = translations.filter { available.contains($0.key) } }
+            if let metadata = item.localization ?? snapshot.localization {
+                updated.localization = Prompt.Localization(sourceLanguage: metadata.sourceLanguage,
+                    sourceFingerprint: item.localization?.sourceFingerprint ?? metadata.sourceFingerprint, translations: translations)
+            }
+            return updated
         }
     }
 
@@ -361,7 +527,8 @@ enum CatalogSyncState: Equatable, Sendable {
         guard !favoritesReadable else { return }
         do {
             let recovered = try JSONDecoder().decode([Prompt].self, from: Data(contentsOf: savedFile))
-            let valid = recovered.filter { !removedIDs.contains($0.id) }
+            let valid = Self.enrichedFavorites(recovered.filter { !removedIDs.contains($0.id) }, from: prompts,
+                                              availability: languagePackBase?.availableLanguages)
             if valid != recovered { try JSONEncoder().encode(valid).write(to: savedFile, options: .atomic) }
             favorites = valid; favoritesReadable = true; error = nil
         } catch { self.error = String(localized: "收藏仍然无法读取，原文件与离线预览已保留。") }

@@ -1,6 +1,6 @@
 # 首版商店与审核准备
 
-更新：2026-10-12。当前候选为 **0.3.1（8）**，原生 iPhone / iPad App。Granola 方向的视觉、旧目录升级与功能检查见 [0.3.1 验收](acceptance-0.3.1.md)。用户尚未验收这次新视觉；本文和准备好的素材不代表用户批准上架，也不代表已上传、提交审核或获得编辑推荐。
+更新：2026-10-12。当前签名候选为 **0.3.2（9）**，原生 iPhone / iPad App，本地归档与IPA审计见[交付记录](quality-release.md)。Granola 方向的此前视觉、旧目录升级与功能检查见 [0.3.1 验收](acceptance-0.3.1.md)。用户尚未验收这次新视觉；本文和准备好的素材不代表用户批准上架，也不代表已上传、提交审核或获得编辑推荐。
 
 ## 九语言商店文案
 
@@ -81,7 +81,7 @@ Content is editorially selected from allowlisted sources and published as a revi
 
 ## 截图与演示
 
-候选截图必须来自 **0.3.1（8）的实际运行**。当前 iPhone 演示保存在开发机 `~/.local/share/prompix/granola-redesign/demo/index.html`，包含浅色首页、作者、Skills、详情、编辑及深色示例。该演示使用 345 条目录时的真实画面；随后日常内容发布新增一条，不能因此把旧截图标成 346 条。
+已有构建8商店候选材料和`~/.local/share/prompix/granola-redesign/demo/index.html`保留为历史证据，画面使用345条目录，不能标成346条或最终构建。当前0.3.2演示位于`~/.local/share/prompix/native-language-downloads/demo/index.html`，包含真实升级首页以及最终日语详情、编辑器共3张模拟器截图；这是截图浏览页，不是可交互App。正式提交前须从最终构建重新拍摄所需设备与语言的商店截图，不把历史材料重新标注成最终版本。
 
 工程同时支持 iPhone 与 iPad。商店拟用 iPhone 1206×2622 与 13 英寸 iPad 2064×2752 的真实截图；每个所需设备组 1–10 张 RGB PNG / JPEG、不带 alpha。应检查实际最终文件、设备比例、语言、内容及顺序，不将测试通过或图库演示直接写成“商店素材已上传”。详细素材与二进制进度统一记在 [交付质量](quality-release.md)。规范依据：[Apple 截图要求](https://developer.apple.com/help/app-store-connect/reference/app-information/screenshot-specifications/)。
 

@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		00A3BAF655F16C8A59777842 /* DiscoveryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 243EFE6F0844D0EF888FE71F /* DiscoveryTests.swift */; };
 		01AC3F9CD912638229F52245 /* ContentLanguage.swift in Sources */ = {isa = PBXBuildFile; fileRef = B4F88881B11FF6A007FDD5EC /* ContentLanguage.swift */; };
+		08C5A86CF8E336487AB8819E /* LanguagePackLibraryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 108AED3C1FBA2407DA591066 /* LanguagePackLibraryTests.swift */; };
 		1B3F9B49063A656FA86179F8 /* CreatorViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7FEA8CDF7268B83623B5A3C /* CreatorViews.swift */; };
 		1C982422EB6FE778B82F9273 /* TabSymbol.swift in Sources */ = {isa = PBXBuildFile; fileRef = 677CBB7564C450F9D6E919D2 /* TabSymbol.swift */; };
 		1E5EA3A9E1020B54DE41139E /* LibraryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C248C810F5017027B0C5F45C /* LibraryTests.swift */; };
@@ -26,7 +27,9 @@
 		86F197139BBEE0BBB344F092 /* Artwork.swift in Sources */ = {isa = PBXBuildFile; fileRef = C913EA7CF73EA826D476B61F /* Artwork.swift */; };
 		8B525338B41278A85B706D1C /* PromptDetail.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F3939B85D87E08D47655CC4 /* PromptDetail.swift */; };
 		8BECB2B6F59BCB430F8AC99E /* PrompixApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15EDB3D11A7E77A9C2601D07 /* PrompixApp.swift */; };
+		9E60534B1E8D0A04BA2FCF95 /* LanguagePackCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = D884CB2F241ACA13A323696C /* LanguagePackCache.swift */; };
 		9F89A427B2C42B8D1C098141 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 1E21261F4D5A685A541FD907 /* Foundation.framework */; };
+		ADE26CE39D84C234CC0C15C6 /* LanguagePackSyncTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A20EA5CEEF44B4D47C56403 /* LanguagePackSyncTests.swift */; };
 		B03561E28402FF05206EB45A /* WebExample.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77543AF7CF1B4AB210D15633 /* WebExample.swift */; };
 		B0D35164084C4E2B7A28784F /* CollectionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F354051DCBAB4AB6BBF74FE /* CollectionsView.swift */; };
 		B92DD19F7E1E30424ECD4077 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = B93317EDC7C67BCFC77A2F39 /* PrivacyInfo.xcprivacy */; };
@@ -38,6 +41,7 @@
 		E041E453BA55806DC712B2CD /* DiscoveryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 418BCEB58EAD4602BDCA4D1F /* DiscoveryView.swift */; };
 		E9D34BCD75567272674C1BDE /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 1E2C056B19ECC4C3925366AD /* Localizable.xcstrings */; };
 		F18619EACA9AF20C0522CC0A /* SkillInformation.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA363661EA255190496CC133 /* SkillInformation.swift */; };
+		F3F5AE59AC45DFED38C01B3A /* LanguagePackCacheTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56132BA164AC4C48DAEDFEC0 /* LanguagePackCacheTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -59,6 +63,7 @@
 
 /* Begin PBXFileReference section */
 		0A11CDB8845617D526DEBCCC /* GlobalDiscoveryTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GlobalDiscoveryTests.swift; sourceTree = "<group>"; };
+		108AED3C1FBA2407DA591066 /* LanguagePackLibraryTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LanguagePackLibraryTests.swift; sourceTree = "<group>"; };
 		15EDB3D11A7E77A9C2601D07 /* PrompixApp.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = PrompixApp.swift; path = App/PrompixApp.swift; sourceTree = "<group>"; };
 		181F10CC14B9CCA0F7D65F88 /* LanguagePackCatalogTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LanguagePackCatalogTests.swift; sourceTree = "<group>"; };
 		1DB047A7403A35ABE65549AB /* PrompixTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PrompixTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -67,8 +72,10 @@
 		243EFE6F0844D0EF888FE71F /* DiscoveryTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DiscoveryTests.swift; sourceTree = "<group>"; };
 		3D483177B8C5492C1F15BA9A /* catalog.json */ = {isa = PBXFileReference; includeInIndex = 1; path = catalog.json; sourceTree = "<group>"; };
 		418BCEB58EAD4602BDCA4D1F /* DiscoveryView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = DiscoveryView.swift; path = Views/DiscoveryView.swift; sourceTree = "<group>"; };
+		56132BA164AC4C48DAEDFEC0 /* LanguagePackCacheTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LanguagePackCacheTests.swift; sourceTree = "<group>"; };
 		5F354051DCBAB4AB6BBF74FE /* CollectionsView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = CollectionsView.swift; path = Views/CollectionsView.swift; sourceTree = "<group>"; };
 		677CBB7564C450F9D6E919D2 /* TabSymbol.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = TabSymbol.swift; path = Views/TabSymbol.swift; sourceTree = "<group>"; };
+		6A20EA5CEEF44B4D47C56403 /* LanguagePackSyncTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LanguagePackSyncTests.swift; sourceTree = "<group>"; };
 		73DD13F54EED35BA0C0493C3 /* RemoteImage.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = RemoteImage.swift; path = Views/RemoteImage.swift; sourceTree = "<group>"; };
 		77543AF7CF1B4AB210D15633 /* WebExample.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = WebExample.swift; path = Views/WebExample.swift; sourceTree = "<group>"; };
 		79833C437CE4BD603EC0EEF8 /* Library.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = Library.swift; path = Models/Library.swift; sourceTree = "<group>"; };
@@ -84,6 +91,7 @@
 		C248C810F5017027B0C5F45C /* LibraryTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LibraryTests.swift; sourceTree = "<group>"; };
 		C913EA7CF73EA826D476B61F /* Artwork.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = Artwork.swift; path = Views/Artwork.swift; sourceTree = "<group>"; };
 		CAEF97C512C0865BA9BCB4CA /* Theme.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = Theme.swift; path = Views/Theme.swift; sourceTree = "<group>"; };
+		D884CB2F241ACA13A323696C /* LanguagePackCache.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = LanguagePackCache.swift; path = Models/LanguagePackCache.swift; sourceTree = "<group>"; };
 		DAD3758DD77E4B43A90D10E3 /* WebExamples */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = folder; path = WebExamples; sourceTree = "<group>"; };
 		E2C8EB92C5F7A296F45257D2 /* LanguagePackCatalog.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = LanguagePackCatalog.swift; path = Models/LanguagePackCatalog.swift; sourceTree = "<group>"; };
 		E64E60E95FE9245A77FC6D5D /* GlobalDiscoveryTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GlobalDiscoveryTests.swift; sourceTree = "<group>"; };
@@ -189,6 +197,7 @@
 				77543AF7CF1B4AB210D15633 /* WebExample.swift */,
 				3DF0BD821DD657FAC88B0052 /* Resources */,
 				E2C8EB92C5F7A296F45257D2 /* LanguagePackCatalog.swift */,
+				D884CB2F241ACA13A323696C /* LanguagePackCache.swift */,
 			);
 			name = Prompix;
 			path = Prompix;
@@ -222,6 +231,9 @@
 				C248C810F5017027B0C5F45C /* LibraryTests.swift */,
 				A8A92C8F2241E603156DE66A /* Resources */,
 				181F10CC14B9CCA0F7D65F88 /* LanguagePackCatalogTests.swift */,
+				56132BA164AC4C48DAEDFEC0 /* LanguagePackCacheTests.swift */,
+				6A20EA5CEEF44B4D47C56403 /* LanguagePackSyncTests.swift */,
+				108AED3C1FBA2407DA591066 /* LanguagePackLibraryTests.swift */,
 			);
 			name = PrompixTests;
 			path = PrompixTests;
@@ -383,6 +395,7 @@
 				CD629DA2EA58D2D347AD73FA /* Theme.swift in Sources */,
 				B03561E28402FF05206EB45A /* WebExample.swift in Sources */,
 				D0B230595110AEDBD78B9E99 /* LanguagePackCatalog.swift in Sources */,
+				9E60534B1E8D0A04BA2FCF95 /* LanguagePackCache.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -393,6 +406,9 @@
 				3D5B5349650B699D7BB77F81 /* GlobalDiscoveryTests.swift in Sources */,
 				1E5EA3A9E1020B54DE41139E /* LibraryTests.swift in Sources */,
 				84CCD61CDE494DC0ABABFAB2 /* LanguagePackCatalogTests.swift in Sources */,
+				F3F5AE59AC45DFED38C01B3A /* LanguagePackCacheTests.swift in Sources */,
+				ADE26CE39D84C234CC0C15C6 /* LanguagePackSyncTests.swift in Sources */,
+				08C5A86CF8E336487AB8819E /* LanguagePackLibraryTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -452,12 +468,12 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CLANG_ENABLE_OBJC_WEAK = NO;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 8;
+				CURRENT_PROJECT_VERSION = 9;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				INFOPLIST_FILE = Prompix/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
-				MARKETING_VERSION = 0.3.1;
+				MARKETING_VERSION = 0.3.2;
 				PRODUCT_BUNDLE_IDENTIFIER = com.p697.prompix;
 				PRODUCT_NAME = Prompix;
 				SDKROOT = iphoneos;
@@ -621,12 +637,12 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CLANG_ENABLE_OBJC_WEAK = NO;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 8;
+				CURRENT_PROJECT_VERSION = 9;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				INFOPLIST_FILE = Prompix/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
-				MARKETING_VERSION = 0.3.1;
+				MARKETING_VERSION = 0.3.2;
 				PRODUCT_BUNDLE_IDENTIFIER = com.p697.prompix;
 				PRODUCT_NAME = Prompix;
 				SDKROOT = iphoneos;

@@ -37,7 +37,7 @@ enum LanguagePackCatalog {
         let catalog: Catalog
         /// Includes an empty list for each original-only item; no translation is inferred.
         let availableLanguages: [String: [String]]
-        fileprivate let manifest: Manifest
+        let manifest: Manifest
         fileprivate init(catalog: Catalog, availableLanguages: [String: [String]], manifest: Manifest) {
             self.catalog = catalog; self.availableLanguages = availableLanguages; self.manifest = manifest
         }
@@ -151,6 +151,13 @@ enum LanguagePackCatalog {
     static func join(manifestBytes: Data, baseBytes: Data, localeBytes: [String: Data]) throws -> Catalog {
         let base = try verifyBase(baseBytes, manifest: verifyManifest(manifestBytes))
         guard Set(localeBytes.keys) == Set(base.manifest.locales.keys) else { throw ValidationError.missingLocale }
+        return try assemble(base: base, localeBytes: localeBytes)
+    }
+
+    /// Assemble only the supplied complete packs; omitted advertised languages
+    /// remain available for a later download and are not treated as withdrawn.
+    static func assemble(base: Base, localeBytes: [String: Data]) throws -> Catalog {
+        guard Set(localeBytes.keys).isSubset(of: Set(base.manifest.locales.keys)) else { throw ValidationError.missingLocale }
         let packs = try supportedLocales.compactMap { locale -> LocalePack? in
             guard let bytes = localeBytes[locale] else { return nil }
             return try verifyLocale(bytes, locale: locale, base: base)

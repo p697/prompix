@@ -406,7 +406,7 @@ import CryptoKit
         defer { slow.invalidateAndCancel(); recovery.invalidateAndCancel() }
         let refresh = Task { await library.refresh(session: slow) }
         for _ in 0..<100 {
-            if case .downloading(_, .some) = library.syncState { break }
+            if case .downloading = library.syncState { break }
             try await Task.sleep(for: .milliseconds(10))
         }
         guard case let .downloading(received, total) = library.syncState else {
@@ -414,8 +414,8 @@ import CryptoKit
             return XCTFail("The old cache must be accompanied by an observable download state")
         }
         XCTAssertEqual(received, 0)
-        XCTAssertEqual(total, CatalogRefreshProtocol.catalogData.count)
-        XCTAssertEqual(library.syncState.fractionCompleted, 0)
+        XCTAssertNil(total, "The complete requested download size is known only after base verification")
+        XCTAssertNil(library.syncState.fractionCompleted)
         XCTAssertTrue(library.isRefreshing)
         XCTAssertEqual(library.prompts, original)
         refresh.cancel()
@@ -531,7 +531,10 @@ import CryptoKit
         XCTAssertEqual(library.updatedAt, ISO8601DateFormatter().date(from: expected.publishedAt!))
         XCTAssertEqual(library.favorites, [favorite], "A new edition must preserve unrelated saved snapshots")
         XCTAssertEqual(library.draft(for: edited), draft)
-        XCTAssertEqual(try Data(contentsOf: directory.appending(path: "catalog.json")), CatalogRefreshProtocol.catalogData)
+        let storedCatalog = try JSONDecoder().decode(Catalog.self, from: Data(contentsOf: directory.appending(path: "catalog.json")))
+        XCTAssertEqual(storedCatalog.prompts, expected.prompts)
+        XCTAssertEqual(storedCatalog.version, expected.version)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: directory.appending(path: LanguagePackCache.indexFileName).path))
         let reopened = Library(directory: directory)
         XCTAssertEqual(reopened.version, expected.version)
         XCTAssertEqual(reopened.prompts, expected.prompts)
@@ -576,6 +579,18 @@ private final class CatalogRefreshProtocol: URLProtocol, @unchecked Sendable {
         return try! JSONSerialization.data(withJSONObject: catalog)
     }()
 
+    static func baseData(expanded: Bool) -> Data {
+        var catalog = try! JSONSerialization.jsonObject(with: expanded ? expandedCatalogData : catalogData) as! [String: Any]
+        catalog["schemaVersion"] = 2
+        catalog["prompts"] = (catalog["prompts"] as! [[String: Any]]).map { value in
+            var item = value
+            item["toolURL"] = NSNull(); item["media"] = NSNull()
+            var source = item["source"] as! [String: Any]; source["url"] = NSNull(); item["source"] = source
+            return item
+        }
+        return try! JSONSerialization.data(withJSONObject: catalog, options: [.sortedKeys])
+    }
+
     override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
     override func startLoading() {
@@ -584,19 +599,19 @@ private final class CatalogRefreshProtocol: URLProtocol, @unchecked Sendable {
             return
         }
         let mode = request.value(forHTTPHeaderField: "X-Prompix-Test-Response")
-        let catalog = mode == "expanded" ? Self.expandedCatalogData : Self.catalogData
+        let catalog = Self.baseData(expanded: mode == "expanded")
         if mode == "offline" {
             client?.urlProtocol(self, didFailWithError: URLError(.notConnectedToInternet))
             return
         }
         let bytes: Data
-        if url.path == "/v1/latest.json" {
+        if url.path == "/v2/latest.json" {
             let digest = SHA256.hash(data: catalog).map { String(format: "%02x", $0) }.joined()
             bytes = Data("""
-                {"schemaVersion":1,"version":"edition-after-refresh","sha256":"\(digest)",
-                 "catalog":"https://api.prompix.dev/releases/edition-after-refresh/catalog.json"}
+                {"schemaVersion":2,"version":"edition-after-refresh","publishedAt":"2026-10-11T10:00:00Z", "count":\(mode == "expanded" ? 345 : 1),
+                 "base":{"url":"https://api.prompix.dev/releases/edition-after-refresh/v2/base.json", "sha256":"\(digest)","byteCount":\(catalog.count),"count":\(mode == "expanded" ? 345 : 1)},"locales":{}}
                 """.utf8)
-        } else if url.path == "/releases/edition-after-refresh/catalog.json" {
+        } else if url.path == "/releases/edition-after-refresh/v2/base.json" {
             if mode == "timeout" {
                 // A deterministic transport error, not a measurement of the real 25-second deadline.
                 client?.urlProtocol(self, didFailWithError: URLError(.timedOut))
@@ -611,7 +626,7 @@ private final class CatalogRefreshProtocol: URLProtocol, @unchecked Sendable {
         let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil,
             headerFields: ["Content-Type": "application/json", "Content-Length": String(bytes.count)])!
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-        if mode == "suspended-catalog", url.path != "/v1/latest.json" { return }
+        if mode == "suspended-catalog", url.path != "/v2/latest.json" { return }
         client?.urlProtocol(self, didLoad: bytes)
         client?.urlProtocolDidFinishLoading(self)
     }
