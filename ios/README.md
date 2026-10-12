@@ -105,3 +105,34 @@ during the latter run. `testShareCancellationKeepsDetailUsable` and
 `testCopiedPromptCanOpenExternalToolAndReturn` cover cancellation and external-tool
 return; opening Safari is not proof of tool login, prompt prefill or generation.
 Native tab selection supports both the iPhone bottom bar and iPad floating tabs.
+
+## Production upgrade and complete-catalog performance
+
+`GlobalDiscoveryUITests/testProductionCatalogUpgradePreservesSavedContentAndDrafts`
+is opt-in with `PROMPIX_PRODUCTION_UPGRADE_TEST=1`. Back up the dedicated simulator
+app data, then stage the external creatorless 68-item catalog, a saved prompt still
+present in production (for example `gentle-tarot`), and a nonempty edited original
+draft. Additional language drafts exercise preservation of the whole draft store.
+Pass `PROMPIX_ACCEPTANCE_CONTAINER` with that simulator's explicit App data-container
+path. The test validates the simulator UUID and bundle metadata, and re-resolves
+the container after each launch because XCTest may change its UUID on reinstall.
+It uses the real production endpoint, observes available update stages, opens a
+downloaded creator, verifies saved source text and all drafts, and repeats the
+checks after a cached restart. It does not fake a slow network or guarantee that a
+fast transfer renders every intermediate progress stage.
+
+After a complete translated catalog is present, opt into
+`testTranslatedCatalogBrowsingPerformance` and
+`testTranslatedCatalogProcessLaunchPerformance` with
+`PROMPIX_FULL_CATALOG_PERFORMANCE=1` and the same explicit container variable.
+Run the Release build with testability enabled. The first probe records three
+rounds of viewport drags and confirms that different real cards become visible;
+CPU and clock values include XCTest gestures and accessibility queries, not FPS.
+The second measures five process launches until responsive, without clearing OS
+or filesystem caches. Both require more than 68 items and complete English prompt
+translations; the small bundled catalog cannot satisfy these gates.
+
+Supply these variables through the UI test runner environment (for example an
+external `.xctestrun` file). Keep fixtures, screenshots, logs and result bundles
+outside Git. Restore the simulator data and settings after acceptance work; never
+stage these fixtures in a user's physical-device container.

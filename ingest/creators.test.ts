@@ -70,7 +70,9 @@ test("creator enrichment prefers exact verified identity and accepts only matchi
 
 test("X author expansions retain real structured fields and validate remote photos", () => {
   const url = xSearchURL("1234");
-  assert.equal(url.searchParams.get("expansions"), "author_id");
+  assert.deepEqual(url.searchParams.get("expansions")?.split(","), ["author_id", "attachments.media_keys"]);
+  assert.match(url.searchParams.get("tweet.fields")!, /note_tweet/);
+  assert.match(url.searchParams.get("media.fields")!, /variants/);
   assert.match(url.searchParams.get("user.fields")!, /profile_image_url/);
   assert.equal(url.searchParams.get("since_id"), "1234");
   assert.equal(url.searchParams.get("max_results"), "10", "Author enrichment does not increase paid post search size");

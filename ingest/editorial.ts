@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { promptSchema } from "../packages/schema/catalog.ts";
 import type { Candidate } from "./sources.ts";
+import { isNativeXDraft } from "./x-intake.ts";
 
 const https = z.url().refine((url) => new URL(url).protocol === "https:", "HTTPS required");
 // Picking from a refined object is rejected by Zod. Reuse the exact field
@@ -46,6 +47,8 @@ export function applyEditorialReviews(items: Candidate[], reviews: Reviews): Can
       reviewStatus: "candidate",
       editorialRank: priority ?? 0,
     };
+    // Metadata review cannot grant publication permission to an unspecified X source.
+    if (isNativeXDraft(item)) return { ...updated, reviewStatus: "draft" };
     // Website cards need an inspectable result, not just a code-generation brief.
     if (updated.kind === "web" && (!updated.media?.demoURL || !updated.media?.imageURL)) return baseline;
     return updated;

@@ -1,0 +1,128 @@
+{
+  "schemaVersion": 1,
+  "status": "draft-not-uploaded",
+  "appVersion": "0.3.1",
+  "buildNumber": "8",
+  "updatedAt": "2026-10-12",
+  "notes": [
+    "Original store copy for implemented features, not third-party prompt content.",
+    "Nine locales checked for field lengths and feature consistency; native-speaker market review has not been performed.",
+    "Primary store locale, final category, legal copyright owner, review contact, availability and age/privacy questionnaire answers remain unset.",
+    "Chinese URLs currently serve Simplified Chinese; all other support/legal URLs serve English.",
+    "No fixed catalog count or promise of daily new items. No generation, Skill execution or cloud sync claims."
+  ],
+  "suggestedCategories": {
+    "primary": "GRAPHICS_AND_DESIGN",
+    "secondary": "PRODUCTIVITY"
+  },
+  "localizations": [
+    {
+      "storeLocale": "en-US",
+      "appLocale": "en",
+      "name": "Prompix",
+      "subtitle": "Discover prompts worth trying",
+      "promotionalText": "Explore text, image, video and website prompts. Meet creators, browse Skills, and save ideas to make your own.",
+      "keywords": "prompts,inspiration,creative,writing,image,video,website,skills,ideas",
+      "description": "Find your next creative starting point.\n\nPrompix is a native app for discovering curated text, image, video and website prompts.\n\n• Browse by format, search by keyword, or explore collections.\n• Discover creators, browse their collected work, save them, and visit their original profiles.\n• Read open-source Skills, inspect source files and usage guidance, then use them in a compatible coding assistant.\n• View images and galleries, play videos, and try bundled interactive website examples.\n• Copy a complete prompt or edit a local draft. Save favorites for later.\n• Check each item's author, source and license, or report a content issue.\n\nNo Prompix account is required. Favorites, saved creators, recent searches and drafts stay on your device. Bundled original examples work offline; saved text and successfully stored thumbnails can also be read offline. Online catalog updates and videos need a connection.\n\nThe interface supports nine languages: English, Simplified and Traditional Chinese, Japanese, Korean, Spanish, Brazilian Portuguese, French and German. Switch between available AI translations and the original. Copy and edit the selected language; drafts are saved separately for each language. Missing translations fall back to the original.\n\nPrompix does not generate AI responses, images or videos, and does not install or run Skills. Use copied content in an appropriate external tool, which may require its own account or payment. Results depend on the model and settings.",
+      "supportURL": "https://prompix.dev/support",
+      "privacyPolicyURL": "https://prompix.dev/privacy",
+      "marketingURL": "https://prompix.dev"
+    },
+    {
+      "storeLocale": "zh-Hans",
+      "appLocale": "zh-Hans",
+      "name": "Prompix",
+      "subtitle": "发现值得试试的 AI 提示词",
+      "promotionalText": "从文本、图片、视频到网页，发现值得试试的 Prompt。认识创作者，探索 Skills，把喜欢的想法留在手边。",
+      "keywords": "提示词,创作灵感,图片灵感,视频灵感,写作助手,网页设计,智能技能",
+      "description": "找到下一个想试试的创作。\n\nPrompix 是原生的 Prompt 发现应用，汇集精选的文本、图片、视频和网页提示词。\n\n• 按类型浏览，搜索关键词，或从专题里发现新想法。\n• 认识创作者，浏览收录作品，收藏作者，并打开原平台主页。\n• 阅读开源 Skill 的完整说明、源文件与使用指引，带到兼容的编程助手中使用。\n• 查看图片与图集、播放视频，体验内置的交互网页示例。\n• 复制完整 Prompt，或先编辑为本地草稿；收藏喜欢的条目。\n• 查看作者、来源和许可信息，也可以反馈内容问题。\n\n无需创建 Prompix 账号。收藏、收藏的创作者、最近搜索和草稿保存在设备上。内置原创示例可以离线浏览；已保存的文字与成功缓存的缩略图也可离线查看。线上内容更新与视频需要联网。\n\n界面支持英语、简繁中文、日语、韩语、西班牙语、巴西葡萄牙语、法语和德语。内容可在已有的 AI 译文与原文之间切换，复制和编辑使用所选语言，各语言草稿独立保存。缺少译文时显示原文。\n\nPrompix 不在 App 内生成 AI 回复、图片或视频，也不安装或执行 Skill。请将复制的内容用于合适的外部工具；这些工具可能需要自己的账号或付费。生成结果取决于模型与设置。",
+      "supportURL": "https://prompix.dev/zh/support",
+      "privacyPolicyURL": "https://prompix.dev/zh/privacy",
+      "marketingURL": "https://prompix.dev/zh"
+    },
+    {
+      "storeLocale": "zh-Hant",
+      "appLocale": "zh-Hant",
+      "name": "Prompix",
+      "subtitle": "發現值得一試的 AI 提示詞",
+      "promotionalText": "從文字、圖片、影片到網頁，發現值得一試的 Prompt。認識創作者，探索 Skills，把喜歡的想法收藏起來。",
+      "keywords": "提示詞,創作靈感,圖片靈感,影片靈感,寫作助手,網頁設計,智慧技能",
+      "description": "找到下一個想試試的創作。\n\nPrompix 是原生的 Prompt 探索 App，匯集精選的文字、圖片、影片與網頁提示詞。\n\n• 依類型瀏覽、搜尋關鍵字，或從專題中發現新想法。\n• 認識創作者、瀏覽收錄作品、收藏作者，並開啟原平台個人頁面。\n• 閱讀開源 Skill 的完整說明、原始檔與使用指引，帶到相容的程式開發助手中使用。\n• 查看圖片與相簿、播放影片，體驗內建的互動網頁範例。\n• 複製完整 Prompt，或先編輯為本機草稿；收藏喜歡的項目。\n• 查看作者、來源與授權資訊，也可以回報內容問題。\n\n無須建立 Prompix 帳號。收藏、收藏的創作者、最近搜尋與草稿都儲存在裝置上。內建原創範例可離線瀏覽；已儲存的文字與成功快取的縮圖也可離線查看。線上內容更新與影片需要網路連線。\n\n介面支援英文、簡繁中文、日文、韓文、西班牙文、巴西葡萄牙文、法文與德文。內容可在現有的 AI 譯文與原文之間切換，複製和編輯使用所選語言，各語言草稿分別儲存。缺少譯文時會顯示原文。\n\nPrompix 不會在 App 內產生 AI 回覆、圖片或影片，也不會安裝或執行 Skill。請將複製的內容用於合適的外部工具；這些工具可能需要另外的帳號或付費。產生結果取決於模型與設定。",
+      "supportURL": "https://prompix.dev/zh/support",
+      "privacyPolicyURL": "https://prompix.dev/zh/privacy",
+      "marketingURL": "https://prompix.dev/zh"
+    },
+    {
+      "storeLocale": "ja",
+      "appLocale": "ja",
+      "name": "Prompix",
+      "subtitle": "試したくなるプロンプトを発見",
+      "promotionalText": "文章、画像、動画、Webサイトのプロンプトを探そう。クリエイターやSkillsに出会い、気になるアイデアを自分のものに。",
+      "keywords": "プロンプト,アイデア,文章作成,画像制作,動画制作,ウェブ制作,スキル",
+      "description": "次に試したいアイデアが見つかる。\n\nPrompixは、厳選された文章・画像・動画・Webサイトのプロンプトを探せるネイティブアプリです。\n\n• 種類別に閲覧、キーワードで検索、コレクションから発見。\n• クリエイターの掲載作品を閲覧し、お気に入りに登録。元のプロフィールも開けます。\n• オープンソースのSkillの説明、ソースファイル、使い方を読み、対応するコーディングアシスタントで活用。\n• 画像やギャラリー、動画、内蔵のインタラクティブなWebサイト例を確認。\n• プロンプト全文をコピー、または端末内の下書きとして編集。気になる項目はお気に入りへ。\n• 作者、出典、ライセンスを確認し、内容の問題を報告。\n\nPrompixのアカウントは不要です。お気に入り、保存したクリエイター、最近の検索、下書きは端末内に保存されます。内蔵のオリジナル例、保存した文章、正常にキャッシュされたサムネイルはオフラインでも閲覧できます。オンラインのコンテンツ更新や動画には通信が必要です。\n\n画面は日本語、英語、簡体字・繁体字中国語、韓国語、スペイン語、ブラジルポルトガル語、フランス語、ドイツ語に対応。用意されたAI翻訳と原文を切り替え、選択した言語でコピー・編集できます。下書きは言語ごとに保存され、翻訳がない場合は原文を表示します。\n\nPrompix内でAIの回答、画像、動画を生成したり、Skillをインストール・実行したりすることはできません。コピーした内容は適切な外部ツールでお使いください。外部ツールには別のアカウントや料金が必要な場合があり、結果はモデルや設定によって変わります。",
+      "supportURL": "https://prompix.dev/support",
+      "privacyPolicyURL": "https://prompix.dev/privacy",
+      "marketingURL": "https://prompix.dev"
+    },
+    {
+      "storeLocale": "ko",
+      "appLocale": "ko",
+      "name": "Prompix",
+      "subtitle": "써 보고 싶은 프롬프트 발견",
+      "promotionalText": "텍스트, 이미지, 영상, 웹사이트 프롬프트를 둘러보세요. 크리에이터와 Skills를 발견하고 마음에 드는 아이디어를 저장하세요.",
+      "keywords": "프롬프트,아이디어,창작도구,글쓰기,이미지,영상제작,웹사이트",
+      "description": "다음에 시도할 아이디어를 찾아보세요.\n\nPrompix는 엄선한 텍스트, 이미지, 영상, 웹사이트 프롬프트를 탐색하는 네이티브 앱입니다.\n\n• 유형별로 둘러보고, 키워드로 검색하고, 컬렉션에서 새로운 아이디어를 찾아보세요.\n• 크리에이터의 수록 작품을 살펴보고 즐겨찾기에 저장하거나 원본 프로필을 여세요.\n• 오픈소스 Skill의 설명, 소스 파일, 사용 안내를 읽고 호환되는 코딩 도우미에서 활용하세요.\n• 이미지와 갤러리, 영상을 감상하고 내장된 인터랙티브 웹사이트 예제를 열어보세요.\n• 전체 프롬프트를 복사하거나 기기 내 초안으로 편집하고, 원하는 항목을 저장하세요.\n• 작성자, 출처, 라이선스를 확인하고 콘텐츠 문제를 신고하세요.\n\nPrompix 계정은 필요하지 않습니다. 즐겨찾기, 저장한 크리에이터, 최근 검색, 초안은 기기에 보관됩니다. 내장된 자체 제작 예제, 저장한 텍스트, 캐시 저장이 완료된 썸네일은 오프라인에서도 볼 수 있습니다. 온라인 콘텐츠 업데이트와 영상에는 인터넷 연결이 필요합니다.\n\n인터페이스는 한국어, 영어, 중국어 간체와 번체, 일본어, 스페인어, 브라질 포르투갈어, 프랑스어, 독일어를 지원합니다. 제공되는 AI 번역과 원문을 전환하고 선택한 언어로 복사하거나 편집하세요. 언어별 초안은 따로 저장되며 번역이 없으면 원문이 표시됩니다.\n\nPrompix는 앱 안에서 AI 답변, 이미지, 영상을 생성하거나 Skill을 설치·실행하지 않습니다. 복사한 내용은 적절한 외부 도구에서 사용하세요. 외부 도구는 별도 계정이나 결제가 필요할 수 있으며, 결과는 모델과 설정에 따라 달라집니다.",
+      "supportURL": "https://prompix.dev/support",
+      "privacyPolicyURL": "https://prompix.dev/privacy",
+      "marketingURL": "https://prompix.dev"
+    },
+    {
+      "storeLocale": "es-ES",
+      "appLocale": "es",
+      "name": "Prompix",
+      "subtitle": "Descubre prompts para crear",
+      "promotionalText": "Explora prompts de texto, imagen, vídeo y sitios web. Descubre creadores y Skills, y guarda ideas para hacerlas tuyas.",
+      "keywords": "prompts,inspiración,creatividad,escritura,imagen,vídeo,web,skills,ideas",
+      "description": "Encuentra tu próxima idea para crear.\n\nPrompix es una app nativa para descubrir una selección de prompts de texto, imagen, vídeo y sitios web.\n\n• Explora por formato, busca por palabra clave o recorre colecciones.\n• Descubre creadores, consulta sus obras recopiladas, guárdalos y visita sus perfiles originales.\n• Lee Skills de código abierto, revisa sus archivos e instrucciones y úsalos con un asistente de programación compatible.\n• Mira imágenes y galerías, reproduce vídeos y prueba los ejemplos web interactivos incluidos.\n• Copia un prompt completo o edita un borrador local. Guarda tus favoritos para después.\n• Consulta el autor, la fuente y la licencia, o informa de un problema con el contenido.\n\nNo necesitas una cuenta de Prompix. Tus favoritos, creadores guardados, búsquedas recientes y borradores se quedan en tu dispositivo. Los ejemplos originales incluidos, los textos guardados y las miniaturas almacenadas correctamente están disponibles sin conexión. Las actualizaciones del catálogo y los vídeos necesitan internet.\n\nLa interfaz está disponible en nueve idiomas: español, inglés, chino simplificado y tradicional, japonés, coreano, portugués de Brasil, francés y alemán. Alterna entre las traducciones con IA disponibles y el original. Copia y edita en el idioma elegido, con borradores separados para cada idioma. Si falta una traducción, se muestra el original.\n\nPrompix no genera respuestas de IA, imágenes ni vídeos, ni instala o ejecuta Skills. Usa el contenido copiado en una herramienta externa adecuada, que puede requerir su propia cuenta o un pago. Los resultados dependen del modelo y de sus ajustes.",
+      "supportURL": "https://prompix.dev/support",
+      "privacyPolicyURL": "https://prompix.dev/privacy",
+      "marketingURL": "https://prompix.dev"
+    },
+    {
+      "storeLocale": "pt-BR",
+      "appLocale": "pt-BR",
+      "name": "Prompix",
+      "subtitle": "Descubra prompts para criar",
+      "promotionalText": "Explore prompts de texto, imagem, vídeo e sites. Conheça criadores, descubra Skills e salve ideias para dar o seu toque.",
+      "keywords": "prompts,inspiração,criatividade,escrita,imagem,vídeo,sites,skills,ideias",
+      "description": "Encontre seu próximo ponto de partida criativo.\n\nPrompix é um app nativo para descobrir uma seleção de prompts de texto, imagem, vídeo e sites.\n\n• Explore por formato, pesquise por palavra-chave ou navegue pelas coleções.\n• Conheça criadores, veja seus trabalhos reunidos, salve seus perfis e visite a plataforma de origem.\n• Leia Skills de código aberto, consulte seus arquivos e orientações de uso e leve-os para um assistente de programação compatível.\n• Veja imagens e galerias, reproduza vídeos e experimente os exemplos de sites interativos incluídos.\n• Copie um prompt completo ou edite um rascunho local. Salve seus favoritos para depois.\n• Confira autor, fonte e licença, ou relate um problema com o conteúdo.\n\nNão é preciso criar uma conta no Prompix. Favoritos, criadores salvos, pesquisas recentes e rascunhos ficam no seu dispositivo. Os exemplos originais incluídos, os textos salvos e as miniaturas armazenadas com sucesso podem ser vistos offline. Atualizações do catálogo e vídeos precisam de internet.\n\nA interface oferece nove idiomas: português do Brasil, inglês, chinês simplificado e tradicional, japonês, coreano, espanhol, francês e alemão. Alterne entre as traduções por IA disponíveis e o original. Copie e edite no idioma escolhido, com rascunhos separados por idioma. Quando não há tradução, o original é exibido.\n\nPrompix não gera respostas de IA, imagens ou vídeos, nem instala ou executa Skills. Use o conteúdo copiado em uma ferramenta externa apropriada, que pode exigir uma conta própria ou pagamento. Os resultados dependem do modelo e das configurações.",
+      "supportURL": "https://prompix.dev/support",
+      "privacyPolicyURL": "https://prompix.dev/privacy",
+      "marketingURL": "https://prompix.dev"
+    },
+    {
+      "storeLocale": "fr-FR",
+      "appLocale": "fr",
+      "name": "Prompix",
+      "subtitle": "Des prompts pour vos idées",
+      "promotionalText": "Explorez des prompts pour le texte, les images, les vidéos et le web. Découvrez des créateurs et des Skills, puis gardez vos idées préférées.",
+      "keywords": "prompts,inspiration,création,écriture,image,vidéo,web,skills,idées",
+      "description": "Trouvez votre prochaine idée à essayer.\n\nPrompix est une app native pour découvrir une sélection de prompts pour le texte, les images, les vidéos et les sites web.\n\n• Parcourez les formats, recherchez un mot-clé ou explorez les collections.\n• Découvrez des créateurs, consultez leurs œuvres sélectionnées, enregistrez leurs profils et visitez leur plateforme d'origine.\n• Lisez des Skills open source, consultez leurs fichiers et leur mode d'emploi, puis utilisez-les dans un assistant de programmation compatible.\n• Regardez des images et des galeries, lancez des vidéos et essayez les exemples de sites interactifs intégrés.\n• Copiez un prompt complet ou modifiez un brouillon local. Gardez vos favoris pour plus tard.\n• Consultez l'auteur, la source et la licence, ou signalez un problème de contenu.\n\nAucun compte Prompix n'est nécessaire. Favoris, créateurs enregistrés, recherches récentes et brouillons restent sur votre appareil. Les exemples originaux intégrés, les textes enregistrés et les miniatures correctement mises en cache sont accessibles hors ligne. Les mises à jour du catalogue et les vidéos nécessitent internet.\n\nL'interface propose neuf langues : français, anglais, chinois simplifié et traditionnel, japonais, coréen, espagnol, portugais du Brésil et allemand. Passez des traductions par IA disponibles au texte original. Copiez et modifiez dans la langue choisie, avec un brouillon distinct par langue. Sans traduction, le texte original s'affiche.\n\nPrompix ne génère pas de réponses d'IA, d'images ou de vidéos et n'installe ni n'exécute de Skills. Utilisez le contenu copié dans un outil externe adapté, qui peut nécessiter un compte ou un paiement. Les résultats dépendent du modèle et de ses réglages.",
+      "supportURL": "https://prompix.dev/support",
+      "privacyPolicyURL": "https://prompix.dev/privacy",
+      "marketingURL": "https://prompix.dev"
+    },
+    {
+      "storeLocale": "de-DE",
+      "appLocale": "de",
+      "name": "Prompix",
+      "subtitle": "Prompts für deine Ideen",
+      "promotionalText": "Entdecke Prompts für Text, Bild, Video und Websites. Lerne Kreative kennen, stöbere durch Skills und speichere Ideen zum Ausprobieren.",
+      "keywords": "prompts,inspiration,kreativität,schreiben,bilder,video,websites,skills,ideen",
+      "description": "Finde den Ausgangspunkt für deine nächste Idee.\n\nPrompix ist eine native App mit ausgewählten Prompts für Text, Bild, Video und Websites.\n\n• Stöbere nach Format, suche nach Stichwörtern oder entdecke Sammlungen.\n• Lerne Kreative kennen, sieh dir ihre gesammelten Werke an, speichere ihre Profile und besuche die Originalplattform.\n• Lies Open-Source-Skills, prüfe Quelldateien und Anwendungshinweise und nutze sie mit einem kompatiblen Programmierassistenten.\n• Sieh dir Bilder und Galerien an, spiele Videos ab und probiere die integrierten interaktiven Website-Beispiele aus.\n• Kopiere einen vollständigen Prompt oder bearbeite einen lokalen Entwurf. Speichere Favoriten für später.\n• Prüfe Urheber, Quelle und Lizenz oder melde ein Problem mit einem Inhalt.\n\nDu brauchst kein Prompix-Konto. Favoriten, gespeicherte Kreative, letzte Suchanfragen und Entwürfe bleiben auf deinem Gerät. Integrierte eigene Beispiele, gespeicherte Texte und erfolgreich zwischengespeicherte Vorschaubilder sind offline verfügbar. Katalogaktualisierungen und Videos benötigen eine Internetverbindung.\n\nDie Oberfläche unterstützt neun Sprachen: Deutsch, Englisch, vereinfachtes und traditionelles Chinesisch, Japanisch, Koreanisch, Spanisch, brasilianisches Portugiesisch und Französisch. Wechsle zwischen verfügbaren KI-Übersetzungen und dem Original. Kopiere und bearbeite die gewählte Sprache; Entwürfe werden je Sprache getrennt gespeichert. Fehlt eine Übersetzung, erscheint das Original.\n\nPrompix erzeugt keine KI-Antworten, Bilder oder Videos und installiert oder startet keine Skills. Nutze kopierte Inhalte in einem passenden externen Werkzeug. Dafür können ein eigenes Konto oder Gebühren nötig sein. Ergebnisse hängen vom Modell und den Einstellungen ab.",
+      "supportURL": "https://prompix.dev/support",
+      "privacyPolicyURL": "https://prompix.dev/privacy",
+      "marketingURL": "https://prompix.dev"
+    }
+  ]
+}

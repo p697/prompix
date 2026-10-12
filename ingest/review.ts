@@ -6,6 +6,7 @@ import { editorialMetadataSchema, reviewsSchema, applyEditorialReviews } from ".
 import { repositories, videoArchive, type Candidate } from "./sources.ts";
 import { skillSources } from "./skills.ts";
 import { lockContent } from "./publication.ts";
+import { isNativeXDraft } from "./x-intake.ts";
 
 const [id, metadataFile] = process.argv.slice(2);
 if (!id || !/^[a-z0-9-]+$/.test(id) || !metadataFile)
@@ -19,7 +20,7 @@ if (!relativeRoot || (!relativeRoot.startsWith("..") && !isAbsolute(relativeRoot
 const unlock = await lockContent(root);
 try {
 let candidate: Candidate | undefined;
-for (const source of [...repositories.map((source) => source.id), "prompts-chat", videoArchive.id, ...skillSources.map(source => `skill-${source.id}`)]) {
+for (const source of [...repositories.map((source) => source.id), "prompts-chat", "x-native", videoArchive.id, ...skillSources.map(source => `skill-${source.id}`)]) {
   try {
     const items: Candidate[] = JSON.parse(await readFile(join(root, "candidates", `${source}.json`), "utf8"));
     candidate = items.find((item) => item.id === id);
@@ -34,8 +35,8 @@ try { reviews = reviewsSchema.parse(JSON.parse(await readFile(file, "utf8"))); }
 catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
 reviews[id] = { fingerprint: candidate.fingerprint, reviewedAt: new Date().toISOString(), metadata };
 const approved = applyEditorialReviews([candidate], reviews)[0];
-if (approved.reviewStatus !== "candidate") throw new Error("Website review requires both a working demo URL and a real preview image URL");
+if (approved.reviewStatus !== "candidate" && !isNativeXDraft(candidate)) throw new Error("Website review requires both a working demo URL and a real preview image URL");
 await writeFile(`${file}.tmp`, JSON.stringify(reviews, null, 2) + "\n");
 await rename(`${file}.tmp`, file);
-console.log(JSON.stringify({ reviewed: id, status: "ready-for-next-edition", published: false }));
+console.log(JSON.stringify({ reviewed: id, status: isNativeXDraft(candidate) ? "draft-awaiting-source-review" : "ready-for-next-edition", published: false }));
 } finally { await unlock(); }

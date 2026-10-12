@@ -50,9 +50,10 @@ export function xSearchURL(since?: string): URL {
   const url = new URL("https://api.x.com/2/tweets/search/recent");
   url.searchParams.set("query", '("prompt" OR "提示词" OR "SKILL.md") ("Seedance" OR "Nano Banana" OR "website" OR "tarot" OR "Claude" OR "GPT") -is:retweet -is:reply');
   url.searchParams.set("max_results", "10");
-  url.searchParams.set("tweet.fields", "created_at,author_id,public_metrics,lang,entities");
-  url.searchParams.set("expansions", "author_id");
+  url.searchParams.set("tweet.fields", "created_at,author_id,public_metrics,lang,entities,note_tweet,attachments");
+  url.searchParams.set("expansions", "author_id,attachments.media_keys");
   url.searchParams.set("user.fields", "id,name,username,profile_image_url,description,url");
+  url.searchParams.set("media.fields", "media_key,type,url,preview_image_url,variants");
   if (since && /^\d+$/.test(since)) url.searchParams.set("since_id", since);
   return url;
 }
@@ -68,6 +69,7 @@ export async function searchX(bearer: string, since?: string) {
   return {
     posts: body.data ?? [],
     creators: parseXUsers(body.includes?.users),
+    media: body.includes?.media ?? [],
     newest: body.meta?.newest_id as string | undefined,
   };
 }

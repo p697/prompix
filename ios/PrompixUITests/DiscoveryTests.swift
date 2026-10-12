@@ -134,7 +134,6 @@ import UIKit
             add(transcript)
         }
         if voiceOver.isEnabled { try voiceOver.disable() }
-        app.buttons["kind-text"].tap()
         try voiceOver.enable()
 
         func require(_ condition: Bool, _ message: String) throws {
@@ -161,9 +160,34 @@ import UIKit
             XCTAssertTrue(element.exists)
             element.doubleTap()
         }
+        // The bundled creatorless catalog exercises the same persistent entry
+        // as an older downloaded catalog. Verify actual speech and navigation,
+        // without claiming coverage of downloaded creator names or profiles.
+        // VoiceOver can restore an earlier card focus when enabled. Anchor at
+        // the toolbar before moving forward to the creator section.
+        app.buttons["searchButton"].tap()
+        let initialSpeech = try voiceOver.currentSpeech().utterance
+        speech.append("initial toolbar focus (targeted exploration): \(initialSpeech)")
+        try require(initialSpeech.contains("搜索") && initialSpeech.contains("按钮"), "Initial spoken focus must be the Search toolbar action")
+        try focus("creator section") { $0.contains("创作者") && $0.contains("标题") }
+        try focus("creator directory entry") { $0.contains("查看全部") && $0.contains("按钮") }
+        activate(app.buttons["allCreators"])
+        try require(app.buttons["loadCreatorsDirectory"].waitForExistence(timeout: 5), "The spoken creator entry must open its directory")
+        try focus("creator empty state") { $0.contains("暂无创作者") }
+        try focus("creator update action") { $0.contains("检查内容更新") && $0.contains("按钮") }
+        try focus("creator directory back", backwards: true) { $0.contains("返回") && $0.contains("按钮") }
+        activate(app.navigationBars.buttons.element(boundBy: 0))
+        try require(app.buttons["kind-text"].waitForExistence(timeout: 5), "Creator-directory Back must restore discovery")
+        app.buttons["kind-text"].tap()
+        let textFilterSpeech = try voiceOver.currentSpeech().utterance
+        speech.append("text filter (targeted exploration): \(textFilterSpeech)")
+        try require(textFilterSpeech.contains("文本") && textFilterSpeech.contains("按钮"), "The explored filter must announce Text")
+        activate(app.buttons["kind-text"])
+        try require(app.buttons["kind-text"].isSelected, "The spoken Text filter must activate")
         try focus("card") { $0.contains("抽一张塔罗") && !$0.contains("收藏") }
         activate(app.buttons["prompt-gentle-tarot"])
         try require(app.buttons["copyPrompt"].waitForExistence(timeout: 5), "Spoken card must open detail")
+        try focus("detail content license") { $0.contains("内容许可") && $0.contains("Creative Commons Zero") }
         try focus("detail copy") { $0.contains("复制 Prompt") }
         activate(app.buttons["copyPrompt"])
         try require(app.buttons["copyPrompt"].label.contains("已复制"), "Copy must confirm its action")
@@ -188,9 +212,19 @@ import UIKit
             return Date().timeIntervalSince(unchangedSince) >= 0.6
         }, object: nil)
         try require(XCTWaiter.wait(for: [stableCopy], timeout: 5) == .completed, "Copy action must settle above the visible keyboard")
-        try focus("settled editor copy") { $0.contains("复制修改后的 Prompt") }
+        // The keyboard's delayed announcement can replace currentSpeech after
+        // Copy was reached. Continuing forward then traverses every keyboard
+        // key and ends at Dictation. Explore the settled control directly, as
+        // with the saved tab below, and require real spoken focus before acting.
+        let settledCopy = app.buttons["copyEditedPrompt"]
+        try require(settledCopy.isHittable, "The settled copy action must be reachable above the keyboard")
+        settledCopy.tap()
+        let settledCopySpeech = try voiceOver.currentSpeech().utterance
+        speech.append("settled editor copy (targeted exploration): \(settledCopySpeech)")
+        try require(settledCopySpeech.contains("复制修改后的 Prompt") && settledCopySpeech.contains("按钮"),
+                    "The explored settled control must announce Copy Edited Prompt")
         let beforeCopy = editor.value as? String
-        activate(app.buttons["copyEditedPrompt"])
+        activate(settledCopy)
         let confirmation = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label CONTAINS %@", "已复制"), object: app.buttons["copyEditedPrompt"])
         try require(XCTWaiter.wait(for: [confirmation], timeout: 3) == .completed, "Edited copy must confirm its action")
         try require(editor.value as? String == beforeCopy, "Copy activation must not type into the editor")

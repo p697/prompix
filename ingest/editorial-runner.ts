@@ -3,6 +3,7 @@ import type { Prompt } from "../packages/schema/catalog.ts";
 import { repositories, fingerprint, type Candidate } from "./sources.ts";
 import { skillSources } from "./skills.ts";
 import { applyEditorialReviews, editorialMetadataSchema, type Reviews } from "./editorial.ts";
+import { isNativeXDraft, nativeXPublicationBlocker } from "./x-intake.ts";
 
 export const editorialVersion = 1;
 export const editorialModel = "gpt-5.6-luna";
@@ -51,6 +52,7 @@ export function editorialInput(item: Candidate) {
     requiredPreviewLabel: previewLabel(item) };
 }
 export function automaticReviewEligibility(item: Candidate): string | undefined {
+  if (isNativeXDraft(item)) return nativeXPublicationBlocker;
   if (item.fingerprint !== fingerprint(item.prompt)) return "Source fingerprint does not match its complete instructions";
   const revision = item.source.revision;
   if (!revision || !/^[a-f0-9]{40}$/.test(revision)) return "Missing immutable source revision";
