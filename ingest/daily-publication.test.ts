@@ -1,12 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { localizationLanguages, type Catalog, type Prompt } from "../packages/schema/catalog.ts";
 import { beginDailyPublication, clearMatchingPublicationHold, languagePackPublishingEnabled, prepareDailyStaging, publishDailyCatalog, readPublicationHold } from "./daily-publication.ts";
 import { atomic, base, digest, editionVersion, manifestSchema, rollbackCatalog, serializeCatalog } from "./publication.ts";
-import { loadPublicationState, publicationIdentity, publishRelease, readPublishedState, stageRelease, type ReleaseTransport } from "./release-publication.ts";
+import { languagePackEditionVersion, loadPublicationState, publicationIdentity, publishRelease, readPublishedState, stageRelease, type ReleaseTransport } from "./release-publication.ts";
 import { recoveryPublicationHooks } from "./recovery-publication.ts";
 import { translationFingerprint } from "./translation.ts";
 
@@ -23,9 +23,8 @@ function prompt(id: string): Prompt {
 function catalog(prompts: Prompt[], removedIDs: string[] = []): Catalog {
   return { schemaVersion: 1, version: editionVersion(prompts, removedIDs), publishedAt: "2026-10-01T00:00:00.000Z", prompts, removedIDs };
 }
-async function fixture() {
+async function fixture(original = catalog([prompt("keep"), prompt("remove-later")])) {
   const root = await mkdtemp(join(tmpdir(), "prompix-daily-v2-"));
-  const original = catalog([prompt("keep"), prompt("remove-later")]);
   const manifest = manifestSchema.parse({ schemaVersion: 1, version: original.version, publishedAt: original.publishedAt,
     count: original.prompts.length, sha256: digest(serializeCatalog(original)), catalog: `${base}/releases/${original.version}/catalog.json` });
   const files = new Map([[`${base}/v1/latest.json`, encode(manifest)], [manifest.catalog, serializeCatalog(original)]]);
@@ -40,6 +39,62 @@ async function fixture() {
     start: () => beginDailyPublication(root, { resumePublishing: false, env: { PROMPIX_LANGUAGE_PACKS_ENABLED: "true" } }, transport),
     cleanup: () => rm(root, { recursive: true, force: true }) };
 }
+
+test("post-bootstrap daily replay gives untrimmed cache text a distinct stable edition without rewriting legacy artifacts", async () => {
+  const raw = catalog([prompt("keep"), prompt("remove-later")]);
+  raw.prompts[0].localization!.translations.fr!.example = "  An original French example.\n";
+  // Legacy daily hashed the cache text first, then its serializer trimmed the stored text.
+  raw.version = editionVersion(raw.prompts, []);
+  const f = await fixture(raw);
+  try {
+    const preparation = await f.start(), prior = preparation.previous!;
+    const legacyPath = join(f.root, "releases", raw.version);
+    await mkdir(legacyPath, { recursive: true });
+    await writeFile(join(legacyPath, "catalog.json"), f.files.get(prior.v1.manifest.catalog)!);
+    await atomic(join(legacyPath, "manifest.json"), prior.v1.manifest);
+    await publishDailyCatalog(f.root, prior.authoritative, preparation, f.transport);
+    const legacyFiles = new Map(f.files);
+    const replay = await f.start();
+    await assert.rejects(publishDailyCatalog(f.root, raw, replay, f.transport), /different content/);
+    const next = { ...raw, version: languagePackEditionVersion(raw.prompts, []) };
+    assert.notEqual(next.version, raw.version);
+    const published = await publishDailyCatalog(f.root, next, replay, f.transport);
+    assert.deepEqual(published.authoritative, next);
+    assert.deepEqual(published.v1.catalog, next);
+    for (const [url, bytes] of legacyFiles) if (!url.endsWith("latest.json")) assert.deepEqual(f.files.get(url), bytes);
+    const filesAfter = new Map(f.files), writes = f.calls.filter(call => call.startsWith("upload:"));
+    const repeated = { ...published.authoritative, publishedAt: "2026-10-09T00:00:00.000Z" };
+    repeated.version = languagePackEditionVersion(repeated.prompts, repeated.removedIDs ?? []);
+    assert.equal(repeated.version, next.version);
+    await publishDailyCatalog(f.root, repeated, await f.start(), f.transport);
+    assert.deepEqual(f.files, filesAfter);
+    assert.deepEqual(f.calls.filter(call => call.startsWith("upload:")), writes);
+    assert.equal((await loadPublicationState(f.root)).pending, undefined);
+  } finally { await f.cleanup(); }
+});
+
+test("v2 edition identity ignores object-key order but preserves text, item order, media and creator changes", () => {
+  const item = prompt("identity"), other = prompt("other");
+  item.creator = { id: "creator", platform: "web", displayName: "Creator", profileURL: "https://example.com/creator" };
+  item.media = { image: null, video: null, demoURL: null, imageURL: `${base}/media/${"a".repeat(64)}.jpg` };
+  const original = [item, other], version = languagePackEditionVersion(original, ["removed-b", "removed-a"]);
+  function reordered(value: unknown): unknown {
+    if (Array.isArray(value)) return value.map(reordered);
+    return value && typeof value === "object" ? Object.fromEntries(Object.entries(value).reverse().map(([key, child]) => [key, reordered(child)])) : value;
+  }
+  assert.equal(languagePackEditionVersion(reordered(original) as Prompt[], ["removed-a", "removed-b", "removed-a"]), version);
+  assert.notEqual(languagePackEditionVersion([...original].reverse(), ["removed-a", "removed-b"]), version);
+  for (const change of [
+    (value: Prompt) => { value.prompt += " "; },
+    (value: Prompt) => { value.localization!.translations.fr!.example += "\n"; },
+    (value: Prompt) => { value.creator!.displayName += " updated"; },
+    (value: Prompt) => { value.media!.imageURL = `${base}/media/${"b".repeat(64)}.jpg`; },
+  ]) {
+    const changed = structuredClone(original); change(changed[0]);
+    assert.notEqual(languagePackEditionVersion(changed, ["removed-a", "removed-b"]), version);
+  }
+  assert.notEqual(languagePackEditionVersion(original, ["removed-a"]), version);
+});
 
 test("bootstrap flag is optional only before remote or local v2 initialization", async () => {
   const f = await fixture();

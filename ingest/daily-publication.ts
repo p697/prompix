@@ -2,10 +2,10 @@ import { rm } from "node:fs/promises";
 import { join } from "node:path";
 import type { Catalog } from "../packages/schema/catalog.ts";
 import { verifyLanguagePackManifest } from "./language-packs.ts";
-import { atomic, base, editionVersion, json, moderationSchema } from "./publication.ts";
+import { atomic, base, json, moderationSchema } from "./publication.ts";
 import { recoveryPublicationHooks } from "./recovery-publication.ts";
 import {
-  assertPublicationReconciled, defaultReleaseTransport, loadPublicationState, publicationIdentity,
+  assertPublicationReconciled, defaultReleaseTransport, languagePackEditionVersion, loadPublicationState, publicationIdentity,
   PendingRemovalsError, preserveCatalogText, preservedRollbackCatalog, publishRelease, readLocalRelease, readPublishedState, resumePublication, stageRelease,
   type PublicationIntent, type PublishedState, type ReleaseTransport,
 } from "./release-publication.ts";
@@ -90,7 +90,7 @@ export async function beginDailyPublication(root: string, options: { resumePubli
       // Keep every already-prepared source/translation; apply only newer tombstones.
       const prompts = target.prompts.filter(item => !requiredRemovedIDs.includes(item.id));
       const corrected = pending.operation === "rollback" ? preservedRollbackCatalog(target, requiredRemovedIDs) : preserveCatalogText({
-        ...target, version: editionVersion(prompts, requiredRemovedIDs), publishedAt: new Date().toISOString(),
+        ...target, version: languagePackEditionVersion(prompts, requiredRemovedIDs), publishedAt: new Date().toISOString(),
         prompts, removedIDs: requiredRemovedIDs,
       });
       const staged = await stageRelease(root, corrected, previous);
