@@ -107,11 +107,12 @@ final class PromptHandoffTests: XCTestCase {
         unpinned.contentType = "skill"; unpinned.skill = prompt.skill
         XCTAssertNil(PromptDestination.installationCommand(for: unpinned))
     }
-    func testOfficialPublisherSkillsCopyTheirExactReviewedPackage() {
+    func testPublisherSkillsCopyTheirExactReviewedPackage() {
         let revision = String(repeating: "c", count: 40)
         for (repository, directory, name) in [
             ("https://github.com/expo/skills", "plugins/expo/skills/expo-native-ui", "expo-native-ui"),
-            ("https://github.com/supabase/agent-skills", "skills/supabase-postgres-best-practices", "supabase-postgres-best-practices")
+            ("https://github.com/supabase/agent-skills", "skills/supabase-postgres-best-practices", "supabase-postgres-best-practices"),
+            ("https://github.com/coreyhaines31/marketingskills", "skills/copywriting", "copywriting")
         ] {
             var prompt = item(revision: revision)
             prompt.contentType = "skill"

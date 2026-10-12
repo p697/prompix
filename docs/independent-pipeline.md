@@ -111,3 +111,12 @@ iOS 使用面板支持两家来源的固定目录命令，限定公开根目录�
 2026-10-13：检查现有 X 快照发现，完整的 `Image Generation Prompt:` 标题被旧规则误判为缺少正文边界。提取器现在识别明确的 Image／Video Generation Prompt 标题，仍要求行首、原有标题装饰及明确分隔；不接受任意提到 prompt 的叙述，不放宽短链接、截断、多段 Prompt 或审核条件。
 
 只读比较同一批 12 份快照，完整候选从 63 增至 64，增加一条 3,310 字符图片 Prompt；原 63 条候选的完整结构、正文和来源身份逐项不变。此次没有 X 请求、模型调用或发布，线上仍为 448 条；新候选仍须正常来源核验、编辑和预览审核。429 项内容测试及类型检查通过，比较证据保存在外接 SSD 的 `Evidence/x-generation-headings/comparison.json`。
+
+
+## 非开发用途 Skill 来源
+
+直接采集 [Corey Haines 的 Marketing Skills](https://github.com/coreyhaines31/marketingskills) 中 `skills/` 下的一级包，沿用固定提交、完整目录清单、最近许可证与入口 Git blob 校验、六小时缓存。作者身份为 Corey Haines，不标成模型厂商。iOS 为同一公开根目录提供固定版本安装命令，不在手机执行。
+
+首轮只读实采固定提交 `1efedbc5148b54b2f0f6c6c9fe0be62e151c7fff`，发现 50 个包，49 个符合现有采集限制，1 个 `ai-seo` 因元数据或正文长度限制暂缓。写作、文案编辑、内容策略、产品定位等用途将进入既有编辑／翻译队列；依赖的产品背景、其他 Skill、账号及外部工具须在审核与使用说明里保留。不自动把 49 计入线上数量。
+
+本轮没有 X 或模型付费请求，没有新增 OpenLab 同步。实采内容和来源树仅保存在外接 SSD 的 `Evidence/marketing-skills/collection.json`，不进入 Git。
