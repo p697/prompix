@@ -1,5 +1,6 @@
 import type { Prompt } from "../packages/schema/catalog.ts";
 import { fingerprint, type Candidate } from "./sources.ts";
+import { isNativeXDraft } from "./x-intake.ts";
 
 export type KindCounts = Record<Prompt["kind"], number> & { total: number };
 
@@ -14,6 +15,7 @@ export function selectLibrary(items: readonly Candidate[], excluded: ReadonlySet
   const eligible = items.filter((item) => {
     if (
       excluded.has(item.id) ||
+      isNativeXDraft(item) ||
       item.prompt.length < (item.editorialRank !== undefined ? 20 : 80) ||
       item.prompt.length > 30000 ||
       item.title.length > 160 ||

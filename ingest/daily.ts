@@ -14,6 +14,7 @@ import {
 } from "./sources.ts";
 import { download } from "./network.ts";
 import { searchX } from "./x.ts";
+import { readXIntake } from "./x-intake.ts";
 import { collectSkill, skillRepositoryRevision, skillSources } from "./skills.ts";
 import { enrichCreators, mergeCreatorCache, mirrorCreatorAvatars, type CreatorCache } from "./creators.ts";
 import { publishAvatar } from "./creator-images.ts";
@@ -154,13 +155,21 @@ async function run() {
       report.sources.x = {
         status: !publishing ? "dry-run" : process.env.X_BEARER_TOKEN ? "daily-limit" : "not-configured", requests: 0,
       };
+    // Cached discoveries still enter intake when today's paid search is disabled.
+    // Marked source bodies are drafts; incomplete posts keep an explicit reason.
+    let reviews = reviewsSchema.parse(await json(join(root, "editorial.json"), {}));
+    const xIntake = await readXIntake(root, creators);
+    xIntake.report.reviewedDrafts = xIntake.candidates.filter(item => reviews[item.id]?.fingerprint === item.fingerprint).length;
+    report.sources["x-intake"] = xIntake.report;
+    all.push(...xIntake.candidates);
+    await atomic(join(root, "candidates", "x-native.json"), xIntake.candidates);
+    await atomic(join(root, "x-intake", "status.json"), { updatedAt: new Date().toISOString(), ...xIntake.report, records: xIntake.records });
     const archive = await json<Candidate[]>(join(root, "candidates", `${videoArchive.id}.json`), []);
     report.sources[videoArchive.id] = {
       status: archive.length ? "staged" : "not-staged",
       count: archive.length,
       revision: videoArchive.revision,
     };
-    let reviews = reviewsSchema.parse(await json(join(root, "editorial.json"), {}));
     const candidates = enrichCreators(mergeCandidates(all, archive), creators);
     report.counts.candidates = countByKind(candidates);
     const hold = await json<unknown | null>(join(root, "publication-hold.json"), null);

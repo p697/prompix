@@ -14,8 +14,9 @@ import XCTest
         #endif
     }
 
-    private func launch(_ language: String = "zh-Hans") {
-        app.launchArguments = ["--cached-only", "-AppleLanguages", "(\(language))", "-AppleLocale", language]
+    private func launch(_ language: String = "zh-Hans", online: Bool = false) {
+        app.launchArguments = ["-AppleLanguages", "(\(language))", "-AppleLocale", language]
+        if !online { app.launchArguments.insert("--cached-only", at: 0) }
         app.launch()
         XCTAssertTrue(app.buttons["searchButton"].waitForExistence(timeout: 10))
     }
@@ -55,6 +56,215 @@ import XCTest
         XCTAssertTrue(skill.isHittable)
         skill.tap()
         XCTAssertTrue(skill.isSelected)
+    }
+
+    // Decode only the fields needed for acceptance. Fixture files stay outside
+    // the repository, and assertions never print the user's full prompt/draft.
+    private struct CatalogSnapshot: Decodable {
+        let version: String
+        let prompts: [SavedPromptSnapshot]
+    }
+
+    private struct SavedPromptSnapshot: Decodable {
+        let id: String
+        let prompt: String
+        let creator: CreatorSnapshot?
+        let localization: LocalizationSnapshot?
+    }
+
+    private struct CreatorSnapshot: Decodable { let id: String }
+    private struct LocalizationSnapshot: Decodable {
+        let translations: [String: TranslationSnapshot]
+    }
+    private struct TranslationSnapshot: Decodable { let prompt: String }
+
+    private func acceptanceDirectory() throws -> URL {
+        let environment = ProcessInfo.processInfo.environment
+        let path = try XCTUnwrap(environment["PROMPIX_ACCEPTANCE_CONTAINER"], "Pass the explicitly staged simulator app-container path.")
+        let simulatorID = try XCTUnwrap(environment["SIMULATOR_UDID"].flatMap { UUID(uuidString: $0) })
+        let container = URL(fileURLWithPath: path).standardizedFileURL
+        let parent = container.deletingLastPathComponent()
+        let expectedSuffix = "/CoreSimulator/Devices/\(simulatorID.uuidString)/data/Containers/Data/Application"
+        XCTAssertTrue(parent.path.hasSuffix(expectedSuffix), "Only the explicitly selected running simulator may be inspected.")
+        XCTAssertNotNil(UUID(uuidString: container.lastPathComponent))
+        guard parent.path.hasSuffix(expectedSuffix), UUID(uuidString: container.lastPathComponent) != nil else {
+            throw CocoaError(.fileReadNoPermission)
+        }
+        // XCTest may reinstall between host-side staging and launch, changing
+        // the UUID. Resolve only Prompix within the same explicit simulator.
+        let matches = try FileManager.default.contentsOfDirectory(at: parent, includingPropertiesForKeys: nil).filter { candidate in
+            guard UUID(uuidString: candidate.lastPathComponent) != nil,
+                  let data = try? Data(contentsOf: candidate.appendingPathComponent(".com.apple.mobile_container_manager.metadata.plist")),
+                  let fields = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any] else { return false }
+            return fields["MCMMetadataIdentifier"] as? String == "com.p697.prompix"
+        }
+        XCTAssertEqual(matches.count, 1, "The selected simulator must contain exactly one metadata-verified Prompix container.")
+        return try XCTUnwrap(matches.count == 1 ? matches.first : nil)
+            .appendingPathComponent("Library/Application Support/Prompix", isDirectory: true)
+    }
+
+    private func readSnapshot<T: Decodable>(_ type: T.Type, from directory: URL, file: String) throws -> T {
+        try JSONDecoder().decode(type, from: Data(contentsOf: directory.appendingPathComponent(file)))
+    }
+
+    private func assertSavedDraft(_ item: SavedPromptSnapshot, expected: String, evidence: String) {
+        app.selectPrompixTab("收藏")
+        let prompt = app.buttons["prompt-\(item.id)"]
+        reveal(prompt)
+        prompt.tap()
+        XCTAssertTrue(app.buttons["copyPrompt"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.buttons["detailFavorite"].label, "取消收藏")
+        let language = app.buttons["contentLanguage"]
+        if language.exists {
+            reveal(language)
+            language.tap()
+            app.buttons["原文"].tap()
+        }
+        reveal(app.buttons["editPrompt"])
+        app.buttons["editPrompt"].tap()
+        let editor = app.textViews["promptEditor"]
+        XCTAssertTrue(editor.waitForExistence(timeout: 5))
+        XCTAssertTrue(editor.value as? String == expected, "The original-language saved draft must remain unchanged.")
+        capture(evidence)
+        app.navigationBars.buttons["完成"].tap()
+    }
+
+    private func assertSavedStorage(in directory: URL, favorites: [SavedPromptSnapshot], drafts: [String: String]) throws {
+        let updated = try readSnapshot([SavedPromptSnapshot].self, from: directory, file: "favorites.json")
+        XCTAssertEqual(updated.map(\.id), favorites.map(\.id), "Updating the catalog must preserve saved items and their order.")
+        XCTAssertTrue(zip(updated, favorites).allSatisfy { pair in pair.0.prompt == pair.1.prompt }, "Enriching saved metadata must not replace the saved source prompt.")
+        XCTAssertTrue(try readSnapshot([String: String].self, from: directory, file: "drafts.json") == drafts,
+                      "All original-language and translated drafts must survive the update and restart.")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: directory.appendingPathComponent("catalog-transaction.json").path),
+                       "A successful update must finish its storage transaction.")
+    }
+
+    func testProductionCatalogUpgradePreservesSavedContentAndDrafts() throws {
+        guard ProcessInfo.processInfo.environment["PROMPIX_PRODUCTION_UPGRADE_TEST"] == "1" else {
+            throw XCTSkip("Explicitly stage the creatorless 68-item catalog, a favorite, and its edited original-language draft before enabling this production-network test.")
+        }
+        var directory = try acceptanceDirectory()
+        var directoryHistory = ["Before first launch: \(directory.path)"]
+        let oldCatalog = try readSnapshot(CatalogSnapshot.self, from: directory, file: "catalog.json")
+        let favorites = try readSnapshot([SavedPromptSnapshot].self, from: directory, file: "favorites.json")
+        let drafts = try readSnapshot([String: String].self, from: directory, file: "drafts.json")
+        XCTAssertEqual(oldCatalog.prompts.count, 68, "This is the legacy-cache migration fixture, not an already-updated installation.")
+        XCTAssertTrue(oldCatalog.prompts.allSatisfy { $0.creator == nil })
+        let seed = try XCTUnwrap(favorites.first { item in
+            guard let draft = drafts[item.id] else { return false }
+            return !draft.isEmpty && draft != item.prompt
+        }, "Seed a saved legacy prompt with an edited original-language draft, preferably gentle-tarot.")
+        let expectedDraft = try XCTUnwrap(drafts[seed.id])
+        XCTAssertTrue(oldCatalog.prompts.contains { $0.id == seed.id })
+
+        launch()
+        directory = try acceptanceDirectory()
+        directoryHistory.append("After cached launch: \(directory.path)")
+        XCTAssertEqual(try readSnapshot(CatalogSnapshot.self, from: directory, file: "catalog.json").version, oldCatalog.version,
+                       "The app launched by XCTest must use the staged legacy catalog.")
+        XCTAssertTrue(app.staticTexts["68"].exists)
+        XCTAssertTrue(app.buttons["allCreators"].isHittable)
+        XCTAssertTrue(app.buttons["loadCreators"].isHittable)
+        capture("production-upgrade-01-legacy-home")
+        assertSavedDraft(seed, expected: expectedDraft, evidence: "production-upgrade-02-seeded-draft")
+        app.terminate()
+
+        // No fixture endpoint or networking override: this launch uses the
+        // production manifest, bounded download, validation, and transaction.
+        launch(online: true)
+        // XCTest can replace the app's data-container UUID at launch, after
+        // setUp and the initial fixture read. Never poll a pre-launch URL.
+        directory = try acceptanceDirectory()
+        directoryHistory.append("After production launch: \(directory.path)")
+        let status = app.descendants(matching: .any).matching(identifier: "catalogUpdateStatus").firstMatch
+        let creator = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'creator-' ")).firstMatch
+        var observedStages = Set<String>()
+        if status.exists {
+            observedStages.formUnion(status.staticTexts.allElementsBoundByIndex.map(\.label))
+            capture("production-upgrade-03-visible-update")
+        }
+        var observations: [String] = []
+        var lastObservation = ""
+        let waitStarted = Date()
+        let updated = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            let statusExists = status.exists
+            let retryExists = self.app.buttons["retryCatalogUpdate"].exists
+            let creatorExists = creator.exists
+            if statusExists {
+                observedStages.formUnion(status.staticTexts.allElementsBoundByIndex.map(\.label))
+            }
+            var versionChanged = false
+            var countIncreased = false
+            let diskState: String
+            do {
+                let catalog = try self.readSnapshot(CatalogSnapshot.self, from: directory, file: "catalog.json")
+                versionChanged = catalog.version != oldCatalog.version
+                countIncreased = catalog.prompts.count > oldCatalog.prompts.count
+                diskState = "version=\(catalog.version), count=\(catalog.prompts.count), versionChanged=\(versionChanged), countIncreased=\(countIncreased)"
+            } catch {
+                diskState = "catalog read/decode error: \(error)"
+            }
+            let observation = "\(diskState); creatorExists=\(creatorExists), statusExists=\(statusExists), retryExists=\(retryExists)"
+            if observation != lastObservation {
+                observations.append(String(format: "%.2fs: %@", Date().timeIntervalSince(waitStarted), observation))
+                lastObservation = observation
+            }
+            return retryExists || (versionChanged && countIncreased && creatorExists && !statusExists)
+        }, object: nil)
+        let result = XCTWaiter.wait(for: [updated], timeout: 90)
+        let conditionEvidence = XCTAttachment(string: (directoryHistory + ["Wait result: \(result)", "Observed condition changes:"] + observations).joined(separator: "\n"))
+        conditionEvidence.name = "production-update-condition-diagnostics"
+        conditionEvidence.lifetime = .keepAlways
+        add(conditionEvidence)
+        let stageEvidence = XCTAttachment(string: observedStages.isEmpty
+            ? "No in-flight stage was captured through XCTest. Fast updates can finish before the first accessibility snapshot; this run does not establish intermediate progress rendering."
+            : "Observed update labels:\n" + observedStages.sorted().joined(separator: "\n"))
+        stageEvidence.name = "production-update-observed-stages"
+        stageEvidence.lifetime = .keepAlways
+        add(stageEvidence)
+        capture("production-upgrade-04-result")
+        XCTAssertFalse(app.buttons["retryCatalogUpdate"].exists, "Production refresh failed; inspect the visible retry state and network evidence.")
+        XCTAssertEqual(result, .completed, "The real production catalog must finish updating within the bounded acceptance timeout. Last observation: \(lastObservation)")
+
+        let catalog = try readSnapshot(CatalogSnapshot.self, from: directory, file: "catalog.json")
+        XCTAssertNotEqual(catalog.version, oldCatalog.version)
+        XCTAssertGreaterThan(catalog.prompts.count, oldCatalog.prompts.count)
+        let creatorIDs = Set(catalog.prompts.compactMap { $0.creator?.id })
+        XCTAssertFalse(creatorIDs.isEmpty)
+        XCTAssertTrue(favorites.allSatisfy { saved in catalog.prompts.contains { $0.id == saved.id } },
+                      "The acceptance seeds must still be published; restage if they were intentionally removed.")
+        XCTAssertTrue(app.staticTexts[catalog.prompts.count.formatted()].exists)
+        XCTAssertFalse(app.buttons["loadCreators"].exists)
+        XCTAssertTrue(app.buttons["allCreators"].isHittable)
+        XCTAssertTrue(creatorIDs.contains(String(creator.identifier.dropFirst("creator-".count))), "The visible creator must come from the downloaded catalog.")
+        creator.tap()
+        XCTAssertTrue(app.buttons["saveCreator"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.links["creatorExternalProfile"].exists || app.buttons["creatorExternalProfile"].exists)
+        XCTAssertTrue(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'prompt-' ")).firstMatch.exists)
+        capture("production-upgrade-05-real-creator-profile")
+        // Creator detail intentionally hides the tab bar. Return through the
+        // native back action before switching to the saved collection.
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        XCTAssertTrue(app.buttons["allCreators"].waitForExistence(timeout: 5))
+        assertSavedDraft(seed, expected: expectedDraft, evidence: "production-upgrade-06-draft-after-update")
+        try assertSavedStorage(in: directory, favorites: favorites, drafts: drafts)
+        app.terminate()
+
+        launch()
+        directory = try acceptanceDirectory()
+        XCTAssertTrue(app.staticTexts[catalog.prompts.count.formatted()].exists)
+        XCTAssertTrue(creator.exists)
+        XCTAssertFalse(app.buttons["loadCreators"].exists)
+        capture("production-upgrade-07-updated-home-after-restart")
+        assertSavedDraft(seed, expected: expectedDraft, evidence: "production-upgrade-08-draft-after-restart")
+        try assertSavedStorage(in: directory, favorites: favorites, drafts: drafts)
+        let finalCatalog = try readSnapshot(CatalogSnapshot.self, from: directory, file: "catalog.json")
+        XCTAssertEqual(finalCatalog.version, catalog.version)
+        XCTAssertEqual(finalCatalog.prompts.count, catalog.prompts.count)
+        let evidence = XCTAttachment(string: "Production upgrade: \(oldCatalog.version) (\(oldCatalog.prompts.count) items) → \(catalog.version) (\(catalog.prompts.count) items, \(creatorIDs.count) creator IDs). Preserved \(favorites.count) favorites and \(drafts.count) drafts through update and cached restart.")
+        evidence.name = "production-upgrade-summary"
+        evidence.lifetime = .keepAlways
+        add(evidence)
     }
 
     func testLegacyCatalogKeepsCreatorEntry() throws {
@@ -168,17 +378,84 @@ import XCTest
         }
     }
 
-    func testTranslatedCatalogBrowsingPerformance() {
+    private func fullPerformanceCatalog() throws -> CatalogSnapshot {
+        guard ProcessInfo.processInfo.environment["PROMPIX_FULL_CATALOG_PERFORMANCE"] == "1" else {
+            throw XCTSkip("Stage the complete translated production catalog and run this opt-in probe with the Release configuration.")
+        }
+        let directory = try acceptanceDirectory()
+        let catalog = try readSnapshot(CatalogSnapshot.self, from: directory, file: "catalog.json")
+        XCTAssertGreaterThan(catalog.prompts.count, 68, "Performance evidence must exercise the expanded catalog.")
+        XCTAssertTrue(catalog.prompts.allSatisfy { !($0.localization?.translations["en"]?.prompt.isEmpty ?? true) },
+                      "Use the full translated catalog, not the lightweight legacy fixture.")
+        return catalog
+    }
+
+    func testTranslatedCatalogProcessLaunchPerformance() throws {
+        let catalog = try fullPerformanceCatalog()
+        let options = XCTMeasureOptions()
+        options.iterationCount = 5
+        measure(metrics: [XCTApplicationLaunchMetric(waitUntilResponsive: true)], options: options) {
+            app.terminate()
+            launch("en")
+            XCTAssertTrue(app.staticTexts[catalog.prompts.count.formatted()].exists)
+            XCTAssertTrue(app.buttons["allCreators"].exists)
+            XCTAssertTrue(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'creator-' ")).firstMatch.exists)
+        }
+        let directory = try acceptanceDirectory()
+        XCTAssertEqual(try readSnapshot(CatalogSnapshot.self, from: directory, file: "catalog.json").version, catalog.version)
+        capture("translated-catalog-after-process-launches")
+        let evidence = XCTAttachment(string: "Release configuration must be supplied by the runner. Catalog: \(catalog.version), \(catalog.prompts.count) fully English-translated items. Five measured process launches with XCTApplicationLaunchMetric(waitUntilResponsive: true), each verifying catalog count and the creator entry. Catalog refresh is disabled to measure loading the complete persisted catalog. OS, file, and media caches are not cleared; this is not a reboot or an empty-cache cold-start measurement.")
+        evidence.name = "translated-catalog-process-launch-scope"
+        evidence.lifetime = .keepAlways
+        add(evidence)
+    }
+
+    func testTranslatedCatalogBrowsingPerformance() throws {
+        let catalog = try fullPerformanceCatalog()
         launch("en")
-        XCTAssertTrue(app.buttons["allCreators"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts[catalog.prompts.count.formatted()].exists)
+        XCTAssertTrue(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'creator-' ")).firstMatch.exists)
+        func visiblePromptIDs() -> Set<String> {
+            let viewport = app.frame.insetBy(dx: 0, dy: 110)
+            return Set(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'prompt-' ")).allElementsBoundByIndex.compactMap { element in
+                let visible = element.frame.intersection(viewport)
+                return !visible.isNull && visible.width >= 44 && visible.height >= 44 && element.isHittable ? element.identifier : nil
+            })
+        }
+        // Move beyond discovery rails before measuring, so each round can
+        // prove that different real cards reached the viewport.
+        scrollFeed(forward: true)
+        let initialIDs = visiblePromptIDs()
+        XCTAssertFalse(initialIDs.isEmpty)
+        var visitedIDs = initialIDs
         let options = XCTMeasureOptions()
         options.iterationCount = 3
         measure(metrics: [XCTMemoryMetric(application: app), XCTCPUMetric(application: app), XCTClockMetric()], options: options) {
-            for _ in 0..<5 { app.swipeUp() }
-            for _ in 0..<5 { app.swipeDown() }
+            let before = visiblePromptIDs()
+            for _ in 0..<5 { scrollFeed(forward: true) }
+            let after = visiblePromptIDs()
+            XCTAssertFalse(after.isEmpty)
+            XCTAssertFalse(after.subtracting(before).isEmpty, "Measured gestures must reveal additional catalog cards.")
+            visitedIDs.formUnion(after)
+            for _ in 0..<5 { scrollFeed(forward: false) }
         }
         XCTAssertTrue(app.buttons["searchButton"].exists)
+        XCTAssertGreaterThan(visitedIDs.count, initialIDs.count)
+        let directory = try acceptanceDirectory()
+        XCTAssertEqual(try readSnapshot(CatalogSnapshot.self, from: directory, file: "catalog.json").version, catalog.version)
         capture("translated-catalog-after-repeated-scroll")
+        let evidence = XCTAttachment(string: "Release configuration must be supplied by the runner. Catalog: \(catalog.version), \(catalog.prompts.count) fully English-translated items. Visible cards sampled: \(visitedIDs.sorted().joined(separator: ", ")). Three rounds of five forward/five reverse viewport drags. Clock and CPU include XCTest gestures and accessibility queries; these are not frame-rate measurements.")
+        evidence.name = "translated-catalog-performance-scope"
+        evidence.lifetime = .keepAlways
+        add(evidence)
+    }
+
+    private func scrollFeed(forward: Bool) {
+        // Begin above the native tab bar; app.swipeUp can start on its fixed
+        // surface and produce a passing measurement without moving the feed.
+        let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: forward ? 0.7 : 0.4))
+        let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: forward ? 0.4 : 0.7))
+        start.press(forDuration: 0.05, thenDragTo: end)
     }
 
     func testRepeatedCreatorAndTypeNavigation() {

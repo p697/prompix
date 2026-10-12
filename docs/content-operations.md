@@ -21,7 +21,15 @@ launchd 是用户任务，须登录该用户；关机时不会运行。内容进
 
 公开 GitHub 来源使用本机 Git 的 `ls-remote` 解析默认分支，再按不可变 commit 下载文件；运行环境须有 Git。这样不依赖共享出口的匿名 REST API 额度。仓库与文件名均使用显式白名单，解析或网络失败仍保留上次快照。
 
-2026-10-11 已在付款设置完成后通过已安装的 launchd 任务验证 X：成功获取 10 条候选并持久化增量游标。候选保存在内容目录的 `x-discovery/YYYY-MM-DD.json`，仍须编辑整理后才能发布；一次搜索成功不代表这些帖子已出现在 App。后续运行保留当天请求名额，不重复付费读取。是否成功须检查 `status.json` 的 `sources.x`，不能只看任务退出码。
+2026-10-11 已在付款设置完成后通过已安装的 launchd 任务验证 X：成功获取 10 条发现记录并持久化增量游标。原帖保存在内容目录的 `x-discovery/YYYY-MM-DD.json`；一次搜索成功不代表这些帖子已出现在 App。后续运行保留当天请求名额，不重复付费读取。搜索是否成功须检查 `status.json` 的 `sources.x`，不能只看任务退出码。
+
+### X 发现与原生草稿
+
+升级运行器后，每次 daily 都会读取已有 X 缓存，按原帖 ID 去重，将有明确提示词边界和可提取正文的记录写入 `candidates/x-native.json`；不新增付费请求，不追踪外链或线程。长帖优先使用完整 note 正文；未标明正文边界、截断、代码围栏未结束、仅含链接或正文仍含未展开短链时保留具体阻塞原因。捕获原帖 URL、作者数字 ID、可用真实资料和对应附件地址，许可如实标为 `Unspecified`，不把数字帖子 ID 伪装成 Git commit。
+
+查看 `status.json.sources["x-intake"]` 的 `discovered/drafted/blocked/publicationBlocked/reviewedDrafts` 与 `reasons`；`x-intake/status.json` 保留逐帖追踪及损坏快照记录。没有新的 X 请求也会重建这些报告。`npm run review -- x-post-<id> /absolute/path/editorial-metadata.json` 可以准备元数据，返回 `draft-awaiting-source-review`。原生 X 目前仍等待来源与发布接入，不参与自动模型审核或公开目录；编辑文案不能解除该门槛。详情与字段兼容边界见[采集说明](../ingest/README.md#native-x-intake)。
+
+2026-10-12 对现有两个日期缓存的只读验证：20 条不同原帖，0 条可提取草稿，17 条缺少明确提示词边界、3 条正文仍含未展开短链，无损坏快照。不能将这 20 条计为 App 新增内容。此验证只执行解析；报告持久化须由升级后的 daily 实际运行验证。
 
 ## 凭据与费用
 
