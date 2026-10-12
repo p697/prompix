@@ -14,10 +14,18 @@ import {
 } from "./sources.ts";
 import { download } from "./network.ts";
 import { searchX } from "./x.ts";
+import { collectSkill, skillRepositoryRevision, skillSources } from "./skills.ts";
+import { enrichCreators, mergeCreatorCache, mirrorCreatorAvatars, type CreatorCache } from "./creators.ts";
+import { publishAvatar } from "./creator-images.ts";
+import { refreshCreatorProfiles } from "./creator-refresh.ts";
+import { prepareDailyTranslations, type DailyTranslationStatus } from "./translation-daily.ts";
+import { inheritPreviousTranslations } from "./translation.ts";
 import { applyEditorialReviews, reviewsSchema } from "./editorial.ts";
+import { prepareDailyEditorial } from "./editorial-daily.ts";
+import type { EditorialReport } from "./editorial-runner.ts";
 import { aspectRatio, prepareJPEG, publishStudioImages } from "./images.ts";
 import { publicationText } from "./templates.ts";
-import { assertLibraryDownloadSize, countByKind, interleaveLibrary, libraryDelta, selectLibrary, type KindCounts } from "./library.ts";
+import { assertLibraryDownloadSize, countByKind, interleaveLibrary, libraryDelta, retainPublishedLibrary, selectLibrary, type KindCounts, type RetentionReport } from "./library.ts";
 const publishing = process.argv.includes("--publish");
 const resumePublishing = process.argv.includes("--resume-publishing");
 if (resumePublishing && !publishing) throw new Error("--resume-publishing requires --publish");
@@ -40,9 +48,13 @@ async function run() {
     error?: string;
     sources: Record<string, unknown>;
     mediaErrors: string[];
+    avatarErrors: string[];
+    translations?: DailyTranslationStatus;
     changed?: boolean;
     comparisonVersion?: string;
     changes?: ReturnType<typeof libraryDelta>;
+    retainedPrevious?: RetentionReport;
+    editorial?: EditorialReport;
     counts: {
       candidates: KindCounts | null;
       reviewed: KindCounts | null;
@@ -57,10 +69,13 @@ async function run() {
     published: false,
     sources: {},
     mediaErrors: [],
+    avatarErrors: [],
     counts: { candidates: null, reviewed: null, eligible: null, bundled: null, prepared: null, published: null, mediaFailed: countByKind([]) },
   };
   try {
     const all: Candidate[] = [];
+    const creatorsPath = join(root, "creators.json");
+    let creators = await json<CreatorCache>(creatorsPath, {});
     for (const source of [
       ...repositories,
       { id: "prompts-chat", repo: "f/prompts.chat" },
@@ -89,17 +104,40 @@ async function run() {
         report.sources[source.id] = { status: "failed", message: String(e) };
       }
     }
+    // Resolve one immutable revision per repository, but preserve each failed
+    // Skill snapshot independently so one deleted file cannot drop the shelf.
+    const skillRevisions = new Map<string, string | Error>();
+    for (const source of skillSources) {
+      const path = join(root, "candidates", `skill-${source.id}.json`);
+      try {
+        if (!skillRevisions.has(source.repo)) {
+          try { skillRevisions.set(source.repo, await skillRepositoryRevision(source.repo)); }
+          catch (error) { skillRevisions.set(source.repo, error instanceof Error ? error : new Error(String(error))); }
+        }
+        const revision = skillRevisions.get(source.repo)!;
+        if (revision instanceof Error) throw revision;
+        const candidate = await collectSkill(source, revision);
+        await atomic(path, [candidate]);
+        all.push(candidate);
+        report.sources[`skill-${source.id}`] = { status: "ok", count: 1, revision };
+      } catch (error) {
+        all.push(...(await json<Candidate[]>(path, [])));
+        report.sources[`skill-${source.id}`] = { status: "failed", message: String(error) };
+      }
+    }
     const xStatePath = join(root, "x-state.json");
     const xState = await json<{ day?: string; newest?: string }>(
       xStatePath,
       {},
     );
     const day = new Date().toISOString().slice(0, 10);
-    if (process.env.X_BEARER_TOKEN && xState.day !== day) {
+    if (publishing && process.env.X_BEARER_TOKEN && xState.day !== day) {
       // Persist the daily attempt BEFORE making a paid request. No retries on ambiguous responses.
       await atomic(xStatePath, { ...xState, day });
       try {
         const result = await searchX(process.env.X_BEARER_TOKEN, xState.newest);
+        creators = mergeCreatorCache(creators, result.creators);
+        await atomic(creatorsPath, creators);
         await atomic(join(root, "x-discovery", `${day}.json`), {
           ...result,
           reviewStatus: "draft",
@@ -108,13 +146,13 @@ async function run() {
           day,
           newest: result.newest ?? xState.newest,
         });
-        report.sources.x = { status: "ok", count: result.posts.length };
+        report.sources.x = { status: "ok", requests: 1, requestedPosts: 10, count: result.posts.length, creators: result.creators.length };
       } catch (e) {
-        report.sources.x = { status: "failed", message: String(e) };
+        report.sources.x = { status: "failed", requests: 1, requestedPosts: 10, message: String(e) };
       }
     } else
       report.sources.x = {
-        status: process.env.X_BEARER_TOKEN ? "daily-limit" : "not-configured",
+        status: !publishing ? "dry-run" : process.env.X_BEARER_TOKEN ? "daily-limit" : "not-configured", requests: 0,
       };
     const archive = await json<Candidate[]>(join(root, "candidates", `${videoArchive.id}.json`), []);
     report.sources[videoArchive.id] = {
@@ -122,11 +160,9 @@ async function run() {
       count: archive.length,
       revision: videoArchive.revision,
     };
-    const reviews = reviewsSchema.parse(await json(join(root, "editorial.json"), {}));
-    const candidates = mergeCandidates(all, archive);
-    const reviewed = applyEditorialReviews(candidates, reviews);
+    let reviews = reviewsSchema.parse(await json(join(root, "editorial.json"), {}));
+    const candidates = enrichCreators(mergeCandidates(all, archive), creators);
     report.counts.candidates = countByKind(candidates);
-    report.counts.reviewed = countByKind(reviewed.filter((item) => item.reviewStatus === "candidate"));
     const hold = await json<unknown | null>(join(root, "publication-hold.json"), null);
     if (publishing && hold && !resumePublishing) {
       report.publicationHold = hold;
@@ -144,12 +180,23 @@ async function run() {
       await atomic(join(root, "moderation.json"), moderation);
     }
     const excluded = new Set(moderation.removedIDs);
+    const editorial = await prepareDailyEditorial(candidates.filter(item => !excluded.has(item.id)), reviews, previous?.prompts ?? [], root, publishing);
+    reviews = editorial.reviews;
+    report.editorial = editorial.report;
+    const reviewed = applyEditorialReviews(candidates, reviews);
+    report.counts.reviewed = countByKind(reviewed.filter((item) => item.reviewStatus === "candidate"));
     const picked = selectLibrary(reviewed, excluded);
     report.counts.eligible = countByKind(picked);
-    const planned = picked.map((candidate): Prompt => {
+    let planned = picked.map((candidate): Prompt => {
       const { fingerprint: _, featured: __, reviewStatus: ___, editorialRank: ____, ...prompt } = candidate;
       return { ...prompt, prompt: publicationText(candidate, reviews) };
     });
+    const refreshed = await refreshCreatorProfiles(planned, creators, root, {
+      enabled: process.env.PROMPIX_CREATOR_LOOKUP_ENABLED === "true", publishing, bearer: process.env.X_BEARER_TOKEN,
+    });
+    report.sources["x-creators"] = refreshed.report;
+    creators = refreshed.cache;
+    planned = enrichCreators(planned, creators);
     let bundled = catalogSchema.parse(JSON.parse(await readFile(join(repo, "ios/Prompix/Resources/catalog.json"), "utf8")))
       .prompts.filter((item) => !excluded.has(item.id));
     report.counts.bundled = countByKind(bundled);
@@ -161,6 +208,7 @@ async function run() {
     );
     const aspects = await json<Record<string,number>>(join(root,"media-aspects.json"),{});
     const published: Prompt[] = [];
+    const mediaFailedIDs = new Set<string>();
     for (const prompt of planned) {
       try {
         if (prompt.media && publishing) {
@@ -238,6 +286,7 @@ async function run() {
         }
         published.push(prompt);
       } catch (e) {
+        mediaFailedIDs.add(prompt.id);
         report.mediaErrors.push(`${prompt.id}: ${String(e)}`);
         report.counts.mediaFailed.total++;
         report.counts.mediaFailed[prompt.kind]++;
@@ -257,12 +306,31 @@ async function run() {
       });
       await atomic(join(root, "media-map.json"), mediaMap);
     }
-    const prompts = interleaveLibrary(published, bundled, excluded);
+    const reviewedByID = new Map(reviewed.map(item => [item.id, item]));
+    const retained = retainPublishedLibrary(interleaveLibrary(published, bundled, excluded), previous?.prompts ?? [], excluded, item => {
+      if (mediaFailedIDs.has(item.id)) return "media-failed";
+      const candidate = reviewedByID.get(item.id);
+      if (!candidate) return "source-missing";
+      return candidate.reviewStatus === "draft" ? "awaiting-review" : "not-prepared";
+    });
+    // Retained snapshots receive the same creator enrichment and translations
+    // as fresh candidates, including older editions without creator metadata.
+    let complete = enrichCreators(retained.prompts, creators);
+    if (publishing) complete = await mirrorCreatorAvatars(complete, async url => {
+      const mirrored = await publishAvatar(url, root, mediaMap, upload);
+      await atomic(join(root, "media-map.json"), mediaMap);
+      return mirrored;
+    }, (creatorID, error) => report.avatarErrors.push(`${creatorID}: ${String(error)}`));
+    // Dry-run only reads validated translations; it never starts a paid batch.
+    const localized = await prepareDailyTranslations(inheritPreviousTranslations(complete, previous?.prompts ?? []), root, process.env, publishing);
+    const prompts = localized.prompts;
+    report.translations = localized.report;
+    report.retainedPrevious = retained.retainedPrevious;
     report.counts.prepared = countByKind(prompts);
     if (previous) report.changes = libraryDelta(previous.prompts, prompts);
     if (
       publishing &&
-      published.filter((p) => p.source.name === "YouMind OpenLab").length < 6
+      prompts.filter((p) => p.source.name === "YouMind OpenLab").length < 6
     )
       throw new Error(
         "Too few verified community previews; current release preserved",

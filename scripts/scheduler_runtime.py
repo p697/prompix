@@ -97,6 +97,8 @@ def run_collection(base, node):
         # Inherit the lock too, so killing the launcher cannot unguard its child.
         return subprocess.run([
             node, '--env-file-if-exists=' + str(Path.home() / '.config/prompix/x.env'),
+            '--env-file-if-exists=' + str(Path.home() / '.config/prompix/translation.env'),
+            '--env-file-if-exists=' + str(Path.home() / '.config/prompix/editorial.env'),
             '--import', 'tsx', 'ingest/daily.ts', '--publish',
         ], cwd=runtime, pass_fds=(descriptor,)).returncode
 

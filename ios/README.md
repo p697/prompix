@@ -1,22 +1,47 @@
 # Prompix for iOS
 
-Native SwiftUI app, iOS 17+. Open `Prompix.xcodeproj`, choose the Prompix scheme, then run on an iPhone simulator. No third-party Swift dependencies. The app downloads verified editions from api.prompix.dev and falls back to bundled content offline.
+Native SwiftUI app, iOS 17+. The current 0.3.0 work adds creator discovery, Agent Skills and internationalization to the four Prompt kinds. This iteration is developed and accepted through an actual simulator demo; do not install it on the user’s phone. Full content translation is still running and has not been completed or published. See [release goals](../docs/next-release.md) for remaining gates.
+
+Open `Prompix.xcodeproj`, choose the Prompix scheme, then run on an iPhone simulator. No third-party Swift dependencies. The app downloads verified editions from api.prompix.dev and falls back to bundled content offline.
 
 ```sh
 xcodebuild -project ios/Prompix.xcodeproj -scheme Prompix \
   -destination 'platform=iOS Simulator,name=iPhone 18 Pro' \
-  test CODE_SIGNING_ALLOWED=NO
+  test -only-testing:PrompixTests CODE_SIGNING_ALLOWED=NO
 ```
 
 Use a simulator name available on your Mac (`xcrun simctl list devices available`). The project is committed. If adding source/resource files, regenerate with `ruby scripts/generate-project.rb` from the repository root; this requires the `xcodeproj` gem. No personal signing team is committed: choose your own team in Xcode or pass `DEVELOPMENT_TEAM` locally.
 
-The preview includes four kinds, editorial collections, local keyword search, favorites persisted atomically as item snapshots, persistent local editing/copying, searchable favorites, native sharing, UIScrollView image zoom, AVKit video playback, and six bundled original website examples. The main interface, navigation, search, editor and all app controls are native. WebKit is used only to preview six bundled first-party website artifacts. JavaScript is enabled for these allowlisted local files, with an ephemeral data store, bounded file navigation and a Content Security Policy blocking network requests. External user-activated HTTPS/mailto links open through the system. The website preview state is scoped to that preview environment.
+## Native discovery and use
 
-Launch and foreground refresh download a hash-checked remote catalog, with a cached or bundled fallback. Pull to refresh checks immediately. Community images use bounded memory/disk caches; saved prompt snapshots remain local and offline. Saved remote thumbnails are retained separately in Application Support, survive browsing-cache cleanup, and are removed when unsaved. Failed thumbnail downloads have a retry action in Favorites. Editor drafts save atomically after a short debounce, on dismissal and when the app backgrounds; restoring the original requires confirmation. Removed IDs also remove associated drafts. Removed IDs propagate to favorites after a successful update. There is no account, tracking or generation service. Video does not autoplay in the feed. Full-size dynamic text switches the feed to one column. The native interface supports Simplified Chinese and English; source content retains its original language.
+The app includes text, image, video and website Prompts, plus a separate Skill channel. Discovery combines real creators, purpose-based collections and the complete content stream. Applying a filter hides the discovery modules and shows the result count and clear action; model and purpose filters use native menus. Search includes content, creator results and clearable local recent searches. Native TabView uses SF Symbols for Discover, Collections and Favorites.
 
-Run only `PrompixTests` for deterministic model validation. UI tests include offline journeys and an explicitly selected live community image/video test; the latter requires the deployed content service. The `--offline` launch argument uses the bundled edition for deterministic UI fixtures. The `studio-004` fallback contains 30 original text, image and website prompts. Video examples arrive with the first successful content update; the offline Video channel explains this and offers update and browse actions. Existing downloaded editions, saved snapshots and drafts are preserved.
+Creator cards open a searchable directory or profile with source identity, real avatar, collected works, biography when available and an external profile link. Missing avatars use initials. Creator bookmarks are local and independent from content bookmarks. A profile’s count describes items in this catalog, not followers or external popularity. Content cards open the detail directly, with separate creator and bookmark actions. Text and Skill details prioritize reading without a decorative media hero; genuine image, video and website previews retain their media controls.
+
+Skills show their full SKILL.md, source directory pinned to a commit, checked file paths and installation guidance. Users can read, edit, copy, share and save them, then open the source instructions; the phone does not install or execute the Skill. Source ingestion and identity rules are documented in [creators and Skills](../docs/creators-and-skills.md).
+
+The main interface, navigation, search, editor and app controls are native. Images use UIScrollView zoom and video uses AVKit, with explicit playback and background/close pausing. WebKit is used only to preview six bundled first-party website artifacts. JavaScript is enabled for these allowlisted local files, with an ephemeral data store, bounded file navigation and a Content Security Policy blocking network requests. External user-activated HTTPS/mailto links open through the system. The website preview state is scoped to that preview environment.
+
+Compact layouts use two content columns and regular-width layouts use three. Accessibility text sizes or VoiceOver switch the feed to a single ordered column. Native controls, multiline identity labels and vertical metadata layouts accommodate larger text; visual and spoken-flow acceptance still requires actual simulator checks.
+
+## Catalog and local persistence
+
+Launch and foreground refresh download a hash-checked remote catalog, with a cached or bundled fallback and a 15-minute automatic attempt interval. Pull to refresh checks immediately. The v1 protocol keeps its four base kinds; optional creator, Skill and localization fields add 0.3.0 capabilities while older clients can still read the original text. A staged catalog in development is separate from the currently published catalog.
+
+Content favorites, creator bookmarks and editor drafts use independent atomic files. A catalog install and its identity/removal migrations commit through one rollback journal; late write failures restore prior bytes, and interrupted transactions recover before the next launch loads state. A failed rollback retains the journal and blocks further mutations and offline-media cleanup until recovery succeeds. Stale details cannot re-save explicitly removed items. Saved items keep snapshots. Current catalog metadata and translations enrich an older favorite only when its original prompt body is exactly unchanged; otherwise the entire saved snapshot remains intact. Original and language-specific drafts remain independent across catalog refreshes and relaunches. Restoring a draft affects only the selected language, and removed item IDs remove all of that item’s draft variants after a successful catalog update. Corrupt stores are retained and block unsafe writes until reloaded successfully.
+
+Community images use bounded memory/disk caches. Saved cover thumbnails and creator avatars are retained separately in Application Support and survive browsing-cache cleanup. Retention is the union of content-favorite covers, their creator avatars and bookmarked-creator avatars; unreadable favorite stores prevent destructive cleanup. Failed retained-image downloads have a retry action in Favorites. Videos are not downloaded for offline playback. There is no account, tracking or generation service; drafts and recent searches stay local.
+
+Editor drafts save atomically after a short debounce, on dismissal and when the app backgrounds; restoring the selected version requires confirmation. The detail language choice applies to displayed text, editing, copying and sharing. Collapsing a long body does not truncate the copied or shared text.
+
+## Development fixtures and checks
+
+Run only `PrompixTests` for deterministic model validation. `GlobalDiscoveryTests` covers creator identity and persistence, locale matching and fallback, Skill/type filtering, independent language drafts, favorite enrichment and offline avatar retention, including write-failure and corrupt-store recovery. UI tests include offline journeys, creator/Skill/localization flows and explicitly selected live community image/video tests; live tests require the content service. Use fresh result bundles and keep Xcode/simulator runs serialized.
+
+The `--offline` launch argument uses the bundled edition for deterministic UI fixtures. The `studio-004` fallback contains 30 original text, image and website prompts. Video examples arrive with the first successful content update; the offline Video channel explains this and offers update and browse actions. Existing downloaded editions, saved snapshots and drafts are preserved. The simulator-only `--cached-only` argument prevents refresh from replacing a staged, validated local catalog with the public edition; it does not bypass catalog validation or create fixture content. Keep third-party staged catalogs and media outside the repository.
 
 First-party assets:
+
 - `catalog.json`: original Prompix prompts and editorial example text, CC0-1.0.
 - `citrus` and `lake`: images generated for the two corresponding prompts; explicitly labeled AI output.
 - `studio-paper-forms`, `studio-object-poster`, `studio-quiet-book` and `studio-color-memory`: generated template examples with their substituted input recorded in the catalog. Exact generation prompts and the built-in tool provenance are in `scripts/original-image-examples.json`.
@@ -42,16 +67,22 @@ when available; additional community gallery pages remain remote.
 
 ## Interface languages
 
-The native interface follows the system language (Simplified Chinese or English); the app-specific language setting is available in iOS Settings. Prompt text, author examples and bundled website content retain their original language. UI translations live in `Prompix/Resources/Localizable.xcstrings`. Keep topic identifiers stable and localize only their displayed labels so filtering works in either language.
+The native interface follows the system or app-specific language setting in iOS Settings. UI resources cover nine locales: English (`en`), Simplified Chinese (`zh-Hans`), Traditional Chinese (`zh-Hant`), Japanese (`ja`), Korean (`ko`), Spanish (`es`), Brazilian Portuguese (`pt-BR`), French (`fr`) and German (`de`). Chinese script identifiers take precedence over regions; without an explicit script, Taiwan, Hong Kong and Macao select Traditional Chinese. Portuguese variants use `pt-BR`.
+
+Prompt source fields remain intact. Detail offers the original and available complete translations, identifies AI translations and falls back to the source when a requested translation is missing or unsupported. It never substitutes an unrelated language’s translation. Names, code, placeholders, parameters and URLs must remain usable. Bundled website artifacts retain their original content. Full content translation is still in progress; nine complete UI resources do not imply nine complete content editions or professional native-speaker review.
+
+UI translations live in `Prompix/Resources/Localizable.xcstrings`. Keep identifiers stable and localize only their displayed labels so filtering remains consistent. From the repository root, run `python3 scripts/check-localizations.py` for coverage, translated states, placeholders and plurals. This resource check does not replace runtime checks for untranslated metadata, long labels or layout. See [translation operations](../docs/translation-operations.md) for the separately budgeted, cached content pipeline and [localization QA](../docs/localization-qa.md) for current evidence.
 
 ## Privacy and submission
 
-`Resources/PrivacyInfo.xcprivacy` is bundled with the app. It declares no tracking and describes operational request data retained by the content service; it does not claim that local drafts or searches are uploaded. Required-reason API declarations must reflect actual code use. Store metadata, review instructions and the final submission checklist are in `docs/app-store.md`.
+`Resources/PrivacyInfo.xcprivacy` is bundled with the app. It declares no tracking and describes operational request data retained by the content service; it does not claim that local drafts or searches are uploaded. Required-reason API declarations must reflect actual code use. Store metadata, review instructions and the final submission checklist are in [App Store preparation](../docs/app-store.md).
 
 Performance checks are explicitly selected UI tests: `testRepeatedLaunchPerformance`
 and `testScrollingResourcePerformance`. Run with `-configuration Release
 ENABLE_TESTABILITY=YES`. Use a simulator for development; record those results
-separately from a final physical-device run with your signing team.
+separately from any later physical-device run with your signing team. The current
+0.3.0 assignment requires simulator evidence only; do not install on a user device
+without a subsequent request.
 The launch test terminates and relaunches the process five times; it does not clear
 OS caches. The scroll test measures CPU and memory over three passes through the
 bundled offline catalog. These provide a repeatable baseline, not a substitute for

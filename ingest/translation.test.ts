@@ -1,0 +1,295 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import { catalogSchema } from "../packages/schema/catalog.ts";
+import { attachTranslations, emptyTranslationCache, inheritPreviousTranslations, localizePrompt, promptSegments, protectText, restoreText, translationFingerprint, validLocalizedText, validateSegment } from "./translation.ts";
+import { translationBatches, runTranslations } from "./translation-runner.ts";
+import { TranslationProviderError } from "./translation-provider.ts";
+
+const fixture = catalogSchema.parse(JSON.parse(await readFile(new URL("../ios/Prompix/Resources/catalog.json", import.meta.url), "utf8"))).prompts[0];
+const item = { ...fixture, title: "Portrait", summary: "Generate a portrait with gentle studio lighting.", prompt: "Create a portrait of {subject}, add https://example.com/reference and --ar 16:9. Keep `field_name`.", example: "Replace {subject} with the person you want to depict.", previewLabel: "Studio example", cover: { text: "Portrait", eyebrow: "IMAGE", tone: "sage" as const } };
+
+function fillCache(locale: "en" | "zh-Hans" = "en") {
+  const cache = emptyTranslationCache();
+  cache.segments[locale] = Object.fromEntries(promptSegments(item).map(segment => [segment.id, locale === "en" ? segment.text : "生成肖像。" + [...segment.text.matchAll(/⟦PP\d+⟧/g)].map(match => match[0]).join(" ")]));
+  return cache;
+}
+test("opaque syntax is preserved exactly and natural word order may reorder it", () => {
+  const original = "Use {subject}, [REFERENCE_IMAGE], ${color}, {{name}}, https://example.com/x?a=1 and --no text, logos, watermarks --ar 16:9 at 24fps. `name`\n```json\n{\"key\":42}\n```";
+  const protectedText = protectText(original);
+  assert.equal(restoreText(protectedText.masked, protectedText.protectedValues), original);
+  assert.throws(() => restoreText(protectedText.masked.replace("⟦PP0⟧", "broken"), protectedText.protectedValues));
+  assert.throws(() => restoreText(protectedText.masked + "⟦PP0⟧", protectedText.protectedValues));
+  assert.equal(restoreText("⟦PP1⟧ ⟦PP0⟧", ["a", "b"]), "b a");
+  assert.deepEqual(protectText("55.6万本场点赞，12.3w viewers and 68.7萬總計").protectedValues, ["55.6万", "12.3w", "68.7萬"]);
+});
+test("Skill frontmatter and fenced implementation remain opaque", () => {
+  const text = "---\nname: deploy\ndescription: Deploy an app\n---\nExplain the workflow.\n```sh\nnpm run deploy\n```";
+  const protectedText = protectText(text);
+  assert.equal(protectedText.protectedValues[0], text.split("\nExplain")[0]);
+  assert.match(protectedText.masked, /Explain the workflow/);
+  assert.equal(restoreText(protectedText.masked, protectedText.protectedValues), text);
+});
+test("JSON keys, nesting and non-string parameters survive translated values", () => {
+  const jsonItem = { ...item, prompt: JSON.stringify({ prompt: "Create a portrait of {subject}", seed: 42, model: "custom_model_v2", aspect_ratio: "16:9", style_preset: "cinematic", html: "<h1>Hello</h1>", style: ["Soft light", { color_space: "sRGB", enabled: true }] }) };
+  const cache = emptyTranslationCache();
+  cache.segments["zh-Hans"] = Object.fromEntries(promptSegments(jsonItem).map(segment => [segment.id, "中文说明" + [...segment.text.matchAll(/⟦PP\d+⟧/g)].map(match => match[0]).join(" ")]));
+  const translated = localizePrompt(jsonItem, "zh-Hans", cache)!;
+  const parsed = JSON.parse(translated.prompt);
+  assert.equal(parsed.seed, 42);
+  assert.equal(parsed.model, "custom_model_v2"); assert.equal(parsed.aspect_ratio, "16:9"); assert.equal(parsed.style_preset, "cinematic"); assert.equal(parsed.html, "<h1>Hello</h1>");
+  assert.equal(parsed.style[1].enabled, true);
+  assert.deepEqual(Object.keys(parsed), ["prompt", "seed", "model", "aspect_ratio", "style_preset", "html", "style"]);
+  assert.match(parsed.prompt, /\{subject\}/);
+});
+test("JSON quality enums stay opaque while descriptive quality prose is translated", () => {
+  const description = "Detailed texture, natural lighting, and realistic materials.";
+  const prose = { ...item, prompt: JSON.stringify({ quality: description, variant: { quality: "high" } }) };
+  const segments = promptSegments(prose);
+  assert.ok(segments.some(segment => segment.text === description));
+  assert.ok(!segments.some(segment => segment.text === "high"));
+  const cache = emptyTranslationCache();
+  cache.segments["zh-Hans"] = Object.fromEntries(segments.map(segment => [segment.id, "详细质感，自然光线与真实材质。" + [...segment.text.matchAll(/⟦PP\d+⟧/g)].map(match => match[0]).join(" ")]));
+  const result = JSON.parse(localizePrompt(prose, "zh-Hans", cache)!.prompt);
+  assert.equal(result.variant.quality, "high"); assert.notEqual(result.quality, description);
+});
+test("localization keeps original fields and rejects partial or malformed cache records", () => {
+  const cache = fillCache();
+  const translated = attachTranslations([item], cache)[0];
+  assert.equal(translated.prompt, item.prompt);
+  assert.equal(translated.localization?.sourceFingerprint, translationFingerprint(item));
+  assert.equal(translated.localization?.translations.en?.prompt, item.prompt);
+  delete cache.segments.en[promptSegments(item)[0].id];
+  assert.equal(localizePrompt(item, "en", cache), undefined);
+  const bad = fillCache("zh-Hans");
+  bad.segments["zh-Hans"][promptSegments(item).find(segment => segment.text.includes("⟦PP"))!.id] = "只有中文而没有占位符";
+  assert.equal(localizePrompt(item, "zh-Hans", bad), undefined);
+});
+test("source and editorial changes invalidate records while unchanged segments remain reusable", () => {
+  const cache = fillCache();
+  assert.equal(translationBatches([item], cache, ["en"]).length, 0);
+  const changed = { ...item, summary: item.summary + "Use a warm background." };
+  assert.notEqual(translationFingerprint(item), translationFingerprint(changed));
+  assert.equal(translationBatches([changed], cache, ["en"])[0].segments.length, 1);
+  assert.equal(localizePrompt(changed, "en", cache), undefined);
+});
+test("wrong target script and oversized translation cannot be published", () => {
+  assert.throws(() => validateSegment("Create a beautiful portrait with soft lighting.", "Create a beautiful portrait with soft lighting.", "zh-Hans"));
+  const english = "Create the illustration you requested with your chosen subject, and keep the background that you provided.";
+  assert.throws(() => validateSegment(english, english, "de"), /foreign-language/);
+  const chinese = "请生成一张人物图片，使用柔和的光线，并保持背景简洁。";
+  assert.throws(() => validateSegment(chinese, chinese, "en"));
+  assert.doesNotThrow(() => validateSegment("动物连帽衫、粉色碗和热烤盘，组成热闹的小厨房。", "Animal hoodies, a pink bowl, and a hot griddle create a lively little kitchen.", "en"));
+  const cache = fillCache();
+  cache.segments.en[promptSegments(item)[0].id] = "x".repeat(251);
+  assert.equal(localizePrompt(item, "en", cache), undefined);
+});
+test("request budget is persisted before provider execution and unchanged reruns cost no requests", async () => {
+  const cache = emptyTranslationCache();
+  let reserved = false, requests = 0;
+  const report = await runTranslations({ items: [item], cache, locales: ["en"], providerName: "codex", maxRequests: 1,
+    persist: async (_cache, report) => { reserved = report.attempted > 0; },
+    provider: async (_locale, segments) => { assert.equal(reserved, true); requests++; return { translations: segments.map(segment => ({ id: segment.id, text: segment.text })) }; } });
+  assert.equal(requests, 1); assert.equal(report.pendingSegments, 0);
+  await runTranslations({ items: [item], cache, locales: ["en"], providerName: "codex", persist: async () => {}, provider: async () => { throw new Error("Must not call"); } });
+});
+test("invalid outputs stay uncached and failures retry only within bounds", async () => {
+  const cache = emptyTranslationCache();
+  let attempts = 0;
+  const report = await runTranslations({ items: [item], cache, locales: ["en"], providerName: "codex", maxAttempts: 2, maxRequests: 2,
+    persist: async () => {}, provider: async () => { attempts++; throw new Error("Temporary network failure"); } });
+  assert.equal(attempts, 2); assert.equal(report.failed, 2); assert.deepEqual(cache.segments, {});
+  const invalid = await runTranslations({ items: [item], cache, locales: ["en"], providerName: "codex", persist: async () => {}, provider: async (_locale, segments) => ({ translations: segments.map(segment => ({ id: segment.id, text: "" })) }) });
+  assert.ok(invalid.rejected > 0); assert.equal(localizePrompt(item, "en", cache), undefined);
+});
+test("unsupported model/auth failure stops globally without spending retry budget", async () => {
+  let attempts = 0;
+  await assert.rejects(runTranslations({ items: [item], cache: emptyTranslationCache(), locales: ["en", "zh-Hans", "ja"], providerName: "codex", concurrency: 1,
+    persist: async () => {}, provider: async () => { attempts++; throw new TranslationProviderError("Unavailable model", true); } }), /Unavailable model/);
+  assert.equal(attempts, 1);
+});
+test("persistence failure stops reservations and drains active requests before returning", async () => {
+  let writes = 0, started = 0, finished = 0;
+  await assert.rejects(runTranslations({ items: [item], cache: emptyTranslationCache(), locales: ["en", "zh-Hans", "ja"], providerName: "codex", concurrency: 2,
+    persist: async () => { if (++writes === 2) throw new Error("Disk write failed"); },
+    provider: async (_locale, segments) => {
+      started++;
+      await new Promise(resolve => setTimeout(resolve, 30));
+      finished++;
+      return { translations: segments.map(segment => ({ id: segment.id, text: segment.text })) };
+    } }), /Disk write failed/);
+  assert.equal(started, 1); assert.equal(finished, 1); assert.equal(writes, 2);
+});
+test("API dollar reservation blocks unaffordable calls", async () => {
+  let calls = 0;
+  const report = await runTranslations({ items: [item], cache: emptyTranslationCache(), locales: ["en"], providerName: "openai", maxUSD: 0.001,
+    persist: async () => {}, provider: async () => { calls++; return { translations: [] }; } });
+  assert.equal(calls, 0); assert.equal(report.attempted, 0);
+});
+test("daily-sized budgets distribute batches fairly across requested locales", async () => {
+  const calls: string[] = [];
+  await runTranslations({ items: [{ ...item, prompt: "x".repeat(2400) }], cache: emptyTranslationCache(), locales: ["zh-Hans", "ja", "ko"], fairLocales: true,
+    providerName: "codex", concurrency: 1, maxCharacters: 1000, maxRequests: 3, persist: async () => {},
+    provider: async (locale, segments) => { calls.push(locale); return { translations: segments.map(segment => ({ id: segment.id, text: (locale === "ko" ? "한국어" : "中文").repeat(100) + [...segment.text.matchAll(/⟦PP\d+⟧/g)].map(match => match[0]).join(" ") })) }; } });
+  assert.deepEqual(calls, ["zh-Hans", "ja", "ko"]);
+});
+test("validated bundled localizations survive missing cache, stale or corrupt ones do not", () => {
+  const localized = attachTranslations([item], fillCache())[0];
+  assert.ok(attachTranslations([localized], emptyTranslationCache())[0].localization?.translations.en);
+  const stale = { ...localized, summary: "A changed editorial purpose." };
+  assert.equal(attachTranslations([stale], emptyTranslationCache())[0].localization, undefined);
+  const broken = structuredClone(localized);
+  broken.localization!.translations.en!.prompt = "A prompt with removed placeholders.";
+  assert.equal(attachTranslations([broken], emptyTranslationCache())[0].localization, undefined);
+});
+test("rebuilt records retain valid online locales with missing or partial cache but reject changed sources", () => {
+  const previous = attachTranslations([item], fillCache())[0];
+  const rebuilt = inheritPreviousTranslations([item], [previous]);
+  assert.deepEqual(attachTranslations(rebuilt, emptyTranslationCache())[0].localization?.translations.en, previous.localization?.translations.en);
+  const partial = fillCache();
+  delete partial.segments.en[promptSegments(item)[0].id];
+  assert.deepEqual(attachTranslations(rebuilt, partial)[0].localization?.translations.en, previous.localization?.translations.en);
+  assert.equal(attachTranslations(inheritPreviousTranslations([{ ...item, prompt: item.prompt + " Changed." }], [previous]), emptyTranslationCache())[0].localization, undefined);
+  const broken = structuredClone(previous);
+  broken.localization!.translations.en!.prompt = "Removed required syntax";
+  assert.equal(attachTranslations(inheritPreviousTranslations([item], [broken]), emptyTranslationCache())[0].localization, undefined);
+});
+test("inherited opaque syntax remasks atomically with duplicate and overlapping values", () => {
+  const sample = { ...item, prompt: "Open `file0.py` and use 0 items. Then use 0 items with `long 0`." };
+  assert.equal(validLocalizedText(sample, "en", sample), true);
+  assert.equal(validLocalizedText(sample, "en", { ...sample, prompt: "Use 0 items with `long 0`, then open `file0.py` and use 0 items." }), true);
+  assert.equal(validLocalizedText(sample, "en", { ...sample, prompt: "Open `file0.py` and use 10 items. Then use 0 items with `long 0`." }), false);
+  assert.equal(validLocalizedText(sample, "en", { ...sample, prompt: sample.prompt + " 0" }), true);
+  assert.equal(validLocalizedText(sample, "en", { ...sample, prompt: sample.prompt + " `file0.py`" }), false);
+  const unit = { ...item, prompt: "Show 12秒 and two things at 4K." };
+  assert.equal(validLocalizedText(unit, "en", { ...unit, prompt: "Show 12seconds and 2 things at 4K." }), true);
+});
+test("completeness rejects drastic same-script omissions without rejecting Chinese compression", () => {
+  const han = "沿着废弃的航道寻找灯塔，观察守塔人、楼梯、旧照片与远处闪烁的灯光。".repeat(6);
+  assert.throws(() => validateSegment(han, "沿着废弃的航道寻找灯塔。", "zh-Hant"), /omit substantial/);
+  const english = "Describe the keeper, the stairs, the photographs, the abandoned shipping routes, and the distant lights in the detailed scene. ".repeat(3);
+  assert.doesNotThrow(() => validateSegment(english, "详细描述守塔人、楼梯、照片、废弃航道与远处灯光，营造完整场景，并且保留画面中的所有细节。".repeat(2), "zh-Hans"));
+});
+test("translation preserves explicitly requested output languages and bilingual tasks", () => {
+  assert.throws(() => validateSegment("用轻松的中文回答。", "편안한 한국어로 답하세요.", "ko"), /language requirement/);
+  assert.doesNotThrow(() => validateSegment("用轻松的中文回答。", "편안한 중국어로 답하세요.", "ko"));
+  assert.throws(() => validateSegment("Translate the English text into Chinese and retain both languages.", "英語のテキストを日本語に翻訳し、両方の言語を残してください。", "ja"), /language requirement/);
+  assert.doesNotThrow(() => validateSegment("Translate the English text into Chinese and retain both languages.", "英語のテキストを中国語に翻訳し、両方の言語を残してください。", "ja"));
+  assert.doesNotThrow(() => validateSegment("A classic English coastal painting.", "Une peinture côtière britannique classique.", "fr"));
+});
+test("daily staging only reads cache unless explicitly enabled and busy runs make no model call", async () => {
+  const { mkdtemp, mkdir, writeFile, rm } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const { prepareDailyTranslations } = await import("./translation-daily.ts");
+  const root = await mkdtemp(join(tmpdir(), "prompix-translation-test-"));
+  try {
+    await mkdir(join(root, "translations"));
+    await writeFile(join(root, "translations/cache.json"), JSON.stringify(fillCache()));
+    const cached = await prepareDailyTranslations([item], root, {});
+    assert.equal(cached.report.status, "cached"); assert.equal(cached.report.coverage.en, 1);
+    assert.equal(cached.report.pendingRecords["zh-Hans"], 1);
+    const dryRun = await prepareDailyTranslations([item], root, { PROMPIX_TRANSLATION_PROVIDER: "codex", PROMPIX_CODEX: "/this-command-must-not-run" }, false);
+    assert.equal(dryRun.report.status, "cached"); assert.equal(dryRun.report.coverage.en, 1);
+    await mkdir(join(root, "translations/run.lock"));
+    const busy = await prepareDailyTranslations([item], root, { PROMPIX_TRANSLATION_PROVIDER: "codex", PROMPIX_CODEX: "/this-command-must-not-run" });
+    assert.equal(busy.report.status, "busy"); assert.equal(busy.report.coverage.en, 1);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+test("identity reuse requires confident language evidence and preserves every original byte", async () => {
+  const { knownTextLocale, seedOriginalSegments } = await import("./translation.ts");
+  assert.equal(knownTextLocale("Create the illustration you requested with your chosen subject, and keep the background that you provided."), "en");
+  assert.equal(knownTextLocale("请生成一张人物图片，使用柔和的光线，并保持背景简洁。"), "zh-Hans");
+  assert.equal(knownTextLocale("請生成一張人物圖片，使用柔和的光線，並保持背景簡潔。"), undefined);
+  assert.equal(knownTextLocale("映画のような人物画像を作成し、背景の光を保持してください。"), undefined);
+  assert.equal(knownTextLocale("映画人物構図背景画像画国人物背景写真美術映画人物画像構図"), undefined);
+  assert.equal(knownTextLocale("请生成图片。 You are the artist with your creative vision and this detailed instruction."), undefined);
+  assert.equal(knownTextLocale("Erstelle eine detaillierte Illustration und bewahre die Beleuchtung der angegebenen Szene."), undefined);
+  const original = { ...item, prompt: "  Create the illustration you requested with your chosen subject, and keep the background that you provided.\n\n" };
+  const cache = emptyTranslationCache();
+  assert.ok(seedOriginalSegments([original], cache) >= 1);
+  const segment = promptSegments(original).find(segment => segment.text.startsWith("  Create"))!;
+  assert.equal(cache.segments.en[segment.id], original.prompt);
+  assert.equal(cache.provenance?.en[segment.id].provider, "original");
+});
+test("daily publication rejects corrupt or unreadable caches and allows absent cache", async () => {
+  const { mkdtemp, mkdir, writeFile, rm } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const { prepareDailyTranslations } = await import("./translation-daily.ts");
+  const root = await mkdtemp(join(tmpdir(), "prompix-corrupt-cache-test-"));
+  const path = join(root, "translations/cache.json");
+  try {
+    assert.equal((await prepareDailyTranslations([item], root, {})).report.total, 1);
+    await mkdir(join(root, "translations"));
+    for (const content of ["{broken", JSON.stringify({ version: "obsolete", segments: {} })]) {
+      await writeFile(path, content);
+      await assert.rejects(prepareDailyTranslations([item], root, {}), /publication stopped/);
+    }
+    await rm(path);
+    await mkdir(path);
+    await assert.rejects(prepareDailyTranslations([item], root, {}), /publication stopped/);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+test("language requirements use local clauses and exclude fruit and visual styles", () => {
+  assert.doesNotThrow(() => validateSegment("A peeled mandarin orange under warm studio lighting. No text.", "Una mandarina pelada bajo una cálida luz de estudio. Sin texto.", "es"));
+  assert.doesNotThrow(() => validateSegment("Write detailed design notes. Choose a Japanese photobook aesthetic.", "詳しいデザインノートを書いてください。日本の写真集の美学を選んでください。", "ja"));
+  assert.doesNotThrow(() => validateSegment("保留图中文字和配色。", "Preserve the lettering in the image and its colors.", "en"));
+  assert.doesNotThrow(() => validateSegment("Chinese lettering, natural colors.", "Tipografía china, colores naturales.", "es"));
+  assert.doesNotThrow(() => validateSegment("一题一题练日语 N5 汉字", "Practice JLPT N5 kanji one question at a time.", "en"));
+  assert.throws(() => validateSegment("若希望中文回答，请用中文回复。", "日本語で回答してほしい場合は、日本語で返答してください。", "ja"), /language requirement/);
+});
+test("visual lettering remains exact while style quotations and prose still translate", () => {
+  const text = '海报标题“上海早安”，标语“从早餐开始”。采用“爆炸图”风格。角落有“关注”按钮。';
+  const visual = protectText(text, true);
+  assert.deepEqual(visual.protectedValues, ['“上海早安”', '“从早餐开始”', '“关注”']);
+  assert.match(visual.masked, /“爆炸图”/);
+  assert.equal(restoreText(visual.masked, visual.protectedValues), text);
+  assert.deepEqual(protectText(text).protectedValues, []);
+  const poster = { ...item, kind: "image" as const, prompt: 'Write the title "GOOD MORNING" above "SHANGHAI".' };
+  const segment = promptSegments(poster).find(segment => segment.text.startsWith("Write"))!;
+  assert.equal(segment.text, 'Write the title ⟦PP0⟧ above ⟦PP1⟧.');
+  const count = promptSegments({ ...item, prompt: 'Draw 1 turn of the camera.' }).find(segment => segment.text.startsWith("Draw"))!;
+  assert.equal(count.numericHints?.["⟦PP0⟧"], "1");
+});
+test("semantic reviews invalidate only exact rejected outputs and reject repeated bad responses", async () => {
+  const { createHash } = await import("node:crypto");
+  const { applyTranslationReviews, validateReviewedTranslation } = await import("./translation-review.ts");
+  const segment = promptSegments(item)[0], cache = fillCache();
+  const reviews = [{ locale: "en", segmentID: segment.id, translationSHA256: createHash("sha256").update(segment.text).digest("hex"), reason: "Missing required clause" }];
+  assert.equal(applyTranslationReviews(cache, reviews), 1);
+  assert.throws(() => validateReviewedTranslation(reviews, "en", segment.id, segment.text), /Semantic review/);
+  cache.segments.en[segment.id] = "A corrected portrait title";
+  assert.equal(applyTranslationReviews(cache, reviews), 0);
+  assert.doesNotThrow(() => validateReviewedTranslation(reviews, "en", segment.id, cache.segments.en[segment.id]));
+  assert.throws(() => validateSegment("超写实电影场景", "초현실적인 영화 장면", "ko"), /Hyperrealism/);
+  assert.doesNotThrow(() => validateSegment("超现实场景中的超写实纹理", "초현실적인 장면 속 극사실적인 질감", "ko"));
+});
+test("rejected published translations and repeated provider responses cannot bypass semantic reviews", async () => {
+  const { createHash } = await import("node:crypto");
+  const cache = fillCache(), segment = promptSegments(item)[0];
+  const reviews = [{ locale: "en", segmentID: segment.id, translationSHA256: createHash("sha256").update(segment.text).digest("hex"), reason: "Reviewed semantic omission" }];
+  const published = attachTranslations([item], cache)[0];
+  assert.equal(attachTranslations([published], emptyTranslationCache(), reviews)[0].localization, undefined);
+  delete cache.segments.en[segment.id];
+  const report = await runTranslations({ items: [item], cache, reviews, locales: ["en"], providerName: "codex", maxRequests: 1,
+    persist: async () => {}, provider: async (_locale, segments) => ({ translations: segments.map(part => ({ id: part.id, text: part.text })) }) });
+  assert.equal(report.rejected, 1); assert.equal(cache.segments.en[segment.id], undefined);
+  assert.equal(attachTranslations([published], cache, reviews)[0].localization, undefined);
+});
+test("opaque numeric hints retain singular camera-motion grammar", () => {
+  assert.throws(() => validateSegment("慢慢绕⟦PP0⟧圈", "Gira lentamente ⟦PP0⟧ vueltas", "es", { "⟦PP0⟧": "1" }), /Singular/);
+  assert.throws(() => validateSegment("慢慢绕⟦PP0⟧圈", "Gira lentamente ⟦PP0⟧ vezes", "pt-BR", { "⟦PP0⟧": "1" }), /Singular/);
+  assert.doesNotThrow(() => validateSegment("慢慢绕⟦PP0⟧圈", "Gira lentamente ⟦PP0⟧ vuelta", "es", { "⟦PP0⟧": "1" }));
+  assert.doesNotThrow(() => validateSegment("慢慢绕⟦PP0⟧圈", "Gira lentamente ⟦PP0⟧ vueltas", "es", { "⟦PP0⟧": "2" }));
+});
+test("human bracket headings, narrative and descriptor arrays translate while placeholders remain opaque", () => {
+  const source = '[风格]\n[保持人物五官与原图完全一致。] [14 秒] [IMAGE_URL] [主题] [00:00-00:05]\n["电影摄影", "照片级真实感"]';
+  const result = protectText(source);
+  assert.deepEqual(result.protectedValues, ['14', '[IMAGE_URL]', '[主题]', '[00:00-00:05]']);
+  assert.match(result.masked, /\[风格\]/);
+  assert.deepEqual(protectText('把[风格]替换为[写下喜欢的摄影风格]。').protectedValues, ['[风格]', '[写下喜欢的摄影风格]']); assert.match(result.masked, /保持人物五官/); assert.match(result.masked, /电影摄影/);
+  assert.equal(restoreText(result.masked, result.protectedValues), source);
+  const sample = 'My first sentence is "istanbulu cok seviyom burada olmak cok guzel"';
+  assert.deepEqual(protectText(sample).protectedValues, ['"istanbulu cok seviyom burada olmak cok guzel"']);
+});

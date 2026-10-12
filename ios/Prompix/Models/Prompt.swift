@@ -26,7 +26,103 @@ struct Prompt: Codable, Identifiable, Hashable {
     let source: Source
     let media: Media?
     var cover: Cover? = nil
-    var searchableText: String { ([title, summary, prompt, model] + tags).joined(separator: " ") }
+    var contentType: String? = nil
+    var creator: Creator? = nil
+    var skill: Skill? = nil
+    var localization: Localization? = nil
+    var publishedAt: String? = nil
+    var isSkill: Bool { contentType == "skill" && skill != nil }
+    var displayKind: String { isSkill ? "Skill" : kind.title }
+    var displaySymbol: String { isSkill ? "square.stack.3d.up" : kind.symbol }
+    var displayModel: String { Self.localizedModel(model) }
+    static func localizedModel(_ value: String) -> String {
+        switch value {
+        case "通用对话模型": String(localized: "通用对话模型")
+        case "通用文本模型": String(localized: "通用文本模型")
+        case "v0 / 网站生成工具": String(localized: "v0 / 网站生成工具")
+        case "图像模型": String(localized: "图像模型")
+        default: value
+        }
+    }
+    var searchableText: String {
+        ([title, summary, prompt, model, displayModel, displayTitle, displaySummary, displayContent.prompt, displayContent.example, displayKind,
+          source.name, source.author ?? "", creator?.searchableIdentity ?? ""] + tags).joined(separator: " ")
+    }
+
+    struct Creator: Codable, Hashable, Identifiable {
+        let id: String
+        let platform: String
+        let displayName: String
+        var username: String? = nil
+        let profileURL: URL
+        var avatarURL: URL? = nil
+        var externalID: String? = nil
+        var bio: String? = nil
+        var platformName: String { platform == "x" ? "X" : platform == "github" ? "GitHub" : String(localized: "网站") }
+        var searchableIdentity: String {
+            [displayName, username ?? "", username.map { "@" + $0.trimmingCharacters(in: CharacterSet(charactersIn: "@")) } ?? "", platformName].joined(separator: " ")
+        }
+        func matchesSearch(_ query: String) -> Bool {
+            query.split(whereSeparator: { $0.isWhitespace }).allSatisfy { searchableIdentity.localizedStandardContains(String($0)) }
+        }
+
+        var platformIdentity: String? {
+            if let externalID, !externalID.isEmpty { return externalID }
+            let prefix = platform + "-id-"
+            guard id.hasPrefix(prefix) else { return nil }
+            let suffix = String(id.dropFirst(prefix.count))
+            return !suffix.isEmpty && suffix.allSatisfy(\.isNumber) ? suffix : nil
+        }
+        var identityKey: String { platform + ":" + id }
+        func hasConflictingIdentity(with other: Self) -> Bool {
+            guard platform == other.platform else { return true }
+            if let first = platformIdentity, let second = other.platformIdentity { return first != second }
+            return false
+        }
+        func matchesIdentity(of other: Self) -> Bool {
+            guard !hasConflictingIdentity(with: other) else { return false }
+            if let first = platformIdentity, let second = other.platformIdentity { return first == second }
+            if id == other.id { return true }
+            // X and GitHub handles are case-insensitive within their platforms.
+            // A display name is never evidence that two accounts are the same.
+            guard ["x", "github"].contains(platform), let first = normalizedUsername,
+                  let second = other.normalizedUsername else { return false }
+            return first == second
+        }
+        private var normalizedUsername: String? {
+            guard let username else { return nil }
+            let normalized = username.trimmingCharacters(in: .whitespacesAndNewlines)
+                .trimmingCharacters(in: CharacterSet(charactersIn: "@")).lowercased()
+            return normalized.isEmpty ? nil : normalized
+        }
+    }
+    struct Skill: Codable, Hashable {
+        let name: String
+        let description: String
+        let format: String
+        let entrypoint: String
+        let repository: URL
+        let directory: String
+        let installURL: URL
+        var files: [String]? = nil
+    }
+    struct Localization: Codable, Hashable {
+        let sourceLanguage: String
+        let sourceFingerprint: String
+        let translations: [String: TranslatedContent]
+    }
+    struct TranslatedContent: Codable, Hashable {
+        let title: String
+        let summary: String
+        let prompt: String
+        let example: String
+        let previewLabel: String
+        var cover: TranslatedCover? = nil
+    }
+    struct TranslatedCover: Codable, Hashable {
+        let text: String
+        let eyebrow: String
+    }
 
     func fits(topic: String) -> Bool {
         // Stable content tags are independent of the interface language.
@@ -77,6 +173,27 @@ struct Catalog: Codable {
             guard !item.id.isEmpty, !item.title.isEmpty, !item.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                   !item.source.name.isEmpty, !item.source.license.isEmpty else { throw CatalogError.invalidItems }
             guard !(removedIDs ?? []).contains(item.id) else { throw CatalogError.invalidItems }
+            guard (item.contentType == "skill") == (item.skill != nil) else { throw CatalogError.invalidItems }
+            if let creator = item.creator {
+                guard !creator.id.isEmpty, !creator.displayName.isEmpty,
+                      ["x", "github", "web"].contains(creator.platform), creator.profileURL.scheme == "https" else { throw CatalogError.invalidItems }
+                if let avatar = creator.avatarURL {
+                    guard avatar.scheme == "https", avatar.host == "api.prompix.dev", avatar.path.hasPrefix("/media/") else { throw CatalogError.invalidItems }
+                }
+            }
+            if let skill = item.skill {
+                guard skill.format == "agent-skills", skill.entrypoint == "SKILL.md", !skill.name.isEmpty,
+                      skill.repository.scheme == "https", skill.installURL.scheme == "https" else { throw CatalogError.invalidItems }
+            }
+            if let localization = item.localization {
+                guard localization.sourceFingerprint.range(of: "^[a-f0-9]{64}$", options: .regularExpression) != nil,
+                      localization.translations.count <= ContentLanguage.supported.count else { throw CatalogError.invalidItems }
+                for (language, value) in localization.translations {
+                    guard ContentLanguage.supported.contains(language), !value.title.isEmpty, !value.summary.isEmpty,
+                          !value.prompt.isEmpty, !value.example.isEmpty, !value.previewLabel.isEmpty,
+                          value.prompt.count <= 50_000 else { throw CatalogError.invalidItems }
+                }
+            }
             if let ratio = item.media?.aspectRatio, !(0.1...10).contains(ratio) { throw CatalogError.invalidItems }
             guard (item.media?.imageURLs?.count ?? 0) <= 8 else { throw CatalogError.invalidItems }
             if let gallery = item.media?.imageURLs, gallery.isEmpty || gallery.first != item.media?.imageURL { throw CatalogError.invalidItems }
@@ -95,8 +212,12 @@ struct PromptQuery {
     var kind: PromptKind?
     var topic: String?
     var model: String?
+    var skillsOnly = false
+    var creatorID: String?
     func matches(_ prompt: Prompt) -> Bool {
-        if let kind, prompt.kind != kind { return false }
+        if let kind, prompt.kind != kind || prompt.isSkill { return false }
+        if skillsOnly && !prompt.isSkill { return false }
+        if let creatorID, prompt.creator?.id != creatorID { return false }
         if let topic, !prompt.fits(topic: topic) { return false }
         if let model, prompt.model != model { return false }
         let terms = text.split(whereSeparator: { $0.isWhitespace })

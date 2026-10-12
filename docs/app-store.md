@@ -1,6 +1,6 @@
 # 首版商店与审核准备
 
-更新：2026-10-12。文案与申报依据已准备；尚未提交 App Store Connect，也不代表正式发行验收通过。提交前必须复核最终二进制、线上配置和最新编辑内容。
+更新：2026-10-12。以下文案已随 0.3.0 创作者、Skill 和国际化范围调整，完整内容与最终验收见 acceptance-0.3.md；尚未提交 App Store Connect，也不代表正式发行验收通过。提交前必须复核最终二进制、线上配置和最新编辑内容。
 
 ## 商店文案
 
@@ -24,6 +24,8 @@
 Prompix 是一个原生 iOS Prompt 发现应用。浏览精选的文本、图片、视频和网页灵感，看清示例与来源，找到下一个想试试的创作。
 
 - 轻松发现：按类型浏览，搜索关键词，或从专题里偶遇一个新想法。
+- 认识创作者：从真实作者主页继续浏览作品，收藏作者，打开原平台主页。
+- 探索技能：阅读官方开放 Skill 的完整说明、文件与来源，带到兼容的编程助手中使用。
 - 看见可能：查看图片与图集、播放视频、打开原创交互网页示例。
 - 变成自己的：复制完整 Prompt，或编辑后使用；草稿自动保留在设备上。
 - 留在手边：收藏喜欢的条目。文字与已保存的缩略图可以离线查看。
@@ -31,7 +33,7 @@ Prompix 是一个原生 iOS Prompt 发现应用。浏览精选的文本、图片
 
 Prompix 不在 App 内生成图片、视频或 AI 回复。复制后可在合适的外部工具中使用；外部工具可能需要账号或付费。不同模型和设置会产生不同结果。首次联网更新后可浏览视频案例；文本、图片与原创网页示例可在首次离线打开时查看。
 
-无需创建 Prompix 账号。原生界面支持简体中文和英文，Prompt 正文保留来源语言。
+无需创建 Prompix 账号。原生界面支持英语、简繁中文、日语、韩语、西班牙语、巴西葡萄牙语、法语和德语。内容提供可切换的 AI 译文并保留原文；复制与编辑使用当前语言，不同语言的草稿独立保存。缺失译文时显示原文。Skill 不在手机内安装或执行。
 
 ### English description
 
@@ -40,6 +42,8 @@ Make a little room for curiosity.
 Prompix is a native iOS home for prompts worth trying. Browse curated text, image, video and website ideas, explore their examples and sources, and find your next creative starting point.
 
 - Discover by format, search by keyword, or explore an editorial collection.
+- Explore real creator profiles, browse their collected work, save creators and visit their original platform.
+- Read official open-source Skills, inspect their files and source, and take them to compatible coding assistants.
 - View images and galleries, play videos, and open original interactive website examples.
 - Copy a complete prompt or edit it first. Your drafts stay on your device.
 - Save favorites for later. Saved text and successfully stored thumbnails are available offline.
@@ -47,7 +51,7 @@ Prompix is a native iOS home for prompts worth trying. Browse curated text, imag
 
 Prompix does not generate images, videos or AI responses inside the app. Use copied prompts in a suitable external tool, which may require its own account or payment. Results vary by model and settings. Video examples become available after the first online update. Original text, image and website examples are available at first launch offline.
 
-No Prompix account is required. The interface supports English and Simplified Chinese; prompt content retains its original language.
+No Prompix account is required. The interface supports English, Simplified and Traditional Chinese, Japanese, Korean, Spanish, Brazilian Portuguese, French and German. Switch between available AI translations and the original. Copy and edit the selected language, with separate local drafts. Missing translations fall back to the original. Skills are not installed or executed on the phone.
 
 ## 审核说明草稿
 
@@ -59,7 +63,10 @@ Suggested review path:
 3. Choose Image and open a preview. Some community items contain multiple images with native paging and zoom.
 4. Choose Video and tap the preview to play. Video playback is user-initiated.
 5. Choose Website and open an original example. WebKit is used only for bundled first-party demonstrations; the app interface is native SwiftUI.
-6. Open Settings for support and privacy, or open an item's report link for attribution/content feedback.
+6. Open a creator from Discover, browse their work, save the creator and find them again in Favorites.
+7. Select Skills to read the complete source instructions and inspect the source files and installation guidance.
+8. Use the language menu in a detail to switch between an available translation and the original; edit each independently.
+9. Open Settings for support and privacy, or open an item's report link for attribution/content feedback.
 
 An example video stream is available at https://api.prompix.dev/media/de4abcd733bca4bca95cdb6e9e86c6ef8ab4153acf93b1b29bb2784b356838ef.mp4 (the television explainer example). This is a public content file, not a reviewer account or a login bypass.
 
@@ -67,7 +74,7 @@ The app does not submit prompts to AI services automatically. External tool/sour
 
 ## 隐私申报依据
 
-`PrivacyInfo.xcprivacy` 随 App 打包。当前无第三方 Swift SDK，无广告标识、跨 App 跟踪或 ATT 请求。文件包含空的 tracking domains 和 required-reason API 数组；当前源码及本地 Debug 二进制没有发现直接使用 UserDefaults、文件时间戳、磁盘容量、系统启动时间等受管 API。这不是对最终发行二进制的替代检查。
+`PrivacyInfo.xcprivacy` 随 App 打包。当前无第三方 Swift SDK，无广告标识、跨 App 跟踪或 ATT 请求。tracking domains 为空。0.3.0 使用 UserDefaults 保存最多六条本机最近搜索，按 CA92.1 声明 NSPrivacyAccessedAPICategoryUserDefaults，仅读写 App 自己的数据，不访问其他 App 或系统偏好。依据 [Apple required-reason API 类型与理由](https://developer.apple.com/documentation/bundleresources/app-privacy-configuration/nsprivacyaccessedapitypes/nsprivacyaccessedapitype)。这不是对最终发行二进制的替代检查。
 
 | 数据路径 | 实际行为 | 当前申报处理 |
 |---|---|---|
@@ -86,7 +93,7 @@ The app does not submit prompts to AI services automatically. External tool/sour
 
 ## 截图与年龄问卷准备
 
-当前工程同时支持 iPhone 与 iPad。候选素材采用实际运行截图：iPhone 18 Pro 为 1206×2622，13 英寸 iPad 为 2064×2752；每个尺寸 1–10 张 PNG／JPEG，不带 alpha。按当前 [Apple 截图规范](https://developer.apple.com/help/app-store-connect/reference/app-information/screenshot-specifications/) 准备，上传时仍核对 App Store Connect 对所选设备组的要求。原生英文界面截图保留真实中文内容，不伪装为已提供完整英文内容库。
+当前工程同时支持 iPhone 与 iPad。候选素材采用实际运行截图：iPhone 18 Pro 为 1206×2622，13 英寸 iPad 为 2064×2752；每个尺寸 1–10 张 PNG／JPEG，不带 alpha。按当前 [Apple 截图规范](https://developer.apple.com/help/app-store-connect/reference/app-information/screenshot-specifications/) 准备，上传时仍核对 App Store Connect 对所选设备组的要求。新素材必须来自 0.3.0 实际运行与已经校验的内容译文，不再沿用旧版中文内容流截图；不把静态设计稿作为已实现功能。
 
 以下是针对旧 68 条目录的问卷输入准备，不是已提交的年龄结果；本轮扩充后的内容须重新核对，不能沿用旧范围的判断。Apple 按实际问卷计算分级。历史字段草案与依据存于开发机 `~/.local/share/prompix/release-candidate/submission-preparation.json`，最终提交前随最新内容复核。
 

@@ -76,6 +76,52 @@ export function interleaveLibrary(
   return prompts;
 }
 
+export type RetentionReason = "awaiting-review" | "media-failed" | "source-missing" | "not-prepared" | "duplicate-update";
+export type RetentionReport = { counts: KindCounts; reasons: Record<RetentionReason, number> };
+
+/** Keep a complete published snapshot until a replacement is ready or explicitly removed. */
+export function retainPublishedLibrary(
+  prepared: readonly Prompt[], previous: readonly Prompt[], excluded: ReadonlySet<string>,
+  reasonForMissing: (item: Prompt) => RetentionReason = () => "not-prepared",
+): { prompts: Prompt[]; retainedPrevious: RetentionReport } {
+  const ready = prepared.filter(item => !excluded.has(item.id));
+  const readyByID = new Map(ready.map(item => [item.id, item]));
+  if (readyByID.size !== ready.length) throw new Error("Prepared library contains duplicate IDs; active edition must remain unchanged");
+  const active = previous.filter(item => !excluded.has(item.id));
+  const previousByHash = new Map(active.map(item => [fingerprint(item.prompt), item.id]));
+  const retained: Prompt[] = [];
+  const reasons: RetentionReport["reasons"] = { "awaiting-review": 0, "media-failed": 0, "source-missing": 0, "not-prepared": 0, "duplicate-update": 0 };
+  const replacements = new Map(active.map(item => {
+    const update = readyByID.get(item.id);
+    const conflictingID = update ? previousByHash.get(fingerprint(update.prompt)) : undefined;
+    if (update && (!conflictingID || conflictingID === item.id)) return [item.id, update] as const;
+    retained.push(item);
+    reasons[update ? "duplicate-update" : reasonForMissing(item)]++;
+    return [item.id, item] as const;
+  }));
+  // Reserve previous identities before deduplicating new source posts. A newly
+  // ranked copy must not replace an ID already held in a user's saved collection.
+  const reservedHashes = new Set([...replacements.values()].map(item => fingerprint(item.prompt)));
+  const seenIDs = new Set<string>(), seenHashes = new Set<string>();
+  const prompts: Prompt[] = [];
+  const append = (item: Prompt) => {
+    prompts.push(item); seenIDs.add(item.id); seenHashes.add(fingerprint(item.prompt));
+  };
+  for (const item of ready) {
+    const existing = replacements.get(item.id);
+    if (existing) { append(existing); continue; }
+    const hash = fingerprint(item.prompt);
+    if (!reservedHashes.has(hash) && !seenHashes.has(hash)) append(item);
+  }
+  for (const item of replacements.values()) if (!seenIDs.has(item.id)) append(item);
+  if (prompts.length > 1000) {
+    throw new Error(`Complete retained library has ${prompts.length} entries, exceeding the 1000-entry client protocol limit; no published items were discarded`);
+  }
+  const resultingIDs = new Set(prompts.map(item => item.id));
+  if (active.some(item => !resultingIDs.has(item.id))) throw new Error("Previously published items are missing without tombstones; active edition must remain unchanged");
+  return { prompts, retainedPrevious: { counts: countByKind(retained), reasons } };
+}
+
 export function assertLibraryDownloadSize(bytes: Uint8Array): void {
   if (bytes.byteLength > 10_000_000) {
     throw new Error(`Complete library is ${bytes.byteLength} bytes, exceeding the 10000000-byte client download limit; the active edition must remain unchanged`);

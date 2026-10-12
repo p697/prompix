@@ -4,6 +4,7 @@ import { promisify } from "node:util";
 import { parse } from "csv-parse/sync";
 import type { Prompt } from "../packages/schema/catalog.ts";
 import { download } from "./network.ts";
+import { creatorFromURL, inferCreator } from "./creators.ts";
 const exec = promisify(execFile);
 export const repositories = [
   {
@@ -98,6 +99,7 @@ export function parseYouMind(
       /\*\*(?:来源|Source):\*\* \[[^\]]+\]\((https:[^)]+)\)/,
     )?.[1];
     const author = block.match(/\*\*(?:作者|Author):\*\* \[([^\]]+)\]/)?.[1];
+    const authorURL = block.match(/\*\*(?:作者|Author):\*\* \[[^\]]+\]\((https:[^)]+)\)/)?.[1];
     const image = block.match(/<img src="(https:[^"]+)"/)?.[1];
     const video = block.match(/<a href="(https:[^"]+\.mp4)"/)?.[1];
     if (
@@ -126,6 +128,7 @@ export function parseYouMind(
       toolURL: source.tool,
       artwork: "editorial",
       previewLabel: "社区创作者生成示例",
+      creator: creatorFromURL(authorURL, author) ?? creatorFromURL(original, author),
       source: {
         name: "YouMind OpenLab",
         url: original,
@@ -206,6 +209,7 @@ export function parseCommunityCSV(csv: string, revision: string): Candidate[] {
         );
       const kind = isWeb ? "web" : "text";
       const hash = fingerprint(row.prompt);
+      const author = row.contributor || "prompts.chat contributors";
       return {
         id: `pc-${hash.slice(0, 20)}`,
         kind,
@@ -225,12 +229,13 @@ export function parseCommunityCSV(csv: string, revision: string): Candidate[] {
         toolURL: isWeb ? "https://claude.ai/" : "https://chatgpt.com/",
         artwork: isWeb ? "web-editorial" : "text-editorial",
         previewLabel: "提示词主题封面",
+        creator: inferCreator({ name: "prompts.chat", author, url: null, license: "CC0-1.0", method: "社区收录" }),
         source: {
           name: "prompts.chat",
           url: `https://github.com/f/prompts.chat/blob/${revision}/prompts.csv`,
           license: "CC0-1.0",
           method: "社区收录",
-          author: row.contributor || "prompts.chat contributors",
+          author,
           revision,
         },
         media: null,

@@ -3,14 +3,15 @@ import { promptSchema } from "../packages/schema/catalog.ts";
 import type { Candidate } from "./sources.ts";
 
 const https = z.url().refine((url) => new URL(url).protocol === "https:", "HTTPS required");
-export const editorialMetadataSchema = promptSchema.pick({
-  title: true,
-  summary: true,
-  example: true,
-  tags: true,
-  previewLabel: true,
-  cover: true,
-}).extend({
+// Picking from a refined object is rejected by Zod. Reuse the exact field
+// schemas without importing catalog-level Skill consistency checks here.
+export const editorialMetadataSchema = z.object({
+  title: promptSchema.shape.title,
+  summary: promptSchema.shape.summary,
+  example: promptSchema.shape.example,
+  tags: promptSchema.shape.tags,
+  previewLabel: promptSchema.shape.previewLabel,
+  cover: promptSchema.shape.cover,
   demoURL: https.optional(),
   imageURL: https.optional(),
   imageURLs: z.array(https).min(1).max(8).optional(),
