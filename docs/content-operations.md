@@ -53,7 +53,7 @@ Cloudflare 上传显式使用 `services/content/wrangler.jsonc` 中指定的项�
 | Skill repository tree request failed | 检查后台 PATH 中的 `gh` 与本机 GitHub 登录；网络或额度恢复前保留旧完整快照。不要把 token 写入仓库或复制到任务日志 |
 | 单来源解析失败或空结果 | 保留上次快照，检查上游 README／CSV 格式，再修改合成测试 |
 | 媒体来源不在白名单 | 检查真实公开链接后再显式补充，不能开放任意 URL 抓取 |
-| 上传／验证失败 | latest 保持旧版本；检查网络、Wrangler 登录和存储空间 |
+| 上传／验证失败 | 激活前失败保留旧版本；v2双通道若已部分激活，保留待完成记录，下一次发布续传同一目标。检查网络、Wrangler登录和状态文件，勿手工覆盖latest |
 | App 更新失败 | 保留已验证缓存；在 App 的更新状态或设置中手动重试，并检查线上清单和 `npm run check:deployment` |
 | App 仍显示 68 条且没有作者资料 | 先核对实际内容版本和更新状态。旧缓存可能缺少结构化作者；0.3.1 的未筛选首页仍保留创作者入口，并说明更新需求。不要为此清空收藏、草稿或卸载 App |
 | 不需要定时采集 | `launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/dev.prompix.collect.plist`；内容服务仍可读 |
@@ -72,12 +72,22 @@ Cloudflare 上传显式使用 `services/content/wrangler.jsonc` 中指定的项�
 
 1. 从本机 `releases/<version>/manifest.json` 选择目标，执行 `npm run rollback -- <version>`。默认仅演练：读取线上当前与目标目录、核对校验和与条目数，合并目标／当前／本地全部下架 ID，生成独立的 `rollback-*` 版本；不切换线上、不改变下架记录或发布状态。
 2. 确认 `rollback-status.json` 的目标和数量后，运行 `npm run rollback -- <version> --publish`。检查旧版本媒体可读取，上传并复核新目录，最后激活清单；上传失败记录到 `rollback-status.json` 和 `operations/rollback-*.json`。
-3. 回滚激活前写入 `publication-hold.json`。下一次每日任务仍采集候选，但跳过发布，状态中带 `publicationHold`。不手动删除此文件；这样有歧义的上传响应也不会让次日任务覆盖修复版。
+3. 回滚激活前写入 `publication-hold.json`；已有暂停文件逐字节保留。下一次每日发布任务先续完自身待完成回滚，再在采集前停止，状态中带 `publicationHold`。不手动删除此文件；需要看新候选时单独运行不带`--publish`的daily。
 4. 修复采集或编辑问题后，执行 `npm run daily` 查看候选，再运行 `npm run daily -- --publish --resume-publishing`。只有线上激活校验通过后才清除 hold。最后运行 `npm run check:deployment`。
 
 采集、回滚、下架共用同一进程锁，避免本机发布交错。恢复发布会把线上有效下架记录合并到本地，因此恢复较旧备份不会让已下架条目重新出现。暂停发布期间的紧急下架：先 `npm run remove -- <id> <reason>`，再以当前线上版本作为回滚目标执行第 1、2 步。客户端下次更新会应用下架记录；保存在用户剪贴板或已经导出的内容无法远程撤回。
 
 回滚要求本机目标清单仍在且对应远程目录可验证。丢失本地清单、媒体失效或当前版本无法校验时会停止，不猜测版本、不删除远程媒体。当前命令用于已建立的生产内容库；首次初始化仍通过经过检查的发布流程执行。
+
+### v2分语言通道
+
+双通道实现已接入，实际部署和首次初始化应另记运行证据。先部署只读Worker路由，再启用外部`~/.config/prompix/publication.env`中的`PROMPIX_LANGUAGE_PACKS_ENABLED=true`，升级定时运行器。首次只有真实404允许从已验证v1建立基线；超时、503、重定向或损坏清单不能当作“尚未初始化”。一旦本地状态或线上v2已存在，删除开关不能退回v1发布。原生端仍须完成网络与缓存迁移才会使用v2。
+
+`publication-state.json`保留初始化、v1冻结状态及待完成发布的已观察指针和目标身份。所有新不可变原文／语言文件先上传并回读，全量重组验证后才先激活v2、再激活v1。两次激活不是原子事务：失败后保留pending，下一次每日发布在任何抓取、媒体及付费准备之前续完同一目标，并结束当次运行。`status.json.channels`分开报告版本和`v1Frozen`；`recoveredPublication`表示只完成恢复。不要手动删除pending或把v1当成完整v2基线。
+
+期间新增下架记录会先合并到待完成目标，生成新不可变版本，保留全部已备妥译文；不会重新调用模型。另一个进程改变远端指针时停止覆盖。显式回滚可以直接替代未完成的普通发布，不先激活待撤回目标；合并v1、v2、目标、本地及待完成目标的全部下架记录。回滚首次和恢复激活前均检查媒体可用，任何现有hold保持不变。恢复普通发布只清除最初明确选择的同一个hold，后来出现的暂停不能被顺带清除。
+
+v1全语言目录超10 MB后只保留最后兼容快照并继续显式下架，后续小目录不自动解冻；v2仍提供完整内容。若全部兼容条目都被下架，旧v1不支持空目录，发布会在激活前失败，须单独处理旧协议空库兼容，不能补造条目。v2目标在本机使用`releases/<version>/v2/manifest.json`及原文／全部语言文件，manifest和index不是公开路径；缺失或损坏时不能回退同版v1。部署后运行`npm run check:deployment -- --require-v2`验证两通道和所有语言文件。
 
 ## 编辑发布
 

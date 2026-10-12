@@ -186,13 +186,15 @@ function deploymentFetch(catalog: Catalog, bytes: Buffer, requests: string[]): t
     const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
     requests.push(url);
     if (init?.method === "PUT") return new Response(null, { status: 405 });
-    if (url.endsWith("latest.json")) return new Response(JSON.stringify(manifestFor(catalog, bytes)));
+    if (url.endsWith("/v2/latest.json")) return new Response(null, { status: 404 });
     if (url.includes("drafts/private")) return new Response(null, { status: 404 });
     const headers = new Headers(init?.headers);
-    if (headers.has("If-None-Match")) return new Response(null, { status: 304 });
+    const metadata = { ETag: '"fixture"', "Cache-Control": url.endsWith("latest.json") ? "public, max-age=60" : "public, max-age=86400" };
+    if (headers.has("If-None-Match")) return new Response(null, { status: 304, headers: metadata });
     if (headers.has("Range")) return new Response("0123456789abcdef", { status: 206, headers: { "Content-Range": "bytes 0-15/100" } });
-    if (init?.method === "HEAD") return new Response(null);
-    return new Response(bytes.toString(), { headers: { ETag: '"fixture"', "Content-Encoding": "br", "Content-Length": "100" } });
+    if (init?.method === "HEAD") return new Response(null, { headers: metadata });
+    if (url.endsWith("/v1/latest.json")) return new Response(JSON.stringify(manifestFor(catalog, bytes)), { headers: metadata });
+    return new Response(bytes.toString(), { headers: { ...metadata, "Content-Encoding": "br", "Content-Length": "100" } });
   };
 }
 

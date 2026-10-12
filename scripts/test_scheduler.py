@@ -115,6 +115,8 @@ class SchedulerTests(unittest.TestCase):
         def child(command, *, cwd, pass_fds):
             self.assertEqual(cwd, self.current)
             self.assertEqual(command[-2:], ['ingest/daily.ts', '--publish'])
+            for name in ['x', 'translation', 'editorial', 'publication']:
+                self.assertIn('--env-file-if-exists=' + str(Path.home() / f'.config/prompix/{name}.env'), command)
             self.assertEqual(len(pass_fds), 1)
             with self.assertRaisesRegex(RuntimeError, 'running'):
                 with runtime.runtime_guard(self.base, exclusive=True):

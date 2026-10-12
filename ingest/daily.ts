@@ -29,6 +29,8 @@ import type { VisualReport } from "./visual-review.ts";
 import { aspectRatio, prepareJPEG, publishStudioImages } from "./images.ts";
 import { publicationText } from "./templates.ts";
 import { countByKind, interleaveLibrary, libraryDelta, retainPublishedLibrary, selectLibrary, type KindCounts, type RetentionReport } from "./library.ts";
+import { beginDailyPublication, clearMatchingPublicationHold, prepareDailyStaging, publishDailyCatalog } from "./daily-publication.ts";
+import { preserveCatalogText, stageRelease } from "./release-publication.ts";
 const publishing = process.argv.includes("--publish");
 const resumePublishing = process.argv.includes("--resume-publishing");
 if (resumePublishing && !publishing) throw new Error("--resume-publishing requires --publish");
@@ -55,6 +57,8 @@ async function run() {
     translations?: DailyTranslationStatus;
     changed?: boolean;
     comparisonVersion?: string;
+    recoveredPublication?: boolean;
+    channels?: { v1: string; v2: string; v1Frozen: boolean };
     changes?: ReturnType<typeof libraryDelta>;
     retainedPrevious?: RetentionReport;
     editorial?: EditorialReport;
@@ -77,6 +81,19 @@ async function run() {
     counts: { candidates: null, reviewed: null, eligible: null, bundled: null, prepared: null, published: null, mediaFailed: countByKind([]) },
   };
   try {
+    // Reconcile retained publication work before any collectors or paid models run.
+    const publication = publishing ? await beginDailyPublication(root, { resumePublishing }) : await prepareDailyStaging(root);
+    if (publication?.recovered) {
+      const recovered = publication.recovered;
+      report.version = recovered.authoritative.version;
+      report.published = true;
+      report.recoveredPublication = true;
+      report.counts.published = countByKind(recovered.authoritative.prompts);
+      report.channels = { v1: recovered.v1.manifest.version, v2: recovered.v2!.manifest.version, v1Frozen: recovered.state.v1Frozen };
+      if (publication.held !== undefined) report.publicationHold = publication.held;
+      return;
+    }
+    if (publication?.held !== undefined) { report.publicationHold = publication.held; return; }
     const all: Candidate[] = [];
     const creatorsPath = join(root, "creators.json");
     let creators = await json<CreatorCache>(creatorsPath, {});
@@ -152,21 +169,16 @@ async function run() {
     };
     const candidates = enrichCreators(mergeCandidates(all, archive), creators);
     report.counts.candidates = countByKind(candidates);
-    const hold = await json<unknown | null>(join(root, "publication-hold.json"), null);
-    if (publishing && hold && !resumePublishing) {
-      report.publicationHold = hold;
-      return;
-    }
     const moderation = moderationSchema.parse(await json(join(root, "moderation.json"), { removedIDs: [] }));
     let previous: Catalog | undefined;
     let previousManifest: Awaited<ReturnType<typeof currentManifest>> | undefined;
-    if (publishing) {
+    if (publishing || publication.enabled) {
       // Compare against the verified online library, not a possibly stale local latest.json.
-      previousManifest = await currentManifest();
-      previous = await remoteCatalog(previousManifest);
+      previousManifest = publication?.previous?.v1.manifest ?? await currentManifest();
+      previous = publication?.previous?.authoritative ?? await remoteCatalog(previousManifest);
       report.comparisonVersion = previous.version;
       moderation.removedIDs = [...new Set([...moderation.removedIDs, ...(previous.removedIDs ?? [])])].sort();
-      await atomic(join(root, "moderation.json"), moderation);
+      if (publishing) await atomic(join(root, "moderation.json"), moderation);
     }
     const excluded = new Set(moderation.removedIDs);
     const editorial = await prepareDailyEditorial(candidates.filter(item => !excluded.has(item.id)), reviews, previous?.prompts ?? [], root, publishing);
@@ -330,7 +342,7 @@ async function run() {
       );
     const version = editionVersion(prompts, moderation.removedIDs);
     const latestPath = join(root, "latest.json");
-    if (publishing && previousManifest?.version === version) {
+    if (publishing && !publication?.enabled && previousManifest?.version === version) {
       const active = await currentManifest();
       if (active.version === version && active.sha256 === previousManifest.sha256) {
         await remoteCatalog(active);
@@ -339,18 +351,33 @@ async function run() {
         report.published = true;
         report.changed = false;
         report.counts.published = countByKind(prompts);
-        if (resumePublishing) await rm(join(root, "publication-hold.json"), { force: true });
+        await clearMatchingPublicationHold(root, { holdToClear: publication?.holdToClear });
         return;
       }
       throw new Error("The active library changed during preparation; refusing to overwrite it");
     }
-    const catalog = catalogSchema.parse({
+    const catalog = (publication.enabled ? preserveCatalogText : catalogSchema.parse)({
       schemaVersion: 1,
       version,
       publishedAt: new Date().toISOString(),
       removedIDs: moderation.removedIDs,
       prompts,
     });
+    if (publishing && publication?.enabled) {
+      const result = await publishDailyCatalog(root, catalog, publication);
+      report.version = result.authoritative.version;
+      report.published = true;
+      report.changed = result.authoritative.version !== previous?.version;
+      report.counts.published = countByKind(result.authoritative.prompts);
+      report.channels = { v1: result.v1.manifest.version, v2: result.v2!.manifest.version, v1Frozen: result.state.v1Frozen };
+      return;
+    }
+    if (publication.enabled) {
+      const staged = await stageRelease(root, catalog, publication.previous!);
+      report.version = staged.targets.v2.version;
+      report.channels = { v1: staged.targets.v1.version, v2: staged.targets.v2.version, v1Frozen: staged.freezeV1 };
+      return;
+    }
     const release = join(root, "releases", version);
     await mkdir(release, { recursive: true });
     const catalogPath = join(release, "catalog.json");
@@ -381,7 +408,7 @@ async function run() {
       report.published = true;
       report.changed = true;
       report.counts.published = countByKind(prompts);
-      if (resumePublishing) await rm(join(root, "publication-hold.json"), { force: true });
+      await clearMatchingPublicationHold(root, { holdToClear: publication?.holdToClear });
     }
     report.version = version;
   } catch (error) {
