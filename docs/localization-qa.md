@@ -33,3 +33,5 @@ Content translations have their own pipeline and review; this file describes the
 ## 0.3.0 content review evidence
 
 The first-party `studio-005` offline edition contains 30 original items in all nine content locales. Agent review covered all 240 non-source-language prompt bodies and corresponding titles, summaries, examples and constraints; 21 exact corrections were independently rechecked. This is semantic agent review, not professional native-speaker proofreading. Third-party content and review artifacts stay outside Git. Final rendered interface evidence is recorded in [acceptance-0.3.md](acceptance-0.3.md).
+
+The final `Quality-Global-Nine-Languages-7b.xcresult` journey passed in all nine interface locales, searching for one real creator, opening a known work, verifying that the content language follows the interface, and copying it. All 27 actual home/directory/detail screenshots were independently reviewed without a confirmed severe layout defect. This evidence covers standard-size iPhone18Pro simulator rendering; separate small-accessibility/iPad coverage is recorded in the acceptance document.

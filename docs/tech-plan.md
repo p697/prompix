@@ -1,6 +1,6 @@
 # Prompix 技术方案 v0.7
 
-更新：2026-10-12。0.3.0 保持 iOS Native、Mac 本地轻量采集和静态发布，增加结构化创作者、Agent Skill、九个 locale 的界面与增量内容翻译。全量译文仍在准备，尚未完成或发布。本阶段使用模拟器，不向用户手机安装；完成关口见 [next-release.md](next-release.md)。
+更新：2026-10-12。0.3.0 保持 iOS Native、Mac 本地轻量采集和静态发布，增加结构化创作者、Agent Skill、九个 locale 的界面与增量内容翻译。345条内容的九语言完整记录已发布并由新旧客户端解码验证。本阶段使用模拟器，不向用户手机安装；完成关口见 [next-release.md](next-release.md)。
 
 ## 当前架构
 
