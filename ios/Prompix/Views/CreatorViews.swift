@@ -119,54 +119,59 @@ struct CreatorRail: View {
     private var entries: [CreatorEntry] { CreatorDirectory.entries(in: library.prompts) }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            HStack(alignment: .firstTextBaseline) {
-                Text(String(localized: "创作者")).font(Typography.editorial(.title3))
-                    .foregroundStyle(Palette.ink).accessibilityAddTraits(.isHeader)
-                Spacer(minLength: 12)
+        if !entries.isEmpty && !typeSize.isAccessibilitySize && !voiceOverEnabled {
+            HStack(spacing: 16) {
                 NavigationLink { CreatorsView() } label: {
-                    Text(String(localized: "查看全部")).font(.footnote).foregroundStyle(Palette.muted)
-                        .frame(minHeight: 44).contentShape(Rectangle())
-                }.accessibilityIdentifier("allCreators")
-            }.padding(.horizontal, 20)
-            if entries.isEmpty {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(String(localized: "作者信息会随内容更新出现。"))
-                        .font(.subheadline).foregroundStyle(Palette.muted)
-                        .fixedSize(horizontal: false, vertical: true)
-                    CreatorUpdateButton(identifier: "loadCreators")
-                }
-                .frame(maxWidth: .infinity, alignment: .leading).padding(16)
-                .background(Palette.soft, in: RoundedRectangle(cornerRadius: 14))
-                .padding(.horizontal, 20)
-            } else if typeSize.isAccessibilitySize || voiceOverEnabled {
-                VStack(spacing: 16) {
-                    ForEach(Array(entries.prefix(1))) { entry in
-                        NavigationLink { CreatorDetail(creator: entry.creator) } label: {
-                            CreatorRow(entry: entry)
-                        }.buttonStyle(.plain).accessibilityIdentifier("creator-\(entry.id)")
-                    }
-                }.padding(.horizontal, 20)
-            } else {
+                    HStack(spacing: 4) {
+                        Text(String(localized: "创作者"))
+                        Image(systemName: "chevron.right").font(.system(size: 9, weight: .semibold))
+                    }.font(.footnote.weight(.medium)).foregroundStyle(Palette.muted)
+                        .fixedSize().frame(minHeight: 52).contentShape(Rectangle())
+                }.buttonStyle(.plain).accessibilityIdentifier("allCreators")
                 ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(alignment: .top, spacing: 16) {
+                    HStack(spacing: 18) {
                         ForEach(Array(entries.prefix(10))) { entry in
                             NavigationLink { CreatorDetail(creator: entry.creator) } label: {
-                                VStack(spacing: 6) {
-                                    CreatorAvatar(creator: entry.creator, size: 44)
-                                    Text(entry.creator.displayName).font(.caption)
-                                        .lineLimit(1).multilineTextAlignment(.center).foregroundStyle(Palette.ink)
-                                        .fixedSize(horizontal: false, vertical: true)
-                                }.frame(width: 82).contentShape(Rectangle())
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityLabel(entry.creator.displayName)
-                            .accessibilityValue(String(localized: "\(entry.count) 条内容"))
-                            .accessibilityIdentifier("creator-\(entry.id)")
+                                HStack(spacing: 8) {
+                                    CreatorAvatar(creator: entry.creator, size: 34)
+                                    VStack(alignment: .leading, spacing: 3) {
+                                        Text(entry.creator.displayName).font(.caption.weight(.medium)).lineLimit(1)
+                                        Text(String(localized: "\(entry.count) 条内容"))
+                                            .font(.caption2).foregroundStyle(Palette.muted)
+                                    }.frame(width: 94, alignment: .leading)
+                                }.frame(minHeight: 52).contentShape(Rectangle())
+                            }.buttonStyle(.plain).foregroundStyle(Palette.ink)
+                                .accessibilityLabel(entry.creator.displayName)
+                                .accessibilityValue(String(localized: "\(entry.count) 条内容"))
+                                .accessibilityIdentifier("creator-\(entry.id)")
                         }
-                    }.padding(.horizontal, 20)
+                    }.padding(.trailing, 20)
                 }
-            }
+            }.padding(.leading, 20)
+        } else {
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text(String(localized: "创作者")).font(.headline).accessibilityAddTraits(.isHeader)
+                    Spacer(minLength: 12)
+                    NavigationLink { CreatorsView() } label: {
+                        Text(String(localized: "查看全部")).font(.footnote).frame(minHeight: 44)
+                    }.accessibilityIdentifier("allCreators")
+                }
+                if entries.isEmpty {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(String(localized: "作者信息会随内容更新出现。"))
+                            .font(.subheadline).foregroundStyle(Palette.muted)
+                            .fixedSize(horizontal: false, vertical: true)
+                        CreatorUpdateButton(identifier: "loadCreators")
+                    }.frame(maxWidth: .infinity, alignment: .leading).padding(16)
+                        .background(Palette.soft, in: RoundedRectangle(cornerRadius: 14))
+                } else {
+                    ForEach(Array(entries.prefix(1))) { entry in
+                        NavigationLink { CreatorDetail(creator: entry.creator) } label: { CreatorRow(entry: entry) }
+                            .buttonStyle(.plain).accessibilityIdentifier("creator-\(entry.id)")
+                    }
+                }
+            }.padding(.horizontal, 20)
         }
     }
 }

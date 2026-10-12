@@ -75,7 +75,7 @@ struct PromptDetail: View {
                                 Text(item.displayModel).fixedSize(horizontal: false, vertical: true)
                             }
                         }.font(.footnote).foregroundStyle(Palette.muted)
-                        Text(content.title).font(Typography.editorial(.largeTitle)).lineSpacing(5).fixedSize(horizontal: false, vertical: true).accessibilityAddTraits(.isHeader)
+                        Text(content.title).font(Typography.editorial(.title)).lineSpacing(3).fixedSize(horizontal: false, vertical: true).accessibilityAddTraits(.isHeader)
                         Text(content.summary).font(.subheadline).lineSpacing(5).foregroundStyle(Palette.muted)
                         if let creator = item.creator { CreatorByline(creator: creator) }
                         if item.kind != .text {
