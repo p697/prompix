@@ -32,6 +32,7 @@ import { publicationText } from "./templates.ts";
 import { countByKind, interleaveLibrary, libraryDelta, retainPublishedLibrary, selectLibrary, type KindCounts, type RetentionReport } from "./library.ts";
 import { beginDailyPublication, clearMatchingPublicationHold, prepareDailyStaging, publishDailyCatalog } from "./daily-publication.ts";
 import { languagePackEditionVersion, preserveCatalogText, stageRelease } from "./release-publication.ts";
+import { applyQualityHolds, assertNoQualityHolds, readQualityHolds } from "./quality-holds.ts";
 const publishing = process.argv.includes("--publish");
 const resumePublishing = process.argv.includes("--resume-publishing");
 if (resumePublishing && !publishing) throw new Error("--resume-publishing requires --publish");
@@ -64,6 +65,7 @@ async function run() {
     retainedPrevious?: RetentionReport;
     editorial?: EditorialReport;
     visualReview?: VisualReport;
+    qualityHeldIDs?: string[];
     counts: {
       candidates: KindCounts | null;
       reviewed: KindCounts | null;
@@ -82,6 +84,7 @@ async function run() {
     counts: { candidates: null, reviewed: null, eligible: null, bundled: null, prepared: null, published: null, mediaFailed: countByKind([]) },
   };
   try {
+    const qualityHolds = await readQualityHolds(root);
     // Reconcile retained publication work before any collectors or paid models run.
     const publication = publishing ? await beginDailyPublication(root, { resumePublishing }) : await prepareDailyStaging(root);
     if (publication?.recovered) {
@@ -323,7 +326,10 @@ async function run() {
     });
     // Retained snapshots receive the same creator enrichment and translations
     // as fresh candidates, including older editions without creator metadata.
-    let complete = enrichCreators(retained.prompts, creators);
+    // A quality hold removes public discovery only, after retention can restore old snapshots.
+    const visible = applyQualityHolds(retained.prompts, qualityHolds);
+    report.qualityHeldIDs = visible.withheldIDs;
+    let complete = enrichCreators(visible.prompts, creators);
     if (publishing) complete = await mirrorCreatorAvatars(complete, async url => {
       const mirrored = await publishAvatar(url, root, mediaMap, upload);
       await atomic(join(root, "media-map.json"), mediaMap);
@@ -397,12 +403,14 @@ async function run() {
     const manifestPath = join(release, "manifest.json");
     await atomic(manifestPath, manifest);
     if (publishing) {
+      assertNoQualityHolds(stored, await readQualityHolds(root));
       await upload(
         `releases/${version}/catalog.json`,
         catalogPath,
         "application/json",
       );
       await remoteCatalog(manifest);
+      assertNoQualityHolds(stored, await readQualityHolds(root));
       // Activate LAST. Any earlier failure leaves clients on the previous complete edition.
       await upload("v1/latest.json", manifestPath, "application/json");
       await atomic(latestPath, manifest);
