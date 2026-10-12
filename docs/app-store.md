@@ -103,9 +103,9 @@ The app does not submit prompts to AI services automatically. External tool/sour
 
 ## 提交前仍需完成
 
-- 0.2.0 (5) 的开发验收归档、导出 IPA、签名与包内隐私／资源检查已完成；记录见 [交付质量](quality-release.md)。App Store 分发签名、上传校验及平台生成的隐私报告仍待正式提交阶段处理，不能用开发包静态审计代替。
+- 0.2.0 (6) 的开发验收归档、导出 IPA、签名与包内隐私／资源检查已完成；记录见 [交付质量](quality-release.md)。App Store 分发签名、上传校验及平台生成的隐私报告仍待正式提交阶段处理，不能用开发包静态审计代替。
 - 真机启动、滚动、内存、视频、后台恢复与离线测试；完成设计／无障碍关口。
-- 已准备 14 张真实候选截图：中文 iPhone 6 张、中文 iPad 5 张、英文 iPhone 3 张。原图、尺寸、来源与哈希清单保存在开发机 `~/.local/share/prompix/release-candidate/screenshots/`；上传时按设备组和本地化选择，仍需核对 App Store Connect 的实际字段要求。
+- 历史 build 3 的 14 张真实候选截图保存在开发机 `~/.local/share/prompix/release-candidate/screenshots/`；本轮修改了文案和内容，正式上传前须用最终界面重新制作，不能将历史截图标成 build 6。当前功能检查截图不直接视为商店素材。
 - 在 App Store Connect 按实际内容完成年龄分级。存在浏览器外链及娱乐反思玩法，不预填未经问卷确认的年龄。
 - 确认发行主体、版权年份、审核联系方式、海外发行区域和账号实际要求的协议／合规事项；不把这些账户事项写进开源仓库。
 - 复核支持入口响应方式及隐私申报；用户完成最终验收后再提交审核。
