@@ -489,6 +489,7 @@ import XCTest
             capture("publisher-\(id)-detail")
             let inventory = app.buttons["skillFiles"]
             reveal(inventory); inventory.tap()
+            reveal(app.staticTexts[try XCTUnwrap(files.last)])
             XCTAssertTrue(app.staticTexts["SKILL.md"].exists)
             XCTAssertTrue(app.descendants(matching: .any)["skillSource"].exists)
             capture("publisher-\(id)-files")
@@ -496,6 +497,8 @@ import XCTest
             let copy = app.buttons["copyInstallCommand"]
             XCTAssertTrue(copy.waitForExistence(timeout: 5)); copy.tap()
             XCTAssertTrue(copy.label.contains("已复制"))
+            let settledAt = Date().addingTimeInterval(0.7)
+            XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in Date() >= settledAt }, object: nil)], timeout: 3), .completed)
             capture("publisher-\(id)-installation")
             XCTAssertEqual(try? Data(contentsOf: try acceptanceDirectory().appendingPathComponent("drafts.json")), drafts)
             app.terminate()
