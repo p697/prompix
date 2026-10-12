@@ -9,7 +9,7 @@ const location = relative(await realpath(repo), await realpath(contentRoot));
 if (!location || (!location.startsWith("..") && !isAbsolute(location))) throw new Error("Community content must stay outside the repository");
 const unlock = await lockContent(contentRoot);
 try {
-  const report = await collectXFeeds(contentRoot, { enabled: process.argv.includes("--fetch"), bearer: process.env.X_BEARER_TOKEN });
+  const report = await collectXFeeds(contentRoot, { enabled: process.argv.includes("--fetch"), bearer: process.env.X_BEARER_TOKEN, replyOnly: process.argv.includes("--replies") });
   const intake = await readXIntake(contentRoot);
   await atomic(join(contentRoot, "candidates", "x-native.json"), intake.candidates);
   await atomic(join(contentRoot, "x-intake", "status.json"), { updatedAt: new Date().toISOString(), ...intake.report, records: intake.records });

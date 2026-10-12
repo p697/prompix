@@ -1,3 +1,5 @@
+import { readXIntake } from "./x-intake.ts";
+import { readXReplyCursors, nextXReply, replyWindow, xReplyRequest, saveXReplyPage } from "./x-replies.ts";
 import { join } from "node:path";
 import { z } from "zod";
 import { atomic, json } from "./publication.ts";
@@ -41,7 +43,7 @@ export function xFeedLimits(env: NodeJS.ProcessEnv = process.env) {
   return { requests: bounded("PROMPIX_X_MAX_REQUESTS", 4, 20), posts: bounded("PROMPIX_X_MAX_POSTS", 200, 1000) };
 }
 export type XFeedReport = {
-  status: "dry-run" | "not-configured" | "ok" | "daily-limit" | "failed";
+  status: "dry-run" | "not-configured" | "ok" | "daily-limit" | "no-pending" | "failed";
   requests: number; count: number; creators: number; dailyRequests: number; reservedPosts: number;
   limits: ReturnType<typeof xFeedLimits>; feeds: { id: string; count: number; hasNextPage: boolean }[];
   message?: string;
@@ -50,7 +52,7 @@ export type XFeedReport = {
 /** Caller holds the content lock. Failed/uncertain paid attempts are never retried that day. */
 export async function collectXFeeds(root: string, options: {
   enabled: boolean; bearer?: string; now?: () => Date;
-  limits?: ReturnType<typeof xFeedLimits>; search?: typeof searchXFeed;
+  limits?: ReturnType<typeof xFeedLimits>; search?: typeof searchXFeed; replyOnly?: boolean;
 }) {
   const now = options.now ?? (() => new Date()), day = now().toISOString().slice(0, 10);
   const limits = options.limits ?? xFeedLimits();
@@ -75,6 +77,8 @@ export async function collectXFeeds(root: string, options: {
   };
   refreshTotals();
   if (ledger.attempts.some(a => a.state !== "completed")) return { ...report, status: "daily-limit" as const };
+  const leads = (await readXIntake(root, creators)).replyLeads;
+  let replyCursors = await readXReplyCursors(root);
   while (report.dailyRequests < limits.requests && limits.posts - report.reservedPosts >= 10) {
     if (now().toISOString().slice(0, 10) !== day) break;
     const feed = xFeeds[state.nextFeed % xFeeds.length];
@@ -86,8 +90,14 @@ export async function collectXFeeds(root: string, options: {
     if (cursor.nextToken && (!cursor.startedAt || now().getTime() - Date.parse(cursor.startedAt) > 48 * 3600_000)) {
       cursor = { since: cursor.since };
     }
-    const request = xFeedRequest(feed.query, { limit, since: cursor.since, nextToken: cursor.nextToken });
-    const attempt: z.infer<typeof attemptSchema> = { feed: feed.id, request: request.requestFingerprint, reservedPosts: limit, state: "reserved" };
+    // Alternate reply recovery and fresh topics. Repeated invocations preserve this
+    // choice through the same daily ledger, rather than resetting an extra budget.
+    const reply = options.replyOnly || ledger.attempts.length % 2 === 0 ? nextXReply(leads, replyCursors, now().toISOString()) : undefined;
+    if (options.replyOnly && !reply) { report.status = "no-pending"; break; }
+    const request = reply ? xReplyRequest(reply, replyWindow(reply, replyCursors, now().toISOString()).nextToken, limit)
+      : xFeedRequest(feed.query, { limit, since: cursor.since, nextToken: cursor.nextToken });
+    const feedID = reply ? `reply:${reply.post.id}` : feed.id;
+    const attempt: z.infer<typeof attemptSchema> = { feed: feedID, request: request.requestFingerprint, reservedPosts: limit, state: "reserved" };
     ledger.attempts.push(attempt);
     await atomic(ledgerPath, ledger);
     // The old lookup command cannot claim a fresh daily slot after this collector.
@@ -97,23 +107,28 @@ export async function collectXFeeds(root: string, options: {
       const result = await (options.search ?? searchXFeed)(options.bearer, request);
       if (result.request.requestFingerprint !== request.requestFingerprint || result.posts.length > limit)
         throw new Error("X feed response does not match its request");
-      const snapshot = `${day}-feed-${String(ledger.attempts.length).padStart(3, "0")}.json`;
-      await atomic(join(root, "x-discovery", snapshot), { ...result, capturedAt: now().toISOString(), feed: feed.id, reviewStatus: "draft" });
       creators = mergeCreatorCache(creators, result.creators);
       await atomic(creatorsPath, creators);
-      const newest = [cursor.newest, result.newest].filter((v): v is string => !!v)
-        .sort((a, b) => BigInt(a) > BigInt(b) ? -1 : 1)[0];
-      // Commit the high-water mark only after the entire paginated window is read.
-      // Otherwise a popular stream loses every page after its newest fifty posts.
-      state.cursors[fingerprint] = result.nextToken
-        ? { ...cursor, nextToken: result.nextToken, newest, startedAt: cursor.startedAt ?? now().toISOString() }
-        : { since: newest ?? cursor.since };
-      state.nextFeed = (state.nextFeed + 1) % xFeeds.length;
-      await atomic(path, state);
+      if (reply) {
+        const saved = await saveXReplyPage(root, reply, replyCursors, now().toISOString(), result);
+        replyCursors = saved.cursors;
+      } else {
+        const snapshot = `${day}-feed-${String(ledger.attempts.length).padStart(3, "0")}.json`;
+        await atomic(join(root, "x-discovery", snapshot), { ...result, capturedAt: now().toISOString(), feed: feed.id, reviewStatus: "draft" });
+        const newest = [cursor.newest, result.newest].filter((v): v is string => !!v)
+          .sort((a, b) => BigInt(a) > BigInt(b) ? -1 : 1)[0];
+        // Commit the high-water mark only after the entire paginated window is read.
+        // Otherwise a popular stream loses every page after its newest fifty posts.
+        state.cursors[fingerprint] = result.nextToken
+          ? { ...cursor, nextToken: result.nextToken, newest, startedAt: cursor.startedAt ?? now().toISOString() }
+          : { since: newest ?? cursor.since };
+        state.nextFeed = (state.nextFeed + 1) % xFeeds.length;
+        await atomic(path, state);
+      }
       attempt.state = "completed"; attempt.count = result.posts.length;
       await atomic(ledgerPath, ledger);
       report.count += result.posts.length; report.creators += result.creators.length;
-      report.feeds.push({ id: feed.id, count: result.posts.length, hasNextPage: !!result.nextToken });
+      report.feeds.push({ id: feedID, count: result.posts.length, hasNextPage: !!result.nextToken });
     } catch (error) {
       attempt.state = "failed";
       await atomic(ledgerPath, ledger);
@@ -122,6 +137,6 @@ export async function collectXFeeds(root: string, options: {
       return report;
     }
   }
-  report.status = report.requests ? "ok" : "daily-limit";
+  report.status = report.requests ? "ok" : report.status === "no-pending" ? "no-pending" : "daily-limit";
   return report;
 }

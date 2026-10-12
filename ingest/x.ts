@@ -260,7 +260,7 @@ export async function lookupX(bearer: string, ids: readonly string[]) {
 
 
 /** Direct multi-topic discovery uses the same validated API contract. */
-export function xFeedRequest(query: string, options: { since?: string; nextToken?: string; limit: number }) {
+export function xFeedRequest(query: string, options: { since?: string; nextToken?: string; limit: number; conversation?: boolean }) {
   if (!query.trim() || query.length > 512 || !Number.isInteger(options.limit) || options.limit < 10 || options.limit > 100)
     throw new Error("Invalid X feed request");
   if (options.since && !searchIDSchema.safeParse(options.since).success) throw new Error("Invalid X feed cursor");
@@ -269,8 +269,10 @@ export function xFeedRequest(query: string, options: { since?: string; nextToken
   url.searchParams.set("query", query);
   url.searchParams.set("max_results", String(options.limit));
   if (options.nextToken) url.searchParams.set("next_token", options.nextToken);
+  const fields = options.conversation ? { ...lookupFields, "tweet.fields": `${lookupFields["tweet.fields"]},withheld` } : searchConfiguration.fields;
+  for (const [field, value] of Object.entries(fields)) url.searchParams.set(field, value);
   // Pagination and page size do not change the identity of the searched stream.
-  const fingerprint = digest(JSON.stringify([searchConfiguration.endpoint, query, searchConfiguration.fields]));
+  const fingerprint = digest(JSON.stringify([searchConfiguration.endpoint, query, fields]));
   return { fingerprint, query, ...options, url: url.toString(), requestFingerprint: digest(url.toString()) };
 }
 export async function searchXFeed(bearer: string, request: ReturnType<typeof xFeedRequest>) {

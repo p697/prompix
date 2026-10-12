@@ -10,19 +10,21 @@ export { isNativeXDraft, nativeXPublicationBlocker, nativeXSourceDigest } from "
 const entitiesSchema = z.object({ urls: z.array(z.object({ url: z.string(), expanded_url: z.string().optional(), unwound_url: z.string().optional(),
   media_key: z.string().optional() })).max(100).optional() });
 const noteSchema = z.object({ text: z.string().min(1).max(50000), truncated: z.boolean().optional(), entities: entitiesSchema.optional() });
-const postSchema = z.object({
+export const xPostSchema = z.object({
   id: z.string().regex(/^\d+$/), author_id: z.string().regex(/^\d+$/), text: z.string().max(50000),
   created_at: z.iso.datetime().optional(), withheld: z.unknown().optional(), truncated: z.boolean().optional(), entities: entitiesSchema.optional(),
+  conversation_id: z.string().regex(/^\d{1,19}$/).optional(), in_reply_to_user_id: z.string().regex(/^\d{1,19}$/).optional(),
+  referenced_tweets: z.array(z.object({ type: z.enum(["replied_to", "quoted", "retweeted"]), id: z.string().regex(/^\d{1,19}$/) })).max(10).optional(),
   note_tweet: noteSchema.optional(), note_post: noteSchema.optional(),
   attachments: z.object({ media_keys: z.array(z.string()).max(20).optional() }).optional(),
 });
-const mediaSchema = z.object({ media_key: z.string(), type: z.enum(["photo", "video", "animated_gif"]),
+export const xMediaSchema = z.object({ media_key: z.string(), type: z.enum(["photo", "video", "animated_gif"]),
   url: z.string().optional(), preview_image_url: z.string().optional(),
   variants: z.array(z.object({ content_type: z.string(), url: z.string(), bit_rate: z.number().optional() })).max(30).optional() });
 const snapshotSchema = z.object({ capturedAt: z.iso.datetime().optional(), posts: z.array(z.unknown()).max(100),
   creators: z.array(creatorSchema).max(100).optional(), media: z.array(z.unknown()).max(400).optional() });
-type XPost = z.infer<typeof postSchema>;
-type XMedia = z.infer<typeof mediaSchema>;
+export type XPost = z.infer<typeof xPostSchema>;
+export type XMedia = z.infer<typeof xMediaSchema>;
 type XURLEntity = NonNullable<z.infer<typeof entitiesSchema>["urls"]>[number];
 type Snapshot = { name: string; data: unknown };
 export type XIntakeRecord = { postID: string; authorID?: string; sourceURL?: string; snapshot: string; candidateID?: string;
@@ -44,7 +46,7 @@ function sourceLinks(post: XPost): string[] {
 }
 
 const truncatedEnding = /(?:…|\.\.\.)\s*(?:https?:\/\/\S+\s*)*$/u;
-function fullText(post: XPost) {
+export function fullXText(post: XPost) {
   const notes = (["note_post", "note_tweet"] as const).flatMap(source => post[source] ? [{ ...post[source], source }] : []);
   // A complete long-form field takes precedence over the display text and an incomplete alias.
   return notes.find(note => !note.truncated && !truncatedEnding.test(note.text.trim())) ?? notes[0] ?? { text: post.text, entities: post.entities, truncated: post.truncated, source: "text" as const };
@@ -145,7 +147,7 @@ const decoratedPromptMarker = new RegExp(String.raw`${promptMarkerPrefix}${model
 
 /** Only explicit instruction boundaries qualify. No fetch, continuation guessing or prose generation. */
 export function extractMarkedXPrompt(post: XPost, media: readonly XMedia[] = []): { body: string; kind: Prompt["kind"]; model?: string } | { reason: string } {
-  const source = fullText(post), text = source.text.trim();
+  const source = fullXText(post), text = source.text.trim();
   if (source.truncated) return { reason: "api-truncated" };
   if (truncatedEnding.test(text)) return { reason: "truncated-ending" };
   const matches = [
@@ -206,9 +208,9 @@ export function convertXDiscovery(snapshots: readonly Snapshot[], creators: Crea
   for (const snapshot of [...snapshots].sort((a, b) => Date.parse(capturedAt(a)) - Date.parse(capturedAt(b)) || a.name.replace(/\.json$/, "").localeCompare(b.name.replace(/\.json$/, "")))) {
     const parsed = snapshotSchema.safeParse(snapshot.data);
     if (!parsed.success) { report.snapshotErrors.push({ snapshot: snapshot.name, reason: "invalid-snapshot" }); continue; }
-    const media = (parsed.data.media ?? []).flatMap(item => { const value = mediaSchema.safeParse(item); return value.success ? [value.data] : []; });
+    const media = (parsed.data.media ?? []).flatMap(item => { const value = xMediaSchema.safeParse(item); return value.success ? [value.data] : []; });
     for (const [index, value] of parsed.data.posts.entries()) {
-      const parsedPost = postSchema.safeParse(value);
+      const parsedPost = xPostSchema.safeParse(value);
       const sourceID = value && typeof value === "object" && "id" in value && typeof value.id === "string" && /^\d+$/.test(value.id) ? value.id : undefined;
       if (!sourceID) {
         records.push({ postID: `invalid-${snapshot.name}-${index}`,
@@ -229,7 +231,7 @@ export function convertXDiscovery(snapshots: readonly Snapshot[], creators: Crea
     const profile = [...profiles, ...Object.values(creators)].find(value => value.platform === "x" && value.externalID === post.author_id);
     const extracted = extractMarkedXPrompt(post, media);
     const record: XIntakeRecord = { postID: post.id, authorID: post.author_id, sourceURL, snapshot,
-      state: "blocked", reason: "", fullTextSource: fullText(post).source, expandedLinks: sourceLinks(post),
+      state: "blocked", reason: "", fullTextSource: fullXText(post).source, expandedLinks: sourceLinks(post),
       hasCreatorProfile: !!profile, mediaItems: verifiedMedia(post, media).length, attachedMediaKeys: post.attachments?.media_keys ?? [] };
     if ("reason" in extracted) { records.push({ ...record, reason: extracted.reason }); continue; }
     const id = `x-post-${post.id}`, hash = fingerprint(extracted.body);
@@ -247,7 +249,7 @@ export function convertXDiscovery(snapshots: readonly Snapshot[], creators: Crea
       fingerprint: hash, featured: false, reviewStatus: "draft" });
     const candidate = candidates.at(-1)!;
     if (capturedAt && post.created_at && profile?.username) {
-      candidate.source.post = { id: post.id, authorID: post.author_id, text: fullText(post).text,
+      candidate.source.post = { id: post.id, authorID: post.author_id, text: fullXText(post).text,
         createdAt: post.created_at, checkedAt: capturedAt };
       candidate.source.license = "X-API-Terms";
       candidate.source.method = "X API — prompt extracted from the original post";
@@ -260,7 +262,15 @@ export function convertXDiscovery(snapshots: readonly Snapshot[], creators: Crea
   report.blocked = records.filter(item => item.state === "blocked").length;
   report.publicationBlocked = candidates.filter(item => nativeXSourceIssue(item)).length;
   for (const record of records) report.reasons[record.reason] = (report.reasons[record.reason] ?? 0) + 1;
-  return { candidates, records, report };
+  // These are public root-post leads, not instructions or approved candidates.
+  const replyLeads = [...posts.values()].flatMap(({ post, snapshot, capturedAt, creators: profiles, media }) => {
+    if (!post || post.withheld !== undefined || !post.created_at || !capturedAt ||
+        post.referenced_tweets?.some(ref => ref.type === "replied_to" || ref.type === "retweeted" || ref.type === "quoted") ||
+        (post.conversation_id && post.conversation_id !== post.id) || !hasPublicReplyPrompt(fullXText(post).text)) return [];
+    const creator = [...profiles, ...Object.values(creators)].find(profile => profile.platform === "x" && profile.externalID === post.author_id);
+    return creator?.username ? [{ post, snapshot, capturedAt, creator, media }] : [];
+  });
+  return { candidates, records, report, replyLeads };
 }
 
 /** Read cached API results only. No source links, media or paid endpoints are fetched. */
@@ -280,4 +290,9 @@ export async function readXIntake(root: string, creators: CreatorCache = {}) {
   result.report.snapshots = names.length;
   result.report.snapshotErrors.push(...errors);
   return result;
+}
+
+export function hasPublicReplyPrompt(text: string): boolean {
+  return /\bprompt(?:s)?\s+(?:is\s+|are\s+)?(?:in|below|in the)\s+(?:the\s+)?(?:first\s+)?(?:repl(?:y|ies)|comments?)\b|(?:first\s+)?(?:repl(?:y|ies)|comments?)\s+(?:for|contains?)\s+(?:the\s+)?prompt\b|提示词.{0,8}(?:在|见).{0,5}(?:评论|回复)|プロンプト.{0,8}(?:返信|リプライ)/i.test(text)
+    && !/\b(?:DM|direct message|comment.{0,20}(?:send|receive|DM))\b/i.test(text);
 }
