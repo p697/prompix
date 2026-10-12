@@ -4,6 +4,12 @@ import SwiftUI
     @Environment(\.scenePhase) private var scenePhase
     @State private var library = Library()
     init() {
+        #if DEBUG && targetEnvironment(simulator)
+        if ProcessInfo.processInfo.arguments.contains("--simulate-network-failure") {
+            try? FileManager.default.removeItem(at: SimulatorNetworkFailure.recoveryURL)
+            URLProtocol.registerClass(SimulatorNetworkFailure.self)
+        }
+        #endif
         let title = UIFont.preferredFont(forTextStyle: .largeTitle)
         if let descriptor = title.fontDescriptor.withDesign(.serif) {
             UINavigationBar.appearance().largeTitleTextAttributes = [.font: UIFont(descriptor: descriptor, size: 0)]
@@ -23,3 +29,21 @@ import SwiftUI
         }
     }
 }
+
+#if DEBUG && targetEnvironment(simulator)
+/// Opt-in UI acceptance fixture. A host-side test can restore networking before
+/// pressing the real retry button; ordinary and release launches never register it.
+private final class SimulatorNetworkFailure: URLProtocol {
+    static var recoveryURL: URL {
+        FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("prompix-ui-network-restored")
+    }
+    override class func canInit(with request: URLRequest) -> Bool {
+        ["http", "https"].contains(request.url?.scheme ?? "") &&
+            !FileManager.default.fileExists(atPath: recoveryURL.path)
+    }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func startLoading() { client?.urlProtocol(self, didFailWithError: URLError(.notConnectedToInternet)) }
+    override func stopLoading() {}
+}
+#endif

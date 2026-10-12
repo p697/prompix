@@ -131,6 +131,29 @@ first. The creator journey intentionally changes bookmarks: restore their origin
 files after testing. Current 345-to-448 iPad upgrade and four portrait flows are
 recorded in [release quality](../docs/quality-release.md).
 
+## Cached content during network failure
+
+`GlobalDiscoveryUITests/testCachedNetworkFailureEditingAndLiveRetry` is opt-in with
+`TEST_RUNNER_PROMPIX_NETWORK_ACCEPTANCE=1` and the explicit
+`TEST_RUNNER_PROMPIX_ACCEPTANCE_CONTAINER`. Use a **Debug simulator build**, with a
+backed-up real catalog, language packs, and personal files. Do not stage or run it
+on a physical device. The journey temporarily edits the original `gentle-tarot`
+draft, verifies it across a failed-network relaunch and live retry, then restores
+the original draft file on teardown. Host-side byte comparison and restoration
+are still required after a test-runner crash.
+
+The simulator-only `--simulate-network-failure` argument registers a URLProtocol
+that rejects HTTP(S) URLSession requests with `notConnectedToInternet`. The test
+creates `Library/Caches/prompix-ui-network-restored` in the metadata-verified App
+container to stop intercepting requests, then taps the real retry button against
+production. A new fault-injected launch clears the marker; teardown removes it.
+Neither the argument handling nor the protocol is compiled into Release builds.
+
+This exercises catalog/image URLSession failures and the cached text/edit/use
+flow; it is not an OS airplane-mode, AVPlayer, external-App, or slow-link test.
+The final clipboard must match the edited text attached by XCTest: detail copy
+copies the displayed source, while the **use panel** transfers the saved draft.
+
 ## Production upgrade and complete-catalog performance
 
 `GlobalDiscoveryUITests/testProductionCatalogUpgradePreservesSavedContentAndDrafts`
