@@ -4,6 +4,7 @@
   "type": "module",
   "scripts": {
     "collect": "tsx ingest/cli.ts collect",
+    "collect:community-skills": "tsx ingest/clawhub-intake.ts",
     "backfill:video": "tsx ingest/backfill.ts",
     "validate": "tsx ingest/cli.ts validate",
     "stage": "tsx ingest/cli.ts stage",

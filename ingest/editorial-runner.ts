@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { Prompt } from "../packages/schema/catalog.ts";
 import { repositories, fingerprint, type Candidate } from "./sources.ts";
 import { skillSources } from "./skills.ts";
+import { clawHubReviewEligibility, isClawHubItem } from "./clawhub.ts";
 import { applyEditorialReviews, editorialMetadataSchema, type Reviews } from "./editorial.ts";
 import { isNativeXDraft, nativeXPublicationBlocker } from "./x-intake.ts";
 import { appendReviewAttempt, replaceReviewAttempt, reviewLedgerSchema, reviewRequestLimit } from "./review-budget.ts";
@@ -23,9 +24,9 @@ export const editorialDecisionSchema = z.object({
 }).strict();
 export const editorialOutputSchema = z.object({ decisions: z.array(editorialDecisionSchema).min(1).max(3) }).strict();
 export type EditorialDecision = z.infer<typeof editorialDecisionSchema>;
-const savedDecisionSchema = editorialDecisionSchema.extend({ reviewedAt: z.iso.datetime(), model: z.string() }).strict();
+const savedDecisionSchema = editorialDecisionSchema.extend({ reviewedAt: z.iso.datetime(), model: z.string(), sourceRevision: z.string().min(1).max(200).optional() }).strict();
 export const editorialCacheSchema = z.object({ version: z.literal(editorialVersion), decisions: z.record(z.string(), savedDecisionSchema) }).strict().superRefine((cache, context) => {
-  for (const [key, decision] of Object.entries(cache.decisions)) if (key !== `${decision.id}:${decision.fingerprint}`)
+  for (const [key, decision] of Object.entries(cache.decisions)) if (key !== `${decision.id}:${decision.fingerprint}${decision.sourceRevision ? `:${decision.sourceRevision}` : ""}`)
     context.addIssue({ code: "custom", path: ["decisions", key], message: "Decision cache identity mismatch" });
 });
 export type EditorialCache = z.infer<typeof editorialCacheSchema>;
@@ -43,7 +44,8 @@ export type EditorialProvider = (items: EditorialInput[]) => Promise<{ decisions
 export type EditorialReport = { status: "disabled" | "no-pending" | "daily-limit" | "reviewed" | "failed";
   pending: number; eligible: number; requests: number; dailyRequests: number; maxRequests: number; attemptedCandidates: number; approved: number; deferred: number; rejected: number;
   cachedDecisions: number; preflightDeferred: number; inputCharacters: number; model: string; error?: string };
-export const editorialDecisionKey = (item: Pick<Candidate, "id" | "fingerprint">) => `${item.id}:${item.fingerprint}`;
+export const editorialDecisionKey = (item: Pick<Candidate, "id" | "fingerprint"> & Partial<Pick<Candidate, "source">>) =>
+  `${item.id}:${item.fingerprint}${(item.id.startsWith("skill-clawhub-") || item.source?.name === "ClawHub") && item.source?.revision ? `:${item.source.revision}` : ""}`;
 
 function previewLabel(item: Candidate) {
   return item.contentType === "skill" ? "Skill 使用说明" : ({ text: "提示词主题", image: "来源附图", video: "来源视频", web: "来源网页" } as const)[item.kind];
@@ -58,7 +60,9 @@ export function automaticReviewEligibility(item: Candidate): string | undefined 
   if (isNativeXDraft(item)) return nativeXPublicationBlocker;
   if (item.fingerprint !== fingerprint(item.prompt)) return "Source fingerprint does not match its complete instructions";
   const revision = item.source.revision;
-  if (!revision || !/^[a-f0-9]{40}$/.test(revision)) return "Missing immutable source revision";
+  const registry = isClawHubItem(item);
+  if (registry) { const reason = clawHubReviewEligibility(item); if (reason) return reason; }
+  else if (!revision || !/^[a-f0-9]{40}$/.test(revision)) return "Missing immutable source revision";
   const community = item.source.name === "prompts.chat" && item.source.license === "CC0-1.0"
     && item.source.url === `https://github.com/f/prompts.chat/blob/${revision}/prompts.csv`;
   const youmind = item.source.name === "YouMind OpenLab" && item.source.license === "CC-BY-4.0"
@@ -69,7 +73,7 @@ export function automaticReviewEligibility(item: Candidate): string | undefined 
       && item.source.repository === repository && item.skill?.repository === repository && item.skill.directory === source.directory
       && item.source.url === `${repository}/blob/${revision}/${source.directory}/SKILL.md`;
   });
-  if (!community && !youmind && !skill) return "Source is outside the automatic-review allowlist";
+  if (!community && !youmind && !skill && !registry) return "Source is outside the automatic-review allowlist";
   if (item.prompt.trim().length < 20) return "Insufficient complete copyable instructions";
   if (item.kind === "image" && !item.media?.imageURL) return "A real source image is required";
   if (item.kind === "video" && !(item.media?.imageURL && item.media.videoURL)) return "A real source poster and clip are required";
@@ -104,7 +108,8 @@ export async function runEditorialReview(options: { candidates: readonly Candida
   const maxRequests = reviewRequestLimit(options.maxRequests);
   const savedLedger = options.ledger === undefined ? undefined : editorialLedgerSchema.parse(options.ledger);
   let ledger = savedLedger?.day === options.day ? savedLedger : undefined;
-  const pending = options.candidates.filter(item => options.reviews[item.id]?.fingerprint !== item.fingerprint);
+  const pending = options.candidates.filter(item => options.reviews[item.id]?.fingerprint !== item.fingerprint
+    || (isClawHubItem(item) && options.reviews[item.id]?.sourceRevision !== item.source.revision));
   const report: EditorialReport = { status: options.provider ? "no-pending" : "disabled", pending: pending.length, eligible: 0,
     requests: 0, dailyRequests: ledger?.requests ?? 0, maxRequests, attemptedCandidates: 0, approved: 0, deferred: 0, rejected: 0,
     cachedDecisions: 0, preflightDeferred: 0, inputCharacters: 0, model: editorialModel };
@@ -118,7 +123,8 @@ export async function runEditorialReview(options: { candidates: readonly Candida
     if (cached && (cached.model !== "preflight-v1" || cached.reason === reason)) { report.cachedDecisions++; continue; }
     if (cached) delete cache.decisions[key];
     if (reason) {
-      cache.decisions[key] = { id: item.id, fingerprint: item.fingerprint, decision: "defer", reason, metadata: null, reviewedAt: now, model: "preflight-v1" };
+      cache.decisions[key] = { id: item.id, fingerprint: item.fingerprint, decision: "defer", reason, metadata: null, reviewedAt: now, model: "preflight-v1",
+        ...(isClawHubItem(item) ? { sourceRevision: item.source.revision } : {}) };
       report.preflightDeferred++;
     } else eligible.push(item);
   }
@@ -167,11 +173,13 @@ export async function runEditorialReview(options: { candidates: readonly Candida
           if (!decision.metadata || decision.metadata.previewLabel !== previewLabel(candidate)) throw new Error("Approval is missing honest editorial metadata");
           const { cover, ...metadata } = decision.metadata;
           const entry = { fingerprint: candidate.fingerprint, reviewedAt: now,
+            ...(isClawHubItem(candidate) ? { sourceRevision: candidate.source.revision } : {}),
             metadata: editorialMetadataSchema.parse({ ...metadata, ...(cover ? { cover } : {}) }) };
           if (applyEditorialReviews([candidate], { [candidate.id]: entry })[0].reviewStatus !== "candidate") throw new Error("Approval has no complete source preview");
           nextReviews[candidate.id] = entry;
         } else if (decision.metadata !== null) throw new Error("A deferred or rejected review cannot supply publication metadata");
-        nextDecisions[editorialDecisionKey(candidate)] = { ...decision, reviewedAt: now, model: editorialModel };
+        nextDecisions[editorialDecisionKey(candidate)] = { ...decision, reviewedAt: now, model: editorialModel,
+          ...(isClawHubItem(candidate) ? { sourceRevision: candidate.source.revision } : {}) };
       }
       // Save approvals before their decision cache, so a cache-only success can
       // never prevent an approved record from reaching the existing review gate.

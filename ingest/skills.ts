@@ -23,7 +23,7 @@ function assertSource(source: SkillSource): void {
 }
 
 /** Parse only the two scalar frontmatter fields; never execute YAML tags or source instructions. */
-function frontmatterValue(frontmatter: string, key: string): string | undefined {
+export function frontmatterValue(frontmatter: string, key: string): string | undefined {
   const lines = frontmatter.split(/\r?\n/);
   const index = lines.findIndex(line => line.startsWith(`${key}:`));
   if (index < 0) return;

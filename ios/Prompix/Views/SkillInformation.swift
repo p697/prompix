@@ -5,7 +5,7 @@ struct SkillInformation: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             Label(String(localized: "使用这个 Skill"), systemImage: "square.stack.3d.up").font(.headline)
-            Text(String(localized: "在支持 Agent Skills 的编程助手中使用。请从源仓库获取完整文件夹，单独复制说明可能缺少脚本或参考文件。"))
+            Text(String(localized: "在支持 Agent Skills 的编程助手中使用。请从来源页面获取完整文件夹，单独复制说明可能缺少脚本或参考文件。"))
                 .font(.subheadline).foregroundStyle(Palette.muted).fixedSize(horizontal: false, vertical: true)
             Link(destination: skill.installURL) {
                 HStack {

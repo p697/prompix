@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { type Catalog, type Prompt } from "../packages/schema/catalog.ts";
 import { atomic, json, lockContent, rollbackCatalog, editionVersion, verifyCatalog, manifestSchema, digest, base, type Manifest } from "./publication.ts";
 import { recoverRelease, type RecoveryTransport } from "./recovery.ts";
+import { clawHubCandidateIdentity, clawHubID, clawHubSources, clawHubURL } from "./clawhub.ts";
 
 const prompt = (id: string): Prompt => ({ id, kind: "text", title: id, summary: "An original test fixture", prompt: "Write a short story about a teacup.", example: "A teacup grew wings.", tags: ["test"], model: "Any", toolURL: null, artwork: "test", previewLabel: "Test", source: { name: "Prompix", url: null, license: "Original", method: "Written for tests" }, media: null });
 const target: Catalog = { schemaVersion: 1, version: "edition-1111111111111111", publishedAt: "2026-10-01T00:00:00Z", prompts: [prompt("keep"), prompt("removed-later"), prompt("removed-locally")], removedIDs: ["removed-earlier"] };
@@ -37,14 +38,14 @@ test("shared content lock rejects overlapping operations and permits the next af
     await (await lockContent(root))();
   } finally { await rm(root, { recursive: true, force: true }); }
 });
-async function fixture(failure?: "media" | "catalog" | "activation" | "changed") {
+async function fixture(failure?: "media" | "catalog" | "activation" | "changed", recoveryTarget: Catalog = target) {
   const root = await mkdtemp(join(tmpdir(), "prompix-recovery-"));
   const files = new Map<string, Buffer>();
-  for (const catalog of [target, current]) files.set(manifest(catalog).catalog, encode(catalog));
+  for (const catalog of [recoveryTarget, current]) files.set(manifest(catalog).catalog, encode(catalog));
   let active = manifest(current);
   let reads = 0;
   const calls: string[] = [];
-  await atomic(join(root, "releases", target.version, "manifest.json"), manifest(target));
+  await atomic(join(root, "releases", recoveryTarget.version, "manifest.json"), manifest(recoveryTarget));
   await atomic(join(root, "latest.json"), active);
   await atomic(join(root, "moderation.json"), { removedIDs: ["removed-locally"] });
   const transport: RecoveryTransport = {
@@ -112,6 +113,38 @@ test("successful recovery activates last, holds daily publishing and preserves i
     assert.deepEqual(await readFile(join(f.root, "releases", active.version, "catalog.json")), firstBytes);
   } finally { await f.cleanup(); }
 });
+
+for (const unavailable of ["withheld", "stale", "changed-during-media-check"] as const)
+  test(`legacy recovery cannot restore a ${unavailable} registry skill`, async () => {
+    const source = clawHubSources[0], page = `https://clawhub.ai/${source.owner}/${source.slug}`;
+    const item: Prompt = { ...prompt(clawHubID(source)), contentType: "skill",
+      source: { name: "ClawHub", url: clawHubURL(source, "/file", { version: "1.0.0", path: "SKILL.md" }),
+        license: "MIT-0", method: "Synthetic registry fixture", repository: page, revision: `1.0.0:${"a".repeat(64)}` },
+      skill: { name: "fixture-skill", description: "An original test-only skill", format: "agent-skills", entrypoint: "SKILL.md",
+        repository: page, directory: `${source.owner}/${source.slug}`, installURL: `${page}?version=1.0.0`, files: ["SKILL.md"] } };
+    const recoveryTarget = { ...target, prompts: [...target.prompts, item] }, f = await fixture(undefined, recoveryTarget);
+    try {
+      const state = (status: "ready" | "withheld", stale = false) => atomic(join(f.root, "clawhub", "state.json"), {
+        schemaVersion: 1, records: { [item.id]: { status, identity: clawHubCandidateIdentity(item),
+          checkedAt: new Date(Date.now() - (stale ? 25 * 3_600_000 : 0)).toISOString() } },
+      });
+      await state(unavailable === "withheld" ? "withheld" : "ready", unavailable === "stale");
+      const before = await readFile(join(f.root, "latest.json"));
+      let mediaCalls = 0;
+      const transport: RecoveryTransport = { ...f.transport, async verifyMedia() {
+        mediaCalls++;
+        await state("withheld");
+      } };
+      await assert.rejects(recoverRelease(f.root, recoveryTarget.version, true, transport, undefined, {}), /ClawHub source is unavailable/);
+      assert.equal(mediaCalls, unavailable === "changed-during-media-check" ? 1 : 0);
+      assert.deepEqual(f.calls, [], "No legacy artifacts or pointers are uploaded after failed availability checks");
+      assert.deepEqual(await readFile(join(f.root, "latest.json")), before);
+      assert.equal(f.getActive().version, current.version);
+      assert.equal(await json(join(f.root, "publication-hold.json"), null), null);
+      assert.deepEqual(await json(join(f.root, "moderation.json"), null), { removedIDs: ["removed-locally"] });
+      assert.equal((await json<{ published: boolean }>(join(f.root, "rollback-status.json"), { published: true })).published, false);
+    } finally { await f.cleanup(); }
+  });
 
 test("edition identity preserves case and spacing edits while normalizing removal order", () => {
   const original = [prompt("keep")];

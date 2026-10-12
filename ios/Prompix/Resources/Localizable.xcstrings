@@ -3898,60 +3898,60 @@
         }
       }
     },
-    "在支持 Agent Skills 的编程助手中使用。请从源仓库获取完整文件夹，单独复制说明可能缺少脚本或参考文件。": {
+    "在支持 Agent Skills 的编程助手中使用。请从来源页面获取完整文件夹，单独复制说明可能缺少脚本或参考文件。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Use in a coding assistant that supports Agent Skills. Get the full folder from the source repository; copying only the instructions may leave out scripts or reference files."
+            "value": "Use in a coding assistant that supports Agent Skills. Get the full folder from the source page; copying only the instructions may leave out scripts or reference files."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "請在支援 Agent Skills 的程式設計助手中使用。從來源儲存庫取得完整資料夾；單獨複製說明可能會缺少指令碼或參考檔案。"
+            "value": "請在支援 Agent Skills 的程式設計助手中使用。從來源頁面取得完整資料夾；單獨複製說明可能會缺少指令碼或參考檔案。"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "Agent Skills に対応するコーディングアシスタントで使用してください。元のリポジトリからフォルダー全体を取得してください。説明だけをコピーすると、スクリプトや参照ファイルが不足する場合があります。"
+            "value": "Agent Skills に対応するコーディングアシスタントで使用してください。配布元のページからフォルダー全体を取得してください。説明だけをコピーすると、スクリプトや参照ファイルが不足する場合があります。"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "Agent Skills를 지원하는 코딩 도우미에서 사용하세요. 소스 저장소에서 전체 폴더를 가져오세요. 설명만 복사하면 스크립트나 참조 파일이 빠질 수 있습니다."
+            "value": "Agent Skills를 지원하는 코딩 도우미에서 사용하세요. 원본 페이지에서 전체 폴더를 가져오세요. 설명만 복사하면 스크립트나 참조 파일이 빠질 수 있습니다."
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Úsalo en un asistente de programación compatible con Agent Skills. Obtén la carpeta completa del repositorio de origen; copiar solo las instrucciones puede omitir scripts o archivos de referencia."
+            "value": "Úsalo en un asistente de programación compatible con Agent Skills. Obtén la carpeta completa desde la página de origen; copiar solo las instrucciones puede omitir scripts o archivos de referencia."
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Use em um assistente de programação compatível com Agent Skills. Obtenha a pasta completa no repositório de origem; copiar apenas as instruções pode deixar scripts ou arquivos de referência de fora."
+            "value": "Use em um assistente de programação compatível com Agent Skills. Obtenha a pasta completa na página de origem; copiar apenas as instruções pode deixar scripts ou arquivos de referência de fora."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Utilisez un assistant de programmation compatible avec Agent Skills. Récupérez le dossier complet depuis le dépôt source ; copier uniquement les instructions peut omettre des scripts ou des fichiers de référence."
+            "value": "Utilisez un assistant de programmation compatible avec Agent Skills. Récupérez le dossier complet depuis la page source ; copier uniquement les instructions peut omettre des scripts ou des fichiers de référence."
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Verwende einen Programmierassistenten, der Agent Skills unterstützt. Lade den vollständigen Ordner aus dem Quell-Repository. Wenn du nur die Anleitung kopierst, können Skripte oder Referenzdateien fehlen."
+            "value": "Verwende einen Programmierassistenten, der Agent Skills unterstützt. Lade den vollständigen Ordner von der Quellseite herunter. Wenn du nur die Anleitung kopierst, können Skripte oder Referenzdateien fehlen."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "在支持 Agent Skills 的编程助手中使用。请从源仓库获取完整文件夹，单独复制说明可能缺少脚本或参考文件。"
+            "value": "在支持 Agent Skills 的编程助手中使用。请从来源页面获取完整文件夹，单独复制说明可能缺少脚本或参考文件。"
           }
         }
       }

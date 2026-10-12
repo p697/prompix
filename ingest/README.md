@@ -158,3 +158,11 @@ reviewed images; they do not bypass the mirror cache or publication checks.
 ## Release recovery
 
 `npm run rollback -- <edition-or-rollback-version>` verifies the saved target and stages a removal-safe rollback. V2 prefers its complete local manifest and all language artifacts; a corrupt/incomplete v2 target cannot fall back to v1. Add `--publish` to verify media and activate both channels. Explicit rollback can replace an interrupted ordinary publication without first publishing that unwanted target, while retaining its removals. Automatic retry rechecks media before activation and preserves any existing hold byte-for-byte. Recovery holds automatic publishing until a matching `npm run daily -- --publish --resume-publishing` succeeds; staging remains available. See [operations](../docs/content-operations.md) for procedures and urgent removals.
+
+## Community Skills
+
+The daily job also reads the owner-qualified ClawHub allowlist in `clawhub.ts`. `npm run collect:community-skills` performs only this bounded public intake under the content lock: no installs, execution, model calls or publication. Raw evidence, candidates and availability state stay outside Git. Three initial packages are allowlisted, with at most ten requests per pass, six-hour caching and persistent `Retry-After` handling.
+
+Complete file inventories and exact entrypoint bytes bind the immutable registry revision. Editorial approvals and cached decisions include that revision, so changed supporting files cannot reuse a text-only approval. ClawHub's registry-wide MIT-0 policy is recorded separately from nullable API license fields. Conflicting moderation or a non-clean version scan prevents intake; upstream scans do not replace editorial review or promise safety.
+
+Only matching source identities checked within 24 hours can enter publication. Collection errors and withdrawals cannot revive retained snapshots. Staging, frozen v1 snapshots, pending activation and both rollback protocols enforce the same availability rule without personal-data removal tombstones. If an old pending target no longer qualifies, refresh intake and prepare a corrected edition; immutable targets are never silently edited. See [source contract and actual research](../docs/community-skills.md).

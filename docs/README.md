@@ -24,6 +24,7 @@ Prompix 是开源、免费的多模态 Prompt 集合 App。用户像逛手机淘
 | [design.md](design.md) | 设计原则、已确认方向、核心页面和四类卡片要求 |
 | [handoff.md](handoff.md) | 复制、编辑、分享和目标工具打开的能力边界 |
 | [content-operations.md](content-operations.md) | 每日采集、发布、凭据与故障恢复 |
+| [community-skills.md](community-skills.md) | ClawHub 作者与版本采集、文件校验及来源变更处理 |
 | [content-policy.md](content-policy.md) | 来源、署名、许可和轻量下架流程 |
 
 ## 背景与旧方案
