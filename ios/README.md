@@ -122,6 +122,15 @@ during the latter run. `testShareCancellationKeepsDetailUsable` and
 return; opening Safari is not proof of tool login, prompt prefill or generation.
 Native tab selection supports both the iPhone bottom bar and iPad floating tabs.
 
+On iPad, search detail navigation remains inside a centered native sheet. The
+global journey helper scopes reveal gestures to the scroll view containing the
+target, so drags do not start on the fixed action bar or outside the sheet.
+`testPublisherSkillPackages` uses `PROMPIX_PUBLISHER_ACCEPTANCE=1` and the explicit
+`PROMPIX_ACCEPTANCE_CONTAINER` for real production refresh; back up personal data
+first. The creator journey intentionally changes bookmarks: restore their original
+files after testing. Current 345-to-448 iPad upgrade and four portrait flows are
+recorded in [release quality](../docs/quality-release.md).
+
 ## Production upgrade and complete-catalog performance
 
 `GlobalDiscoveryUITests/testProductionCatalogUpgradePreservesSavedContentAndDrafts`
