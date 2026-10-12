@@ -194,6 +194,101 @@ import UIKit
         try JSONDecoder().decode(type, from: Data(contentsOf: directory.appendingPathComponent(file)))
     }
 
+    func testCachedNetworkFailureEditingAndLiveRetry() throws {
+        guard ProcessInfo.processInfo.environment["PROMPIX_NETWORK_ACCEPTANCE"] == "1" else {
+            throw XCTSkip("Back up the dedicated simulator's production cache and personal files before this network-failure journey.")
+        }
+        let directory = try acceptanceDirectory()
+        let catalogBytes = try Data(contentsOf: directory.appendingPathComponent("catalog.json"))
+        let catalog = try JSONDecoder().decode(CatalogSnapshot.self, from: catalogBytes)
+        XCTAssertGreaterThan(catalog.prompts.count, 100, "Exercise a downloaded catalog, not the small bundled fixture.")
+        let drafts = try Data(contentsOf: directory.appendingPathComponent("drafts.json"))
+        let favorites = try Data(contentsOf: directory.appendingPathComponent("favorites.json"))
+        func recoveryURL(_ current: URL) -> URL {
+            current.deletingLastPathComponent().deletingLastPathComponent()
+                .appendingPathComponent("Caches/prompix-ui-network-restored")
+        }
+        defer {
+            app.terminate()
+            do {
+                let current = try acceptanceDirectory()
+                try drafts.write(to: current.appendingPathComponent("drafts.json"), options: .atomic)
+                try? FileManager.default.removeItem(at: recoveryURL(current))
+                XCTAssertEqual(try Data(contentsOf: current.appendingPathComponent("drafts.json")), drafts)
+            } catch { XCTFail("Restore the backed-up simulator draft file after this run: \(error)") }
+        }
+        func launchWithFailure() {
+            app.launchArguments = ["--simulate-network-failure", "-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh-Hans"]
+            app.launch()
+            XCTAssertTrue(app.buttons["retryCatalogUpdate"].waitForExistence(timeout: 15))
+            XCTAssertTrue(app.buttons["allCreators"].exists)
+        }
+        func openOriginalEditor() {
+            app.buttons["kind-text"].tap()
+            let card = app.buttons["prompt-gentle-tarot"]
+            reveal(card); card.tap()
+            XCTAssertTrue(app.buttons["copyPrompt"].waitForExistence(timeout: 5))
+            let language = app.buttons["contentLanguage"]
+            if language.exists {
+                reveal(language); language.tap(); app.buttons["contentLanguage-original"].tap()
+            }
+            app.buttons["编辑后使用"].tap()
+            XCTAssertTrue(app.textViews["promptEditor"].waitForExistence(timeout: 5))
+        }
+        launchWithFailure()
+        capture("network-01-cached-discovery-with-retry")
+        openOriginalEditor()
+        let editor = app.textViews["promptEditor"]
+        let original = try XCTUnwrap(editor.value as? String)
+        XCTAssertFalse(original.isEmpty)
+        let marker = " PROMPIX NETWORK ACCEPTANCE CHECK "
+        XCTAssertFalse(original.contains(marker))
+        editor.tap(); editor.typeText(marker)
+        let edited = try XCTUnwrap(editor.value as? String)
+        XCTAssertTrue(edited.contains(marker))
+        app.navigationBars.buttons["完成"].tap()
+        let saved = try readSnapshot([String: String].self, from: try acceptanceDirectory(), file: "drafts.json")
+        XCTAssertEqual(saved["gentle-tarot"], edited)
+        capture("network-02-edit-saved-without-network")
+        app.terminate()
+        launchWithFailure()
+        openOriginalEditor()
+        XCTAssertEqual(editor.value as? String, edited)
+        app.buttons["copyEditedPrompt"].tap()
+        XCTAssertTrue(app.buttons["copyEditedPrompt"].label.contains("已复制"))
+        capture("network-03-reopened-edited-draft")
+        app.navigationBars.buttons["完成"].tap()
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        let retry = app.buttons["retryCatalogUpdate"]
+        XCTAssertTrue(retry.waitForExistence(timeout: 5))
+        let current = try acceptanceDirectory()
+        XCTAssertEqual(try Data(contentsOf: current.appendingPathComponent("catalog.json")), catalogBytes)
+        XCTAssertEqual(try Data(contentsOf: current.appendingPathComponent("favorites.json")), favorites)
+        // Let the registered protocol defer to URLSession's normal HTTP loader.
+        // Retry now reaches the real production manifest and language artifacts.
+        try FileManager.default.createDirectory(at: recoveryURL(current).deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data("restored".utf8).write(to: recoveryURL(current), options: .atomic)
+        retry.tap()
+        let status = app.descendants(matching: .any).matching(identifier: "catalogUpdateStatus").firstMatch
+        let recovered = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in !status.exists }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [recovered], timeout: 90), .completed)
+        XCTAssertTrue(app.buttons["searchButton"].isHittable)
+        capture("network-04-live-retry-completed")
+        openOriginalEditor()
+        XCTAssertEqual(editor.value as? String, edited)
+        app.navigationBars.buttons["完成"].tap()
+        // Detail copy follows the displayed source. The use panel transfers the
+        // saved language-specific draft, which is the edited-content contract.
+        app.buttons["usePrompt"].tap()
+        let handoffCopy = app.buttons["handoffCopy"]
+        XCTAssertTrue(handoffCopy.waitForExistence(timeout: 5)); handoffCopy.tap()
+        XCTAssertTrue(handoffCopy.label.contains("已复制"))
+        capture("network-05-edited-content-after-recovery")
+        let expected = XCTAttachment(string: edited)
+        expected.name = "network-expected-clipboard"; expected.lifetime = .keepAlways; add(expected)
+        XCTAssertEqual(try Data(contentsOf: try acceptanceDirectory().appendingPathComponent("favorites.json")), favorites)
+    }
+
     private func assertSavedDraft(_ item: SavedPromptSnapshot, expected: String, evidence: String) {
         app.selectPrompixTab("收藏")
         let prompt = app.buttons["prompt-\(item.id)"]

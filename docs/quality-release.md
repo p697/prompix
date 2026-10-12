@@ -260,3 +260,13 @@ iPhone 18 Pro 连续五屏浏览及每屏详情返回位置通过，五张截图
 证据目录 `/Volumes/Lucy-SSD/Prompix-Codex/Evidence/ipad-current-upgrade/` 包含 `publisher.xcresult`（首轮失败）、`publisher-scoped.xcresult`、`browsing-handoff.xcresult`、实际截图、`upgrade-preservation.json`、`clipboard-verification.json`、`personal-restoration.json`。这轮是中文、正常字号、竖屏的功能证据，不替代 iPad 横屏／分屏、大字、完整离线／慢网或最终真机测试；未安装用户手机。
 
 同一测试辅助方法在专用 iPhone 18 Pro／iOS 27 模拟器完成两个官方 Skill 包流程回归，61.176 秒通过，结果为同目录 `phone-regression.xcresult`。它验证普通手机滚动未因面板范围修正而失效，不是新增性能测量。
+
+## 0.4.5 缓存编辑与网络恢复验收（2026-10-13）
+
+新增仅 Debug 模拟器可显式启用的 URLSession 断网故障注入。使用实际 448 条目录与已下载语言包，检查更新失败提示和重试入口、缓存浏览、原文编辑保存、再次断网启动后的草稿、恢复连接后点击真实生产重试，以及使用面板的编辑稿复制。最终 UI 流程 **52.453 秒通过**，165 项模型测试通过；结果无失败、无跳过、无运行时警告。
+
+宿主读取模拟器剪贴板，与测试记录的编辑稿 **519 字节完全一致**。原始草稿在测试结束恢复；草稿、内容收藏、创作者收藏、目录和语言包索引五个文件均与测试前逐字节一致，网络恢复标记也已清除。首次外部剪贴板检查指出测试错误地选择了复制来源正文的详情按钮；最终改为验证按既有契约交接草稿的使用面板，没有改变两种复制入口的产品行为。
+
+Release 模拟器构建成功，独立扫描确认故障注入参数、协议类名、恢复标记均未进入 Release App；同次 Debug App 中存在这些标识。故障注入不会改变普通启动或发行构建。未安装用户手机。
+
+证据目录 `/Volumes/Lucy-SSD/Prompix-Codex/Evidence/cached-network-recovery/` 包含 `network.xcresult`（模型测试及首次流程）、`network-handoff.xcresult`（最终交接流程）、截图、剪贴板、`preservation.json` 和 `release-exclusion.json`。这是 HTTP(S) URLSession 故障下的缓存文本使用与真实生产重试证据；没有模拟 OS 飞行模式，也未覆盖 AVPlayer、外部 App、慢网、视频离线或全部语言，不能据此关闭完整离线关口。
