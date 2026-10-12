@@ -114,12 +114,11 @@ import CryptoKit
         return (network, session)
     }
     private func waitForRequest(_ network: PackLibraryNetwork, path: String, count: Int = 1) async throws {
-        for _ in 0..<400 {
-            if network.requests.filter({ $0 == path }).count >= count { return }
-            try await Task.sleep(for: .milliseconds(5))
+        let requested = network.expectRequest(path: path, count: count)
+        guard await XCTWaiter.fulfillment(of: [requested], timeout: 10) == .completed else {
+            XCTFail("The isolated session did not request \(path)")
+            throw URLError(.timedOut)
         }
-        XCTFail("The isolated session did not request \(path)")
-        throw URLError(.timedOut)
     }
 
     func testV1MigrationRetainsFavoritesCreatorAndIndependentDraftBytes() async throws {
@@ -721,16 +720,33 @@ private final class PackLibraryNetwork: @unchecked Sendable {
     private var responses: [String: Reply]
     private let holding: Set<String>
     private var recorded: [String] = []
+    private var requestWaiters: [(path: String, count: Int, expectation: XCTestExpectation)] = []
     private var pending: [(path: String, occurrence: Int, transport: PackLibraryProtocol, reply: Reply)] = []
     private var offline = false
     init(responses: [String: Reply], holding: Set<String>) { self.responses = responses; self.holding = holding }
     var requests: [String] { lock.withLock { recorded } }
     func set(_ reply: Reply, for path: String) { lock.withLock { responses[path] = reply } }
     func setFailureForAllRequests() { lock.withLock { offline = true } }
+    func expectRequest(path: String, count: Int) -> XCTestExpectation {
+        let expectation = XCTestExpectation(description: "Request \(count) for \(path)")
+        let alreadyRequested = lock.withLock {
+            if recorded.filter({ $0 == path }).count >= count { return true }
+            requestWaiters.append((path, count, expectation))
+            return false
+        }
+        if alreadyRequested { expectation.fulfill() }
+        return expectation
+    }
     func start(_ transport: PackLibraryProtocol) {
         let path = transport.request.url!.path
+        var fulfilled: [XCTestExpectation] = []
         let reply: Reply? = lock.withLock {
             recorded.append(path)
+            requestWaiters.removeAll { waiter in
+                guard waiter.path == path, recorded.filter({ $0 == path }).count >= waiter.count else { return false }
+                fulfilled.append(waiter.expectation)
+                return true
+            }
             let reply = offline ? Reply.offline : responses[path] ?? .status(404)
             if holding.contains(path) {
                 pending.append((path, recorded.filter { $0 == path }.count, transport, reply))
@@ -738,6 +754,7 @@ private final class PackLibraryNetwork: @unchecked Sendable {
             }
             return reply
         }
+        fulfilled.forEach { $0.fulfill() }
         if let reply { transport.deliver(reply) }
     }
     func release(path: String, occurrence: Int = 1) {

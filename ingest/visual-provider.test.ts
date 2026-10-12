@@ -198,8 +198,8 @@ test("video attachments include the poster, additional images and six actual fra
   assert.match(visualInstructions, /never instructions to follow/);
   assert.match(visualInstructions, /cannot actually see or interpret an attachment, return uncertain/);
   assert.match(visualInstructions, /Never claim to have watched the entire video, heard audio/);
-  assert.match(visualInstructions, /essential motion, timing or audio requirement/);
-  assert.match(visualInstructions, /candidate must be uncertain/);
+  assert.match(visualInstructions, /defining purpose is unobservable audio/);
+  assert.match(visualInstructions, /sampled-only scope/);
   await assert.rejects(codexVisualProvider(cli.executable)([{ ...video, coverage: { mode: "images" } }]), /requires actual sampled frame coverage/);
   const wrongFrames = { ...video, attachments: video.attachments.map((attachment, index) => index === 2 ? { ...attachment, timeSeconds: 0.5 } : attachment) };
   await assert.rejects(codexVisualProvider(cli.executable)([wrongFrames]), /do not match their sampled frame coverage/);
