@@ -201,3 +201,14 @@ PR47、PR48分别完成真实网页审核路径与非破坏性质量暂缓，通
 精确证据位于开发机`~/.local/share/prompix/web-community-review/`：`artifact.json`、`website-review.completed.json`、`translation-corrections.approved.json`、`translation-correction-installation.json`、`publication-quality-hold/2026-10-12T14-39-27-552Z-11123c47-3037-4eb9-b37a-5bde2127a64b/operation-report.json`及`deployment-check-after-publication.log`。专用模拟器已实际更新该版、显示7个网页条目并从详情打开iOS Safari，证据在`native-web-quality-9/ui-evidence.json`。这些结果不代表新视频连续审核或完整X来源发布已经完成。
 
 原生数据核对同时通过：活动原文base和已下载简体中文包与生产字节一致，catalog投影的原文字段及已下载译文语义一致，新网页可发现、质量暂缓条目不在目录中，预先保存的该条收藏快照严格相等，整份草稿文件SHA保持不变，未留下目录事务。证据为`native-web-quality-9/native-update-audit-20261012T144708-7bfa091c.json`；它是数据保存核对，不冒充收藏页的视觉验证。测试后的App Support另存，9份原始文件全部恢复且哈希一致，见同目录`restored.json`；未操作用户手机。
+
+
+## 社区 Skill 运行器部署（2026-10-13本机／2026-10-12 UTC）
+
+PR51合并为`f602d2403cf8ce5c132bab2cc3f523818323d6b4`后，正式安装器将08:00本机任务升级至`runtimes/1791819174597361000`，保留回退副本`1791815278466588000`。运行副本同时包含PR50的独立无冒号X提示词标题识别；此次没有重读X，也没有重新打包App或安装设备。
+
+从已安装运行副本执行一次独立社区Skill采集，6次公开请求后退出0：Gog取得1条草稿，GitHub包因`TypeError: fetch failed`暂缓，Ontology因具体版本扫描非clean暂缓。失败结果受既有6小时缓存约束，本轮未重试；版本扫描不是对整个来源的永久判断。研究阶段保存的GitHub和Gog两份候选不能作为此次运行取得2条草稿的证据。Gog仍须元数据审核、九语言翻译及正常发布，注册表采集成功不等于内容已进入App。
+
+此次只更新社区Skill候选、证据与来源状态，没有运行付费X、作者查询、审核或翻译，也没有发布。升级前后跟踪的16个状态／账本路径内容及存在状态完全一致，包含daily总报告、两通道本地指针、发布状态、移除与质量暂缓记录、编辑记录和各付费请求账本；两份远程manifest字节也保持不变。线上仍为`edition-v2-b740a025a93331a3`、352条九语，未新增社区Skill条目。证据位于开发机`~/.local/share/prompix/clawhub-source-review/`的`runtime-before.json`、`runtime-intake.json`及`runtime-verification.json`，原始内容不进入Git。
+
+PR51的[CI记录](https://github.com/p697/prompix/actions/runs/38270297394)通过：内容测试共381项，380通过，1项因Linux缺少ffmpeg而跳过；定时运行器12项测试通过，iOS模型148项通过。这是实现与安装后独立采集的证据，不代表已完成社区条目的编辑审批、完整包代码审计、正式发布或新的客户端验收。来源契约与下一轮缓存／限流要求见[社区Skill采集](community-skills.md)。
