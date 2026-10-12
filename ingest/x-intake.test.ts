@@ -420,3 +420,38 @@ test("hosting tool names do not conflict with specific output models or website 
   assert.ok("body" in role); assert.equal(role.kind, "text", "An attached cover must not turn a role prompt into image generation");
   assert.deepEqual(extractMarkedXPrompt(post("123", `GPT Image and Seedance\nPrompt:\n${visualBody}`)), { reason: "conflicting-modality-evidence" });
 });
+
+
+test("manual native X metadata edits bind the current source revision without bypassing source or media review", async () => {
+  const root = await mkdtemp(join(tmpdir(), "prompix-x-review-bound-"));
+  try {
+    const now = new Date().toISOString();
+    const creator = { id: "x-writer", externalID: "456", platform: "x" as const, displayName: "Fixture Writer",
+      username: "writer", profileURL: "https://x.com/writer" };
+    const { candidates } = convertXDiscovery([snapshot([{ ...post("123", `Image prompt:\n${visualBody}`), created_at: now,
+      attachments: { media_keys: [photo.media_key] } }], undefined, { capturedAt: now, creators: [creator], media: [photo] })]);
+    await mkdir(join(root, "candidates"));
+    const candidateFile = join(root, "candidates", "x-native.json");
+    await writeFile(candidateFile, JSON.stringify(candidates));
+    const file = join(root, "metadata.json"); await writeFile(file, JSON.stringify(metadata));
+    async function run() {
+      return JSON.parse((await promisify(execFile)(process.execPath, ["--import", "tsx", "ingest/review.ts", candidates[0].id, file],
+        { cwd: process.cwd(), env: { ...process.env, PROMPIX_CONTENT_DIR: root } })).stdout);
+    }
+    assert.equal((await run()).status, "metadata-reviewed-awaiting-media-check");
+    const reviews = JSON.parse(await readFile(join(root, "editorial.json"), "utf8"));
+    assert.equal(reviews[candidates[0].id].sourceRevision, candidates[0].source.revision);
+    const edited = applyEditorialReviews(candidates, reviews)[0];
+    assert.equal(edited.title, metadata.title); assert.equal(edited.reviewStatus, "candidate");
+    assert.equal(edited.prompt, visualBody); assert.deepEqual(edited.source, candidates[0].source);
+    // A changed original post cannot inherit metadata bound to the old version.
+    const changed = structuredClone(candidates[0]); changed.source.post!.text += " Different context.";
+    changed.source.revision = nativeXSourceDigest(changed);
+    assert.equal(applyEditorialReviews([changed], reviews)[0].reviewStatus, "draft");
+    // Even a new manual edit cannot make stale or inconsistent provenance publishable.
+    candidates[0].source.post!.checkedAt = "2000-01-01T00:00:00.000Z";
+    await writeFile(candidateFile, JSON.stringify(candidates));
+    assert.equal((await run()).status, "draft-awaiting-source-review");
+    await assert.rejects(readFile(join(root, "latest.json")), { code: "ENOENT" });
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
