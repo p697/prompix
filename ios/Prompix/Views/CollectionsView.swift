@@ -40,12 +40,19 @@ struct Collection: Identifiable {
     }
 }
 struct CollectionsView: View {
+    var body: some View { NavigationStack { CollectionsDirectory() } }
+}
+struct CollectionsDirectory: View {
     @Environment(Library.self) private var library
     @Environment(\.dynamicTypeSize) private var typeSize
+    @Environment(\.horizontalSizeClass) private var sizeClass
+    @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
+    private var columns: [GridItem] {
+        Array(repeating: GridItem(.flexible(), spacing: 24), count: sizeClass == .regular && !typeSize.isAccessibilitySize && !voiceOverEnabled ? 2 : 1)
+    }
     var body: some View {
-        NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 32) {
+                LazyVGrid(columns: columns, alignment: .leading, spacing: 32) {
                     ForEach(Collection.all.filter { !($0.items(in: library)).isEmpty }) { collection in
                         let items = collection.items(in: library)
                         NavigationLink { CollectionDetail(collection: collection) } label: {
@@ -65,13 +72,66 @@ struct CollectionsView: View {
                                 Text(collection.subtitle).font(.subheadline).foregroundStyle(Palette.muted)
                                     .fixedSize(horizontal: false, vertical: true)
                                 Text(String(localized: "\(items.count) 个 Prompt")).font(.footnote).foregroundStyle(Palette.muted)
-                            }.foregroundStyle(.primary).multilineTextAlignment(.leading)
+                            }.foregroundStyle(.primary).multilineTextAlignment(.leading).contentShape(Rectangle())
                         }.buttonStyle(.plain)
                             .accessibilityLabel("\(collection.title) \(collection.subtitle) \(String(localized: "\(items.count) 个 Prompt"))")
                             .accessibilityIdentifier("collection-\(collection.id)")
                     }
                 }.padding(20).padding(.bottom, 20)
             }.navigationTitle(String(localized: "专题"))
+    }
+}
+struct CollectionRail: View {
+    @Environment(Library.self) private var library
+    @Environment(\.dynamicTypeSize) private var typeSize
+    @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
+    private var collections: [Collection] {
+        ["portraits", "play", "graphics", "web", "video"].compactMap { id in Collection.all.first { $0.id == id } }
+            .filter { !$0.items(in: library).isEmpty }
+    }
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text(String(localized: "按用途探索")).font(.headline)
+                Spacer()
+                NavigationLink { CollectionsDirectory() } label: {
+                    Text(String(localized: "查看全部")).font(.footnote).foregroundStyle(Palette.muted).frame(minHeight: 44)
+                }
+            }.padding(.horizontal, 20)
+            if typeSize.isAccessibilitySize || voiceOverEnabled {
+                VStack(spacing: 12) { ForEach(collections.prefix(1)) { collection in
+                    NavigationLink { CollectionDetail(collection: collection) } label: {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 5) {
+                                Text(collection.title).font(.headline)
+                                Text(collection.subtitle).font(.subheadline).foregroundStyle(Palette.muted)
+                            }
+                            Spacer(); Image(systemName: "chevron.right").foregroundStyle(Palette.muted)
+                        }.multilineTextAlignment(.leading).frame(minHeight: 44)
+                    }.buttonStyle(.plain)
+                } }.padding(.horizontal, 20)
+            } else {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 12) {
+                        ForEach(collections) { collection in
+                            let items = collection.items(in: library)
+                            NavigationLink { CollectionDetail(collection: collection) } label: {
+                                HStack(spacing: 12) {
+                                    if let cover = collection.covers(from: items).first {
+                                        Artwork(item: cover, compact: true).frame(width: 58, height: 68)
+                                            .clipped().clipShape(RoundedRectangle(cornerRadius: 8))
+                                    }
+                                    VStack(alignment: .leading, spacing: 5) {
+                                        Text(collection.title).font(.subheadline.weight(.medium)).lineLimit(2)
+                                            .fixedSize(horizontal: false, vertical: true)
+                                        Text(String(localized: "\(items.count) 条内容")).font(.caption).foregroundStyle(Palette.muted)
+                                    }.frame(maxWidth: .infinity, alignment: .leading)
+                                }.frame(width: 208).multilineTextAlignment(.leading).contentShape(Rectangle())
+                            }.buttonStyle(.plain).accessibilityIdentifier("home-collection-\(collection.id)")
+                        }
+                    }.padding(.horizontal, 20)
+                }
+            }
         }
     }
 }
@@ -89,7 +149,6 @@ struct CollectionDetail: View {
                 } else { PromptGrid(items: items) }
             }.padding(16)
         }.navigationTitle(String(localized: "专题")).navigationBarTitleDisplayMode(.inline)
-            .navigationDestination(for: Prompt.self) { PromptDetail(item: $0) }
     }
 }
 struct SettingsView: View {
@@ -104,9 +163,9 @@ struct SettingsView: View {
                         Text("prompix").font(.system(.largeTitle, design: .serif, weight: .semibold))
                     }.padding(.vertical, 12)
                     LabeledContent(String(localized: "版本")) { Text("\(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—") (\(Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "—"))").foregroundStyle(Palette.muted) }
-                    LabeledContent(String(localized: "Prompt 数量")) { Text(String(library.prompts.count)).foregroundStyle(Palette.muted) }
+                    LabeledContent(String(localized: "内容数量")) { Text(String(library.prompts.count)).foregroundStyle(Palette.muted) }
                     Link(String(localized: "App 语言与系统设置"), destination: URL(string: UIApplication.openSettingsURLString)!)
-                    Text(String(localized: "Prompt 与示例保留原作者的语言。")).font(.footnote).foregroundStyle(Palette.muted)
+                    Text(String(localized: "内容优先显示 App 语言的译文，可在详情中切回原文。作者名、代码和模型参数保持不变。")).font(.footnote).foregroundStyle(Palette.muted)
                     if let updated = library.updatedAt { LabeledContent(String(localized: "最近更新")) { Text(updated, style: .date).foregroundStyle(Palette.muted) } }
                     Button(library.isRefreshing ? String(localized: "正在更新…") : String(localized: "检查内容更新")) { Task { await library.refresh(force: true) } }.disabled(library.isRefreshing)
                     if let message = library.syncMessage { Text(message).font(.footnote).foregroundStyle(Palette.muted) }

@@ -4,6 +4,8 @@ import { join, resolve, relative, isAbsolute, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { editorialMetadataSchema, reviewsSchema, applyEditorialReviews } from "./editorial.ts";
 import { repositories, videoArchive, type Candidate } from "./sources.ts";
+import { skillSources } from "./skills.ts";
+import { lockContent } from "./publication.ts";
 
 const [id, metadataFile] = process.argv.slice(2);
 if (!id || !/^[a-z0-9-]+$/.test(id) || !metadataFile)
@@ -14,8 +16,10 @@ const repo = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const relativeRoot = relative(await realpath(repo), await realpath(root));
 if (!relativeRoot || (!relativeRoot.startsWith("..") && !isAbsolute(relativeRoot)))
   throw new Error("Editorial content must stay outside the repository");
+const unlock = await lockContent(root);
+try {
 let candidate: Candidate | undefined;
-for (const source of [...repositories.map((source) => source.id), "prompts-chat", videoArchive.id]) {
+for (const source of [...repositories.map((source) => source.id), "prompts-chat", videoArchive.id, ...skillSources.map(source => `skill-${source.id}`)]) {
   try {
     const items: Candidate[] = JSON.parse(await readFile(join(root, "candidates", `${source}.json`), "utf8"));
     candidate = items.find((item) => item.id === id);
@@ -34,3 +38,4 @@ if (approved.reviewStatus !== "candidate") throw new Error("Website review requi
 await writeFile(`${file}.tmp`, JSON.stringify(reviews, null, 2) + "\n");
 await rename(`${file}.tmp`, file);
 console.log(JSON.stringify({ reviewed: id, status: "ready-for-next-edition", published: false }));
+} finally { await unlock(); }

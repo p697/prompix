@@ -19,11 +19,7 @@ import UIKit
         shot.name = name; shot.lifetime = .keepAlways; add(shot)
     }
     private func selectTab(_ title: String) {
-        // iPadOS exposes its floating native tabs as ordinary buttons.
-        let tab = app.tabBars.buttons[title]
-        let target = tab.exists ? tab : app.buttons.matching(NSPredicate(format: "label == %@", title)).firstMatch
-        XCTAssertTrue(target.waitForExistence(timeout: 5))
-        target.tap()
+        app.selectPrompixTab(title)
     }
     // Run with a Release configuration; record simulator and device results separately.
     // These are process launches, not a claim of empty OS caches or a reboot.
@@ -160,8 +156,9 @@ import UIKit
             throw NSError(domain: "PrompixVoiceOverTest", code: 1)
         }
         func activate(_ element: XCUIElement) {
-            // Spoken focus is verified above; activation uses a targeted synthetic
-            // double-tap, not a claim of physical VoiceOver gesture acceptance.
+            // Spoken focus is verified above. XCTest's synthesized pointer
+            // events target the element; they are not physical VO gestures.
+            XCTAssertTrue(element.exists)
             element.doubleTap()
         }
         try focus("card") { $0.contains("抽一张塔罗") && !$0.contains("收藏") }
@@ -178,11 +175,25 @@ import UIKit
         try require(!spokenPrefix.isEmpty, "Editor must have meaningful current content")
         try focus("editor text") { $0.contains(spokenPrefix) }
         activate(editor)
-        editor.typeText(" VoiceOver note.")
-        try require((editor.value as? String ?? "").contains("VoiceOver note."), "Editor must accept the note")
+        try require(app.keyboards.firstMatch.waitForExistence(timeout: 5), "Show the simulator software keyboard for the spoken editor journey")
+        let marker = " VoiceOver-\(UUID().uuidString.prefix(8)) "
+        editor.typeText(marker)
+        try require((editor.value as? String ?? "").contains(marker), "Editor must accept this run's unique note")
         try focus("editor copy") { $0.contains("复制修改后的 Prompt") }
+        var copyFrame = app.buttons["copyEditedPrompt"].frame
+        var unchangedSince = Date()
+        let stableCopy = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            let frame = self.app.buttons["copyEditedPrompt"].frame
+            if frame != copyFrame { copyFrame = frame; unchangedSince = Date() }
+            return Date().timeIntervalSince(unchangedSince) >= 0.6
+        }, object: nil)
+        try require(XCTWaiter.wait(for: [stableCopy], timeout: 5) == .completed, "Copy action must settle above the visible keyboard")
+        try focus("settled editor copy") { $0.contains("复制修改后的 Prompt") }
+        let beforeCopy = editor.value as? String
         activate(app.buttons["copyEditedPrompt"])
-        try require(app.buttons["copyEditedPrompt"].label.contains("已复制"), "Edited copy must confirm its action")
+        let confirmation = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label CONTAINS %@", "已复制"), object: app.buttons["copyEditedPrompt"])
+        try require(XCTWaiter.wait(for: [confirmation], timeout: 3) == .completed, "Edited copy must confirm its action")
+        try require(editor.value as? String == beforeCopy, "Copy activation must not type into the editor")
         try focus("editor done", backwards: true) { $0.contains("完成") && $0.contains("按钮") }
         activate(app.buttons["完成"])
         try require(app.buttons["detailFavorite"].waitForExistence(timeout: 5), "Done must leave the editor")

@@ -4,7 +4,7 @@ root = File.expand_path('..', __dir__)
 path = File.join(root, 'ios/Prompix.xcodeproj')
 project = Xcodeproj::Project.new(path)
 project.root_object.development_region = "zh-Hans"
-project.root_object.known_regions = ["zh-Hans", "en", "Base"]
+project.root_object.known_regions = ["zh-Hans", "zh-Hant", "en", "ja", "ko", "es", "pt-BR", "fr", "de", "Base"]
 project.build_configurations.each do |config|
   config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '17.0'
   config.build_settings['SWIFT_VERSION'] = '6.0'
@@ -15,8 +15,8 @@ app.build_configurations.each do |config|
     'PRODUCT_BUNDLE_IDENTIFIER' => 'com.p697.prompix',
     'PRODUCT_NAME' => 'Prompix', 'INFOPLIST_FILE' => 'Prompix/Info.plist',
     'SWIFT_VERSION' => '6.0', 'TARGETED_DEVICE_FAMILY' => '1,2',
-    'CODE_SIGN_STYLE' => 'Automatic', 'MARKETING_VERSION' => '0.2.0',
-    'CURRENT_PROJECT_VERSION' => '6', 'ASSETCATALOG_COMPILER_APPICON_NAME' => 'AppIcon',
+    'CODE_SIGN_STYLE' => 'Automatic', 'MARKETING_VERSION' => '0.3.0',
+    'CURRENT_PROJECT_VERSION' => '7', 'ASSETCATALOG_COMPILER_APPICON_NAME' => 'AppIcon',
     'ENABLE_USER_SCRIPT_SANDBOXING' => 'YES', 'SWIFT_STRICT_CONCURRENCY' => 'complete'
   })
 end

@@ -11,6 +11,14 @@ struct PromptDetail: View {
     @State private var playerPresented = false
     @State private var copied = false
     @State private var webPresented = false
+    @State private var language: String?
+    @State private var fullPrompt = false
+    private var content: Prompt.TranslatedContent { item.content(in: language) }
+    private var displaysOriginalContent: Bool { content == item.content(in: nil) }
+    init(item: Prompt) {
+        self.item = item
+        _language = State(initialValue: item.preferredTranslation)
+    }
     private var related: [Prompt] {
         RelatedPrompts.select(for: item, from: library.prompts)
     }
@@ -35,38 +43,47 @@ struct PromptDetail: View {
                     }.buttonStyle(.plain)
                         .accessibilityLabel(item.kind == .video ? String(localized: "播放视频") : String(localized: "放大图片"))
                         .accessibilityIdentifier("previewButton")
-                } else { hero }
+                }
                 VStack(alignment: .leading, spacing: 24) {
                     VStack(alignment: .leading, spacing: 12) {
                         ViewThatFits(in: .horizontal) {
                             HStack {
-                                Label(item.kind.title, systemImage: item.kind.symbol)
+                                Label(item.displayKind, systemImage: item.displaySymbol)
                                 Text("·").accessibilityHidden(true)
-                                Text(item.model)
+                                Text(item.displayModel)
                             }.fixedSize()
                             VStack(alignment: .leading, spacing: 6) {
-                                Label(item.kind.title, systemImage: item.kind.symbol)
-                                Text(item.model).fixedSize(horizontal: false, vertical: true)
+                                Label(item.displayKind, systemImage: item.displaySymbol)
+                                Text(item.displayModel).fixedSize(horizontal: false, vertical: true)
                             }
                         }.font(.footnote).foregroundStyle(Palette.muted)
-                        Text(item.title).font(.title2.weight(.semibold)).lineSpacing(5).fixedSize(horizontal: false, vertical: true)
-                        Text(item.summary).font(.subheadline).lineSpacing(5).foregroundStyle(Palette.muted)
-                        Text(item.previewLabel).font(.footnote).foregroundStyle(Palette.muted)
+                        Text(content.title).font(.title2.weight(.semibold)).lineSpacing(5).fixedSize(horizontal: false, vertical: true).accessibilityAddTraits(.isHeader)
+                        Text(content.summary).font(.subheadline).lineSpacing(5).foregroundStyle(Palette.muted)
+                        if let creator = item.creator { CreatorByline(creator: creator) }
+                        if item.kind != .text {
+                            Text(content.previewLabel).font(.footnote).foregroundStyle(Palette.muted)
+                        }
                     }
+                    languagePicker
                     Divider()
                     VStack(alignment: .leading, spacing: 10) {
-                        Text(String(localized: "说明与示例")).font(.headline)
-                        Text(item.example).font(.subheadline).lineSpacing(6).textSelection(.enabled)
+                        Text(String(localized: "说明与示例")).font(.headline).accessibilityAddTraits(.isHeader)
+                        Text(content.example).font(.subheadline).lineSpacing(6).textSelection(.enabled)
                     }
+                    if let skill = item.skill { SkillInformation(skill: skill) }
                     VStack(alignment: .leading, spacing: 14) {
                         HStack {
-                            Text("Prompt").font(.headline)
+                            Text(item.isSkill ? "SKILL.md" : "Prompt").font(.headline).accessibilityAddTraits(.isHeader)
                             Spacer()
                             Button { editorPresented = true } label: { Label(String(localized: "编辑"), systemImage: "square.and.pencil").frame(minWidth: 44, minHeight: 44).contentShape(Rectangle()) }.font(.subheadline)
                                 .accessibilityIdentifier("editPrompt")
                         }
-                        Text(item.prompt).font(.system(.subheadline)).lineSpacing(6).textSelection(.enabled)
+                        Text(fullPrompt ? content.prompt : String(content.prompt.prefix(1100))).font(.system(.subheadline)).lineSpacing(6).textSelection(.enabled)
                             .frame(maxWidth: .infinity, alignment: .leading)
+                        if content.prompt.count > 1100 {
+                            Button(fullPrompt ? String(localized: "收起正文") : String(localized: "展开完整内容")) { fullPrompt.toggle() }
+                                .font(.subheadline.weight(.medium)).frame(minHeight: 44).accessibilityIdentifier("expandPrompt")
+                        }
                     }.padding(20).background(Palette.soft, in: RoundedRectangle(cornerRadius: 18))
                     if WebsiteExamples.files[item.id] != nil {
                         Button { webPresented = true } label: { Label(String(localized: "打开原创网页示例"), systemImage: "safari").frame(minHeight: 44).contentShape(Rectangle()) }.accessibilityIdentifier("webExample")
@@ -83,25 +100,28 @@ struct PromptDetail: View {
                     }
                     if let demo = item.media?.demoURL { Link(destination: demo) { Text(String(localized: "打开网页示例")).font(.subheadline).frame(minHeight: 44).contentShape(Rectangle()) } }
                     VStack(alignment: .leading, spacing: 8) {
-                        HStack { Text(item.source.author ?? item.source.name).font(.footnote.weight(.medium)); Spacer(); Text(item.source.method).font(.footnote).foregroundStyle(Palette.muted) }
-                        Text("\(item.source.license) · \(item.previewLabel)").font(.footnote).foregroundStyle(Palette.muted)
+                        ViewThatFits(in: .horizontal) {
+                            HStack { sourceAuthor; Spacer(); sourceKind }
+                            VStack(alignment: .leading, spacing: 6) { sourceAuthor; sourceKind }
+                        }
+                        Text(item.source.license).font(.footnote).foregroundStyle(Palette.muted)
                         if let repository = item.source.repository { Link(destination: repository) { Text(String(localized: "收录于 \(item.source.name)")).font(.footnote).frame(minHeight: 44).contentShape(Rectangle()) } }
                         if let source = item.source.url { Link(destination: source) { Text(String(localized: "查看原始来源 ↗")).font(.footnote).frame(minHeight: 44).contentShape(Rectangle()) } }
                         Link(destination: SupportLinks.url(.report, contentID: item.id)) { Text(String(localized: "反馈这条内容")).font(.footnote).frame(minHeight: 44).contentShape(Rectangle()) }.accessibilityIdentifier("reportContent")
                     }
                     if !related.isEmpty {
                         Divider()
-                        HStack { Text(String(localized: "相关 Prompt")).font(.headline); Spacer(); Image(systemName: "arrow.down.right").foregroundStyle(Palette.muted) }
+                        HStack { Text(String(localized: "相关 Prompt")).font(.headline).accessibilityAddTraits(.isHeader); Spacer(); Image(systemName: "arrow.down.right").foregroundStyle(Palette.muted).accessibilityHidden(true) }
                         PromptGrid(items: related)
                     }
-                }.padding(.horizontal, 22)
-            }.padding(.bottom, 28)
+                }.padding(.horizontal, 22).padding(.top, 12)
+            }.padding(.bottom, 28).frame(maxWidth: 700).frame(maxWidth: .infinity)
         }
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.hidden, for: .tabBar)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                ShareLink(item: "\(item.title)\n\n\(item.prompt)\n\n\(String(localized: "来自")) \(item.source.author ?? item.source.name) · \(item.source.license)\n\(item.source.url?.absoluteString ?? "https://prompix.dev")") { Label(String(localized: "分享"), systemImage: "square.and.arrow.up").frame(minWidth: 44, minHeight: 44) }
+                ShareLink(item: "\(content.title)\n\n\(content.prompt)\n\n\(String(localized: "来自")) \(item.source.author ?? item.source.name) · \(item.source.license)\n\(item.source.url?.absoluteString ?? "https://prompix.dev")") { Label(String(localized: "分享"), systemImage: "square.and.arrow.up").frame(minWidth: 44, minHeight: 44) }
                     .accessibilityIdentifier("sharePrompt")
             }
             ToolbarItem(placement: .topBarTrailing) {
@@ -114,20 +134,64 @@ struct PromptDetail: View {
                 Button { editorPresented = true } label: { Image(systemName: "slider.horizontal.3").font(.system(size: 20)).frame(width: 50, height: 50) }
                     .buttonStyle(.plain).background(Palette.soft, in: RoundedRectangle(cornerRadius: 16)).accessibilityLabel(String(localized: "编辑后使用"))
                 Button {
-                    UIPasteboard.general.string = item.prompt
+                    UIPasteboard.general.string = content.prompt
                     copied = true
                 } label: {
-                    PrimaryActionLabel(title: copied ? String(localized: "已复制") : String(localized: "复制 Prompt"),
+                    PrimaryActionLabel(title: copied ? String(localized: "已复制") : item.isSkill ? String(localized: "复制 Skill") : String(localized: "复制 Prompt"),
                         compactTitle: copied ? String(localized: "已复制") : String(localized: "复制"), symbol: copied ? "checkmark" : "doc.on.doc")
                 }.buttonStyle(.plain).accessibilityIdentifier("copyPrompt").sensoryFeedback(.success, trigger: copied)
-            }.padding(.horizontal, 20).padding(.vertical, 10).background(.bar)
+            }.padding(.horizontal, 20).padding(.vertical, 10).frame(maxWidth: 700)
+                .frame(maxWidth: .infinity).background(.bar)
         }
-        .sheet(isPresented: $editorPresented) { PromptEditor(item: item) }
+        .onChange(of: language) { _, _ in copied = false; fullPrompt = false }
+        .sheet(isPresented: $editorPresented) { PromptEditor(item: item, language: language) }
         .fullScreenCover(isPresented: $imagePresented) { ImageViewer(name: item.media?.image ?? item.artwork, urls: item.media?.galleryURLs ?? []) }
         .sheet(isPresented: $webPresented) {
             if let filename = WebsiteExamples.files[item.id] { WebExample(filename: filename) }
         }
-        .sheet(isPresented: $playerPresented) { MovieView(filename: item.media?.video, remoteURL: item.media?.videoURL, caption: item.previewLabel) }
+        .sheet(isPresented: $playerPresented) { MovieView(filename: item.media?.video, remoteURL: item.media?.videoURL, caption: content.previewLabel) }
+    }
+    private var sourceAuthor: some View {
+        Text(item.source.author ?? item.source.name).font(.footnote.weight(.medium))
+    }
+    private var sourceKind: some View {
+        Text(item.source.name == "Prompix Studio" ? String(localized: "原创内容") : String(localized: "社区收录"))
+            .font(.footnote).foregroundStyle(Palette.muted)
+    }
+    private var languagePicker: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .center, spacing: 12) { languageSummary; Spacer(minLength: 4); languageMenu }
+            VStack(alignment: .leading, spacing: 10) { languageSummary; languageMenu }
+        }
+    }
+    private var languageSummary: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(displaysOriginalContent ? String(localized: "当前显示原文") : String(localized: "AI 译文"))
+                .font(.footnote.weight(.medium))
+            if !displaysOriginalContent {
+                Text(String(localized: "可随时切回原文，复制和编辑使用当前语言。"))
+                    .font(.caption).foregroundStyle(Palette.muted).fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+    @ViewBuilder private var languageMenu: some View {
+            if !item.availableLanguages.isEmpty {
+                Menu {
+                    Button { language = nil } label: {
+                        if language == nil { Label(String(localized: "原文"), systemImage: "checkmark") }
+                        else { Text(String(localized: "原文")) }
+                    }
+                    ForEach(item.availableLanguages, id: \.self) { code in
+                        Button { language = code } label: {
+                            if language == code { Label(ContentLanguage.name(code), systemImage: "checkmark") }
+                            else { Text(ContentLanguage.name(code)) }
+                        }
+                    }
+                } label: {
+                    Label(language.map(ContentLanguage.name) ?? String(localized: "原文"), systemImage: "globe")
+                        .font(.subheadline).frame(minHeight: 44)
+                }.accessibilityIdentifier("contentLanguage")
+            }
     }
     private var hero: some View {
         Artwork(item: item).aspectRatio(item.media?.aspectRatio.map { max(0.9, min(1.8, $0)) } ?? (item.kind == .image ? 0.95 : 1.15), contentMode: .fit)
@@ -137,6 +201,7 @@ struct PromptDetail: View {
 
 struct PromptEditor: View {
     let item: Prompt
+    let language: String?
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.dynamicTypeSize) private var typeSize
@@ -150,7 +215,10 @@ struct PromptEditor: View {
     @State private var leavePresented = false
     @State private var leavingWithoutSaving = false
     @State private var headerHeight: CGFloat?
-    init(item: Prompt) { self.item = item; _text = State(initialValue: item.prompt) }
+    init(item: Prompt, language: String? = nil) {
+        self.item = item; self.language = language
+        _text = State(initialValue: item.content(in: language).prompt)
+    }
     var body: some View {
         NavigationStack {
             GeometryReader { geometry in
@@ -170,8 +238,8 @@ struct PromptEditor: View {
                     ToolbarItem(placement: .cancellationAction) { Button(String(localized: "完成")) { if save() { dismiss() } } }
                     ToolbarItem(placement: .primaryAction) {
                         Menu {
-                            Button(String(localized: "恢复原始 Prompt"), systemImage: "arrow.counterclockwise", role: .destructive) { restorePresented = true }
-                                .disabled(text == item.prompt)
+                            Button(language == nil ? String(localized: "恢复原始 Prompt") : String(localized: "恢复当前语言的内容"), systemImage: "arrow.counterclockwise", role: .destructive) { restorePresented = true }
+                                .disabled(text == item.content(in: language).prompt)
                         } label: { Label(String(localized: "编辑选项"), systemImage: "ellipsis.circle") }
                     }
                     ToolbarItem(placement: .primaryAction) { ShareLink(item: text) { Label(String(localized: "分享"), systemImage: "square.and.arrow.up").frame(minWidth: 44, minHeight: 44) }.disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) }
@@ -189,9 +257,9 @@ struct PromptEditor: View {
                 }
                 .onAppear {
                     guard !initialized else { return }
-                    text = library.draft(for: item); initialized = true
+                    text = library.draft(for: item, language: language); initialized = true
                 }
-                .onChange(of: text) { _, _ in copied = false; saved = text == library.draft(for: item); saveError = nil }
+                .onChange(of: text) { _, _ in copied = false; saved = text == library.draft(for: item, language: language); saveError = nil }
                 .task(id: text) {
                     guard initialized else { return }
                     do { try await Task.sleep(for: .milliseconds(400)) } catch { return }
@@ -201,8 +269,8 @@ struct PromptEditor: View {
                 .onChange(of: scenePhase) { _, phase in
                     if phase != .active, initialized { save() }
                 }
-                .confirmationDialog(String(localized: "恢复原始 Prompt？"), isPresented: $restorePresented, titleVisibility: .visible) {
-                    Button(String(localized: "恢复原文"), role: .destructive) { text = item.prompt; save() }
+                .confirmationDialog(language == nil ? String(localized: "恢复原始 Prompt？") : String(localized: "恢复当前语言的内容？"), isPresented: $restorePresented, titleVisibility: .visible) {
+                    Button(language == nil ? String(localized: "恢复原文") : String(localized: "恢复译文"), role: .destructive) { text = item.content(in: language).prompt; save() }
                     Button(String(localized: "取消"), role: .cancel) {}
                 } message: { Text(String(localized: "这会替换你在此设备上保存的修改。")) }
                 .confirmationDialog(String(localized: "本次修改尚未保存"), isPresented: $leavePresented, titleVisibility: .visible) {
@@ -217,10 +285,11 @@ struct PromptEditor: View {
                     Text(String(localized: "退出后将保留上一次成功保存的草稿。你可以先复制本次修改，再离开编辑器。"))
                 }
         }
-        .interactiveDismissDisabled(!saved || text != library.draft(for: item))
+        .interactiveDismissDisabled(!saved || text != library.draft(for: item, language: language))
     }
     private var editorHeader: some View {
         VStack(alignment: .leading, spacing: 8) {
+            if let language { Text(ContentLanguage.name(language)).font(.footnote.weight(.medium)).foregroundStyle(Palette.accent) }
             Text(typeSize.isAccessibilitySize ? String(localized: "原文会保留。") : String(localized: "修改会保存到此设备，原始 Prompt 会保留。"))
                 .font(.footnote).foregroundStyle(Palette.muted).fixedSize(horizontal: false, vertical: true)
             HStack {
@@ -250,7 +319,7 @@ struct PromptEditor: View {
     }
     @discardableResult private func save() -> Bool {
         guard !leavingWithoutSaving else { return false }
-        saved = library.saveDraft(text, for: item)
+        saved = library.saveDraft(text, for: item, language: language)
         saveError = saved ? nil : library.error ?? String(localized: "尚未保存，可先复制保留")
         // Present draft failures here: a root alert can dismiss this editor sheet.
         if !saved { library.dismissError() }

@@ -178,7 +178,7 @@ import CryptoKit
 
     func testBundledFallbackAndSearchIntersection() throws {
         let library = Library(directory: directory)
-        XCTAssertEqual(library.version, "studio-004")
+        XCTAssertEqual(library.version, "studio-005")
         XCTAssertEqual(library.prompts.count, 30)
         XCTAssertEqual(Set(library.prompts.map(\.kind)), Set([PromptKind.text, .image, .web]))
         for kind in [PromptKind.text, .image, .web] { XCTAssertGreaterThanOrEqual(library.prompts.filter { $0.kind == kind }.count, 6) }
@@ -300,7 +300,7 @@ import CryptoKit
         // A missing edition cache may restore the bundle, but must not delete saved snapshots.
         try FileManager.default.removeItem(at: directory.appending(path: "catalog.json"))
         let fallback = Library(directory: directory)
-        XCTAssertEqual(fallback.version, "studio-004")
+        XCTAssertEqual(fallback.version, "studio-005")
         XCTAssertFalse(fallback.prompts.contains { $0.kind == .video })
         XCTAssertEqual(fallback.favorites, [video])
         XCTAssertEqual(fallback.draft(for: video), "Keep my video draft")

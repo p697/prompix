@@ -14,24 +14,38 @@ enum Palette {
 
 struct KindPicker: View {
     @Binding var selection: PromptKind?
+    @Binding var skillsOnly: Bool
+    init(selection: Binding<PromptKind?>, skillsOnly: Binding<Bool> = .constant(false)) {
+        _selection = selection
+        _skillsOnly = skillsOnly
+    }
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 26) {
+            HStack(spacing: 16) {
                 choice(nil, title: String(localized: "全部"))
                 ForEach(PromptKind.allCases) { choice($0, title: $0.title) }
+                Button { selection = nil; skillsOnly = true } label: {
+                    VStack(spacing: 10) {
+                        Text("Skills").font(.subheadline.weight(skillsOnly ? .semibold : .regular))
+                            .foregroundStyle(skillsOnly ? Color.primary : Palette.muted)
+                        Capsule().fill(skillsOnly ? Color.primary : .clear).frame(width: 18, height: 2)
+                    }.frame(minWidth: 44, minHeight: 44).contentShape(Rectangle())
+                }.buttonStyle(.plain).accessibilityAddTraits(skillsOnly ? .isSelected : [])
+                    .accessibilityIdentifier("kind-skill")
             }.padding(.horizontal, 20)
         }
         .accessibilityIdentifier("kindPicker")
     }
     private func choice(_ kind: PromptKind?, title: String) -> some View {
-        Button { selection = kind } label: {
+        let selected = selection == kind && !skillsOnly
+        return Button { selection = kind; skillsOnly = false } label: {
             VStack(spacing: 10) {
-                Text(title).font(.subheadline.weight(selection == kind ? .semibold : .regular))
-                    .foregroundStyle(selection == kind ? Color.primary : Palette.muted)
-                Capsule().fill(selection == kind ? Color.primary : .clear).frame(width: 18, height: 2)
+                Text(title).font(.subheadline.weight(selected ? .semibold : .regular))
+                    .foregroundStyle(selected ? Color.primary : Palette.muted)
+                Capsule().fill(selected ? Color.primary : .clear).frame(width: 18, height: 2)
             }.frame(minWidth: 44, minHeight: 44).contentShape(Rectangle())
         }.buttonStyle(.plain)
-            .accessibilityAddTraits(selection == kind ? .isSelected : [])
+            .accessibilityAddTraits(selected ? .isSelected : [])
             .accessibilityIdentifier("kind-\(kind?.rawValue ?? "all")")
     }
 }

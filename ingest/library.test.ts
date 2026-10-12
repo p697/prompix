@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { Prompt } from "../packages/schema/catalog.ts";
 import { applyEditorialReviews, type Reviews } from "./editorial.ts";
-import { assertLibraryDownloadSize, countByKind, interleaveLibrary, libraryDelta, selectLibrary } from "./library.ts";
+import { assertLibraryDownloadSize, countByKind, interleaveLibrary, libraryDelta, retainPublishedLibrary, selectLibrary } from "./library.ts";
 import { fingerprint, type Candidate } from "./sources.ts";
 
 function candidate(id: string, kind: Prompt["kind"] = "text"): Candidate {
@@ -109,4 +109,63 @@ test("repeated runs and ranking changes report zero new content; additions and r
 test("oversized catalog bytes cannot be uploaded even when entry count fits the client protocol", () => {
   assert.doesNotThrow(() => assertLibraryDownloadSize(new Uint8Array(10_000_000)));
   assert.throws(() => assertLibraryDownloadSize(new Uint8Array(10_000_001)), /10000001 bytes.*10000000-byte client download limit/);
+});
+
+test("changed source awaiting review retains the complete previously published item", () => {
+  const previous = { ...candidate("edited-upstream", "image"), media: {
+    image: null, video: null, demoURL: null, imageURL: "https://api.prompix.dev/media/verified.jpg",
+  }, localization: { sourceLanguage: "en", sourceFingerprint: "a".repeat(64), translations: {
+    ja: { title: "保存された作品", summary: "元の説明", prompt: "保存された手順", example: "使い方", previewLabel: "例" },
+  } } };
+  const changed = { ...previous, prompt: previous.prompt + " Unreviewed instructions.", fingerprint: "b".repeat(64) };
+  const ready = selectLibrary(applyEditorialReviews([changed], { [previous.id]: review(previous) }), new Set());
+  const result = retainPublishedLibrary(ready, [previous], new Set(), () => "awaiting-review");
+  assert.deepEqual(result.prompts, [previous]);
+  assert.equal(result.retainedPrevious.counts.image, 1);
+  assert.equal(result.retainedPrevious.reasons["awaiting-review"], 1);
+  assert.equal(libraryDelta([previous], result.prompts).removed.total, 0);
+});
+
+test("one failed media preparation retains its old mirror while other ready work updates", () => {
+  const failed = candidate("failed-preview", "video"), previous = candidate("updated-text");
+  const ready = { ...previous, title: "A reviewed improved title" };
+  const result = retainPublishedLibrary([ready], [failed, previous], new Set(), () => "media-failed");
+  assert.deepEqual(result.prompts, [ready, failed]);
+  assert.equal(result.retainedPrevious.reasons["media-failed"], 1);
+  assert.equal(result.retainedPrevious.counts.video, 1);
+});
+
+test("explicit tombstones remove prior items and cannot be resurrected by ready copies", () => {
+  const removed = candidate("removed"), kept = candidate("kept");
+  const result = retainPublishedLibrary([removed], [removed, kept], new Set([removed.id]), () => "source-missing");
+  assert.deepEqual(result.prompts, [kept]);
+  assert.equal(result.retainedPrevious.reasons["source-missing"], 1);
+  assert.equal(libraryDelta([removed, kept], result.prompts).removed.total, 1);
+});
+
+test("a newly preferred cross-source duplicate cannot displace a published stable ID", () => {
+  const previous = candidate("saved-stable-id", "image");
+  const newCopy = { ...previous, id: "new-source-copy", title: "A higher ranked duplicate" };
+  const addition = candidate("new-original");
+  const result = retainPublishedLibrary([newCopy, addition], [previous], new Set());
+  assert.deepEqual(result.prompts, [addition, previous]);
+  assert.deepEqual(libraryDelta([previous], result.prompts), {
+    added: { total: 1, text: 1, image: 0, video: 0, web: 0 },
+    removed: { total: 0, text: 0, image: 0, video: 0, web: 0 }, retained: 1,
+  });
+});
+
+test("an update that duplicates another saved identity keeps both prior instructions", () => {
+  const first = candidate("first"), second = candidate("second");
+  const collidingUpdate = { ...first, prompt: second.prompt };
+  const result = retainPublishedLibrary([collidingUpdate], [first, second], new Set());
+  assert.deepEqual(result.prompts, [first, second]);
+  assert.equal(result.retainedPrevious.reasons["duplicate-update"], 1);
+});
+
+test("retention respects protocol capacity without silently pruning old content", () => {
+  const previous = Array.from({ length: 1000 }, (_, index) => candidate(`old-${index}`));
+  assert.throws(() => retainPublishedLibrary([candidate("new")], previous, new Set()), /1001 entries.*no published items were discarded/);
+  assert.equal(previous.length, 1000);
+  assert.throws(() => retainPublishedLibrary([previous[0], previous[0]], [], new Set()), /duplicate IDs/);
 });

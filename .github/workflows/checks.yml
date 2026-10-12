@@ -20,6 +20,8 @@ jobs:
       - run: npm run validate -- ios/Prompix/Resources/catalog.json
       - name: Check scheduler retention safety
         run: python3 -m unittest discover -s scripts -p 'test_scheduler.py' -v
+      - name: Check complete interface localizations
+        run: python3 scripts/check-localizations.py
       - name: Build public website
         run: |
           python3 services/site/build.py

@@ -4,9 +4,32 @@ const https = z
   .refine((value) => new URL(value).protocol === "https:", "HTTPS required");
 const nonempty = z.string().trim().min(1);
 const resource = z.string().regex(/^[a-z0-9-]+$/);
+export const localizationLanguages = ["en", "zh-Hans", "zh-Hant", "ja", "ko", "es", "pt-BR", "fr", "de"] as const;
+const translatedContent = z.object({
+  title: nonempty.max(250), summary: nonempty.max(4000), prompt: nonempty.max(50000),
+  example: nonempty.max(50000), previewLabel: nonempty.max(500),
+  cover: z.object({ text: nonempty.max(100), eyebrow: nonempty.max(40) }).optional(),
+});
+export const creatorSchema = z.object({
+  id: nonempty.max(200), platform: z.enum(["x", "github", "web"]),
+  displayName: nonempty.max(200), username: nonempty.max(200).optional(),
+  profileURL: https, avatarURL: https.optional(), externalID: nonempty.max(200).optional(),
+  bio: nonempty.max(2000).optional(),
+});
 export const promptSchema = z.object({
   id: resource,
   kind: z.enum(["text", "image", "video", "web"]),
+  contentType: z.enum(["prompt", "skill"]).optional(),
+  creator: creatorSchema.optional(),
+  skill: z.object({
+    name: nonempty.max(250), description: nonempty.max(4000), format: z.literal("agent-skills"),
+    entrypoint: z.literal("SKILL.md"), repository: https, directory: nonempty,
+    installURL: https, files: z.array(nonempty).max(200).optional(),
+  }).optional(),
+  localization: z.object({
+    sourceLanguage: nonempty.max(40), sourceFingerprint: z.string().regex(/^[a-f0-9]{64}$/),
+    translations: z.partialRecord(z.enum(localizationLanguages), translatedContent),
+  }).optional(),
   title: nonempty.max(250),
   summary: nonempty.max(4000),
   prompt: nonempty.max(50000),
@@ -43,6 +66,9 @@ export const promptSchema = z.object({
     .refine(media => !media.imageURLs || media.imageURL === media.imageURLs[0], "Gallery must start with its cover")
     .nullable(),
   publishedAt: z.string().optional(),
+}).superRefine((item, context) => {
+  if ((item.contentType === "skill") !== !!item.skill)
+    context.addIssue({ code: "custom", path: ["skill"], message: "Skill metadata and contentType must agree" });
 });
 export const catalogSchema = z
   .object({

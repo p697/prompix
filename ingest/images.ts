@@ -14,8 +14,8 @@ export async function aspectRatio(path: string): Promise<number> {
   return width / height;
 }
 
-export async function prepareJPEG(input: string, output: string) {
-  await exec("/usr/bin/sips", ["-s", "format", "jpeg", "-s", "formatOptions", "82", "-Z", "1200", input, "--out", output], { timeout: 30000 });
+export async function prepareJPEG(input: string, output: string, maximumDimension = 1200) {
+  await exec("/usr/bin/sips", ["-s", "format", "jpeg", "-s", "formatOptions", "82", "-Z", String(maximumDimension), input, "--out", output], { timeout: 30000 });
 }
 
 /** Original bundled images are mirrored too, so older installs can display new art. */
