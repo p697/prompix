@@ -60,7 +60,7 @@ Prompix 是一个开源、免费的多模态 Prompt 集合 App：聚合和创作
 - 外部收录、原创、整理改编三条路径并行；不局限于已有集合站。
 - 自建轻量采集，按来源使用 API、公开数据文件或允许采集的网页。来源、署名、许可、去重和下架作为基础处理，见 [content-policy.md](content-policy.md)。
 - 先覆盖四类内容与不同用途，优先选择有吸引力、能理解、可复用、示例与 Prompt 对应的条目，不用数量替代质量。
-- 已有来源包括 YouMind 的三个公共模型仓库、prompts.chat 和 X 发现流；新增 Anthropic、OpenAI 官方开放 Skill 目录。聚合站、原作者与最终目标工具分别显示，不把 YouMind 的收录署名当成创作者身份。具体来源和字段见 [创作者与 Skill](creators-and-skills.md)。
+- 已有来源包括 YouMind 的四个公共模型仓库、prompts.chat 和 X 发现流；新增 Anthropic、OpenAI 官方开放 Skill 目录。聚合站、原作者与最终目标工具分别显示，不把 YouMind 的收录署名当成创作者身份。具体来源和字段见 [创作者与 Skill](creators-and-skills.md)。
 - 参考 YouMind、PromptHero 的效果展示，prompts.chat、AIPRM、FlowGPT 的文本用途组织，以及 v0、Lovable 的网页作品展示。竞品参考不等于采集来源授权，模板也不自动等于原始 Prompt。调研入口见 [research-summary.md](research-summary.md)。
 
 ## 7. 平台、市场与设计

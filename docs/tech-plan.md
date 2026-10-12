@@ -24,13 +24,13 @@ flowchart LR
 
 ## 内容采集与选编
 
-`ingest/sources.ts` 明确列出来源：YouMind OpenLab 的 Nano Banana Pro、GPT Image 2、Seedance 2 公开仓库、prompts.chat CSV，以及 Anthropic/OpenAI 官方 Skill 中允许收录的目录。每次解析固定 commit 的文件，保留作者、原始链接、上游仓库与版本。Skill 保留完整 `SKILL.md` 和已核验文件路径；源目录入口固定到同一提交，不在采集器或手机上执行。
+`ingest/sources.ts` 明确列出来源：YouMind OpenLab 的 Nano Banana Pro、GPT Image 2、GPT Image 1.5、Seedance 2 公开仓库、prompts.chat CSV，以及 Anthropic/OpenAI 官方 Skill 中允许收录的目录。每次解析固定 commit 的文件，保留作者、原始链接、上游仓库与版本。Skill 保留完整 `SKILL.md` 和已核验文件路径；源目录入口固定到同一提交，不在采集器或手机上执行。
 
 YouMind 公开的 [同步工作流](https://github.com/YouMind-OpenLab/awesome-nano-banana-pro-prompts/blob/main/.github/workflows/update-readme.yml) 每 4 小时将其 CMS 内容导出到 GitHub，另有审核投稿同步；公开仓库并不等于完整的 X 采集系统。本项目独立实现来源适配、编辑规则和发布流程。
 
 `npm run daily` 只采集和本地预览；`npm run daily -- --publish` 额外镜像媒体并发布。完整库选择使用当前指纹编辑记录、内容条件与全局去重，不再截断每个来源或模态的条数。编辑优先级与上游标记控制排序，四类内容交错展示；未经整理的候选不会直接上线。内容状态记录候选、已审、合格、准备发布和实际发布的分类型数量，以及相对线上已校验目录的新增／移除数。相同版本重复运行明确记为零新增。
 
-X 使用专用应用的 app-only Bearer Token，日常搜索最多一次、10 条结果，不自动重试收费请求。搜索复用 `author_id` expansion 和用户字段取得真实 ID、账号、姓名、简介及头像。先写尝试记录，再请求，失败不推进帖子游标；X 帖子先进入本机候选，不绕过编辑审核直接发布。额外作者补全默认关闭，显式启用后按 UTC 日限额与负缓存控制请求；初次补全和日常请求分别记账，见 [创作者与 Skill](creators-and-skills.md)。
+X 使用专用应用的 app-only Bearer Token，日常搜索最多一次、10 条结果，不自动重试收费请求。搜索复用 `author_id` expansion 和用户字段取得真实 ID、账号、姓名、简介及头像。查询聚焦已收录创作者和中英日Prompt关键词；查询／字段集分别绑定增量游标，全局UTC日额度保持。先写无凭据请求身份与尝试记录，再请求；完整快照先落盘后推进游标，失败不自动重发。快照统计长文、entities、关联媒体和作者资料字段覆盖；X 帖子先进入本机候选，不绕过编辑审核直接发布。额外作者补全默认关闭，显式启用后按 UTC 日限额与负缓存控制请求；初次补全和日常请求分别记账，见 [创作者与 Skill](creators-and-skills.md)。
 
 作者按平台与稳定身份聚合，不按显示名合并。已取得数字 ID 的 X 作者使用稳定 ID，账号别名可合并；仅有可信来源链接时保留规范账号身份。头像从 allowlist 获取、验证并缩至最长边 400 px 后镜像到自己的内容域名。照片失败保留作者及作品，客户端显示首字母。
 
