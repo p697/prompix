@@ -14,6 +14,7 @@ const exec = promisify(execFile);
 export const skillPublishers = [
   { id: "expo", repo: "expo/skills", root: "plugins/expo/skills", publisher: "Expo" },
   { id: "supabase", repo: "supabase/agent-skills", root: "skills", publisher: "Supabase" },
+  { id: "corey-haines", repo: "coreyhaines31/marketingskills", root: "skills", publisher: "Corey Haines" },
 ] as const;
 export type SkillPublisher = (typeof skillPublishers)[number];
 const sha = /^[a-f0-9]{40}$/;
