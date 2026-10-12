@@ -32,6 +32,14 @@
 
 支持入口为 `support@prompix.dev`，无需 Prompix 或 GitHub 账号。该地址经 Cloudflare Email Routing 转发到项目负责人的既有已验证邮箱；路由与 DNS 已核对，实际邮件投递仍未用测试邮件验证。它不能自动代替 App Store Connect 要求的审核联系人姓名、邮箱与国际格式电话。
 
+## App Store 分发包
+
+2026-10-12 从既有 0.3.2（9）归档成功导出 App Store Connect 分发 IPA，未重新编译或更改版本号。导出选项为 `method=app-store-connect`、`destination=export`、`manageAppVersionAndBuildNumber=false`，使用 Cloud Managed Apple Distribution 签名。该操作只生成本地包，不上传或提交审核；Apple 将这种导出与上传明确区分，见[分发导出说明](https://help.apple.com/xcode/mac/current/en.lproj/dev23ea8b877.html)。
+
+独立于导出命令的本地检查共24项通过：严格签名有效，分发描述文件不含登记设备名单、非企业配置，调试权限关闭，应用标识与证书匹配；27份资源与已审归档逐字节一致，Info.plist全部字段相同（仅二进制序列化变化），可执行文件与归档及调试符号的UUID一致。隐私清单与此前审计相同，声明不跟踪，且没有测试包或测试视频。上传调试符号已启用，未限制为仅内部TestFlight。
+
+本机证据位于 `~/.local/share/prompix/release-candidate-9/`：`app-store-export/Prompix.ipa`、`app-store-export.log`、`ExportOptions-AppStore.plist`、`app-store-export-audit.json`。IPA为8,461,857字节，SHA-256为`2722ce7d74ee13042242ea93f63cf2f9fec06eb8e8b857bcebc541fade395c1b`。原开发验收IPA保持不变。此分发IPA用于后续商店上传，不能用作登记手机的开发安装包；本地导出和签名审计也不等于Apple服务端上传校验、TestFlight可用或审核通过。
+
 ## 审核说明草稿
 
 以下英文段落可放入 Review Notes；其功能边界与当前代码一致，正式提交时复核线上视频及最终包。无需审核账号。
@@ -81,7 +89,7 @@ Content is editorially selected from allowlisted sources and published as a revi
 
 ## 截图与演示
 
-已有构建8商店候选材料和`~/.local/share/prompix/granola-redesign/demo/index.html`保留为历史证据，画面使用345条目录，不能标成346条或最终构建。当前0.3.2演示位于`~/.local/share/prompix/native-language-downloads/demo/index.html`，包含真实升级首页以及最终日语详情、编辑器共3张模拟器截图；这是截图浏览页，不是可交互App。正式提交前须从最终构建重新拍摄所需设备与语言的商店截图，不把历史材料重新标注成最终版本。
+已有构建8商店候选材料和`~/.local/share/prompix/granola-redesign/demo/index.html`保留为历史证据，画面使用345条目录，不能标成346条或最终构建。当前0.3.2演示位于`~/.local/share/prompix/native-language-downloads/demo/index.html`，包含352条目录的首页、修正译文后的日语详情，以及此前346条目录阶段的创作者主页，共3张真实模拟器截图；每张画面的来源在同目录`evidence.json`中记录。这是截图浏览页，不是可交互App。正式提交前须从最终构建重新拍摄所需设备与语言的商店截图，不把历史材料重新标注成最终版本。
 
 工程同时支持 iPhone 与 iPad。商店拟用 iPhone 1206×2622 与 13 英寸 iPad 2064×2752 的真实截图；每个所需设备组 1–10 张 RGB PNG / JPEG、不带 alpha。应检查实际最终文件、设备比例、语言、内容及顺序，不将测试通过或图库演示直接写成“商店素材已上传”。详细素材与二进制进度统一记在 [交付质量](quality-release.md)。规范依据：[Apple 截图要求](https://developer.apple.com/help/app-store-connect/reference/app-information/screenshot-specifications/)。
 
@@ -124,7 +132,7 @@ Content is editorially selected from allowlisted sources and published as a revi
 
 发行阶段才集中确认以下真实信息，不从 Git 作者、设备名或域名持有人推断：
 
-1. 用户对 0.3.1 新视觉与产品的验收，以及是否正式提交审核。
+1. 用户对当前 0.3.2 新视觉与产品的验收，以及是否正式提交审核。
 2. Apple Developer 账号中的发行主体、版权权利人及年份、可响应的审核联系人姓名／邮箱／国际电话。
 3. 最终发行地区、商店主语言与分类；EU trader 状态依据实际经营事实填写，不能因免费就自动选择 non-trader。若选择欧盟并属于 trader，按账号要求提供／验证联系方式及所需资料。[Apple EU trader 要求](https://developer.apple.com/help/app-store-connect/manage-compliance-information/manage-european-union-digital-services-act-trader-requirements/)
 4. 账号实际提示的协议或资料缺口。没有 IAP 不意味着任意账户合规字段都可跳过，也不提前假设全部收费产品收款手续是本 App 阻断项。
