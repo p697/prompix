@@ -3,10 +3,17 @@ import SwiftUI
 @main struct PrompixApp: App {
     @Environment(\.scenePhase) private var scenePhase
     @State private var library = Library()
+    init() {
+        let title = UIFont.preferredFont(forTextStyle: .largeTitle)
+        if let descriptor = title.fontDescriptor.withDesign(.serif) {
+            UINavigationBar.appearance().largeTitleTextAttributes = [.font: UIFont(descriptor: descriptor, size: 0)]
+        }
+    }
     var body: some Scene {
         WindowGroup {
             RootView().environment(library)
-                .tint(Color.primary)
+                .tint(Palette.accent)
+                .foregroundStyle(Palette.ink)
                 .task { await library.refresh() }
                 .task(id: library.savedImageURLs) { if let urls = library.savedImageURLs { await ImageStore.shared.keepOffline(urls) } }
                 .onChange(of: scenePhase) { _, phase in if phase == .active { Task { await library.refresh() } } }

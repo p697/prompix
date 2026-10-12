@@ -1,6 +1,15 @@
 import Foundation
 import Observation
 
+enum CatalogSyncState: Equatable, Sendable {
+    case idle, checking, downloading(receivedBytes: Int, totalBytes: Int?), installing, current, failed
+
+    var fractionCompleted: Double? {
+        guard case let .downloading(received, total) = self, let total, total > 0 else { return nil }
+        return min(1, max(0, Double(received) / Double(total)))
+    }
+}
+
 @MainActor @Observable final class Library {
     private(set) var prompts: [Prompt] = []
     private(set) var favorites: [Prompt] = []
@@ -9,6 +18,7 @@ import Observation
     private(set) var error: String?
     private(set) var version = ""
     private(set) var isRefreshing = false
+    private(set) var syncState = CatalogSyncState.idle
     private(set) var syncMessage: String?
     private(set) var updatedAt: Date?
     private(set) var drafts: [String: String] = [:]
@@ -17,6 +27,7 @@ import Observation
     private var removedIDs = Set<String>()
     private var creatorAliases: [String: Prompt.Creator] = [:]
     private var lastAttempt: Date?
+    private var refreshID: UUID?
     private let directory: URL
     private let installFileWriter: (Data, URL) throws -> Void
     private var storageRecoveryPending = false
@@ -155,28 +166,55 @@ import Observation
             return false
         }
     }
-    func refresh(force: Bool = false, session: URLSession = .shared) async {
+    func refresh(force: Bool = false, session: URLSession = .shared, now: Date = Date()) async {
         #if targetEnvironment(simulator)
         // A staged, validated catalog can be exercised without replacing it
         // with the public edition while a release is being prepared.
         if ProcessInfo.processInfo.arguments.contains("--cached-only") { return }
         #endif
         guard !isRefreshing, !ProcessInfo.processInfo.arguments.contains("--offline") else { return }
-        if !force, let lastAttempt, Date().timeIntervalSince(lastAttempt) < 900 { return }
-        lastAttempt = Date(); isRefreshing = true
-        defer { isRefreshing = false }
+        // A failed first refresh must not strand an upgraded installation on its
+        // previous edition for fifteen minutes. Successful checks retain the
+        // longer interval; explicit retry always bypasses either interval.
+        let retryInterval: TimeInterval = syncState == .failed ? 30 : 900
+        if !force, let lastAttempt, now.timeIntervalSince(lastAttempt) < retryInterval { return }
+        let attempt = UUID()
+        lastAttempt = now; isRefreshing = true; refreshID = attempt
+        syncState = .checking; syncMessage = nil
+        defer { isRefreshing = false; refreshID = nil }
         do {
             let data = try await CatalogSync.fetch(CatalogSync.endpoint, maximum: 32_000, session: session)
             let manifest = try JSONDecoder().decode(CatalogManifest.self, from: data).validated()
-            if manifest.version == version { syncMessage = nil; return }
-            let content = try await CatalogSync.fetch(manifest.catalog, maximum: 10_000_000, session: session)
-            try install(content, manifest: manifest)
-            syncMessage = nil
-        } catch is CancellationError { }
-        catch { syncMessage = String(localized: "暂时无法更新，仍可浏览已下载的灵感。") }
+            try Task.checkCancellation()
+            if manifest.version == version { syncState = .current; return }
+            syncState = .downloading(receivedBytes: 0, totalBytes: nil)
+            let content = try await CatalogSync.fetch(manifest.catalog, maximum: 10_000_000, session: session) { [weak self] progress in
+                Task { @MainActor in
+                    guard let self, self.refreshID == attempt,
+                          case let .downloading(received, _) = self.syncState,
+                          progress.receivedBytes >= received else { return }
+                    self.syncState = .downloading(receivedBytes: progress.receivedBytes, totalBytes: progress.totalBytes)
+                }
+            }
+            syncState = .installing
+            let catalog = try await CatalogSync.verified(content, manifest: manifest)
+            try Task.checkCancellation()
+            try installVerified(catalog, data: content)
+            syncState = .current
+        } catch is CancellationError {
+            // Returning to the foreground should immediately resume an interrupted
+            // update, without showing a failure for a user-initiated cancellation.
+            lastAttempt = nil; syncState = .idle
+        } catch {
+            syncState = .failed
+            syncMessage = String(localized: "暂时无法更新，仍可浏览已下载的灵感。")
+        }
     }
     func install(_ data: Data, manifest: CatalogManifest) throws {
         let catalog = try CatalogSync.verify(data, manifest: manifest.validated())
+        try installVerified(catalog, data: data)
+    }
+    private func installVerified(_ catalog: Catalog, data: Data) throws {
         var aliases = Self.creatorAliases(from: prompts + favorites, to: catalog.prompts)
         for (key, previous) in creatorAliases where aliases[key] == nil {
             aliases[key] = Self.resolveCreator(previous, in: catalog.prompts, aliases: aliases)

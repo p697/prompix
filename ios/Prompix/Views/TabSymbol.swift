@@ -1,10 +1,12 @@
 import SwiftUI
 
-/// Preserve SF Symbols' light outline in the system tab bar.
+/// Keep the supplied outline while the native tab bar controls icon sizing.
 enum TabSymbol {
     static func image(_ name: String) -> Image {
-        let configuration = UIImage.SymbolConfiguration(pointSize: 23, weight: .regular)
-        let symbol = UIImage(systemName: name, withConfiguration: configuration) ?? UIImage()
-        return Image(uiImage: symbol.withRenderingMode(.alwaysTemplate))
+        // TabView otherwise substitutes filled variants for every tab.
+        if let symbol = UIImage(systemName: name) {
+            return Image(uiImage: symbol).renderingMode(.template)
+        }
+        return Image(systemName: name)
     }
 }

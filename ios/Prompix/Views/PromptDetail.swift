@@ -15,6 +15,10 @@ struct PromptDetail: View {
     @State private var fullPrompt = false
     private var content: Prompt.TranslatedContent { item.content(in: language) }
     private var displaysOriginalContent: Bool { content == item.content(in: nil) }
+    private var spokenLicense: String {
+        // Give the common abbreviation a pronounceable name for VoiceOver.
+        item.source.license == "CC0-1.0" ? "Creative Commons Zero" : item.source.license
+    }
     init(item: Prompt) {
         self.item = item
         _language = State(initialValue: item.preferredTranslation)
@@ -57,7 +61,7 @@ struct PromptDetail: View {
                                 Text(item.displayModel).fixedSize(horizontal: false, vertical: true)
                             }
                         }.font(.footnote).foregroundStyle(Palette.muted)
-                        Text(content.title).font(.title2.weight(.semibold)).lineSpacing(5).fixedSize(horizontal: false, vertical: true).accessibilityAddTraits(.isHeader)
+                        Text(content.title).font(Typography.editorial(.largeTitle)).lineSpacing(5).fixedSize(horizontal: false, vertical: true).accessibilityAddTraits(.isHeader)
                         Text(content.summary).font(.subheadline).lineSpacing(5).foregroundStyle(Palette.muted)
                         if let creator = item.creator { CreatorByline(creator: creator) }
                         if item.kind != .text {
@@ -84,7 +88,8 @@ struct PromptDetail: View {
                             Button(fullPrompt ? String(localized: "收起正文") : String(localized: "展开完整内容")) { fullPrompt.toggle() }
                                 .font(.subheadline.weight(.medium)).frame(minHeight: 44).accessibilityIdentifier("expandPrompt")
                         }
-                    }.padding(20).background(Palette.soft, in: RoundedRectangle(cornerRadius: 18))
+                    }.padding(20).background(Palette.surface, in: RoundedRectangle(cornerRadius: 16))
+                        .overlay { RoundedRectangle(cornerRadius: 16).stroke(Palette.line, lineWidth: 0.5).allowsHitTesting(false) }
                     if WebsiteExamples.files[item.id] != nil {
                         Button { webPresented = true } label: { Label(String(localized: "打开原创网页示例"), systemImage: "safari").frame(minHeight: 44).contentShape(Rectangle()) }.accessibilityIdentifier("webExample")
                     }
@@ -105,6 +110,7 @@ struct PromptDetail: View {
                             VStack(alignment: .leading, spacing: 6) { sourceAuthor; sourceKind }
                         }
                         Text(item.source.license).font(.footnote).foregroundStyle(Palette.muted)
+                            .accessibilityLabel(String(localized: "内容许可：\(spokenLicense)"))
                         if let repository = item.source.repository { Link(destination: repository) { Text(String(localized: "收录于 \(item.source.name)")).font(.footnote).frame(minHeight: 44).contentShape(Rectangle()) } }
                         if let source = item.source.url { Link(destination: source) { Text(String(localized: "查看原始来源 ↗")).font(.footnote).frame(minHeight: 44).contentShape(Rectangle()) } }
                         Link(destination: SupportLinks.url(.report, contentID: item.id)) { Text(String(localized: "反馈这条内容")).font(.footnote).frame(minHeight: 44).contentShape(Rectangle()) }.accessibilityIdentifier("reportContent")
@@ -117,6 +123,7 @@ struct PromptDetail: View {
                 }.padding(.horizontal, 22).padding(.top, 12)
             }.padding(.bottom, 28).frame(maxWidth: 700).frame(maxWidth: .infinity)
         }
+        .paperScreen()
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.hidden, for: .tabBar)
         .toolbar {
@@ -131,8 +138,8 @@ struct PromptDetail: View {
         }
         .safeAreaInset(edge: .bottom) {
             HStack(spacing: 12) {
-                Button { editorPresented = true } label: { Image(systemName: "slider.horizontal.3").font(.system(size: 20)).frame(width: 50, height: 50) }
-                    .buttonStyle(.plain).background(Palette.soft, in: RoundedRectangle(cornerRadius: 16)).accessibilityLabel(String(localized: "编辑后使用"))
+                Button { editorPresented = true } label: { Image(systemName: "square.and.pencil").font(.system(size: 19)).frame(width: 50, height: 50) }
+                    .buttonStyle(.plain).background(Palette.surface, in: Circle()).accessibilityLabel(String(localized: "编辑后使用"))
                 Button {
                     UIPasteboard.general.string = content.prompt
                     copied = true
@@ -141,7 +148,7 @@ struct PromptDetail: View {
                         compactTitle: copied ? String(localized: "已复制") : String(localized: "复制"), symbol: copied ? "checkmark" : "doc.on.doc")
                 }.buttonStyle(.plain).accessibilityIdentifier("copyPrompt").sensoryFeedback(.success, trigger: copied)
             }.padding(.horizontal, 20).padding(.vertical, 10).frame(maxWidth: 700)
-                .frame(maxWidth: .infinity).background(.bar)
+                .frame(maxWidth: .infinity).background(Palette.paper)
         }
         .onChange(of: language) { _, _ in copied = false; fullPrompt = false }
         .sheet(isPresented: $editorPresented) { PromptEditor(item: item, language: language) }
@@ -195,6 +202,7 @@ struct PromptDetail: View {
     }
     private var hero: some View {
         Artwork(item: item).aspectRatio(item.media?.aspectRatio.map { max(0.9, min(1.8, $0)) } ?? (item.kind == .image ? 0.95 : 1.15), contentMode: .fit)
+            .clipShape(RoundedRectangle(cornerRadius: 18)).padding(.horizontal, 20).padding(.top, 8)
     }
 
 }
@@ -233,7 +241,7 @@ struct PromptEditor: View {
                     TextEditor(text: $text).font(.body).scrollContentBackground(.hidden).padding(.horizontal, 16)
                         .frame(maxHeight: .infinity).accessibilityIdentifier("promptEditor")
                 }
-            }.navigationTitle(String(localized: "编辑 Prompt")).navigationBarTitleDisplayMode(.inline)
+            }.paperScreen().navigationTitle(String(localized: "编辑 Prompt")).navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) { Button(String(localized: "完成")) { if save() { dismiss() } } }
                     ToolbarItem(placement: .primaryAction) {
@@ -253,7 +261,7 @@ struct PromptEditor: View {
                             compactTitle: copied ? String(localized: "已复制") : String(localized: "复制"), symbol: copied ? "checkmark" : "doc.on.doc")
                     }.buttonStyle(.plain).accessibilityIdentifier("copyEditedPrompt")
                         .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                        .padding().background(.bar).sensoryFeedback(.success, trigger: copied)
+                        .padding().background(Palette.paper).sensoryFeedback(.success, trigger: copied)
                 }
                 .onAppear {
                     guard !initialized else { return }

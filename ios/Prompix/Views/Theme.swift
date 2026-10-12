@@ -1,15 +1,39 @@
 import SwiftUI
 
 enum Palette {
-    static let paper = Color(uiColor: .systemBackground)
-    static let soft = Color(uiColor: .secondarySystemBackground)
-    static let ink = Color.primary
-    static let muted = Color(uiColor: UIColor { traits in
-        traits.userInterfaceStyle == .dark ? UIColor(white: 0.72, alpha: 1) : UIColor(white: 0.36, alpha: 1)
-    })
-    static let accent = Color(uiColor: UIColor { traits in
-        traits.userInterfaceStyle == .dark ? UIColor(red: 0.69, green: 0.75, blue: 0.59, alpha: 1) : UIColor(red: 0.35, green: 0.40, blue: 0.28, alpha: 1)
-    })
+    private static func adaptive(_ light: UInt, _ dark: UInt) -> Color {
+        Color(uiColor: UIColor { traits in
+            let rgb = traits.userInterfaceStyle == .dark ? dark : light
+            return UIColor(red: CGFloat((rgb >> 16) & 255) / 255,
+                           green: CGFloat((rgb >> 8) & 255) / 255,
+                           blue: CGFloat(rgb & 255) / 255, alpha: 1)
+        })
+    }
+
+    static let paper = adaptive(0xF5F4EE, 0x1E221C)
+    static let surface = adaptive(0xFFFFFF, 0x292E25)
+    static let soft = adaptive(0xECEEE4, 0x30362B)
+    static let ink = adaptive(0x252A22, 0xF1F2E9)
+    static let muted = adaptive(0x62685B, 0xB8BFAC)
+    static let accent = adaptive(0x435332, 0xD1E190)
+    static let highlight = adaptive(0xD6E579, 0xC8D974)
+    static let highlightInk = Color(red: 0.15, green: 0.18, blue: 0.11)
+    static let line = adaptive(0xDCE0D2, 0x434A3B)
+}
+
+enum Typography {
+    static func editorial(_ style: Font.TextStyle) -> Font {
+        .system(style, design: .serif, weight: .regular)
+    }
+}
+
+extension View {
+    func paperScreen() -> some View {
+        background(Palette.paper)
+            .foregroundStyle(Palette.ink)
+            .toolbarBackground(Palette.paper, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
+    }
 }
 
 struct KindPicker: View {
@@ -21,15 +45,11 @@ struct KindPicker: View {
     }
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 16) {
+            HStack(spacing: 4) {
                 choice(nil, title: String(localized: "全部"))
                 ForEach(PromptKind.allCases) { choice($0, title: $0.title) }
                 Button { selection = nil; skillsOnly = true } label: {
-                    VStack(spacing: 10) {
-                        Text("Skills").font(.subheadline.weight(skillsOnly ? .semibold : .regular))
-                            .foregroundStyle(skillsOnly ? Color.primary : Palette.muted)
-                        Capsule().fill(skillsOnly ? Color.primary : .clear).frame(width: 18, height: 2)
-                    }.frame(minWidth: 44, minHeight: 44).contentShape(Rectangle())
+                    choiceLabel("Skills", selected: skillsOnly)
                 }.buttonStyle(.plain).accessibilityAddTraits(skillsOnly ? .isSelected : [])
                     .accessibilityIdentifier("kind-skill")
             }.padding(.horizontal, 20)
@@ -39,14 +59,17 @@ struct KindPicker: View {
     private func choice(_ kind: PromptKind?, title: String) -> some View {
         let selected = selection == kind && !skillsOnly
         return Button { selection = kind; skillsOnly = false } label: {
-            VStack(spacing: 10) {
-                Text(title).font(.subheadline.weight(selected ? .semibold : .regular))
-                    .foregroundStyle(selected ? Color.primary : Palette.muted)
-                Capsule().fill(selected ? Color.primary : .clear).frame(width: 18, height: 2)
-            }.frame(minWidth: 44, minHeight: 44).contentShape(Rectangle())
+            choiceLabel(title, selected: selected)
         }.buttonStyle(.plain)
             .accessibilityAddTraits(selected ? .isSelected : [])
             .accessibilityIdentifier("kind-\(kind?.rawValue ?? "all")")
+    }
+    private func choiceLabel(_ title: String, selected: Bool) -> some View {
+        Text(title).font(.subheadline.weight(selected ? .medium : .regular))
+            .foregroundStyle(selected ? Palette.highlightInk : Palette.muted)
+            .padding(.horizontal, 13).padding(.vertical, 8)
+            .background(selected ? Palette.highlight : .clear, in: Capsule())
+            .frame(minHeight: 44).contentShape(Rectangle())
     }
 }
 
@@ -61,8 +84,8 @@ struct PrimaryActionLabel: View {
             .font(.subheadline.weight(.semibold)).multilineTextAlignment(.center)
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, minHeight: 24).padding(.horizontal, 14).padding(.vertical, 13)
-            .foregroundStyle(Color(uiColor: .systemBackground))
-            .background(Color(uiColor: .label), in: RoundedRectangle(cornerRadius: 16))
+            .foregroundStyle(Palette.highlightInk)
+            .background(Palette.highlight, in: Capsule())
             .opacity(isEnabled ? 1 : 0.45)
             .accessibilityLabel(title)
     }
