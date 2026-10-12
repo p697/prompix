@@ -405,3 +405,46 @@ test("daily inherits the validated completed local artifact with absent cache an
     await assert.rejects(prepareDailyTranslations([item], root, {}, false));
   } finally { await rm(root, { recursive: true, force: true }); }
 });
+
+test("daily translation default leaves only the unspent part of 36 requests and preserves explicit lower limits", async () => {
+  const { mkdtemp, mkdir, writeFile, rm, chmod } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const { prepareDailyTranslations } = await import("./translation-daily.ts");
+  const { translationVersion } = await import("./translation.ts");
+  const root = await mkdtemp(join(tmpdir(), "prompix-translation-throughput-"));
+  try {
+    const day = new Date().toISOString().slice(0, 10), directory = join(root, "translations", "daily-budgets");
+    const ledgerPath = join(directory, `${day}.json`), callsPath = join(root, "synthetic-calls.txt");
+    await mkdir(directory, { recursive: true });
+    await writeFile(ledgerPath, JSON.stringify({ version: translationVersion, provider: "codex", attempted: 35,
+      succeeded: 0, rejected: 0, failed: 0, pendingSegments: 0, reservedUSD: 0, measuredUSD: null,
+      inputTokens: 120, outputTokens: 60, failures: [] }));
+    const explicit = await prepareDailyTranslations([item], root, { PROMPIX_TRANSLATION_PROVIDER: "codex",
+      PROMPIX_TRANSLATION_MAX_REQUESTS: "12", PROMPIX_CODEX: "/must-not-run" });
+    assert.equal(explicit.report.status, "updated"); assert.equal(explicit.report.attempted, 35);
+    const executable = join(root, "synthetic-translation-provider.cjs");
+    // Returns an incomplete response to leave pending work without contacting a model.
+    await writeFile(executable, `#!${process.execPath}
+const fs = require("node:fs");
+process.stdin.resume();
+process.stdin.on("end", () => {
+  const ledger = JSON.parse(fs.readFileSync(${JSON.stringify(ledgerPath)}, "utf8"));
+  if (ledger.attempted !== 36) process.exit(2);
+  fs.appendFileSync(${JSON.stringify(callsPath)}, "called\\n");
+  fs.writeFileSync(process.argv[process.argv.indexOf("--output-last-message") + 1], JSON.stringify({ translations: [] }));
+});
+`);
+    await chmod(executable, 0o700);
+    const environment = { PROMPIX_TRANSLATION_PROVIDER: "codex", PROMPIX_CODEX: executable };
+    const result = await prepareDailyTranslations([item], root, environment);
+    assert.equal(result.report.status, "updated"); assert.equal(result.report.attempted, 36);
+    assert.equal(result.report.measuredUSD, null);
+    assert.equal(await readFile(callsPath, "utf8"), "called\n");
+    const repeat = await prepareDailyTranslations([item], root, environment);
+    assert.equal(repeat.report.attempted, 36); assert.equal(await readFile(callsPath, "utf8"), "called\n");
+    const saved = JSON.parse(await readFile(ledgerPath, "utf8"));
+    assert.equal(saved.inputTokens, 120); assert.equal(saved.outputTokens, 60);
+    assert.equal(saved.day, day);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});

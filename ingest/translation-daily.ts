@@ -46,7 +46,7 @@ export async function prepareDailyTranslations(items: readonly Prompt[], root: s
           const maxOutputTokens = 24000;
           const provider = providerName === "codex" ? codexTranslationProvider(environment.PROMPIX_CODEX ?? "codex", maxOutputTokens, model) : openAITranslationProvider(environment.OPENAI_API_KEY ?? "", maxOutputTokens);
           report = await runTranslations({ items: prepared, cache, provider, providerName, model, locales, fairLocales: true,
-            maxRequests: Number(environment.PROMPIX_TRANSLATION_MAX_REQUESTS ?? "12"), maxUSD: Number(environment.PROMPIX_TRANSLATION_MAX_USD ?? "2"), maxOutputTokens,
+            maxRequests: Number(environment.PROMPIX_TRANSLATION_MAX_REQUESTS ?? "36"), maxUSD: Number(environment.PROMPIX_TRANSLATION_MAX_USD ?? "2"), maxOutputTokens,
             persist: async (state, progress) => { await atomic(cachePath, state); await atomic(ledgerPath, { ...progress, day, model, updatedAt: new Date().toISOString() }); }, prior, reviews });
           status = "updated";
         } catch (reason) { status = "failed"; error = reason instanceof Error ? reason.message : "Translation preparation failed"; }

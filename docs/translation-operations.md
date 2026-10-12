@@ -29,11 +29,13 @@ npx tsx ingest/translation-cli.ts /absolute/external/catalog.json --provider cod
 ```dotenv
 PROMPIX_TRANSLATION_PROVIDER=codex
 PROMPIX_TRANSLATION_MODEL=gpt-5.6-luna
-PROMPIX_TRANSLATION_MAX_REQUESTS=12
+PROMPIX_TRANSLATION_MAX_REQUESTS=36
 PROMPIX_TRANSLATION_MAX_USD=2
 ```
 
-每次仅处理已经通过当前来源指纹编辑审核的内容。每日默认最多12次请求，预算写入 `translations/daily-budgets/YYYY-MM-DD.json`，按 UTC 天计数，手动重跑同一天不会重置。批次按语言轮流执行，首语言逐日轮换，避免长条目占满预算而令后面的语言长期缺译。普通新增内容常可在每个语言的一批内处理，12次覆盖9语言并留出有限重试；大 Skill 或长正文可能超过当日预算，pendingRecords 明确报告待补数量，不保证12次能处理任意3条长内容。若初次完整翻译正在占锁，每日任务跳过模型调用，仍可复用原子保存的已验证缓存；翻译故障也不会把无效翻译发布。`status.json` 的 translations 逐语言报告完整条目 coverage 与 pendingRecords，而非只统计某些标题已翻译的数量。缺少完整语言记录的条目继续保留原文与已有完整译文，由客户端明确回退；待后续预算补齐，不伪装成该语言已完成。
+Codex路径受请求数、批大小、超时和账号额度控制，`PROMPIX_TRANSLATION_MAX_USD=2` 不构成Codex的美元费用上限，实测费用保持null；美元预留只用于直接OpenAI API路径。此变更不修改现有翻译重试策略：每批最多两次尝试，均提前预约且计入当天累计请求。
+
+每次仅处理已经通过当前来源指纹编辑审核的内容。每日默认最多36次请求，预算写入 `translations/daily-budgets/YYYY-MM-DD.json`，按 UTC 天计数，手动重跑同一天不会重置。批次按语言轮流执行，首语言逐日轮换，避免长条目占满预算而令后面的语言长期缺译。该默认值配合元数据／视觉各四次审核批次，为九语言留出更多补译名额，但不保证36次可以处理任意十二条内容；大Skill、长正文与失败重试可能占用多批，pendingRecords明确报告待补数量。已有显式 `PROMPIX_TRANSLATION_MAX_REQUESTS=12` 仍覆盖新默认，升级运行器不会自动改写环境文件。若初次完整翻译正在占锁，每日任务跳过模型调用，仍可复用原子保存的已验证缓存；翻译故障也不会把无效翻译发布。`status.json` 的 translations 逐语言报告完整条目 coverage 与 pendingRecords，而非只统计某些标题已翻译的数量。缺少完整语言记录的条目继续保留原文与已有完整译文，由客户端明确回退；待后续预算补齐，不伪装成该语言已完成。
 
 每日处理也会读取外部已完成的 `translations/catalog.localized.json`，仅按 ID 继承源指纹一致且通过字段校验的语言记录；在部分缓存无法独立重组完整正文时，仍能使用完整校验成果。取得翻译锁后重新读取缓存、审查清单与此目录，避免手工任务刚完成时使用过期快照。损坏的已完成目录同样阻止处理，缺失则允许只读缓存与线上已有译文。升级定时运行器后才能使用新的模块和配置加载。单独翻译命令不会修改定时器、最新线上清单或 R2。译文应先随 staging 与目录检查复核，然后由现有发布流程激活。
 
