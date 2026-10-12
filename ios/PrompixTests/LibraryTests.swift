@@ -140,9 +140,15 @@ import CryptoKit
             if !playback.loading { break }
             try await Task.sleep(for: .milliseconds(100))
         }
-        XCTAssertFalse(playback.failed)
-        XCTAssertFalse(playback.loading)
-        XCTAssertNotNil(playback.player)
+        let player = playback.player
+        let diagnostic = "itemStatus=\(player?.currentItem?.status.rawValue ?? -1), " +
+            "transportStatus=\(player?.timeControlStatus.rawValue ?? -1), " +
+            "waiting=\(player?.reasonForWaitingToPlay?.rawValue ?? "none"), " +
+            "itemError=\(String(describing: player?.currentItem?.error)), " +
+            "playerError=\(String(describing: player?.error))"
+        XCTAssertFalse(playback.failed, diagnostic)
+        XCTAssertFalse(playback.loading, diagnostic)
+        XCTAssertNotNil(player)
         playback.pause()
         XCTAssertEqual(playback.player?.rate, 0)
         playback.stop()
