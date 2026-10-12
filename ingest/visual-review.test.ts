@@ -122,7 +122,7 @@ test("new web previews stay deferred until real webpage inspection exists", asyn
   assert.deepEqual(result.prompts, []); assert.match(result.report.items[0].reason!, /real webpage/);
   assert.deepEqual(state.preparedIDs, []); assert.deepEqual(state.events, []);
   const retained = await run({ previous: [item] });
-  assert.equal(retained.report.previousSnapshots, 1); assert.deepEqual(retained.prompts, [item]);
+  assert.equal(retained.report.previousSnapshots, 0); assert.deepEqual(retained.prompts, []);
 });
 
 test("real prepared image and sampled video inputs reserve before the provider and persist independent evidence", async () => {

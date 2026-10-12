@@ -25,6 +25,7 @@ import { applyEditorialReviews, reviewsSchema } from "./editorial.ts";
 import { prepareDailyEditorial } from "./editorial-daily.ts";
 import type { EditorialReport } from "./editorial-runner.ts";
 import { prepareDailyVisualReview } from "./visual-daily.ts";
+import { websiteMediaNeedsMirroring } from "./website-review.ts";
 import type { VisualReport } from "./visual-review.ts";
 import { aspectRatio, prepareJPEG, publishStudioImages } from "./images.ts";
 import { publicationText } from "./templates.ts";
@@ -214,7 +215,7 @@ async function run() {
     const mediaFailedIDs = new Set<string>();
     for (const prompt of planned) {
       try {
-        if (prompt.media && publishing) {
+        if (prompt.media && publishing && websiteMediaNeedsMirroring(prompt)) {
           const media = { ...prompt.media, ...(prompt.media.imageURLs ? { imageURLs: [...prompt.media.imageURLs] } : {}) };
           const targets = [
             ...(["imageURL", "videoURL"] as const).flatMap(field => media[field] ? [{
