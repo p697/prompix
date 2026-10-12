@@ -746,6 +746,72 @@ import UIKit
         #endif
     }
 
+    /// Host supplies IDs from the reviewed release; third-party text stays outside Git.
+    func testPublishedEditorialBatch() throws {
+        guard let requested = ProcessInfo.processInfo.environment["PROMPIX_EDITORIAL_ACCEPTANCE_IDS"] else {
+            throw XCTSkip("Requires a reviewed live batch on the dedicated simulator.")
+        }
+        let ids = requested.split(separator: ",").map(String.init)
+        XCTAssertFalse(ids.isEmpty)
+        XCTAssertEqual(Set(ids).count, ids.count)
+        let directory = try acceptanceDirectory()
+        let personalFiles = ["drafts.json", "favorites.json", "creators.json"]
+        let before = personalFiles.map { try? Data(contentsOf: directory.appendingPathComponent($0)) }
+        launch(online: true)
+        let refreshed = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            guard let current = try? self.acceptanceDirectory(),
+                  let catalog = try? self.readSnapshot(CatalogSnapshot.self, from: current, file: "catalog.json") else { return false }
+            return Set(ids).isSubset(of: Set(catalog.prompts.map(\.id)))
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [refreshed], timeout: 90), .completed)
+        let bytes = try Data(contentsOf: try acceptanceDirectory().appendingPathComponent("catalog.json"))
+        let catalog = try XCTUnwrap(JSONSerialization.jsonObject(with: bytes) as? [String: Any])
+        let prompts = try XCTUnwrap(catalog["prompts"] as? [[String: Any]])
+        capture("editorial-batch-discovery")
+        for id in ids {
+            let item = try XCTUnwrap(prompts.first { $0["id"] as? String == id })
+            let title = try XCTUnwrap(item["title"] as? String)
+            // Each launch uses the verified local edition after the live refresh.
+            app.terminate(); launch()
+            app.buttons["searchButton"].tap()
+            let search = app.searchFields.firstMatch
+            XCTAssertTrue(search.waitForExistence(timeout: 5))
+            search.tap(); search.typeText(title)
+            let card = app.scrollViews["searchResults"].buttons["prompt-\(id)"]
+            reveal(card); card.tap()
+            XCTAssertTrue(app.buttons["usePrompt"].waitForExistence(timeout: 5))
+            capture("editorial-batch-\(id)-detail")
+            if item["contentType"] as? String == "skill" {
+                let skill = try XCTUnwrap(item["skill"] as? [String: Any])
+                let files = try XCTUnwrap(skill["files"] as? [String])
+                XCTAssertTrue(files.contains("SKILL.md"))
+                let inventory = app.buttons["skillFiles"]
+                reveal(inventory); inventory.tap()
+                reveal(app.staticTexts[try XCTUnwrap(files.last)])
+                XCTAssertTrue(app.descendants(matching: .any)["skillSource"].exists)
+                capture("editorial-batch-\(id)-files")
+                app.buttons["usePrompt"].tap()
+                let copy = app.buttons["copyInstallCommand"]
+                XCTAssertTrue(copy.waitForExistence(timeout: 5)); copy.tap()
+                XCTAssertTrue(copy.label.contains("已复制"))
+                let settledAt = Date().addingTimeInterval(0.7)
+                XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in Date() >= settledAt }, object: nil)], timeout: 3), .completed)
+                capture("editorial-batch-\(id)-installation")
+            } else {
+                let copy = app.buttons["copyPrompt"]
+                copy.tap(); XCTAssertTrue(copy.label.contains("已复制"))
+                app.buttons["usePrompt"].tap()
+                XCTAssertTrue(app.buttons["handoffOpen"].waitForExistence(timeout: 5))
+                XCTAssertTrue(app.buttons["handoffCopy"].exists)
+                capture("editorial-batch-\(id)-use")
+            }
+        }
+        let current = try acceptanceDirectory()
+        for (index, name) in personalFiles.enumerated() {
+            XCTAssertEqual(try? Data(contentsOf: current.appendingPathComponent(name)), before[index], name)
+        }
+    }
+
     func testPublisherSkillPackages() throws {
         guard ProcessInfo.processInfo.environment["PROMPIX_PUBLISHER_ACCEPTANCE"] == "1" else {
             throw XCTSkip("Requires live reviewed publisher packages on the dedicated simulator.")
