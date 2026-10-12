@@ -2,8 +2,8 @@ import XCTest
 @testable import Prompix
 
 final class PromptHandoffTests: XCTestCase {
-    private func item(kind: PromptKind = .text, url: String? = "https://chatgpt.com/", revision: String? = nil) -> Prompt {
-        .init(id: "test", kind: kind, title: "Test", summary: "Original test", prompt: "Write an original story.", example: "Choose a subject.", tags: ["Test"], model: "ChatGPT", toolURL: url.flatMap(URL.init(string:)), artwork: "text-editorial", previewLabel: "Test", source: .init(name: "Test", url: nil, license: "CC0-1.0", method: "Original", revision: revision), media: nil)
+    private func item(kind: PromptKind = .text, url: String? = "https://chatgpt.com/", revision: String? = nil, model: String = "ChatGPT") -> Prompt {
+        .init(id: "test", kind: kind, title: "Test", summary: "Original test", prompt: "Write an original story.", example: "Choose a subject.", tags: ["Test"], model: model, toolURL: url.flatMap(URL.init(string:)), artwork: "text-editorial", previewLabel: "Test", source: .init(name: "Test", url: nil, license: "CC0-1.0", method: "Original", revision: revision), media: nil)
     }
     func testToolChoicesPreserveRecommendedURLAndDoNotDuplicateItsHost() {
         let prompt = item(url: "https://chatgpt.com/?model=example")
@@ -22,6 +22,15 @@ final class PromptHandoffTests: XCTestCase {
         }
         XCTAssertEqual(PromptDestination.choices(for: item(kind: .video, url: "https://example.com/video")).count, 1)
     }
+    func testDesktopVideoWorkflowOffersCopyInsteadOfAnUnusableMobileDestination() {
+        let prompt = item(kind: .video, url: "https://www.remotion.dev/", model: "Remotion")
+        XCTAssertTrue(PromptDestination.requiresDesktop(for: prompt))
+        XCTAssertTrue(PromptDestination.choices(for: prompt).isEmpty)
+        let mobile = item(kind: .video, model: "Seedance 2.5")
+        XCTAssertFalse(PromptDestination.requiresDesktop(for: mobile))
+        XCTAssertFalse(PromptDestination.choices(for: mobile).isEmpty)
+    }
+
     func testSkillCommandPinsCompleteReviewedDirectoryAndNeverAutoConfirms() {
         let revision = String(repeating: "a", count: 40)
         var prompt = item(revision: revision)

@@ -24,6 +24,9 @@ struct PromptUseSheet: View {
                     if item.isSkill {
                         Text(String(localized: "在电脑上的编程助手中安装。安装时会询问目标工具；完整文件夹会一并获取。"))
                             .font(.subheadline).foregroundStyle(Palette.muted)
+                    } else if PromptDestination.requiresDesktop(for: item) {
+                        Text(String(localized: "此工作流需要电脑上的代码工具。复制或分享内容，在电脑中继续。"))
+                            .font(.subheadline).foregroundStyle(Palette.muted).accessibilityIdentifier("desktopWorkflowGuidance")
                     } else {
                         Text(String(localized: "选择工具，复制后即可粘贴使用。发送前请确认内容，参考图片和文件需在目标工具中添加。"))
                             .font(.subheadline).foregroundStyle(Palette.muted)
@@ -86,6 +89,13 @@ struct PromptUseSheet: View {
                     } label: {
                         PrimaryActionLabel(title: String(localized: "复制并打开工具"), compactTitle: String(localized: "复制并打开"), symbol: "arrow.up.right")
                     }.buttonStyle(.plain).padding(20).background(Palette.paper).accessibilityIdentifier("handoffOpen").disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                } else if PromptDestination.requiresDesktop(for: item) {
+                    Button {
+                        UIPasteboard.general.string = text; copied = true
+                    } label: {
+                        PrimaryActionLabel(title: copied ? String(localized: "已复制") : String(localized: "复制完整内容"), compactTitle: String(localized: "复制"), symbol: copied ? "checkmark" : "doc.on.doc")
+                    }.buttonStyle(.plain).padding(20).background(Palette.paper).accessibilityIdentifier("copyDesktopWorkflow")
+                        .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 } else if item.isSkill, command != nil {
                     Button {
                         UIPasteboard.general.string = transferText; copied = true

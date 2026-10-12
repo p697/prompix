@@ -5,8 +5,12 @@ struct PromptDestination: Identifiable, Equatable {
     let name: String
     let url: URL
 
+    static func requiresDesktop(for item: Prompt) -> Bool {
+        item.kind == .video && item.model.localizedCaseInsensitiveContains("Remotion")
+    }
+
     static func choices(for item: Prompt) -> [Self] {
-        guard !item.isSkill else { return [] }
+        guard !item.isSkill && !requiresDesktop(for: item) else { return [] }
         var choices: [Self] = []
         if let url = item.toolURL ?? modelDestination(for: item), isSafeURL(url) {
             let known: [String: (String, String)] = [

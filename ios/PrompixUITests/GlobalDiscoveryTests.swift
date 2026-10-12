@@ -470,7 +470,11 @@ import XCTest
                   let catalog = (try? JSONSerialization.jsonObject(with: bytes)) as? [String: Any],
                   let prompts = catalog["prompts"] as? [[String: Any]] else { return false }
             let native = prompts.filter { ($0["source"] as? [String: Any])?["name"] as? String == "X" }
-            targets = ["image", "video"].compactMap { kind in native.first { $0["kind"] as? String == kind } }
+            // Desktop workflows have their own copy/share journey below. This
+            // journey exercises destinations available to mobile image/video tools.
+            targets = ["image", "video"].compactMap { kind in native.first {
+                $0["kind"] as? String == kind && !($0["model"] as? String ?? "").localizedCaseInsensitiveContains("Remotion")
+            } }
             return targets.count == 2
         }, object: nil)
         XCTAssertEqual(XCTWaiter.wait(for: [downloaded], timeout: 90), .completed)
@@ -510,6 +514,61 @@ import XCTest
             app.navigationBars.buttons["完成"].tap()
             launch()
         }
+    }
+
+    func testNativeReplyContextAndDesktopWorkflow() throws {
+        guard ProcessInfo.processInfo.environment["PROMPIX_THREAD_ACCEPTANCE"] == "1" else {
+            throw XCTSkip("Requires a reviewed X reply workflow in the dedicated simulator catalog.")
+        }
+        let directory = try acceptanceDirectory()
+        let drafts = try? Data(contentsOf: directory.appendingPathComponent("drafts.json"))
+        launch(online: true)
+        let downloaded = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            guard let current = try? self.acceptanceDirectory(),
+                  let bytes = try? Data(contentsOf: current.appendingPathComponent("catalog.json")),
+                  let catalog = (try? JSONSerialization.jsonObject(with: bytes)) as? [String: Any],
+                  let prompts = catalog["prompts"] as? [[String: Any]] else { return false }
+            return prompts.contains { ($0["source"] as? [String: Any])?["context"] != nil && $0["model"] as? String == "Remotion" }
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [downloaded], timeout: 90), .completed)
+        let bytes = try Data(contentsOf: try acceptanceDirectory().appendingPathComponent("catalog.json"))
+        let catalog = try XCTUnwrap(JSONSerialization.jsonObject(with: bytes) as? [String: Any])
+        let prompts = try XCTUnwrap(catalog["prompts"] as? [[String: Any]])
+        let target = try XCTUnwrap(prompts.first { ($0["source"] as? [String: Any])?["context"] != nil && $0["model"] as? String == "Remotion" })
+        let id = try XCTUnwrap(target["id"] as? String), title = try XCTUnwrap(target["title"] as? String)
+        let source = try XCTUnwrap(target["source"] as? [String: Any])
+        let context = try XCTUnwrap((source["context"] as? [[String: Any]])?.first)
+        let contextID = try XCTUnwrap(context["id"] as? String)
+        app.buttons["searchButton"].tap()
+        let search = app.searchFields.firstMatch
+        XCTAssertTrue(search.waitForExistence(timeout: 5)); search.tap(); search.typeText(title)
+        let card = app.scrollViews["searchResults"].buttons["prompt-\(id)"]
+        reveal(card); card.tap()
+        XCTAssertTrue(app.buttons["usePrompt"].waitForExistence(timeout: 5))
+        capture("thread-01-workflow-detail")
+        app.buttons["previewButton"].tap()
+        XCTAssertTrue(app.descendants(matching: .any)["playingVideo"].waitForExistence(timeout: 35))
+        XCTAssertFalse(app.buttons["retryVideo"].exists)
+        capture("thread-02-original-video")
+        app.buttons["完成"].tap()
+        let original = app.buttons["sourceContext-\(contextID)"]
+        reveal(original); original.tap()
+        let sourceSettledAt = Date().addingTimeInterval(0.7)
+        XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in Date() >= sourceSettledAt }, object: nil)], timeout: 3), .completed)
+        capture("thread-03-separate-original-context")
+        original.tap()
+        app.buttons["usePrompt"].tap()
+        XCTAssertTrue(app.staticTexts["desktopWorkflowGuidance"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["handoffOpen"].exists)
+        let copy = app.buttons["copyDesktopWorkflow"]
+        XCTAssertTrue(copy.exists); copy.tap()
+        XCTAssertTrue(copy.label.contains("已复制"))
+        let copySettledAt = Date().addingTimeInterval(0.7)
+        XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in Date() >= copySettledAt }, object: nil)], timeout: 3), .completed)
+        capture("thread-04-desktop-copy-and-share")
+        let expected = XCTAttachment(data: Data(try XCTUnwrap(target["prompt"] as? String).utf8), uniformTypeIdentifier: "public.utf8-plain-text")
+        expected.name = "thread-clipboard-expected"; expected.lifetime = .keepAlways; add(expected)
+        XCTAssertEqual(try? Data(contentsOf: try acceptanceDirectory().appendingPathComponent("drafts.json")), drafts)
     }
 
     func testPromptAndSkillHandoff() {

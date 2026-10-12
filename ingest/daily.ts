@@ -15,7 +15,7 @@ import {
 import { download } from "./network.ts";
 import { discoverX } from "./x-discovery.ts";
 import { collectXFeeds } from "./x-feed.ts";
-import { readXIntake } from "./x-intake.ts";
+import { readAllXIntake as readXIntake } from "./x-thread-intake.ts";
 import { collectSkill, skillRepositoryRevision, skillSources } from "./skills.ts";
 import { prepareClawHub, filterClawHubAvailability, assertClawHubAvailability } from "./clawhub-daily.ts";
 import { enrichCreators, mergeCreatorCache, mirrorCreatorAvatars, type CreatorCache } from "./creators.ts";
@@ -184,9 +184,10 @@ async function run() {
     const xIntake = await readXIntake(root, creators);
     xIntake.report.reviewedDrafts = xIntake.candidates.filter(item => reviews[item.id]?.fingerprint === item.fingerprint).length;
     report.sources["x-intake"] = xIntake.report;
+    report.sources["x-reply-intake"] = xIntake.threads;
     all.push(...filterXAvailability(xIntake.candidates, xAvailability.state).prompts);
     await atomic(join(root, "candidates", "x-native.json"), xIntake.candidates);
-    await atomic(join(root, "x-intake", "status.json"), { updatedAt: new Date().toISOString(), ...xIntake.report, records: xIntake.records });
+    await atomic(join(root, "x-intake", "status.json"), { updatedAt: new Date().toISOString(), ...xIntake.report, threads: xIntake.threads, records: xIntake.records });
     report.sources[videoArchive.id] = { status: "retired", count: 0 };
     const candidates = enrichCreators(mergeCandidates(all), creators);
     report.counts.candidates = countByKind(candidates);

@@ -16,6 +16,11 @@ export const creatorSchema = z.object({
   profileURL: https, avatarURL: https.optional(), externalID: nonempty.max(200).optional(),
   bio: nonempty.max(2000).optional(),
 });
+export const sourcePostSchema = z.object({
+  id: z.string().regex(/^\d{1,19}$/), authorID: z.string().regex(/^\d{1,19}$/),
+  text: z.string().min(1).max(50000), createdAt: z.iso.datetime(), checkedAt: z.iso.datetime(),
+  parentID: z.string().regex(/^\d{1,19}$/).optional(),
+});
 export const promptSchema = z.object({
   id: resource,
   kind: z.enum(["text", "image", "video", "web"]),
@@ -52,10 +57,9 @@ export const promptSchema = z.object({
     author: nonempty.optional(),
     repository: https.optional(),
     revision: nonempty.optional(),
-    post: z.object({
-      id: z.string().regex(/^\d{1,19}$/), authorID: z.string().regex(/^\d{1,19}$/),
-      text: z.string().min(1).max(50000), createdAt: z.iso.datetime(), checkedAt: z.iso.datetime(),
-    }).optional(),
+    post: sourcePostSchema.optional(),
+    context: z.array(sourcePostSchema).min(1).max(8).optional(),
+    mediaPostID: z.string().regex(/^\d{1,19}$/).optional(),
   }),
   media: z
     .object({
@@ -70,9 +74,19 @@ export const promptSchema = z.object({
     .refine(media => !media.imageURLs || media.imageURL === media.imageURLs[0], "Gallery must start with its cover")
     .nullable(),
   publishedAt: z.string().optional(),
-}).superRefine((item, context) => {
+}).superRefine((item, validation) => {
+  const { post, context, mediaPostID } = item.source;
+  if (context) {
+    const chain = [...context, ...(post ? [post] : [])];
+    if (!post || item.source.name !== "X" || !mediaPostID || !chain.some(value => value.id === mediaPostID) ||
+        new Set(chain.map(value => value.id)).size !== chain.length || chain.some((value, index) =>
+          value.authorID !== post.authorID || (index === 0 ? value.parentID !== undefined :
+            value.parentID !== chain[index - 1].id || Date.parse(value.createdAt) < Date.parse(chain[index - 1].createdAt))))
+      contextIssue();
+  } else if (post?.parentID || mediaPostID) contextIssue();
+  function contextIssue() { validation.addIssue({ code: "custom", path: ["source", "context"], message: "Invalid original-post context chain" }); }
   if ((item.contentType === "skill") !== !!item.skill)
-    context.addIssue({ code: "custom", path: ["skill"], message: "Skill metadata and contentType must agree" });
+    validation.addIssue({ code: "custom", path: ["skill"], message: "Skill metadata and contentType must agree" });
 });
 export const catalogSchema = z
   .object({
