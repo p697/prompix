@@ -26,7 +26,7 @@ const metadata = { title: "安排一次轻松的周末出行", summary: "根据�
   example: "使用建议：先填写出发地点和可用时间，再复制到对话工具，并根据当地情况调整路线。",
   tags: ["日常有用", "出行计划"], previewLabel: "提示词主题" as const, cover: null };
 const approve = (items: EditorialInput[]) => ({ decisions: items.map(item => ({ id: item.id, fingerprint: item.fingerprint,
-  decision: "approve", reason: "Complete useful instructions", metadata: { ...metadata, previewLabel: item.requiredPreviewLabel } })) });
+  outputKind: item.contentType === "skill" ? "skill" : item.kind, decision: "approve", reason: "Complete useful instructions", metadata: { ...metadata, previewLabel: item.requiredPreviewLabel } })) });
 function harness(candidates: Candidate[], provider: EditorialProvider, initialLedger?: EditorialLedger | EditorialAttempt) {
   const state: { cache: EditorialCache; reviews: Reviews; ledger?: EditorialLedger; events: string[] } = {
     cache: { version: 1, decisions: {} }, reviews: {}, events: [],
@@ -67,7 +67,7 @@ test("daily review reserves before its only request, approves at most three reco
 test("rejections and deferred decisions are cached by exact identity/fingerprint, but changed text is eligible", async () => {
   const items = [candidate("reject"), candidate("defer")];
   const { state, run } = harness(items, async input => ({ decisions: input.map(item => ({ id: item.id, fingerprint: item.fingerprint,
-    decision: item.id, reason: "Source is a teaser or needs editorial judgment", metadata: null })) }));
+    outputKind: "unknown", decision: item.id, reason: "Source is a teaser or needs editorial judgment", metadata: null })) }));
   const first = await run();
   assert.equal(first.report.rejected, 1); assert.equal(first.report.deferred, 1);
   assert.equal(Object.keys(state.reviews).length, 0);
@@ -328,7 +328,7 @@ process.stdin.on("end", () => {
   const { candidates } = JSON.parse(input.trim().split("\\n").at(-1));
   const ledger = JSON.parse(fs.readFileSync(${JSON.stringify(ledgerPath)}, "utf8"));
   if (ledger.attempts.at(-1).state !== "reserved") process.exit(2);
-  const decisions = candidates.map(item => ({ id: item.id, fingerprint: item.fingerprint, decision: "approve", reason: "Synthetic complete source", metadata: { ...${JSON.stringify(metadata)}, previewLabel: item.requiredPreviewLabel } }));
+  const decisions = candidates.map(item => ({ id: item.id, fingerprint: item.fingerprint, outputKind: item.contentType === "skill" ? "skill" : item.kind, decision: "approve", reason: "Synthetic complete source", metadata: { ...${JSON.stringify(metadata)}, previewLabel: item.requiredPreviewLabel } }));
   fs.writeFileSync(process.argv[process.argv.indexOf("--output-last-message") + 1], JSON.stringify({ decisions }));
   process.stdout.write(JSON.stringify({ type: "turn.completed", usage: { input_tokens: 100, output_tokens: 50 } }) + "\\n");
 });
@@ -364,4 +364,33 @@ process.stdin.on("end", () => {
     await writeFile(ledgerPath, JSON.stringify({ ...legacy, day: "2026-01-01" }));
     await assert.rejects(prepareDailyEditorial(items, {}, [], root, true, environment), /ledger date does not match/);
   } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test("mismatched output modalities are deferred independently without approving misleading text cards", async () => {
+  const items = [candidate("scene", "A photorealistic portrait in soft window light, vertical frame, natural skin and shallow depth of field."),
+    candidate("script", "Write a two-minute video script for a fictional photography tutorial."), candidate("uncertain")];
+  const original = structuredClone(items);
+  const { state, run } = harness(items, async input => ({ decisions: approve(input).decisions.map(decision => ({ ...decision,
+    outputKind: decision.id === "scene" ? "image" : decision.id === "uncertain" ? "unknown" : "text" })) }));
+  const result = await run();
+  assert.equal(result.report.status, "reviewed");
+  assert.equal(result.report.approved, 1); assert.equal(result.report.deferred, 2);
+  assert.deepEqual(Object.keys(state.reviews), ["script"]);
+  assert.equal(state.cache.decisions[editorialDecisionKey(items[0])].metadata, null);
+  assert.equal(state.cache.decisions[editorialDecisionKey(items[0])].outputKind, "image");
+  assert.match(state.cache.decisions[editorialDecisionKey(items[0])].reason, /does not match/);
+  assert.equal(state.ledger?.attempts[0].state, "completed");
+  assert.deepEqual(items, original);
+});
+
+test("live editorial responses must classify output even when their old cache remains readable", async () => {
+  const items = [candidate("scene")];
+  const { outputKind: _omitted, ...old } = approve(items.map(editorialInput)).decisions[0];
+  assert.equal(editorialResponseSchema(items.map(editorialInput)).safeParse({ decisions: [old] }).success, false);
+  const { editorialCacheSchema } = await import("./editorial-runner.ts");
+  assert.equal(editorialCacheSchema.safeParse({ version: 1, decisions: {
+    [editorialDecisionKey(items[0])]: { ...old, model: "gpt-5.6-luna", reviewedAt: day + "T00:00:00Z" },
+  } }).success, true);
+  const { run } = harness(items, async () => ({ decisions: [old] }));
+  assert.equal((await run()).report.status, "failed");
 });

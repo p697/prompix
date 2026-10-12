@@ -94,7 +94,7 @@ test("changed supporting files invalidate approval and decision cache without ch
   const f = fixture(), original = f.candidate();
   let reviews: Reviews = {}, cache: EditorialCache = { version: 1, decisions: {} }, calls = 0;
   const run = async (day: string) => runEditorialReview({ candidates: [f.candidate()], previous: [], reviews, cache, day,
-    provider: async items => { calls++; return { decisions: items.map(item => ({ id: item.id, fingerprint: item.fingerprint, decision: "approve", reason: "Synthetic complete fixture", metadata: { ...metadata, cover: null } })) }; },
+    provider: async items => { calls++; return { decisions: items.map(item => ({ id: item.id, fingerprint: item.fingerprint, outputKind: "skill", decision: "approve", reason: "Synthetic complete fixture", metadata: { ...metadata, cover: null } })) }; },
     persistReviews: async value => { reviews = value; }, persistCache: async value => { cache = editorialCacheSchema.parse(value); }, persistLedger: async () => {} });
   assert.equal((await run("2026-10-12")).report.approved, 1);
   assert.equal(reviews[original.id].sourceRevision, original.source.revision);

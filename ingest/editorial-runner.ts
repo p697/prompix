@@ -19,12 +19,13 @@ export const automaticMetadataSchema = z.object({
 }).strict();
 export const editorialDecisionSchema = z.object({
   id: z.string(), fingerprint: z.string().regex(/^[a-f0-9]{64}$/),
+  outputKind: z.enum(["text", "image", "video", "web", "skill", "unknown"]),
   decision: z.enum(["approve", "defer", "reject"]), reason: z.string().trim().min(1).max(500),
   metadata: automaticMetadataSchema.nullable(),
 }).strict();
 export const editorialOutputSchema = z.object({ decisions: z.array(editorialDecisionSchema).min(1).max(3) }).strict();
 export type EditorialDecision = z.infer<typeof editorialDecisionSchema>;
-const savedDecisionSchema = editorialDecisionSchema.extend({ reviewedAt: z.iso.datetime(), model: z.string(), sourceRevision: z.string().min(1).max(200).optional() }).strict();
+const savedDecisionSchema = editorialDecisionSchema.partial({ outputKind: true }).extend({ reviewedAt: z.iso.datetime(), model: z.string(), sourceRevision: z.string().min(1).max(200).optional() }).strict();
 export const editorialCacheSchema = z.object({ version: z.literal(editorialVersion), decisions: z.record(z.string(), savedDecisionSchema) }).strict().superRefine((cache, context) => {
   for (const [key, decision] of Object.entries(cache.decisions)) if (key !== `${decision.id}:${decision.fingerprint}${decision.sourceRevision ? `:${decision.sourceRevision}` : ""}`)
     context.addIssue({ code: "custom", path: ["decisions", key], message: "Decision cache identity mismatch" });
@@ -173,6 +174,12 @@ export async function runEditorialReview(options: { candidates: readonly Candida
       const nextDecisions = { ...cache.decisions };
       for (const decision of decisions) {
         const candidate = selected.find(item => item.id === decision.id)!;
+        const expectedKind = candidate.contentType === "skill" ? "skill" : candidate.kind;
+        if (decision.decision === "approve" && decision.outputKind !== expectedKind) {
+          decision.decision = "defer";
+          decision.reason = `Output modality ${decision.outputKind} does not match catalog kind ${expectedKind}; source classification and preview need review`;
+          decision.metadata = null;
+        }
         if (decision.decision === "approve") {
           if (!decision.metadata || decision.metadata.previewLabel !== previewLabel(candidate)) throw new Error("Approval is missing honest editorial metadata");
           const { cover, ...metadata } = decision.metadata;
