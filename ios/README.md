@@ -1,6 +1,6 @@
 # Prompix for iOS
 
-Native SwiftUI app, iOS 17+. Development version **0.4.2 (13)** adds original X posts, verified creator links, model-specific tool destinations and the native Prompt/Skill use sheet. Current production has 405 items and 32 Skills. This iteration uses only the dedicated simulator; no user phone installation. See the [independent pipeline](../docs/independent-pipeline.md) for source and language coverage.
+Native SwiftUI app, iOS 17+. Development version **0.4.2 (13)** adds original X posts, verified creator links, model-specific tool destinations and the native Prompt/Skill use sheet. Current production has 421 items and 32 Skills. This iteration uses only the dedicated simulator; no user phone installation. See the [independent pipeline](../docs/independent-pipeline.md) for source and language coverage.
 
 Version 0.3.3 (10) refines discovery density, pinned kind navigation, compact creator discovery, native card context menus and motion-aware detail transitions. See the [visual review](../docs/design-polish-2026-10.md). It has not been signed or installed on a user device.
 
