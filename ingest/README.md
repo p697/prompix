@@ -22,6 +22,8 @@ The checked-in app catalog contains 30 original Prompix text, image and website 
 
 Install the Mac daily job with `python3 scripts/install-scheduler.py`. See [operations](../docs/content-operations.md) for credentials, logs, recovery and cost limits.
 
+Official Skill inventory requires an authenticated GitHub CLI (`gh`) session on the collector host. The collector requests one complete recursive tree per allowlisted repository and immutable revision, with a 60-second timeout and 7 MB response limit. It validates the complete directory inventory before accepting a Skill. CLI failures expose sanitized errors and preserve the previous candidate; there is no anonymous API fallback or interactive login in the daily job. Source bodies and licenses still come from pinned public raw URLs.
+
 ## Editorial reviews
 
 Every community source requires an editorial review before publication, including YouMind image/video entries and prompts.chat roles. Daily collection is discovery, not automatic quality approval: new or changed source text stays out of public editions until its exact fingerprint is reviewed. An unchanged cached snapshot can reuse its matching review. Review a candidate with `npm run review -- <candidate-id> /absolute/path/editorial-metadata.json`. The metadata requires title, summary, example, tags and previewLabel; optional cover contains text, eyebrow and tone (`sage`, `clay`, `ink`, `sky`, `cream`). Optional imageURL and demoURL select inspected HTTPS previews; web entries require both. Optional priority (0–100) controls editorial selection before upstream featured items.

@@ -11,7 +11,7 @@
 - 本地预览：`npm run daily`；人工发布：`npm run daily -- --publish`。
 - 下架：`npm run remove -- <id> <reason>`，再发布。不得将包含第三方内容的 JSON、媒体或日志提交到仓库。
 
-launchd 是用户任务，须登录该用户；关机时不会运行。内容进程锁避免并发，崩溃后的失效锁一小时后可由内容命令恢复。升级前确认任务未在运行；安装器不会自行删除内容锁。安装器把实际 Node、Wrangler 和 Git 的可执行目录写入后台 PATH；使用 Homebrew keg-only Node 时同样可被上传工具的 shebang 找到。
+launchd 是用户任务，须登录该用户；关机时不会运行。内容进程锁避免并发，崩溃后的失效锁一小时后可由内容命令恢复。升级前确认任务未在运行；安装器不会自行删除内容锁。安装器把实际 Node、Wrangler、Git 和 GitHub CLI 的可执行目录写入后台 PATH；使用 Homebrew keg-only Node 时同样可被上传工具的 shebang 找到。
 
 运行目录位于 `~/.local/share/prompix/runtimes/`。安装器与 Python 启动器共用 `runtime.lock`：采集从解析 runtime 链接到子进程退出期间持有共享锁，升级／清理持有独占锁，忙时退出并保留原目录。不要删除锁文件，也不要直接从历史运行目录启动 Node；日常运行使用上面的 launchd 命令或 `run-daily.sh`，从开发 checkout 调试仍可使用 `npm run daily`。
 
@@ -43,11 +43,14 @@ X 凭据从 `~/.config/prompix/x.env` 加载，文件权限 0600，只包含变�
 
 Cloudflare 上传显式使用 `services/content/wrangler.jsonc` 中指定的项目账号，避免登录多个账号后后台任务无法选择。使用本机已授权的 Wrangler OAuth；过期后若刷新失败，重新 `wrangler login`，无需将 OAuth 凭据复制到项目。Worker 通过 R2 binding 读取，不携带发布密钥。Cloudflare 套餐按当前账号计费，不默认启用付费增值产品。
 
+官方 Skill 的完整文件清单通过本机已登录的 `gh api --hostname github.com` 读取白名单仓库的固定 commit tree。同仓库同 revision 共用一次请求；不再使用 GitHub 匿名 API 配额，不把 CLI 凭据写入配置或日志。后台须能找到 `gh` 且其 GitHub 登录有效。命令禁止交互，60秒截止、7 MB响应上限；请求、解析或完整性验证失败保留上次完整候选，不能把只下载的两个核心文件当作完整包清单。修复登录后由下一次每日任务重试，无匿名回退。
+
 ## 常见故障
 
 | 表现 | 处理 |
 |---|---|
 | X HTTP 402 | 额度不足；完成付款设置／充值后重试，其他来源无需停机 |
+| Skill repository tree request failed | 检查后台 PATH 中的 `gh` 与本机 GitHub 登录；网络或额度恢复前保留旧完整快照。不要把 token 写入仓库或复制到任务日志 |
 | 单来源解析失败或空结果 | 保留上次快照，检查上游 README／CSV 格式，再修改合成测试 |
 | 媒体来源不在白名单 | 检查真实公开链接后再显式补充，不能开放任意 URL 抓取 |
 | 上传／验证失败 | latest 保持旧版本；检查网络、Wrangler 登录和存储空间 |
@@ -128,3 +131,7 @@ Cloudflare 上传显式使用 `services/content/wrangler.jsonc` 中指定的项�
 2026-10-12 来源接入复查：固定commit `65e30b33f28534f60c493f0e8183be6a1c12f866` 解析123个独立候选，与现有候选和346条线上目录均无正文指纹重复；110个满足自动元数据审核前置条件，13个正文过短而暂缓。该数值不是已批准或上线量。LICENSE、正文快照和去重记录仅保存在开发机 `~/.local/share/prompix/x-discovery-next/youmind-gpt-image-15/`，未进入Git、未触发X或模型请求。
 
 同日独立视觉链路完成201项内容回归和一次真实模型校准：实际雨林配图与原正文通过；同图配“白底单个红圆”的原创负例被挡；实际电视视频的封面与六帧虽相关，但无法证明连续运动和平滑过渡，因此暂缓。该调用占用生产视觉账本当天唯一一次请求，没有修改编辑记录、目录或线上版本，也没有调用X。228条既有图片／视频与线上快照的身份比较一致，不因新检查被移除。真实决定与覆盖记录在外部 `visual-review/`，校准摘要在 `~/.local/share/prompix/x-discovery-next/visual-calibration.json`；这不代表所有历史媒体完成了新的模型审核。
+
+PR34合并后，08:00运行器已升级至 `runtimes/1791798005082111000`，保留前一副本。通过安装后的启动器真实复跑，发布 `edition-9dfa3763da42be10`：全部346个既有ID保留、移除0、九语言完整；解码目录7,345,871字节，SHA-256为 `6959cf63c4cfee1365a09935b5609b4f027b8ec7fc43cf47388cdcc755673264`。95条来源commit元数据及排序变化导致新版本，正文和译文没有改变。新来源123条仅进入候选；本次X、作者资料、元数据、视觉及翻译新增请求均为0。线上哈希、范围请求及访问边界检查通过。运行摘要见开发机 `~/.local/share/prompix/x-discovery-next/runtime-verification.json`。
+
+该次运行还暴露了GitHub匿名API额度用尽：10个Skill全部沿用缓存。改为复用本机已登录的GitHub CLI后，真实只读采集取得10个完整清单（每包2至83个文件），Anthropic仓库固定在 `dbd4588f9e1033efb41dad4bef2f7947c8993d44`，OpenAI仓库固定在 `49f948faa9258a0c61caceaf225e179651397431`。206项内容测试、类型检查与调度器隔离测试通过。此段记录修复的独立采集验证，运行器升级后的状态须以实际 `status.json` 为准；原始Skill仅保存在仓库外 `~/.local/share/prompix/skill-inventory-fix/`，未进入Git或触发模型调用。
