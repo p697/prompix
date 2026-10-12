@@ -518,7 +518,16 @@ import XCTest
         }
         let directory = try acceptanceDirectory()
         let drafts = try? Data(contentsOf: directory.appendingPathComponent("drafts.json"))
-        let bytes = try Data(contentsOf: directory.appendingPathComponent("catalog.json"))
+        launch(online: true)
+        let downloaded = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            guard let current = try? self.acceptanceDirectory(),
+                  let bytes = try? Data(contentsOf: current.appendingPathComponent("catalog.json")),
+                  let catalog = (try? JSONSerialization.jsonObject(with: bytes)) as? [String: Any],
+                  let prompts = catalog["prompts"] as? [[String: Any]] else { return false }
+            return prompts.contains { ($0["source"] as? [String: Any])?["context"] != nil && $0["model"] as? String == "Remotion" }
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [downloaded], timeout: 90), .completed)
+        let bytes = try Data(contentsOf: try acceptanceDirectory().appendingPathComponent("catalog.json"))
         let catalog = try XCTUnwrap(JSONSerialization.jsonObject(with: bytes) as? [String: Any])
         let prompts = try XCTUnwrap(catalog["prompts"] as? [[String: Any]])
         let target = try XCTUnwrap(prompts.first { ($0["source"] as? [String: Any])?["context"] != nil && $0["model"] as? String == "Remotion" })
@@ -526,7 +535,6 @@ import XCTest
         let source = try XCTUnwrap(target["source"] as? [String: Any])
         let context = try XCTUnwrap((source["context"] as? [[String: Any]])?.first)
         let contextID = try XCTUnwrap(context["id"] as? String)
-        launch()
         app.buttons["searchButton"].tap()
         let search = app.searchFields.firstMatch
         XCTAssertTrue(search.waitForExistence(timeout: 5)); search.tap(); search.typeText(title)
@@ -541,6 +549,8 @@ import XCTest
         app.buttons["完成"].tap()
         let original = app.buttons["sourceContext-\(contextID)"]
         reveal(original); original.tap()
+        let sourceSettledAt = Date().addingTimeInterval(0.7)
+        XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in Date() >= sourceSettledAt }, object: nil)], timeout: 3), .completed)
         capture("thread-03-separate-original-context")
         original.tap()
         app.buttons["usePrompt"].tap()
@@ -549,6 +559,8 @@ import XCTest
         let copy = app.buttons["copyDesktopWorkflow"]
         XCTAssertTrue(copy.exists); copy.tap()
         XCTAssertTrue(copy.label.contains("已复制"))
+        let copySettledAt = Date().addingTimeInterval(0.7)
+        XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in Date() >= copySettledAt }, object: nil)], timeout: 3), .completed)
         capture("thread-04-desktop-copy-and-share")
         let expected = XCTAttachment(data: Data(try XCTUnwrap(target["prompt"] as? String).utf8), uniformTypeIdentifier: "public.utf8-plain-text")
         expected.name = "thread-clipboard-expected"; expected.lifetime = .keepAlways; add(expected)
