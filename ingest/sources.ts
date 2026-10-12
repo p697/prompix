@@ -28,6 +28,13 @@ export const repositories = [
     model: "Seedance 2.0",
     tool: "https://dreamina.capcut.com/",
   },
+  {
+    id: "youmind-gpt-image-15",
+    repo: "YouMind-OpenLab/awesome-gpt-image-1.5",
+    kind: "image",
+    model: "GPT Image 1.5",
+    tool: "https://chatgpt.com/",
+  },
 ] as const;
 export type Repository = (typeof repositories)[number];
 // The last upstream release map with complete downloadable video examples.

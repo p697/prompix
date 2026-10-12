@@ -1,4 +1,5 @@
-import { download } from "./network.ts";
+import { createHash } from "node:crypto";
+import { download, readResponseBytes } from "./network.ts";
 import { z } from "zod";
 import type { Creator } from "./creators.ts";
 
@@ -46,30 +47,155 @@ export async function lookupXUsers(bearer: string, usernames: readonly string[])
   return { creators, errors: body.errors ?? [] };
 }
 
+// These public handles already occur in the published catalog. This is an
+// editorial starting pool, not a claim about their current posting frequency.
+export const xSearchAuthors = Object.freeze(["ChangningL29508", "SheBuildsAI_", "xiaoxiaodong", "Elvorya", "ArtistaNozomu"]);
+const searchConfiguration = Object.freeze({
+  endpoint: "https://api.x.com/2/tweets/search/recent",
+  query: `(${xSearchAuthors.map(name => `from:${name}`).join(" OR ")}) (prompt OR 提示词 OR プロンプト) -is:retweet -is:reply -is:quote`,
+  maxResults: 10,
+  sortOrder: "recency",
+  fields: Object.freeze({
+    "tweet.fields": "created_at,author_id,public_metrics,lang,entities,note_tweet,attachments",
+    expansions: "author_id,attachments.media_keys",
+    "user.fields": "id,name,username,profile_image_url,description,url",
+    "media.fields": "media_key,type,url,preview_image_url,variants",
+  }),
+});
+
+// Official documentation checked 2026-10-12 is inconsistent:
+// https://docs.x.com/x-api/fundamentals/data-dictionary uses tweet.fields/note_tweet;
+// https://docs.x.com/x-api/posts/search-recent-posts uses post.fields/note_post.
+// Preserve the existing request convention and accept both documented response
+// names. This has not been live-verified with the curated query; never spend a
+// second paid request automatically trying another field convention.
+// Operators: https://docs.x.com/x-api/posts/search/integrate/operators
+const digest = (value: string) => createHash("sha256").update(value).digest("hex");
+export const xSearchFingerprint = digest(JSON.stringify(searchConfiguration));
+/** Stable across cursors and credentials; changes whenever query or requested fields change. */
+export function xSearchIdentity() { return { ...searchConfiguration, fingerprint: xSearchFingerprint }; }
+
 export function xSearchURL(since?: string): URL {
-  const url = new URL("https://api.x.com/2/tweets/search/recent");
-  url.searchParams.set("query", '("prompt" OR "提示词" OR "SKILL.md") ("Seedance" OR "Nano Banana" OR "website" OR "tarot" OR "Claude" OR "GPT") -is:retweet -is:reply');
-  url.searchParams.set("max_results", "10");
-  url.searchParams.set("tweet.fields", "created_at,author_id,public_metrics,lang,entities,note_tweet,attachments");
-  url.searchParams.set("expansions", "author_id,attachments.media_keys");
-  url.searchParams.set("user.fields", "id,name,username,profile_image_url,description,url");
-  url.searchParams.set("media.fields", "media_key,type,url,preview_image_url,variants");
-  if (since && /^\d+$/.test(since)) url.searchParams.set("since_id", since);
+  if (since !== undefined && !/^\d{1,19}$/.test(since)) throw new Error("Invalid X search cursor");
+  const url = new URL(searchConfiguration.endpoint);
+  url.searchParams.set("query", searchConfiguration.query);
+  url.searchParams.set("max_results", String(searchConfiguration.maxResults));
+  url.searchParams.set("sort_order", searchConfiguration.sortOrder);
+  for (const [field, value] of Object.entries(searchConfiguration.fields)) url.searchParams.set(field, value);
+  if (since !== undefined) url.searchParams.set("since_id", since);
   return url;
 }
-/** X search is discovery only: tweets are not automatically republished as licensed prompts. */
-export async function searchX(bearer: string, since?: string) {
-  const url = xSearchURL(since);
-  const result = await download(url.toString(), ["api.x.com"], 500_000, {
-    Authorization: `Bearer ${bearer}`,
-  });
-  const body = JSON.parse(result.bytes.toString());
-  if (body.errors?.length)
-    throw new Error("X returned partial errors; cursor unchanged");
+
+/** Exact request identity, safe to persist before reserving one paid request. */
+export function xSearchRequest(since?: string) {
+  const url = xSearchURL(since).toString();
+  return { ...xSearchIdentity(), ...(since !== undefined ? { since } : {}), url, requestFingerprint: digest(url) };
+}
+
+const searchIDSchema = z.string().regex(/^\d{1,19}$/);
+const searchEntitiesSchema = z.object({
+  urls: z.array(z.object({
+    url: z.string(), expanded_url: z.string().optional(), unwound_url: z.string().optional(),
+    start: z.number().int().nonnegative().optional(), end: z.number().int().nonnegative().optional(),
+  }).passthrough()).max(100).optional(),
+}).passthrough();
+const searchNoteSchema = z.object({ text: z.string().min(1).max(50_000), entities: searchEntitiesSchema.optional() }).passthrough();
+const searchPostSchema = z.object({
+  id: searchIDSchema, text: z.string().max(50_000), author_id: searchIDSchema.optional(),
+  entities: searchEntitiesSchema.optional(), note_tweet: searchNoteSchema.optional(), note_post: searchNoteSchema.optional(),
+  attachments: z.object({ media_keys: z.array(z.string().min(1)).max(20).optional() }).passthrough().optional(),
+}).passthrough();
+const searchMediaSchema = z.object({
+  media_key: z.string().min(1), type: z.enum(["photo", "video", "animated_gif"]),
+  url: z.string().optional(), preview_image_url: z.string().optional(),
+  variants: z.array(z.object({ content_type: z.string(), url: z.string(), bit_rate: z.number().optional() }).passthrough()).max(30).optional(),
+}).passthrough();
+const searchResponseSchema = z.object({
+  data: z.array(searchPostSchema).max(searchConfiguration.maxResults).optional(),
+  errors: z.array(z.unknown()).optional(),
+  includes: z.object({
+    users: z.array(userSchema).max(100).optional(), media: z.array(searchMediaSchema).max(100).optional(),
+  }).passthrough().optional(),
+  meta: z.object({
+    result_count: z.number().int().min(0).max(searchConfiguration.maxResults),
+    newest_id: searchIDSchema.optional(), oldest_id: searchIDSchema.optional(), next_token: z.string().min(1).optional(),
+  }).passthrough(),
+}).passthrough();
+
+/** Counts observed fields only; absence of a note does not prove text is complete. */
+function searchCoverage(body: z.infer<typeof searchResponseSchema>) {
+  const posts = body.data ?? [], users = body.includes?.users ?? [], media = body.includes?.media ?? [];
+  const authorIDs = new Set(posts.flatMap(post => post.author_id ? [post.author_id] : []));
+  const profileIDs = new Set(users.map(user => user.id));
+  const mediaKeys = new Set(posts.flatMap(post => post.attachments?.media_keys ?? []));
+  const expandedKeys = new Set(media.map(item => item.media_key));
   return {
-    posts: body.data ?? [],
-    creators: parseXUsers(body.includes?.users),
-    media: body.includes?.media ?? [],
-    newest: body.meta?.newest_id as string | undefined,
+    posts: posts.length,
+    longTextPosts: posts.filter(post => post.note_post || post.note_tweet).length,
+    noteTweetPosts: posts.filter(post => post.note_tweet).length,
+    notePostPosts: posts.filter(post => post.note_post).length,
+    entityPosts: posts.filter(post => post.entities).length,
+    longTextEntityPosts: posts.filter(post => post.note_post?.entities || post.note_tweet?.entities).length,
+    selectedTextEntityPosts: posts.filter(post => (post.note_post ?? post.note_tweet ?? post).entities).length,
+    urlEntityPosts: posts.filter(post => [post.entities, post.note_tweet?.entities, post.note_post?.entities].some(entities => entities?.urls?.length)).length,
+    attachmentPosts: posts.filter(post => post.attachments).length,
+    mediaKeyPosts: posts.filter(post => post.attachments?.media_keys?.length).length,
+    referencedMediaKeys: mediaKeys.size,
+    expandedMediaKeys: [...mediaKeys].filter(key => expandedKeys.has(key)).length,
+    mediaObjects: media.length,
+    authorIDPosts: posts.filter(post => post.author_id).length,
+    uniqueAuthorIDs: authorIDs.size,
+    authorProfiles: users.length,
+    matchedAuthorPosts: posts.filter(post => post.author_id && profileIDs.has(post.author_id)).length,
+    missingAuthorProfiles: [...authorIDs].filter(id => !profileIDs.has(id)).length,
+    // Never follow this token: the caller's budget remains one request / ten posts.
+    hasNextPage: !!body.meta.next_token,
   };
+}
+
+/** Pure parser so response validation and coverage can be tested without paid calls. */
+export function parseXSearchResponse(value: unknown, since?: string) {
+  if (since !== undefined && !searchIDSchema.safeParse(since).success) throw new Error("Invalid X search cursor");
+  const parsed = searchResponseSchema.safeParse(value);
+  if (!parsed.success) throw new Error("X search returned an invalid response; cursor unchanged");
+  const body = parsed.data, posts = body.data ?? [];
+  if (body.errors?.length) throw new Error("X returned partial errors; cursor unchanged");
+  if (posts.length !== body.meta.result_count || new Set(posts.map(post => post.id)).size !== posts.length)
+    throw new Error("X search returned inconsistent post counts; cursor unchanged");
+  const users = body.includes?.users ?? [], media = body.includes?.media ?? [];
+  if (new Set(users.map(user => user.id)).size !== users.length || new Set(media.map(item => item.media_key)).size !== media.length)
+    throw new Error("X search returned duplicate expansions; cursor unchanged");
+  if (posts.length) {
+    const ids = posts.map(post => BigInt(post.id));
+    const newest = ids.reduce((largest, id) => id > largest ? id : largest);
+    if (!body.meta.newest_id || BigInt(body.meta.newest_id) !== newest ||
+      (body.meta.oldest_id !== undefined && BigInt(body.meta.oldest_id) !== ids.reduce((smallest, id) => id < smallest ? id : smallest)) ||
+      (since !== undefined && ids.some(id => id <= BigInt(since))))
+      throw new Error("X search returned an inconsistent cursor; cursor unchanged");
+  } else if (body.meta.newest_id !== undefined || body.meta.oldest_id !== undefined || body.meta.next_token !== undefined) {
+    throw new Error("X search returned an inconsistent empty page; cursor unchanged");
+  }
+  return { posts, creators: parseXUsers(users), media, newest: body.meta.newest_id, coverage: searchCoverage(body) };
+}
+
+/** Discovery only. One bounded request, no retries, redirects or implicit pagination. */
+export async function searchX(bearer: string, since?: string) {
+  const request = xSearchRequest(since);
+  let response: Response;
+  try {
+    response = await fetch(request.url, {
+      headers: { Authorization: `Bearer ${bearer}` }, redirect: "manual", signal: AbortSignal.timeout(60_000),
+    });
+  } catch { throw new Error("X search request failed; cursor unchanged"); }
+  if (!response.ok) {
+    try { await response.body?.cancel(); } catch { /* Discard error bodies and transport diagnostics. */ }
+    throw new Error(`X search returned HTTP ${response.status}; cursor unchanged`);
+  }
+  let bytes: Buffer;
+  try { bytes = await readResponseBytes(response, 500_000); }
+  catch { throw new Error("X search response exceeded its limit or was interrupted; cursor unchanged"); }
+  let body: unknown;
+  try { body = JSON.parse(bytes.toString()); }
+  catch { throw new Error("X search returned invalid JSON; cursor unchanged"); }
+  return { ...parseXSearchResponse(body, since), request };
 }

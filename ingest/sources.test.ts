@@ -12,6 +12,7 @@ import {
 } from "./sources.ts";
 import { download } from "./network.ts";
 import { applyEditorialReviews } from "./editorial.ts";
+import { automaticReviewEligibility } from "./editorial-runner.ts";
 test("repository collection rejects unlisted sources and files before starting Git", async () => {
   await assert.rejects(collectRepository("other/private", "README_zh.md"), /not allowlisted/);
   await assert.rejects(collectRepository(repositories[0].repo, "../../secret"), /not allowlisted/);
@@ -36,6 +37,47 @@ test("source parser retains provenance and rejects incomplete cards; editorial g
     ).length,
     0,
   );
+});
+test("GPT Image 1.5 preserves repository attribution and has distinct stable source IDs", () => {
+  const source = repositories.find(item => item.id === "youmind-gpt-image-15")!;
+  const revision = "a".repeat(40);
+  const [item] = parseYouMind(block, source, revision);
+  assert.equal(repositories[2].id, "youmind-seedance", "Appending a source must preserve existing source order");
+  assert.match(item.id, /^youmind-gpt-image-15-[a-f0-9]{16}$/);
+  assert.equal(item.kind, "image");
+  assert.equal(item.model, "GPT Image 1.5");
+  assert.equal(item.toolURL, "https://chatgpt.com/");
+  assert.deepEqual(item.source, {
+    name: "YouMind OpenLab", url: "https://x.com/studio/status/123", author: "Studio",
+    license: "CC-BY-4.0", method: "社区收录", repository: `https://github.com/${source.repo}`, revision,
+  });
+  assert.equal(item.creator?.username, "studio");
+  assert.equal(item.media?.imageURL, "https://cms-assets.youmind.com/media/test.jpg");
+  assert.equal(parseYouMind(block.replace("paper city with", "paper village with"), source, "b".repeat(40))[0].id, item.id);
+  assert.notEqual(parseYouMind(block, repositories[1], revision)[0].id, item.id);
+  assert.deepEqual(parseYouMind(block.replace(/<img[^>]+>/, ""), source, revision), []);
+});
+test("GPT Image 1.5 follows current-fingerprint editorial review before library publication", () => {
+  const source = repositories.find(item => item.id === "youmind-gpt-image-15")!;
+  const items = parseYouMind(block, source, "a".repeat(40));
+  const [item] = items;
+  assert.equal(automaticReviewEligibility(item), undefined, "The allowlisted image source can enter automatic metadata review");
+  const unreviewed = applyEditorialReviews(items, {});
+  assert.equal(unreviewed[0].reviewStatus, "draft");
+  assert.deepEqual(selectLibrary(unreviewed, new Set()), []);
+  const reviews = { [item.id]: {
+    fingerprint: item.fingerprint, reviewedAt: "2026-10-12T00:00:00.000Z",
+    metadata: { title: "A paper neighborhood", summary: "Explore folded paper rooftops.",
+      example: "使用建议：描述你想要的建筑与灯光。", tags: ["Craft"], previewLabel: "来源附图" },
+  } };
+  const approved = applyEditorialReviews(items, reviews);
+  assert.deepEqual(selectLibrary(approved, new Set()).map(value => value.id), [item.id]);
+  assert.equal(approved[0].prompt, item.prompt);
+  assert.deepEqual(approved[0].source, item.source);
+  assert.deepEqual(approved[0].media, item.media);
+  assert.deepEqual(selectLibrary(approved, new Set([item.id])), []);
+  const edited = parseYouMind(block.replace("paper city with", "paper village with"), source, "b".repeat(40));
+  assert.deepEqual(selectLibrary(applyEditorialReviews(edited, reviews), new Set()), [], "A changed source body needs its own review");
 });
 test("community parser distinguishes a website brief from ordinary text and preserves multiline CSV", () => {
   const items = parseCommunityCSV(

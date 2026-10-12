@@ -25,7 +25,11 @@ launchd 是用户任务，须登录该用户；关机时不会运行。内容进
 
 ### X 发现与原生草稿
 
-升级运行器后，每次 daily 都会读取已有 X 缓存，按原帖 ID 去重，将有明确提示词边界和可提取正文的记录写入 `candidates/x-native.json`；不新增付费请求，不追踪外链或线程。长帖优先使用完整 note 正文；未标明正文边界、截断、代码围栏未结束、仅含链接或正文仍含未展开短链时保留具体阻塞原因。捕获原帖 URL、作者数字 ID、可用真实资料和对应附件地址，许可如实标为 `Unspecified`，不把数字帖子 ID 伪装成 Git commit。
+X 搜索现在聚焦五位已收录创作者，并检索英文、中文、日文的 Prompt 标记；仍限每天一次请求、最多10条，不抓网页、不自动分页或重试。查询、字段集、端点、排序与数量共同形成指纹，增量游标写入 `x-state.json.cursors[指纹]`。历史无指纹游标不会套到新查询；全局 `day` 名额独立保留，切换查询不能增加当日请求。
+
+`x-search-attempts/YYYY-MM-DD.json` 在请求前记录无凭据的查询身份；成功快照先保存，再推进该查询游标。新快照的 `request` 与 `coverage` 区分长文、entities、关联媒体与真实作者资料覆盖；0表示响应未提供，不能推断原帖确实没有。部分API错误、格式损坏、重定向或保存失败消耗当天尝试，不自动重发。字段别名继续等待下一次正常预算内请求验证。
+
+升级运行器后，每次 daily 都会读取已有 X 缓存，按原帖 ID 去重，将有明确提示词边界和可提取正文的记录写入 `candidates/x-native.json`；不新增付费请求，不追踪外链或线程。常见Markdown／emoji和日文标记可识别；只按当前正文的API entities展开明确链接，只有确证属于本帖附件的尾部短链占位才能移除。模态不能确定时保持待审，不能把所有泛用Prompt归入文本。长帖优先使用完整 note 正文；未标明正文边界、截断、代码围栏未结束、仅含链接或正文仍含未展开短链时保留具体阻塞原因。捕获原帖 URL、作者数字 ID、可用真实资料和对应附件地址，许可如实标为 `Unspecified`，不把数字帖子 ID 伪装成 Git commit。
 
 查看 `status.json.sources["x-intake"]` 的 `discovered/drafted/blocked/publicationBlocked/reviewedDrafts` 与 `reasons`；`x-intake/status.json` 保留逐帖追踪及损坏快照记录。没有新的 X 请求也会重建这些报告。`npm run review -- x-post-<id> /absolute/path/editorial-metadata.json` 可以准备元数据，返回 `draft-awaiting-source-review`。原生 X 目前仍等待来源与发布接入，不参与自动模型审核或公开目录；编辑文案不能解除该门槛。详情与字段兼容边界见[采集说明](../ingest/README.md#native-x-intake)。
 
@@ -112,3 +116,9 @@ Cloudflare 上传显式使用 `services/content/wrangler.jsonc` 中指定的项�
 安装新运行副本后的真实复跑未改变版本，保留全部346条。X、作者查询、审核均为零请求；翻译`attempted`是UTC日累计值，仍为9，和上次账本比较的新增调用为0，不应将累计字段误读为这次又调用9次。两份缓存X快照共20条发现，17条缺少明确Prompt边界、3条有无法确认的短链，完整草稿0；原因已写入`x-intake/status.json`，未计入App内容。
 
 官网双语隐私页已部署并回读200，包含日志期限、支持邮件保留和来源下架时的本机收藏／草稿清理行为。证据在开发机`~/.local/share/prompix/release-readiness-8/`的`runtime-verification.json`、`operations-final-check.json`、`privacy-production-check.json`及CI日志；没有发送测试邮件或提交App Store。
+
+## 新增 GPT Image 1.5 来源
+
+显式加入 `YouMind-OpenLab/awesome-gpt-image-1.5` 的 CC-BY-4.0 公开集合，来源ID为 `youmind-gpt-image-15`。候选仍需正文指纹编辑、真实图片核验及翻译；既有每日模型预算和v1容量上限保持，收集数量不能写成上线数量。新来源继续携带真实模型名称、作者与原帖，并使用固定Git commit记录来源。
+
+2026-10-12 来源接入复查：固定commit `65e30b33f28534f60c493f0e8183be6a1c12f866` 解析123个独立候选，与现有候选和346条线上目录均无正文指纹重复；110个满足自动元数据审核前置条件，13个正文过短而暂缓。该数值不是已批准或上线量。LICENSE、正文快照和去重记录仅保存在开发机 `~/.local/share/prompix/x-discovery-next/youmind-gpt-image-15/`，未进入Git、未触发X或模型请求。

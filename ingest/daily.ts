@@ -13,7 +13,7 @@ import {
   videoArchive,
 } from "./sources.ts";
 import { download } from "./network.ts";
-import { searchX } from "./x.ts";
+import { discoverX } from "./x-discovery.ts";
 import { readXIntake } from "./x-intake.ts";
 import { collectSkill, skillRepositoryRevision, skillSources } from "./skills.ts";
 import { enrichCreators, mergeCreatorCache, mirrorCreatorAvatars, type CreatorCache } from "./creators.ts";
@@ -126,35 +126,12 @@ async function run() {
         report.sources[`skill-${source.id}`] = { status: "failed", message: String(error) };
       }
     }
-    const xStatePath = join(root, "x-state.json");
-    const xState = await json<{ day?: string; newest?: string }>(
-      xStatePath,
-      {},
-    );
-    const day = new Date().toISOString().slice(0, 10);
-    if (publishing && process.env.X_BEARER_TOKEN && xState.day !== day) {
-      // Persist the daily attempt BEFORE making a paid request. No retries on ambiguous responses.
-      await atomic(xStatePath, { ...xState, day });
-      try {
-        const result = await searchX(process.env.X_BEARER_TOKEN, xState.newest);
-        creators = mergeCreatorCache(creators, result.creators);
-        await atomic(creatorsPath, creators);
-        await atomic(join(root, "x-discovery", `${day}.json`), {
-          ...result,
-          reviewStatus: "draft",
-        });
-        await atomic(xStatePath, {
-          day,
-          newest: result.newest ?? xState.newest,
-        });
-        report.sources.x = { status: "ok", requests: 1, requestedPosts: 10, count: result.posts.length, creators: result.creators.length };
-      } catch (e) {
-        report.sources.x = { status: "failed", requests: 1, requestedPosts: 10, message: String(e) };
-      }
-    } else
-      report.sources.x = {
-        status: !publishing ? "dry-run" : process.env.X_BEARER_TOKEN ? "daily-limit" : "not-configured", requests: 0,
-      };
+    const discovery = await discoverX(root, { publishing, bearer: process.env.X_BEARER_TOKEN });
+    report.sources.x = discovery.report;
+    if (discovery.result) {
+      creators = mergeCreatorCache(creators, discovery.result.creators);
+      await atomic(creatorsPath, creators);
+    }
     // Cached discoveries still enter intake when today's paid search is disabled.
     // Marked source bodies are drafts; incomplete posts keep an explicit reason.
     let reviews = reviewsSchema.parse(await json(join(root, "editorial.json"), {}));
