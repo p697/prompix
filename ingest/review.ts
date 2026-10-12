@@ -38,5 +38,7 @@ const approved = applyEditorialReviews([candidate], reviews)[0];
 if (approved.reviewStatus !== "candidate" && !isNativeXDraft(candidate)) throw new Error("Website review requires both a working demo URL and a real preview image URL");
 await writeFile(`${file}.tmp`, JSON.stringify(reviews, null, 2) + "\n");
 await rename(`${file}.tmp`, file);
-console.log(JSON.stringify({ reviewed: id, status: isNativeXDraft(candidate) ? "draft-awaiting-source-review" : "ready-for-next-edition", published: false }));
+const visual = approved.kind !== "text" || !!(approved.media?.imageURL || approved.media?.imageURLs?.length || approved.media?.videoURL);
+console.log(JSON.stringify({ reviewed: id, status: isNativeXDraft(candidate) ? "draft-awaiting-source-review"
+  : visual ? "metadata-reviewed-awaiting-media-check" : "ready-for-next-edition", published: false }));
 } finally { await unlock(); }

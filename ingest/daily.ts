@@ -24,6 +24,8 @@ import { inheritPreviousTranslations } from "./translation.ts";
 import { applyEditorialReviews, reviewsSchema } from "./editorial.ts";
 import { prepareDailyEditorial } from "./editorial-daily.ts";
 import type { EditorialReport } from "./editorial-runner.ts";
+import { prepareDailyVisualReview } from "./visual-daily.ts";
+import type { VisualReport } from "./visual-review.ts";
 import { aspectRatio, prepareJPEG, publishStudioImages } from "./images.ts";
 import { publicationText } from "./templates.ts";
 import { countByKind, interleaveLibrary, libraryDelta, retainPublishedLibrary, selectLibrary, type KindCounts, type RetentionReport } from "./library.ts";
@@ -56,6 +58,7 @@ async function run() {
     changes?: ReturnType<typeof libraryDelta>;
     retainedPrevious?: RetentionReport;
     editorial?: EditorialReport;
+    visualReview?: VisualReport;
     counts: {
       candidates: KindCounts | null;
       reviewed: KindCounts | null;
@@ -278,6 +281,9 @@ async function run() {
         report.counts.mediaFailed[prompt.kind]++;
       }
     }
+    const visual = await prepareDailyVisualReview(published, previous?.prompts ?? [], root, publishing);
+    report.visualReview = visual.report;
+    const mediaAwaitingReview = new Set(visual.withheldIDs);
     if (publishing) {
       bundled = await publishStudioImages(bundled, join(repo, "ios/Prompix/Resources/Assets.xcassets"), mediaMap, async input => {
         await mkdir(join(root, "tmp"), { recursive: true });
@@ -293,8 +299,9 @@ async function run() {
       await atomic(join(root, "media-map.json"), mediaMap);
     }
     const reviewedByID = new Map(reviewed.map(item => [item.id, item]));
-    const retained = retainPublishedLibrary(interleaveLibrary(published, bundled, excluded), previous?.prompts ?? [], excluded, item => {
+    const retained = retainPublishedLibrary(interleaveLibrary(visual.prompts, bundled, excluded), previous?.prompts ?? [], excluded, item => {
       if (mediaFailedIDs.has(item.id)) return "media-failed";
+      if (mediaAwaitingReview.has(item.id)) return "awaiting-media-review";
       const candidate = reviewedByID.get(item.id);
       if (!candidate) return "source-missing";
       return candidate.reviewStatus === "draft" ? "awaiting-review" : "not-prepared";
