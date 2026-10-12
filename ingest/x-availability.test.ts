@@ -72,6 +72,9 @@ test("maintenance persists withdrawal so older discovery snapshots cannot revive
     const result = await prepareXAvailability(root, { enabled: true, bearer: "fixture", now: next,
       lookup: async () => ({ posts: [], unavailable: ["123"], creators: [], media: [] }) });
     assert.equal(result.report.withheld, 1);
+    const repeat = await prepareXAvailability(root, { enabled: true, bearer: "fixture", now: next,
+      lookup: async () => { throw new Error("A removed post must not be queried again"); } });
+    assert.equal(repeat.report.requests, 0);
     assert.equal(filterXAvailability([candidate()], result.state, Date.parse(next)).prompts.length, 0);
   } finally { await rm(root, { recursive: true, force: true }); }
 });

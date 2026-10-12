@@ -48,7 +48,9 @@ export async function prepareXAvailability(root: string, options: { enabled: boo
   const intake = await readXIntake(root);
   const due = intake.candidates.filter(item => {
     const checked = Math.max(Date.parse(item.source.post?.checkedAt ?? "") || 0, Date.parse(state[item.id]?.checkedAt ?? "") || 0);
-    return !state[item.id] || state[item.id].revision !== item.source.revision || nowMS - checked >= 12 * 3600_000;
+    const record = state[item.id];
+    if (record?.removed) return false;
+    return !record || (record.status === "ready" && record.revision !== item.source.revision) || nowMS - checked >= 12 * 3600_000;
   }).sort((a, b) => Date.parse(a.source.post?.checkedAt ?? "1970-01-01") - Date.parse(b.source.post?.checkedAt ?? "1970-01-01"));
   while (due.length && ledger.length < 2) {
     const batch = due.splice(0, 100), ids = batch.map(item => item.id.slice("x-post-".length));
