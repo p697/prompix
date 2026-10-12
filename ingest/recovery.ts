@@ -5,6 +5,7 @@ import { assertPublicationReconciled, defaultReleaseTransport, loadPublicationSt
   readPublishedState, resumePublication, stageRelease, type ReleaseTransport } from "./release-publication.ts";
 import { languagePackPublishingEnabled } from "./daily-publication.ts";
 import { recoveryPublicationHooks, verifyRecoveryMedia as verifyMedia } from "./recovery-publication.ts";
+import { assertNoQualityHolds, readQualityHolds } from "./quality-holds.ts";
 
 export interface RecoveryTransport {
   currentManifest: typeof currentManifest;
@@ -45,6 +46,7 @@ export async function recoverRelease(root: string, version: string, publishing: 
   const unlock = await lockContent(root);
   const report: Record<string, unknown> = { target: version, startedAt: new Date().toISOString(), published: false };
   try {
+    await readQualityHolds(root);
     // Preserve existing injected v1-only transports without creating an implicit production read.
     // Real operations and explicitly injected v2 transports also discover remote initialization.
     const state = await loadPublicationState(root);
@@ -61,6 +63,7 @@ export async function recoverRelease(root: string, version: string, publishing: 
     const target = await transport.remoteCatalog(targetManifest);
     const moderation = moderationSchema.parse(await json(join(root, "moderation.json"), { removedIDs: [] }));
     const catalog = rollbackCatalog(target, [...(current.removedIDs ?? []), ...moderation.removedIDs]);
+    assertNoQualityHolds(catalog, await readQualityHolds(root));
     const release = join(root, "releases", catalog.version);
     const catalogPath = join(release, "catalog.json");
     // Check actual immutable bytes before media probes, uploads, hold or latest changes.
@@ -76,6 +79,7 @@ export async function recoverRelease(root: string, version: string, publishing: 
     await transport.remoteCatalog(manifest);
     const active = await transport.currentManifest();
     if (active.version !== before.version || active.sha256 !== before.sha256) throw new Error("Active edition changed during rollback");
+    assertNoQualityHolds(stored, await readQualityHolds(root));
     // Persist removals and the hold before activation, including on an ambiguous upload response.
     moderation.removedIDs = stored.removedIDs ?? [];
     await atomic(join(root, "moderation.json"), moderation);

@@ -6,6 +6,7 @@ import { languagePackManifestSchema, languagePackManifestByteLimit, languagePack
 import { joinLanguagePacks, splitLanguagePacks, verifyLanguagePackManifest, type LocaleBytes } from "./language-packs.ts";
 import { atomic, base, digest, editionVersion, manifestSchema, upload, verifyCatalog, verifyManifest, writeImmutableBytes, type Manifest } from "./publication.ts";
 import { readResponseBytes } from "./network.ts";
+import { applyQualityHolds, assertNoQualityHolds, readQualityHolds } from "./quality-holds.ts";
 
 const versionSchema = z.string().regex(/^[a-z0-9-]+$(?![\s\S])/);
 const hashSchema = z.string().length(64).regex(/^[a-f0-9]{64}$/);
@@ -196,6 +197,8 @@ export class PendingRemovalsError extends Error {
 /** Caller holds daily.lock. Staging never activates remote pointers or changes publication state. */
 export async function stageRelease(root: string, input: Catalog, previous: PublishedState): Promise<StagedRelease> {
   const catalog = preserveCatalogText(input);
+  const qualityHolds = await readQualityHolds(root);
+  assertNoQualityHolds(catalog, qualityHolds);
   assertRemovals(catalog, [...(previous.v1.catalog.removedIDs ?? []), ...(previous.v2?.catalog.removedIDs ?? [])]);
   // Measure only after full schema validation; arbitrary failures must not freeze v1.
   const fullBytes = Buffer.from(JSON.stringify(catalog) + "\n");
@@ -203,7 +206,7 @@ export async function stageRelease(root: string, input: Catalog, previous: Publi
   let legacy = catalog;
   if (freezeV1) {
     const removedIDs = [...new Set([...(previous.v1.catalog.removedIDs ?? []), ...(catalog.removedIDs ?? [])])].sort();
-    const prompts = previous.v1.catalog.prompts.filter(item => !removedIDs.includes(item.id));
+    const prompts = applyQualityHolds(previous.v1.catalog.prompts.filter(item => !removedIDs.includes(item.id)), qualityHolds).prompts;
     legacy = preserveCatalogText({ schemaVersion: 1, version: editionVersion(prompts, removedIDs), publishedAt: catalog.publishedAt, prompts, removedIDs });
   }
   let v1: Manifest;
@@ -269,17 +272,27 @@ export async function resumePublication(root: string, hooks: PublicationHooks = 
   if (!intent) return null;
   const live = await readPointers(transport); assertPublicationReconciled(intent, live.observed);
   const catalog = await readLocalRelease(root, intent.targets.v2.version, intent.targets.v2);
+  const qualityHolds = await readQualityHolds(root);
+  assertNoQualityHolds(catalog, qualityHolds);
   assertRemovals(catalog, hooks.requiredRemovedIDs);
   const descriptors = [intent.targets.v2.base, ...Object.values(intent.targets.v2.locales)];
   for (const descriptor of descriptors) await ensureRemoteArtifact(root, descriptor.url, languagePackByteLimit, transport, bytes => {
     if (bytes.length !== descriptor.byteCount || digest(bytes) !== descriptor.sha256) throw new Error("Remote immutable artifact conflicts with target");
   });
-  await ensureRemoteArtifact(root, intent.targets.v1.catalog, 10_000_000, transport, bytes => { verifyCatalog(intent.targets.v1, bytes); });
+  let legacyCatalog: Catalog | undefined;
+  await ensureRemoteArtifact(root, intent.targets.v1.catalog, 10_000_000, transport, bytes => {
+    legacyCatalog = verifyCatalog(intent.targets.v1, bytes);
+    assertNoQualityHolds(legacyCatalog, qualityHolds);
+  });
   // Reassemble every advertised remote pack before changing either pointer.
   await readV2(intent.targets.v2, async (url, maximum) => (await remoteBytes(transport, url, maximum))!);
   if (intent.operation === "rollback" && !hooks.beforeActivation) throw new Error("Rollback requires a durable hold callback");
   if (intent.holdToClear && !hooks.afterActivation) throw new Error("Resuming held publication requires a hold cleanup callback");
   await hooks.beforeActivation?.(intent);
+  // Recheck operator changes before activation, without mutating a persisted target.
+  const activeHolds = await readQualityHolds(root);
+  assertNoQualityHolds(catalog, activeHolds);
+  assertNoQualityHolds(legacyCatalog!, activeHolds);
   await activate(root, "v2", intent, transport);
   await activate(root, "v1", intent, transport);
   const published = await readPublishedState(root, {}, transport);
