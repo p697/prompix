@@ -124,9 +124,10 @@ export function retainPublishedLibrary(
   return { prompts, retainedPrevious: { counts: countByKind(retained), reasons } };
 }
 
+export const catalogByteLimit = 10_000_000;
 export function assertLibraryDownloadSize(bytes: Uint8Array): void {
-  if (bytes.byteLength > 10_000_000) {
-    throw new Error(`Complete library is ${bytes.byteLength} bytes, exceeding the 10000000-byte client download limit; the active edition must remain unchanged`);
+  if (bytes.byteLength > catalogByteLimit) {
+    throw new Error(`Complete library is ${bytes.byteLength} bytes, exceeding the ${catalogByteLimit}-byte client download limit; the active edition must remain unchanged`);
   }
 }
 

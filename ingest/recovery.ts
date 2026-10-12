@@ -1,8 +1,6 @@
-import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { z } from "zod";
-import { catalogSchema } from "../packages/schema/catalog.ts";
-import { atomic, json, base, lockContent, upload, manifestSchema, digest, remoteCatalog, currentManifest, rollbackCatalog, moderationSchema } from "./publication.ts";
+import { atomic, json, base, lockContent, upload, manifestSchema, digest, remoteCatalog, currentManifest, rollbackCatalog, moderationSchema, writeCatalog } from "./publication.ts";
 
 export interface RecoveryTransport {
   currentManifest: typeof currentManifest;
@@ -32,14 +30,8 @@ export async function recoverRelease(root: string, version: string, publishing: 
     const catalog = rollbackCatalog(target, [...(current.removedIDs ?? []), ...moderation.removedIDs]);
     const release = join(root, "releases", catalog.version);
     const catalogPath = join(release, "catalog.json");
-    const existing = await json<unknown | null>(catalogPath, null);
-    if (existing) {
-      const stored = catalogSchema.parse(existing);
-      if (stored.version !== catalog.version || JSON.stringify(stored.prompts) !== JSON.stringify(catalog.prompts) || JSON.stringify(stored.removedIDs) !== JSON.stringify(catalog.removedIDs))
-        throw new Error("Existing rollback version has different content");
-    } else await atomic(catalogPath, catalog);
-    const bytes = await readFile(catalogPath);
-    const stored = catalogSchema.parse(JSON.parse(bytes.toString()));
+    // Check actual immutable bytes before media probes, uploads, hold or latest changes.
+    const { bytes, catalog: stored } = await writeCatalog(catalogPath, catalog, { reuseExistingPublishedAt: true });
     const manifest = manifestSchema.parse({ schemaVersion: 1, version: stored.version, publishedAt: stored.publishedAt, count: stored.prompts.length, sha256: digest(bytes), catalog: `${base}/releases/${stored.version}/catalog.json` });
     const manifestPath = join(release, "manifest.json");
     await atomic(manifestPath, manifest);

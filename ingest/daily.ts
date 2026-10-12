@@ -1,7 +1,7 @@
 import { mkdir, readFile, writeFile, rm } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
-import { repo, contentRoot as root, base, atomic, json, lockContent, upload, moderationSchema, currentManifest, remoteCatalog, editionVersion } from "./publication.ts";
+import { repo, contentRoot as root, base, atomic, json, lockContent, upload, moderationSchema, currentManifest, remoteCatalog, editionVersion, writeCatalog, manifestSchema } from "./publication.ts";
 import { catalogSchema, type Catalog, type Prompt } from "../packages/schema/catalog.ts";
 import {
   repositories,
@@ -26,7 +26,7 @@ import { prepareDailyEditorial } from "./editorial-daily.ts";
 import type { EditorialReport } from "./editorial-runner.ts";
 import { aspectRatio, prepareJPEG, publishStudioImages } from "./images.ts";
 import { publicationText } from "./templates.ts";
-import { assertLibraryDownloadSize, countByKind, interleaveLibrary, libraryDelta, retainPublishedLibrary, selectLibrary, type KindCounts, type RetentionReport } from "./library.ts";
+import { countByKind, interleaveLibrary, libraryDelta, retainPublishedLibrary, selectLibrary, type KindCounts, type RetentionReport } from "./library.ts";
 const publishing = process.argv.includes("--publish");
 const resumePublishing = process.argv.includes("--resume-publishing");
 if (resumePublishing && !publishing) throw new Error("--resume-publishing requires --publish");
@@ -370,19 +370,16 @@ async function run() {
     const release = join(root, "releases", version);
     await mkdir(release, { recursive: true });
     const catalogPath = join(release, "catalog.json");
-    // Reuse identical version bytes on retry so published hashes never change.
-    const existing = await json<unknown | null>(catalogPath, null);
-    if (!existing) await atomic(catalogPath, catalog);
-    const bytes = await readFile(catalogPath);
-    assertLibraryDownloadSize(bytes);
-    const manifest = {
+    // Media may already be mirrored, but an oversized catalog must never upload or activate.
+    const { bytes, catalog: stored } = await writeCatalog(catalogPath, catalog, { reuseExistingPublishedAt: true });
+    const manifest = manifestSchema.parse({
       schemaVersion: 1,
       version,
-      publishedAt: catalogSchema.parse(JSON.parse(bytes.toString())).publishedAt,
+      publishedAt: stored.publishedAt!,
       count: prompts.length,
       sha256: createHash("sha256").update(bytes).digest("hex"),
       catalog: `${base}/releases/${version}/catalog.json`,
-    };
+    });
     const manifestPath = join(release, "manifest.json");
     await atomic(manifestPath, manifest);
     if (publishing) {
@@ -391,12 +388,7 @@ async function run() {
         catalogPath,
         "application/json",
       );
-      const verified = await download(manifest.catalog, ["api.prompix.dev"]);
-      if (
-        createHash("sha256").update(verified.bytes).digest("hex") !==
-        manifest.sha256
-      )
-        throw new Error("Remote verification failed");
+      await remoteCatalog(manifest);
       // Activate LAST. Any earlier failure leaves clients on the previous complete edition.
       await upload("v1/latest.json", manifestPath, "application/json");
       await atomic(latestPath, manifest);
