@@ -75,15 +75,29 @@ function renderedLiterals(text: string, preserveLettering: boolean): { start: nu
   for (const match of text.matchAll(quotes)) if (literals.has(match[0]) && !ranges.some(range => range.start === match.index)) ranges.push({ start: match.index!, end: match.index! + match[0].length });
   return ranges;
 }
+/** Clear fill-in instructions are prose; short labels and identifier-like forms stay opaque. */
+function bracketGuidance(body: string): "zh" | "en" | undefined {
+  const text = body.trim();
+  // Do not expose nested bracket instructions: the existing matcher cannot
+  // safely separate their inner identifiers from surrounding prose.
+  if (text.includes("[")) return undefined;
+  if (/^[\p{L}\p{N}]+(?:[_.:-][\p{L}\p{N}]+)+$/u.test(text)) return undefined;
+  const chinese = !/[\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u.test(text)
+    && /^(?:(?:请|請)\s*)?(?:自由\s*)?(?:写下|寫下|输入|輸入|填写|填寫|列出|描述|提供|填入|填上)\s*(.*)$/u.exec(text);
+  if (chinese && chinese[1].length >= 2 && /\p{L}/u.test(chinese[1])) return "zh";
+  if (/^(?:please\s+)?(?:describe|write|enter|insert|fill|choose|select|list|provide|replace|paste)\s+\S/iu.test(text)) return "en";
+}
 /** Literal lettering in visual prompts is part of the image/video specification. */
 export function protectText(text: string, preserveLettering = false) {
   if (/⟦PP\d+⟧/.test(text)) throw new Error("Source contains reserved translation tokens");
   const protectedValues: string[] = [];
   const opaque = /^---\r?\n[\s\S]*?\r?\n---(?=\r?\n)|```[\s\S]*?```|`[^`\n]+`|@[A-Za-z_][A-Za-z0-9_-]+|https?:\/\/[^\s<>"\]]+|\{argument\b[^}]*\}|\$\{[^}\n]+\}|\{\{[^}\n]+\}\}|\{[\p{L}\p{N}_ .-]{1,120}\}|\[[^\]\n]{1,160}\]|<\/?[A-Za-z_][A-Za-z0-9_ -]*>|--no[ \t]+[^\n.;]+?(?=[ \t]+--[a-z]|\r?\n|[.;]|$)|--[a-z][a-z0-9-]*(?:[ \t]+[A-Za-z0-9:_-]+(?:\.[A-Za-z0-9]+)*)?|\b(?:GPT[-\s]?[\d.]+(?:[-\w]+)?|DALL-E\s*\d*|Midjourney|Seedance|Stable Diffusion|FLUX|ChatGPT|YouMind)\b|\b\d+(?:[.,:]\d+)*(?:(?:万|千|亿|萬|億)|(?:%|px|fps|mm|cm|ms|s|w)?\b)/giu;
   const humanBracket = (body: string, start: number, end: number) => {
+    if (body.includes("[")) return false;
+    if (bracketGuidance(body)) return true;
     const heading = /^\s*$/u.test(text.slice(0, start).split("\n").at(-1)!) && /^\s*(?:\r?\n|$)/u.test(text.slice(end));
-    // A short action instruction can be a fill-in variable: preserve it unless
-    // punctuation, a heading, a quantity, or a descriptive phrase proves otherwise.
+    // Other short bracket labels remain ambiguous unless prose, a heading,
+    // a quantity, or a descriptive phrase proves otherwise.
     if (/\p{Script=Han}/u.test(body) && (body.length > 24 || /[，。！？：、]/u.test(body) || (heading && /^(?:风格|風格|场景|場景|人物|镜头细节|鏡頭細節)$/u.test(body)) || (body.length >= 8 && !/^(?:写下|寫下|输入|輸入|填写|填寫|选择|選擇|你的)/u.test(body) && /(?:拍摄|拍攝|风格|風格|音效|特效)/u.test(body)) || /^\d+\s*(?:秒|分钟|分鐘|帧|幀)$/u.test(body))) return true;
     if (/^\s*"/u.test(body) && /\p{Script=Han}/u.test(body)) return true;
     return /[a-z]+(?:\s+[a-z]+){3}/u.test(body) && /\b(?:the|you|your|with|is|are|keep|create)\b/iu.test(body);
@@ -209,8 +223,19 @@ export function validateSegment(source: string, translated: string, locale: Tran
     if ((locale === "es" && new RegExp(`${escaped}\\s+vueltas\\b`, "u").test(translated)) || (locale === "pt-BR" && new RegExp(`${escaped}\\s+vezes\\b`, "u").test(translated)) || (locale === "fr" && new RegExp(`${escaped}\\s+tours\\b`, "u").test(translated)) || (locale === "de" && new RegExp(`${escaped}\\s+Kreise\\b`, "u").test(translated))) throw new Error("Singular count translated with plural motion unit");
   }
   for (const match of source.matchAll(/\[[^\]\n]+\]/gu)) {
-    if (!/\p{Script=Han}/u.test(match[0]) || !translated.includes(match[0])) continue;
+    if (!translated.includes(match[0])) continue;
     const body = match[0].slice(1, -1);
+    const guidance = bracketGuidance(body);
+    if (guidance === "en" && locale !== "en" && (locale.startsWith("zh") || locale === "ja" || locale === "ko"
+      || /\b(?:your|the|without|this|my)\b/iu.test(body) || knownTextLocale(prose) === "en"))
+      throw new Error("Translation retained untranslated bracket guidance");
+    if (!/\p{Script=Han}/u.test(body)) continue;
+    // Shared Han wording may be valid in Traditional Chinese or Japanese.
+    // Only reject distinctive source-language spelling/phrasing here; exact
+    // field-bound semantic reviews cover the remaining ambiguous cases.
+    if (guidance === "zh" && ((locale === "zh-Hant" && /[写输请选择图头]/u.test(body))
+      || (locale === "ja" && /写下|寫下|输入|填写|填寫|列出|填入|填上|^[\s]*(?:请|請)/u.test(body))))
+      throw new Error("Translation retained untranslated bracket guidance");
     const simplified = /[这译简观创复转说时种点书开变从让过进应对来将请产维动线场风户镜细关]/u.test(body);
     if (/^(en|es|pt-BR|fr|de|ko)$/.test(locale) || ((locale === "zh-Hant" || locale === "ja") && simplified)) throw new Error("Translation retained untranslated human bracket prose");
     // Shared Japanese/Chinese kanji headings can be valid; full Chinese narrative cannot.

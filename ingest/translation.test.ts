@@ -289,10 +289,108 @@ test("human bracket headings, narrative and descriptor arrays translate while pl
   const result = protectText(source);
   assert.deepEqual(result.protectedValues, ['14', '[IMAGE_URL]', '[主题]', '[00:00-00:05]']);
   assert.match(result.masked, /\[风格\]/);
-  assert.deepEqual(protectText('把[风格]替换为[写下喜欢的摄影风格]。').protectedValues, ['[风格]', '[写下喜欢的摄影风格]']); assert.match(result.masked, /保持人物五官/); assert.match(result.masked, /电影摄影/);
+  assert.deepEqual(protectText('把[风格]替换为[写下喜欢的摄影风格]。').protectedValues, ['[风格]']); assert.match(result.masked, /保持人物五官/); assert.match(result.masked, /电影摄影/);
   assert.equal(restoreText(result.masked, result.protectedValues), source);
   const sample = 'My first sentence is "istanbulu cok seviyom burada olmak cok guzel"';
   assert.deepEqual(protectText(sample).protectedValues, ['"istanbulu cok seviyom burada olmak cok guzel"']);
+});
+test("clear bracket guidance translates while embedded parameters, numbers and URLs remain exact", () => {
+  const source = '[写下最近在意的一件事] [Enter your name] [write your {subject} using ${color}, {{name}}, 2 notes at https://example.com/input ]';
+  const protectedText = protectText(source);
+  assert.deepEqual(protectedText.protectedValues, ['{subject}', '${color}', '{{name}}', '2', 'https://example.com/input']);
+  assert.equal(protectedText.masked, '[写下最近在意的一件事] [Enter your name] [write your ⟦PP0⟧ using ⟦PP1⟧, ⟦PP2⟧, ⟦PP3⟧ notes at ⟦PP4⟧ ]');
+  assert.equal(restoreText(protectedText.masked, protectedText.protectedValues), source);
+  for (const instruction of ['自由写下所有念头', '请输入图片', '列出日常事件', 'describe a memory without private details']) {
+    assert.deepEqual(protectText(`[${instruction}]`).protectedValues, []);
+  }
+});
+test("guidance classification preserves identifiers, ambiguous noun labels, code and literal lettering", () => {
+  const identifiers = ['[主题]', '[输入法]', '[描述符]', '[输入_URL]', '[描述_字段]', '[输入-field]', '[IMAGE_URL]', '[WRITE_YOUR_PROMPT]', '[input_value]', '[writeFile]', '[00:00-00:05]'];
+  assert.deepEqual(protectText(identifiers.join(' ')).protectedValues, identifiers);
+  const code = '`[Enter your name]`\n```json\n{"prompt":"[写下你的想法]"}\n```';
+  const protectedCode = protectText(code);
+  assert.deepEqual(protectedCode.protectedValues, ['`[Enter your name]`', '```json\n{"prompt":"[写下你的想法]"}\n```']);
+  assert.equal(restoreText(protectedCode.masked, protectedCode.protectedValues), code);
+  const caption = 'Draw the label "[Enter your name]" beside the title "[写下你的想法]".';
+  assert.deepEqual(protectText(caption, true).protectedValues, ['"[Enter your name]"', '"[写下你的想法]"']);
+  const nested = '[enter your value using [IMAGE_URL]]';
+  const protectedNested = protectText(nested);
+  assert.equal(protectedNested.masked, '⟦PP0⟧]');
+  assert.equal(restoreText(protectedNested.masked, protectedNested.protectedValues), nested);
+  assert.ok(!protectedNested.masked.includes('IMAGE_URL'), 'Nested square-bracket instructions remain opaque instead of exposing the inner identifier');
+});
+test("unambiguously foreign bracket guidance is rejected without rejecting shared Han or ambiguous Latin wording", () => {
+  for (const locale of ['en', 'zh-Hant', 'ja', 'ko', 'es', 'pt-BR', 'fr', 'de'] as const) {
+    assert.throws(() => validateSegment('[写下最近在意的一件事]', 'Guidance: [写下最近在意的一件事]', locale), /untranslated/);
+  }
+  for (const locale of ['zh-Hans', 'zh-Hant', 'ja', 'ko', 'es', 'pt-BR', 'fr', 'de'] as const) {
+    assert.throws(() => validateSegment('[Enter your name]', 'Guidance: [Enter your name]', locale), /untranslated bracket guidance/);
+  }
+  assert.doesNotThrow(() => validateSegment('[写下最近在意的一件事]', '[写下最近在意的一件事]', 'zh-Hans'));
+  assert.doesNotThrow(() => validateSegment('[写下最近在意的一件事]', '[寫下最近在意的一件事]', 'zh-Hant'));
+  assert.doesNotThrow(() => validateSegment('[写下最近在意的一件事]', '[最近気になっていることを一つ書いてください]', 'ja'));
+  for (const locale of ['zh-Hant', 'ja'] as const) assert.doesNotThrow(() => validateSegment('[提供素材]', '[提供素材]', locale));
+  assert.deepEqual(protectText('[輸入商品の説明]').protectedValues, ['[輸入商品の説明]']);
+  assert.doesNotThrow(() => validateSegment('[輸入商品の説明]', '[輸入商品の説明]', 'ja'));
+  assert.doesNotThrow(() => validateSegment('[輸入素材]', '[輸入素材]', 'ja'));
+  assert.doesNotThrow(() => validateSegment('[Describe ideas]', '[Describe ideas]', 'es'));
+  assert.doesNotThrow(() => validateSegment('[Enter your name]', '[Enter your name]', 'en'));
+});
+test("the bundled tarot Japanese translation must translate its input guidance without changing its source", async () => {
+  const catalog = catalogSchema.parse(JSON.parse(await readFile(new URL('../ios/Prompix/Resources/catalog.json', import.meta.url), 'utf8')));
+  const tarot = catalog.prompts.find(prompt => prompt.id === 'gentle-tarot')!;
+  const sourceBytes = JSON.stringify(tarot), fingerprint = translationFingerprint(tarot);
+  const existing = tarot.localization!.translations.ja!;
+  assert.ok(existing.prompt.includes('[写下最近在意的一件事]'));
+  assert.equal(validLocalizedText(tarot, 'ja', existing), false);
+  const corrected = { ...existing, prompt: existing.prompt.replace('[写下最近在意的一件事]', '[最近気になっていることを一つ書いてください]') };
+  assert.equal(validLocalizedText(tarot, 'ja', corrected), true);
+  assert.equal(translationFingerprint(tarot), fingerprint);
+  assert.equal(JSON.stringify(tarot), sourceBytes);
+});
+test("JSON guidance values translate while identical JSON keys and code remain unchanged", () => {
+  const source = { ...item, prompt: JSON.stringify({ '[Enter your name]': '[Enter your name] for {user_name}',
+    code: 'const value = "[Enter your name]";', model: 'custom_model', seed: 42 }) };
+  const cache = emptyTranslationCache();
+  cache.segments.fr = Object.fromEntries(promptSegments(source).map(segment => [segment.id,
+    segment.sourceText === '[Enter your name] for {user_name}' ? '[Saisissez votre nom] pour ⟦PP0⟧' : segment.text]));
+  const translated = JSON.parse(localizePrompt(source, 'fr', cache)!.prompt);
+  assert.deepEqual(Object.keys(translated), ['[Enter your name]', 'code', 'model', 'seed']);
+  assert.equal(translated['[Enter your name]'], '[Saisissez votre nom] pour {user_name}');
+  assert.equal(translated.code, 'const value = "[Enter your name]";');
+  assert.equal(translated.model, 'custom_model'); assert.equal(translated.seed, 42);
+});
+test("new guidance masks rebuild only the affected field and reject both inherited and fresh untranslated output", async () => {
+  const { createHash } = await import('node:crypto');
+  const hash = (value: string) => createHash('sha256').update(value).digest('hex');
+  const source = { ...item, kind: 'text' as const, prompt: 'Prompt: [写下最近在意的一件事]. Keep {subject}.' };
+  const legacyMask = 'Prompt: ⟦PP0⟧. Keep ⟦PP1⟧.', legacyID = hash(legacyMask);
+  const segments = promptSegments(source), guidance = segments.find(segment => segment.sourceText === source.prompt)!;
+  assert.equal(guidance.text, 'Prompt: [写下最近在意的一件事]. Keep ⟦PP0⟧.');
+  assert.notEqual(guidance.id, legacyID);
+  const cache = emptyTranslationCache();
+  cache.segments.en = Object.fromEntries(segments.filter(segment => segment.id !== guidance.id).map(segment => [segment.id, segment.text]));
+  cache.segments.en[legacyID] = legacyMask;
+  const provenance = { provider: 'existing', model: 'existing-model', generatedAt: '2026-10-12T00:00:00Z' };
+  cache.provenance = { en: Object.fromEntries(Object.keys(cache.segments.en).map(id => [id, { ...provenance }])) };
+  const untouched = structuredClone(cache);
+  const inherited = { ...source, localization: { sourceLanguage: 'zh', sourceFingerprint: translationFingerprint(source),
+    translations: { en: { title: source.title, summary: source.summary, prompt: source.prompt, example: source.example,
+      previewLabel: source.previewLabel, cover: { text: source.cover.text, eyebrow: source.cover.eyebrow } } } } };
+  assert.deepEqual(translationBatches([inherited], cache, ['en']).flatMap(job => job.segments.map(segment => segment.id)), [guidance.id]);
+  const bad = await runTranslations({ items: [inherited], cache, locales: ['en'], providerName: 'codex', maxRequests: 1,
+    persist: async () => {}, provider: async (_locale, pending) => ({ translations: pending.map(segment => ({ id: segment.id,
+      text: 'Rephrased guidance: [写下最近在意的一件事]. Keep ⟦PP0⟧.' })) }) });
+  assert.equal(bad.rejected, 1); assert.equal(cache.segments.en[guidance.id], undefined);
+  assert.equal(attachTranslations([inherited], cache)[0].localization?.translations.en, undefined);
+  const good = await runTranslations({ items: [inherited], cache, locales: ['en'], providerName: 'codex', maxRequests: 1,
+    persist: async () => {}, provider: async (_locale, pending) => ({ translations: pending.map(segment => ({ id: segment.id,
+      text: 'Prompt: [Write down one thing you have been thinking about]. Keep ⟦PP0⟧.' })) }) });
+  assert.equal(good.succeeded, 1);
+  assert.ok(attachTranslations([inherited], cache)[0].localization?.translations.en?.prompt.includes('[Write down'));
+  for (const [id, value] of Object.entries(untouched.segments.en)) {
+    assert.equal(cache.segments.en[id], value); assert.deepEqual(cache.provenance!.en[id], untouched.provenance!.en[id]);
+  }
 });
 test("verified same-fingerprint inherited records need no paid rebuilding but untranslated bracket prose does", async () => {
   const published = attachTranslations([item], fillCache())[0];
