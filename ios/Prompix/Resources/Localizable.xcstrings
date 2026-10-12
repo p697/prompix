@@ -241,23 +241,6 @@
         }
       }
     },
-    "你会得到什么": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "What you'll get"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "你会得到什么"
-          }
-        }
-      }
-    },
     "使用方法": {
       "localizations": {
         "en": {
@@ -270,6 +253,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "使用方法"
+          }
+        }
+      }
+    },
+    "修改会保存到此设备，原始 Prompt 会保留。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Changes are saved on this device. The original prompt is preserved."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "修改会保存到此设备，原始 Prompt 会保留。"
           }
         }
       }
@@ -408,23 +407,6 @@
         }
       }
     },
-    "写进你的想法，变成自己的版本。原始 Prompt 会保留。": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Add your own ideas. The original prompt stays intact."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "写进你的想法，变成自己的版本。原始 Prompt 会保留。"
-          }
-        }
-      }
-    },
     "分享": {
       "extractionState": "manual",
       "localizations": {
@@ -438,23 +420,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "分享"
-          }
-        }
-      }
-    },
-    "创作思路": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "The idea behind it"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "创作思路"
           }
         }
       }
@@ -2009,13 +1974,29 @@
         }
       }
     },
+    "编辑 Prompt": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Edit prompt"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "编辑 Prompt"
+          }
+        }
+      }
+    },
     "编辑后使用": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Make it yours"
+            "value": "Edit prompt"
           }
         },
         "zh-Hans": {
@@ -2244,23 +2225,6 @@
         }
       }
     },
-    "让它更像你": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Make it yours"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "让它更像你"
-          }
-        }
-      }
-    },
     "设置": {
       "extractionState": "manual",
       "localizations": {
@@ -2307,6 +2271,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "语言练习、知识解释与思路梳理"
+          }
+        }
+      }
+    },
+    "说明与示例": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Notes and examples"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "说明与示例"
           }
         }
       }

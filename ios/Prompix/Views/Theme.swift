@@ -12,11 +12,6 @@ enum Palette {
     })
 }
 
-struct Eyebrow: View {
-    let text: String
-    var body: some View { Text(text).font(.system(.footnote, design: .monospaced)).tracking(2).foregroundStyle(Palette.muted) }
-}
-
 struct KindPicker: View {
     @Binding var selection: PromptKind?
     var body: some View {

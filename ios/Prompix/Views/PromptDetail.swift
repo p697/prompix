@@ -55,13 +55,12 @@ struct PromptDetail: View {
                     }
                     Divider()
                     VStack(alignment: .leading, spacing: 10) {
-                        Eyebrow(text: "THE IDEA")
-                        Text(item.kind == .text ? String(localized: "你会得到什么") : String(localized: "创作思路")).font(.headline)
+                        Text(String(localized: "说明与示例")).font(.headline)
                         Text(item.example).font(.subheadline).lineSpacing(6).textSelection(.enabled)
                     }
                     VStack(alignment: .leading, spacing: 14) {
                         HStack {
-                            Eyebrow(text: "THE PROMPT")
+                            Text("Prompt").font(.headline)
                             Spacer()
                             Button { editorPresented = true } label: { Label(String(localized: "编辑"), systemImage: "square.and.pencil").frame(minWidth: 44, minHeight: 44).contentShape(Rectangle()) }.font(.subheadline)
                                 .accessibilityIdentifier("editPrompt")
@@ -166,7 +165,7 @@ struct PromptEditor: View {
                     TextEditor(text: $text).font(.body).scrollContentBackground(.hidden).padding(.horizontal, 16)
                         .frame(maxHeight: .infinity).accessibilityIdentifier("promptEditor")
                 }
-            }.navigationTitle(String(localized: "让它更像你")).navigationBarTitleDisplayMode(.inline)
+            }.navigationTitle(String(localized: "编辑 Prompt")).navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) { Button(String(localized: "完成")) { if save() { dismiss() } } }
                     ToolbarItem(placement: .primaryAction) {
@@ -222,7 +221,7 @@ struct PromptEditor: View {
     }
     private var editorHeader: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(typeSize.isAccessibilitySize ? String(localized: "原文会保留。") : String(localized: "写进你的想法，变成自己的版本。原始 Prompt 会保留。"))
+            Text(typeSize.isAccessibilitySize ? String(localized: "原文会保留。") : String(localized: "修改会保存到此设备，原始 Prompt 会保留。"))
                 .font(.footnote).foregroundStyle(Palette.muted).fixedSize(horizontal: false, vertical: true)
             HStack {
                 Label(saved ? String(localized: "已保存到此设备") : saveError != nil ? String(localized: "尚未保存，可先复制保留") : String(localized: "正在保存…"), systemImage: saved ? "checkmark.circle" : "circle.dotted")
