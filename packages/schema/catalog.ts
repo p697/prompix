@@ -5,7 +5,7 @@ const https = z
 const nonempty = z.string().trim().min(1);
 const resource = z.string().regex(/^[a-z0-9-]+$/);
 export const localizationLanguages = ["en", "zh-Hans", "zh-Hant", "ja", "ko", "es", "pt-BR", "fr", "de"] as const;
-const translatedContent = z.object({
+export const translatedContent = z.object({
   title: nonempty.max(250), summary: nonempty.max(4000), prompt: nonempty.max(50000),
   example: nonempty.max(50000), previewLabel: nonempty.max(500),
   cover: z.object({ text: nonempty.max(100), eyebrow: nonempty.max(40) }).optional(),
