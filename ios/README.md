@@ -60,6 +60,8 @@ a new result bundle and report the actual metric values and device conditions.
 
 Live release journeys are explicitly selected: `testLiveFiveScreenBrowsingPreservesReturnPosition`
 checks five consecutive screens and return positions, while
+`testExpandedLibraryBrowsingAndSearch` requires at least 100 distinct, actually
+visible cards, checks return positions, and searches/copies newly reviewed text.
 `testEveryPublishedVideoPlaysAndBackgroundPauses` reads the published inventory and
 requires each video playback clock to advance. Keep the content edition unchanged
 during the latter run. `testShareCancellationKeepsDetailUsable` and

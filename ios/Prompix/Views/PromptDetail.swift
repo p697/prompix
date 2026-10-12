@@ -55,13 +55,12 @@ struct PromptDetail: View {
                     }
                     Divider()
                     VStack(alignment: .leading, spacing: 10) {
-                        Eyebrow(text: "THE IDEA")
-                        Text(item.kind == .text ? String(localized: "你会得到什么") : String(localized: "创作思路")).font(.headline)
+                        Text(String(localized: "说明与示例")).font(.headline)
                         Text(item.example).font(.subheadline).lineSpacing(6).textSelection(.enabled)
                     }
                     VStack(alignment: .leading, spacing: 14) {
                         HStack {
-                            Eyebrow(text: "THE PROMPT")
+                            Text("Prompt").font(.headline)
                             Spacer()
                             Button { editorPresented = true } label: { Label(String(localized: "编辑"), systemImage: "square.and.pencil").frame(minWidth: 44, minHeight: 44).contentShape(Rectangle()) }.font(.subheadline)
                                 .accessibilityIdentifier("editPrompt")
@@ -76,7 +75,7 @@ struct PromptDetail: View {
                         Link(destination: toolURL) {
                             HStack {
                                 VStack(alignment: .leading, spacing: 5) {
-                                    Text(String(localized: "带着灵感，去试试")).font(.subheadline.weight(.medium))
+                                    Text(String(localized: "使用方法")).font(.subheadline.weight(.medium))
                                     Text(String(localized: "复制后打开工具，粘贴使用")).font(.footnote).foregroundStyle(Palette.muted)
                                 }; Spacer(); Image(systemName: "arrow.up.right")
                             }.padding(.vertical, 5)
@@ -92,7 +91,7 @@ struct PromptDetail: View {
                     }
                     if !related.isEmpty {
                         Divider()
-                        HStack { Text(String(localized: "顺着灵感，再逛一点")).font(.headline); Spacer(); Image(systemName: "arrow.down.right").foregroundStyle(Palette.muted) }
+                        HStack { Text(String(localized: "相关 Prompt")).font(.headline); Spacer(); Image(systemName: "arrow.down.right").foregroundStyle(Palette.muted) }
                         PromptGrid(items: related)
                     }
                 }.padding(.horizontal, 22)
@@ -118,7 +117,7 @@ struct PromptDetail: View {
                     UIPasteboard.general.string = item.prompt
                     copied = true
                 } label: {
-                    PrimaryActionLabel(title: copied ? String(localized: "已复制，去创造吧") : String(localized: "复制 Prompt"),
+                    PrimaryActionLabel(title: copied ? String(localized: "已复制") : String(localized: "复制 Prompt"),
                         compactTitle: copied ? String(localized: "已复制") : String(localized: "复制"), symbol: copied ? "checkmark" : "doc.on.doc")
                 }.buttonStyle(.plain).accessibilityIdentifier("copyPrompt").sensoryFeedback(.success, trigger: copied)
             }.padding(.horizontal, 20).padding(.vertical, 10).background(.bar)
@@ -166,7 +165,7 @@ struct PromptEditor: View {
                     TextEditor(text: $text).font(.body).scrollContentBackground(.hidden).padding(.horizontal, 16)
                         .frame(maxHeight: .infinity).accessibilityIdentifier("promptEditor")
                 }
-            }.navigationTitle(String(localized: "让它更像你")).navigationBarTitleDisplayMode(.inline)
+            }.navigationTitle(String(localized: "编辑 Prompt")).navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) { Button(String(localized: "完成")) { if save() { dismiss() } } }
                     ToolbarItem(placement: .primaryAction) {
@@ -222,7 +221,7 @@ struct PromptEditor: View {
     }
     private var editorHeader: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(typeSize.isAccessibilitySize ? String(localized: "原文会保留。") : String(localized: "写进你的想法，变成自己的版本。原始 Prompt 会保留。"))
+            Text(typeSize.isAccessibilitySize ? String(localized: "原文会保留。") : String(localized: "修改会保存到此设备，原始 Prompt 会保留。"))
                 .font(.footnote).foregroundStyle(Palette.muted).fixedSize(horizontal: false, vertical: true)
             HStack {
                 Label(saved ? String(localized: "已保存到此设备") : saveError != nil ? String(localized: "尚未保存，可先复制保留") : String(localized: "正在保存…"), systemImage: saved ? "checkmark.circle" : "circle.dotted")
@@ -358,7 +357,7 @@ struct MovieView: View {
                         .overlay { if playback.loading { ProgressView(String(localized: "正在加载视频…")).padding(16).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14)).allowsHitTesting(false) } }
                 }
                 Text(caption).font(.footnote).foregroundStyle(Palette.muted).padding(.horizontal, 20)
-            }.frame(maxWidth: .infinity, maxHeight: .infinity).background(.black).navigationTitle(String(localized: "动态灵感")).navigationBarTitleDisplayMode(.inline)
+            }.frame(maxWidth: .infinity, maxHeight: .infinity).background(.black).navigationTitle(String(localized: "视频预览")).navigationBarTitleDisplayMode(.inline)
                 .toolbar { ToolbarItem(placement: .confirmationAction) { Button(String(localized: "完成")) { dismiss() } } }
                 .onAppear { playback.start(url: url) }
                 .onDisappear { playback.stop() }

@@ -1,6 +1,22 @@
 {
   "sourceLanguage": "zh-Hans",
   "strings": {
+    "%lld 个 Prompt": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld prompts"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld 个 Prompt"
+          }
+        }
+      }
+    },
     "%lld 字符": {
       "extractionState": "manual",
       "localizations": {
@@ -30,6 +46,102 @@
         }
       }
     },
+    "App 语言与系统设置": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "App language and system settings"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "App 语言与系统设置"
+          }
+        }
+      }
+    },
+    "Prompix 官网": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Prompix website"
+          }
+        }
+      }
+    },
+    "Prompt 与示例保留原作者的语言。": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Prompts and examples keep their original language."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Prompt 与示例保留原作者的语言。"
+          }
+        }
+      }
+    },
+    "Prompt 数量": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Prompt count"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Prompt 数量"
+          }
+        }
+      }
+    },
+    "上一张": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Previous image"
+          }
+        }
+      }
+    },
+    "下一张": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Next image"
+          }
+        }
+      }
+    },
+    "不同画风、场景设定与视觉实验": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Drawing styles, imagined scenes and visual experiments"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "不同画风、场景设定与视觉实验"
+          }
+        }
+      }
+    },
     "专题": {
       "extractionState": "manual",
       "localizations": {
@@ -47,36 +159,34 @@
         }
       }
     },
-    "从一个小小的念头开始": {
-      "extractionState": "manual",
+    "产品与商业摄影": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Start with a little curiosity."
+            "value": "Product photography"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "从一个小小的念头开始"
+            "value": "产品与商业摄影"
           }
         }
       }
     },
-    "从一张照片，到一个属于你的网站": {
-      "extractionState": "manual",
+    "人像与角色": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "From a picture to a place of your own online"
+            "value": "Portraits & characters"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "从一张照片，到一个属于你的网站"
+            "value": "人像与角色"
           }
         }
       }
@@ -115,36 +225,50 @@
         }
       }
     },
-    "你会得到什么": {
-      "extractionState": "manual",
+    "作品集、网站与可以操作的工具": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "What you'll get"
+            "value": "Portfolios, websites and interactive tools"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "你会得到什么"
+            "value": "作品集、网站与可以操作的工具"
           }
         }
       }
     },
-    "你的内容，留在你的设备上": {
-      "extractionState": "manual",
+    "使用方法": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Your ideas stay on your device"
+            "value": "How to use"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "你的内容，留在你的设备上"
+            "value": "使用方法"
+          }
+        }
+      }
+    },
+    "修改会保存到此设备，原始 Prompt 会保留。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Changes are saved on this device. The original prompt is preserved."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "修改会保存到此设备，原始 Prompt 会保留。"
           }
         }
       }
@@ -179,6 +303,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "全部模型"
+          }
+        }
+      }
+    },
+    "全部用途": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "All uses"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "全部用途"
           }
         }
       }
@@ -251,19 +391,18 @@
         }
       }
     },
-    "写进你的想法，变成自己的版本。原始 Prompt 会保留。": {
-      "extractionState": "manual",
+    "写作与故事": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Add your own ideas. The original prompt stays intact."
+            "value": "Writing & stories"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "写进你的想法，变成自己的版本。原始 Prompt 会保留。"
+            "value": "写作与故事"
           }
         }
       }
@@ -285,23 +424,6 @@
         }
       }
     },
-    "创作思路": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "The idea behind it"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "创作思路"
-          }
-        }
-      }
-    },
     "创作灵感": {
       "extractionState": "manual",
       "localizations": {
@@ -315,23 +437,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "创作灵感"
-          }
-        }
-      }
-    },
-    "动态灵感": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Motion study"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "动态灵感"
           }
         }
       }
@@ -383,6 +488,33 @@
           "stringUnit": {
             "state": "translated",
             "value": "原文件和离线预览已保留，暂时不会覆盖你的收藏。"
+          }
+        }
+      }
+    },
+    "原文会保留。": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The original stays intact."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "原文会保留。"
+          }
+        }
+      }
+    },
+    "反馈这条内容": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Report this content"
           }
         }
       }
@@ -455,6 +587,22 @@
         }
       }
     },
+    "商品静物、场景布置与品牌画面": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Still life, product settings and brand imagery"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "商品静物、场景布置与品牌画面"
+          }
+        }
+      }
+    },
     "图片": {
       "extractionState": "manual",
       "localizations": {
@@ -523,36 +671,36 @@
         }
       }
     },
-    "在收藏中找灵感": {
+    "塔罗": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Search your saved ideas"
+            "value": "Tarot"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "在收藏中找灵感"
+            "value": "塔罗"
           }
         }
       }
     },
-    "塔罗、故事与一点善意的胡闹": {
+    "复制": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Tarot, stories, and a little kind mischief"
+            "value": "Copy"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "塔罗、故事与一点善意的胡闹"
+            "value": "复制"
           }
         }
       }
@@ -608,6 +756,23 @@
         }
       }
     },
+    "复制并退出": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copy and Leave"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "复制并退出"
+          }
+        }
+      }
+    },
     "好玩一点": {
       "extractionState": "manual",
       "localizations": {
@@ -621,6 +786,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "好玩一点"
+          }
+        }
+      }
+    },
+    "学习与思考": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Learning & thinking"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "学习与思考"
           }
         }
       }
@@ -642,23 +823,6 @@
         }
       }
     },
-    "少一些费力，多一点自己的时间": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Less effort. A little more time for you."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "少一些费力，多一点自己的时间"
-          }
-        }
-      }
-    },
     "尚未保存，可先复制保留": {
       "extractionState": "manual",
       "localizations": {
@@ -672,6 +836,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "尚未保存，可先复制保留"
+          }
+        }
+      }
+    },
+    "工作与生活": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Work & everyday life"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "工作与生活"
           }
         }
       }
@@ -693,6 +873,22 @@
         }
       }
     },
+    "已复制": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copied"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已复制"
+          }
+        }
+      }
+    },
     "已复制修改后的 Prompt": {
       "extractionState": "manual",
       "localizations": {
@@ -706,23 +902,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "已复制修改后的 Prompt"
-          }
-        }
-      }
-    },
-    "已复制，去创造吧": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Copied. Go make something."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "已复制，去创造吧"
           }
         }
       }
@@ -761,19 +940,32 @@
         }
       }
     },
-    "带着灵感，去试试": {
-      "extractionState": "manual",
+    "帮助与信息": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Take the idea for a spin"
+            "value": "Help and information"
           }
-        },
-        "zh-Hans": {
+        }
+      }
+    },
+    "帮助与反馈": {
+      "localizations": {
+        "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "带着灵感，去试试"
+            "value": "Help and feedback"
+          }
+        }
+      }
+    },
+    "开源项目": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open-source project"
           }
         }
       }
@@ -846,23 +1038,6 @@
         }
       }
     },
-    "慢慢逛，会遇见喜欢的": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Take your time. Find your thing."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "慢慢逛，会遇见喜欢的"
-          }
-        }
-      }
-    },
     "打开作品": {
       "extractionState": "manual",
       "localizations": {
@@ -931,19 +1106,18 @@
         }
       }
     },
-    "把喜欢的，留在这里": {
-      "extractionState": "manual",
+    "插画与概念设计": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Keep what catches your eye"
+            "value": "Illustration & concepts"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "把喜欢的，留在这里"
+            "value": "插画与概念设计"
           }
         }
       }
@@ -965,19 +1139,69 @@
         }
       }
     },
-    "搜索灵感": {
+    "搜索 Prompt": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Find inspiration"
+            "value": "Search Prompts"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "搜索灵感"
+            "value": "搜索 Prompt"
+          }
+        }
+      }
+    },
+    "搜索收藏": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Search saved prompts"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "搜索收藏"
+          }
+        }
+      }
+    },
+    "搜索标题、用途或模型": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Search titles, uses, or models"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "搜索标题、用途或模型"
+          }
+        }
+      }
+    },
+    "摄影布光、人物造型与原创角色": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lighting, styling and original characters"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "摄影布光、人物造型与原创角色"
           }
         }
       }
@@ -1084,6 +1308,16 @@
         }
       }
     },
+    "收藏和草稿保存在本机，不上传编辑内容或搜索词，也没有广告与分析 SDK。下载内容仍需要网络请求。删除 App 会清除其本地数据。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saved ideas and drafts stay on your device. Edits and searches are not uploaded, and there are no ads or analytics SDKs. Downloading content still makes network requests. Deleting the app removes its local data."
+          }
+        }
+      }
+    },
     "收藏暂时无法读取": {
       "extractionState": "manual",
       "localizations": {
@@ -1152,6 +1386,39 @@
         }
       }
     },
+    "放弃本次修改并退出": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Discard Changes and Leave"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "放弃本次修改并退出"
+          }
+        }
+      }
+    },
+    "文字排版、视觉层次与信息表达": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Typography, visual hierarchy and clear information"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "文字排版、视觉层次与信息表达"
+          }
+        }
+      }
+    },
     "文本": {
       "extractionState": "manual",
       "localizations": {
@@ -1182,6 +1449,40 @@
           "stringUnit": {
             "state": "translated",
             "value": "日常有用"
+          }
+        }
+      }
+    },
+    "暂无匹配内容": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No matching content"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "暂无匹配内容"
+          }
+        }
+      }
+    },
+    "暂无收藏": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No saved prompts"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "暂无收藏"
           }
         }
       }
@@ -1220,19 +1521,18 @@
         }
       }
     },
-    "有时候，灵感是一连串的。 ": {
-      "extractionState": "manual",
+    "最近更新": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Sometimes, one idea leads to another."
+            "value": "Last updated"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "有时候，灵感是一连串的。 "
+            "value": "最近更新"
           }
         }
       }
@@ -1254,19 +1554,35 @@
         }
       }
     },
-    "本期更新": {
-      "extractionState": "manual",
+    "本地数据": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Updated"
+            "value": "Local data"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "本期更新"
+            "value": "本地数据"
+          }
+        }
+      }
+    },
+    "本次修改尚未保存": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your changes haven’t been saved"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "本次修改尚未保存"
           }
         }
       }
@@ -1284,6 +1600,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "来自"
+          }
+        }
+      }
+    },
+    "查看其他内容": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Browse other content"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "查看其他内容"
           }
         }
       }
@@ -1356,6 +1689,23 @@
         }
       }
     },
+    "模型": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Model"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "模型"
+          }
+        }
+      }
+    },
     "正在保存…": {
       "extractionState": "manual",
       "localizations": {
@@ -1424,6 +1774,22 @@
         }
       }
     },
+    "海报与信息图": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Posters & infographics"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "海报与信息图"
+          }
+        }
+      }
+    },
     "清理图片缓存": {
       "extractionState": "manual",
       "localizations": {
@@ -1458,23 +1824,6 @@
         }
       }
     },
-    "灵感数量": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ideas to explore"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "灵感数量"
-          }
-        }
-      }
-    },
     "灵感暂时没有加载成功。你仍然可以查看已保存的收藏。": {
       "extractionState": "manual",
       "localizations": {
@@ -1488,40 +1837,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "灵感暂时没有加载成功。你仍然可以查看已保存的收藏。"
-          }
-        }
-      }
-    },
-    "灵感还在路上": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Something else might spark an idea"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "灵感还在路上"
-          }
-        }
-      }
-    },
-    "灵感，随手可得。": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "A little inspiration, anytime."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "灵感，随手可得。"
           }
         }
       }
@@ -1543,53 +1858,51 @@
         }
       }
     },
-    "生活，偶尔不按剧本。": {
-      "extractionState": "manual",
+    "猜谜、角色扮演与趣味互动": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Life, a little unscripted."
+            "value": "Guessing games, role-play and playful conversations"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "生活，偶尔不按剧本。"
+            "value": "猜谜、角色扮演与趣味互动"
           }
         }
       }
     },
-    "用途、风格、模型，或一点好奇": {
+    "电影": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "An idea, a style, or a model"
+            "value": "Cinematic"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "用途、风格、模型，或一点好奇"
+            "value": "电影"
           }
         }
       }
     },
-    "留住灵感，等一个想试试的时刻。": {
-      "extractionState": "manual",
+    "相关 Prompt": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Keep an idea for when the moment is right."
+            "value": "Related prompts"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "留住灵感，等一个想试试的时刻。"
+            "value": "相关 Prompt"
           }
         }
       }
@@ -1611,36 +1924,35 @@
         }
       }
     },
-    "精选": {
-      "extractionState": "manual",
+    "短篇、文案、诗歌与文字修改": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "For you"
+            "value": "Stories, copywriting, poetry and editing"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "精选"
+            "value": "短篇、文案、诗歌与文字修改"
           }
         }
       }
     },
-    "给想象，一个出口。": {
+    "继续编辑": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Give imagination somewhere to go."
+            "value": "Keep Editing"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "给想象，一个出口。"
+            "value": "继续编辑"
           }
         }
       }
@@ -1662,13 +1974,29 @@
         }
       }
     },
+    "编辑 Prompt": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Edit prompt"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "编辑 Prompt"
+          }
+        }
+      }
+    },
     "编辑后使用": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Make it yours"
+            "value": "Edit prompt"
           }
         },
         "zh-Hans": {
@@ -1713,6 +2041,23 @@
         }
       }
     },
+    "网站": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Websites"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "网站"
+          }
+        }
+      }
+    },
     "网页": {
       "extractionState": "manual",
       "localizations": {
@@ -1726,6 +2071,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "网页"
+          }
+        }
+      }
+    },
+    "网页与小工具": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Websites & tools"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "网页与小工具"
           }
         }
       }
@@ -1798,6 +2159,39 @@
         }
       }
     },
+    "视频内容需要联网更新": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connect to update video prompts"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "视频内容需要联网更新"
+          }
+        }
+      }
+    },
+    "视频创作": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Video creation"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "视频创作"
+          }
+        }
+      }
+    },
     "视频暂不可用": {
       "extractionState": "manual",
       "localizations": {
@@ -1815,53 +2209,18 @@
         }
       }
     },
-    "让好奇，变成创造。 ": {
-      "extractionState": "manual",
+    "视频预览": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Turn curiosity into something of your own."
+            "value": "Video preview"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "让好奇，变成创造。 "
-          }
-        }
-      }
-    },
-    "让它更像你": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Make it yours"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "让它更像你"
-          }
-        }
-      }
-    },
-    "让日常，轻一点。": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Make room in your day."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "让日常，轻一点。"
+            "value": "视频预览"
           }
         }
       }
@@ -1883,19 +2242,67 @@
         }
       }
     },
-    "试试其他分类，或回到全部精选。": {
+    "试试其他分类，或清除筛选条件。": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Try another category or explore all picks."
+            "value": "Try another category or clear the filters."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "试试其他分类，或回到全部精选。"
+            "value": "试试其他分类，或清除筛选条件。"
+          }
+        }
+      }
+    },
+    "语言练习、知识解释与思路梳理": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Language practice, explanations and structured thinking"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "语言练习、知识解释与思路梳理"
+          }
+        }
+      }
+    },
+    "说明与示例": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Notes and examples"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "说明与示例"
+          }
+        }
+      }
+    },
+    "趣味聊天": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Playful conversations"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "趣味聊天"
           }
         }
       }
@@ -1917,6 +2324,22 @@
         }
       }
     },
+    "运镜、转场与动态场景的实际案例": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Real examples of camera movement, transitions and motion"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "运镜、转场与动态场景的实际案例"
+          }
+        }
+      }
+    },
     "这会替换你在此设备上保存的修改。": {
       "extractionState": "manual",
       "localizations": {
@@ -1930,6 +2353,56 @@
           "stringUnit": {
             "state": "translated",
             "value": "这会替换你在此设备上保存的修改。"
+          }
+        }
+      }
+    },
+    "退出后将保留上一次成功保存的草稿。你可以先复制本次修改，再离开编辑器。": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The last saved draft will be kept. You can copy your changes before leaving the editor."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "退出后将保留上一次成功保存的草稿。你可以先复制本次修改，再离开编辑器。"
+          }
+        }
+      }
+    },
+    "退出编辑": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Leave Editor"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "退出编辑"
+          }
+        }
+      }
+    },
+    "邮件、面试、旅行与日常安排": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Emails, interviews, travel and everyday planning"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "邮件、面试、旅行与日常安排"
           }
         }
       }
@@ -2019,6 +2492,33 @@
         }
       }
     },
+    "重试保存": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Retry Save"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重试保存"
+          }
+        }
+      }
+    },
+    "隐私说明": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Privacy"
+          }
+        }
+      }
+    },
     "项目与反馈": {
       "extractionState": "manual",
       "localizations": {
@@ -2036,461 +2536,19 @@
         }
       }
     },
-    "顺着灵感，再逛一点": {
+    "首次联网更新后可浏览视频 Prompt。你也可以先查看其他类型的内容。": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Follow your curiosity"
+            "value": "Video prompts are available after the first online update. You can browse other content types in the meantime."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "顺着灵感，再逛一点"
-          }
-        }
-      }
-    },
-    "塔罗": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Tarot"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "塔罗"
-          }
-        }
-      }
-    },
-    "网站": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Websites"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "网站"
-          }
-        }
-      }
-    },
-    "电影": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Cinematic"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "电影"
-          }
-        }
-      }
-    },
-    "App 语言与系统设置": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "App language and system settings"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "App 语言与系统设置"
-          }
-        }
-      }
-    },
-    "Prompt 与示例保留原作者的语言。": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Prompts and examples keep their original language."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Prompt 与示例保留原作者的语言。"
-          }
-        }
-      }
-    },
-    "复制": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Copy"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "复制"
-          }
-        }
-      }
-    },
-    "已复制": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Copied"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "已复制"
-          }
-        }
-      }
-    },
-    "原文会保留。": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "The original stays intact."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "原文会保留。"
-          }
-        }
-      }
-    },
-    "%lld 个灵感": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "variations": {
-            "plural": {
-              "one": {
-                "stringUnit": {
-                  "state": "translated",
-                  "value": "%lld idea"
-                }
-              },
-              "other": {
-                "stringUnit": {
-                  "state": "translated",
-                  "value": "%lld ideas"
-                }
-              }
-            }
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld 个灵感"
-          }
-        }
-      }
-    },
-    "模型": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Model"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "模型"
-          }
-        }
-      }
-    },
-    "Prompix 官网": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Prompix website"
-          }
-        }
-      }
-    },
-    "反馈这条内容": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Report this content"
-          }
-        }
-      }
-    },
-    "帮助与信息": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Help and information"
-          }
-        }
-      }
-    },
-    "帮助与反馈": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Help and feedback"
-          }
-        }
-      }
-    },
-    "开源项目": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Open-source project"
-          }
-        }
-      }
-    },
-    "收藏和草稿保存在本机，不上传编辑内容或搜索词，也没有广告与分析 SDK。下载内容仍需要网络请求。删除 App 会清除其本地数据。": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Saved ideas and drafts stay on your device. Edits and searches are not uploaded, and there are no ads or analytics SDKs. Downloading content still makes network requests. Deleting the app removes its local data."
-          }
-        }
-      }
-    },
-    "隐私说明": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Privacy"
-          }
-        }
-      }
-    },
-    "上一张": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Previous image"
-          }
-        }
-      }
-    },
-    "下一张": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Next image"
-          }
-        }
-      }
-    },
-    "视频灵感，联网后见": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Discover videos online"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "视频灵感，联网后见"
-          }
-        }
-      }
-    },
-    "首次联网更新后，就能浏览真实的视频案例。现在也可以先逛文本、图片和网页灵感。": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Connect to load real video examples. You can explore text, image and website ideas while offline."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "首次联网更新后，就能浏览真实的视频案例。现在也可以先逛文本、图片和网页灵感。"
-          }
-        }
-      }
-    },
-    "先逛其他灵感": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Explore other ideas"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "先逛其他灵感"
-          }
-        }
-      }
-    },
-    "复制并退出": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Copy and Leave"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "复制并退出"
-          }
-        }
-      }
-    },
-    "放弃本次修改并退出": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Discard Changes and Leave"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "放弃本次修改并退出"
-          }
-        }
-      }
-    },
-    "本次修改尚未保存": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Your changes haven’t been saved"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "本次修改尚未保存"
-          }
-        }
-      }
-    },
-    "继续编辑": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Keep Editing"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "继续编辑"
-          }
-        }
-      }
-    },
-    "退出后将保留上一次成功保存的草稿。你可以先复制本次修改，再离开编辑器。": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "The last saved draft will be kept. You can copy your changes before leaving the editor."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "退出后将保留上一次成功保存的草稿。你可以先复制本次修改，再离开编辑器。"
-          }
-        }
-      }
-    },
-    "退出编辑": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Leave Editor"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "退出编辑"
-          }
-        }
-      }
-    },
-    "重试保存": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Retry Save"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "重试保存"
+            "value": "首次联网更新后可浏览视频 Prompt。你也可以先查看其他类型的内容。"
           }
         }
       }

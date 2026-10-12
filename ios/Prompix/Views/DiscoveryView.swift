@@ -27,16 +27,11 @@ struct DiscoverView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
-                    HStack(alignment: .firstTextBaseline) {
-                        Text(String(localized: "灵感，随手可得。")).font(.subheadline).foregroundStyle(Palette.muted)
-                        Spacer()
-                        if !typeSize.isAccessibilitySize { Text(library.updatedAt == nil ? "STUDIO EDITION" : "DAILY FINDS").font(.system(.footnote, design: .monospaced)).tracking(1.5).foregroundStyle(Palette.muted) }
-                    }.padding(.horizontal, 20)
                     KindPicker(selection: $kind)
                     HStack(spacing: 8) {
                         ScrollView(.horizontal, showsIndicators: false) {
                             HStack(spacing: 8) {
-                                topicButton(nil, String(localized: "精选"))
+                                topicButton(nil, String(localized: "全部用途"))
                                 ForEach(topics, id: \.self) { topicButton($0, NSLocalizedString($0, comment: "Discovery topic")) }
                             }.padding(.leading, 20).padding(.trailing, 4)
                         }
@@ -46,22 +41,20 @@ struct DiscoverView: View {
                     if items.isEmpty {
                         if needsFirstVideoUpdate {
                             ContentUnavailableView {
-                                Label(String(localized: "视频灵感，联网后见"), systemImage: "play.rectangle")
+                                Label(String(localized: "视频内容需要联网更新"), systemImage: "play.rectangle")
                             } description: {
-                                Text(String(localized: "首次联网更新后，就能浏览真实的视频案例。现在也可以先逛文本、图片和网页灵感。"))
+                                Text(String(localized: "首次联网更新后可浏览视频 Prompt。你也可以先查看其他类型的内容。"))
                             } actions: {
                                 Button(library.isRefreshing ? String(localized: "正在更新…") : String(localized: "检查内容更新")) {
                                     Task { await library.refresh(force: true) }
                                 }.buttonStyle(.borderedProminent).disabled(library.isRefreshing).accessibilityIdentifier("loadVideoExamples")
-                                Button(String(localized: "先逛其他灵感")) { kind = nil; topic = nil; model = nil }
+                                Button(String(localized: "查看其他内容")) { kind = nil; topic = nil; model = nil }
                                     .buttonStyle(.bordered).accessibilityIdentifier("browseOtherIdeas")
                             }
                         } else {
-                            ContentUnavailableView(String(localized: "灵感还在路上"), systemImage: "sparkle", description: Text(String(localized: "试试其他分类，或回到全部精选。")))
+                            ContentUnavailableView(String(localized: "暂无匹配内容"), systemImage: "sparkle", description: Text(String(localized: "试试其他分类，或清除筛选条件。")))
                         }
                     } else { PromptGrid(items: items).padding(.horizontal, 16) }
-                    HStack { Rectangle().frame(height: 0.5); Text(String(localized: "慢慢逛，会遇见喜欢的")).font(.footnote).fixedSize(horizontal: false, vertical: true).multilineTextAlignment(.center); Rectangle().frame(height: 0.5) }
-                        .foregroundStyle(Palette.muted).padding(.horizontal, 40).padding(.vertical, 24)
                 }.padding(.top, 4).padding(.bottom, 16)
             }
             .refreshable { await library.refresh(force: true) }
@@ -180,14 +173,13 @@ struct SearchView: View {
                 VStack(alignment: .leading, spacing: 18) {
                     KindPicker(selection: $kind)
                     if query.isEmpty {
-                        Text(String(localized: "从一个小小的念头开始")).font(.subheadline).foregroundStyle(Palette.muted).padding(.horizontal, 20)
                         HStack { ForEach(["塔罗", "网站", "电影"], id: \.self) { term in Button(NSLocalizedString(term, comment: "Suggested search")) { query = term }.buttonStyle(.bordered).controlSize(.large) } }.padding(.horizontal, 20)
                     }
                     if results.isEmpty { ContentUnavailableView.search(text: query) }
                     else { PromptGrid(items: results).padding(.horizontal, 16) }
                 }.padding(.bottom, 24)
-            }.navigationTitle(String(localized: "搜索灵感")).navigationBarTitleDisplayMode(.inline)
-                .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: String(localized: "用途、风格、模型，或一点好奇"))
+            }.navigationTitle(String(localized: "搜索 Prompt")).navigationBarTitleDisplayMode(.inline)
+                .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: String(localized: "搜索标题、用途或模型"))
                 .toolbar { ToolbarItem(placement: .confirmationAction) { Button(String(localized: "完成")) { dismiss() } } }
                 .navigationDestination(for: Prompt.self) { PromptDetail(item: $0) }
         }
@@ -203,7 +195,6 @@ struct FavoritesView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
-                    Text(String(localized: "留住灵感，等一个想试试的时刻。")).font(.subheadline).foregroundStyle(Palette.muted).padding(.horizontal, 20)
                     KindPicker(selection: $kind)
                     if !images.offlineFailures.isEmpty {
                         Button { Task { if let urls = library.savedImageURLs { await images.keepOffline(urls) } } } label: {
@@ -219,13 +210,15 @@ struct FavoritesView: View {
                         actions: { Button(String(localized: "重新读取收藏")) { library.reloadFavorites() }.buttonStyle(.bordered) }
                     } else if items.isEmpty {
                         if !query.isEmpty { ContentUnavailableView.search(text: query) }
-                        else {
-                        ContentUnavailableView(String(localized: "把喜欢的，留在这里"), systemImage: "bookmark", description: Text(String(localized: "轻点卡片上的书签。\n文字保存在本机，缩略图会下载以供离线查看。")))
+                        else if !library.favorites.isEmpty {
+                            ContentUnavailableView(String(localized: "暂无匹配内容"), systemImage: "bookmark", description: Text(String(localized: "试试其他分类，或清除筛选条件。")))
+                        } else {
+                            ContentUnavailableView(String(localized: "暂无收藏"), systemImage: "bookmark", description: Text(String(localized: "轻点卡片上的书签。\n文字保存在本机，缩略图会下载以供离线查看。")))
                         }
                     } else { PromptGrid(items: items).padding(.horizontal, 16) }
                 }.padding(.bottom, 24)
             }.navigationTitle(String(localized: "收藏"))
-                .searchable(text: $query, prompt: String(localized: "在收藏中找灵感"))
+                .searchable(text: $query, prompt: String(localized: "搜索收藏"))
                 .navigationDestination(for: Prompt.self) { PromptDetail(item: $0) }
         }
     }

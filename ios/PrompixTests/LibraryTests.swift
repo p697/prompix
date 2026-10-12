@@ -9,6 +9,24 @@ import CryptoKit
     }
     override func tearDown() async throws { try? FileManager.default.removeItem(at: directory) }
 
+    func testSpecificCollectionsDoNotCollapseIntoEveryVisualPrompt() throws {
+        let library = Library(directory: directory)
+        let products = try XCTUnwrap(Collection.all.first { $0.id == "products" })
+        XCTAssertTrue(products.items(in: library).contains { $0.id == "object-poster" })
+        XCTAssertFalse(products.items(in: library).contains { $0.id == "tiny-island" })
+        let websites = try XCTUnwrap(Collection.all.first { $0.id == "web" })
+        XCTAssertEqual(websites.items(in: library).count, 6)
+        XCTAssertTrue(websites.items(in: library).allSatisfy { $0.kind == .web })
+        let play = try XCTUnwrap(Collection.all.first { $0.id == "play" })
+        XCTAssertTrue(play.items(in: library).contains { $0.id == "gentle-tarot" })
+        XCTAssertTrue(play.items(in: library).allSatisfy { $0.kind == .text })
+        XCTAssertFalse(play.items(in: library).contains { $0.id == "simple-explanation" })
+        XCTAssertFalse(play.items(in: library).contains { $0.id == "color-memory" })
+        let covers = play.covers(from: Array(repeating: library.prompts, count: 30).flatMap { $0 })
+        XCTAssertEqual(covers.count, 3)
+        XCTAssertEqual(Set(covers.map(\.id)).count, 3)
+    }
+
     func testGalleryPreservesCoverOrderAndRejectsUntrustedMedia() throws {
         let cover = URL(string: "https://api.prompix.dev/media/cover.jpg")!
         let second = URL(string: "https://api.prompix.dev/media/second.jpg")!
