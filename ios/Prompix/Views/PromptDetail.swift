@@ -545,11 +545,12 @@ struct MovieView: View {
                 }
                 Text(caption).font(.footnote).foregroundStyle(Palette.muted).padding(.horizontal, 20)
             }.frame(maxWidth: .infinity, maxHeight: .infinity).background(.black).navigationTitle(String(localized: "视频预览")).navigationBarTitleDisplayMode(.inline)
+                .toolbarColorScheme(.dark, for: .navigationBar)
                 .toolbar { ToolbarItem(placement: .confirmationAction) { Button(String(localized: "完成")) { dismiss() } } }
                 .onAppear { playback.start(url: url) }
                 .onDisappear { playback.stop() }
                 .onChange(of: scenePhase) { _, phase in if phase != .active { playback.pause() } }
-        }.preferredColorScheme(.dark)
+        }.environment(\.colorScheme, .dark)
     }
 }
 
@@ -585,7 +586,7 @@ struct ImageViewer: View {
                 .toolbarBackground(.visible, for: .navigationBar, .bottomBar)
                 .toolbarBackground(.black, for: .navigationBar, .bottomBar)
                 .toolbarColorScheme(.dark, for: .navigationBar, .bottomBar)
-        }.preferredColorScheme(.dark)
+        }.environment(\.colorScheme, .dark)
     }
 }
 
