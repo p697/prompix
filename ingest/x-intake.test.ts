@@ -189,6 +189,74 @@ test("emoji and Markdown prefixes retain explicit boundaries and exact instructi
   assert.deepEqual(extractMarkedXPrompt(post("123", `✨ Prompt:\n${body}\n### **Prompt:**\n${body}`)), { reason: "multiple-prompt-boundaries" });
 });
 
+test("standalone colon-free headings preserve complete instructions with LF and CRLF", () => {
+  for (const newline of ["\n", "\r\n"]) {
+    const exact = body + newline + "Keep  two spaces and the original punctuation!";
+    for (const marker of ["Prompt", "**PROMPT**", "__Full prompt__", "### **Text prompt**", "> 🎬 __Video prompt__",
+      "- Image prompt", "1. Website prompt", "✨ 提示词", "**完整提示词**", "画像プロンプト", "__テキストプロンプト__"]) {
+      const result = extractMarkedXPrompt(post("123", `Fixture context.${newline}${marker} \t${newline}${exact}`));
+      assert.ok("body" in result, marker);
+      assert.equal(result.body, exact, marker);
+    }
+  }
+});
+
+test("colon-free heading acceptance does not include inline prose or unmatched formatting", () => {
+  for (const heading of ["I found this Prompt", "Prompt below", "Prompt — source notes", "Prompt " + body,
+    "**Prompt** extra text", "**Prompt", "Prompt**", "__Prompt", "Prompt__", "**Prompt__", "__Prompt**",
+    "***Prompt***", "*Prompt*", "`Prompt`", "### **Prompt", "- **Prompt__"]) {
+    assert.deepEqual(extractMarkedXPrompt(post("123", `${heading}\n${body}`)), { reason: "missing-prompt-boundary" }, heading);
+  }
+  for (const text of ["**Prompt**", `Prompt\r${body}`, `Prompt\u2028${body}`, `Prompt\u2029${body}`]) {
+    assert.deepEqual(extractMarkedXPrompt(post("123", text)), { reason: "missing-prompt-boundary" });
+  }
+});
+
+test("colon and colon-free headings share the same single-boundary requirement", () => {
+  for (const [first, second] of [["**Prompt**", "Prompt:"], ["Prompt:", "__Prompt__"],
+    ["Prompt", "### **Prompt**"], ["**Prompt**", "提示词："], ["提示词", "プロンプト"]]) {
+    for (const separator of ["\n", `\r\n${body}\r\n`]) {
+      assert.deepEqual(extractMarkedXPrompt(post("123", `${first}${separator}${second}\n${body}`)),
+        { reason: "multiple-prompt-boundaries" });
+    }
+  }
+});
+
+test("colon-free headings preserve all incomplete-body and modality blockers", () => {
+  const marked = (instructions: string) => post("123", `**Prompt**\n${instructions}`);
+  const cases = [
+    { input: { ...marked(body), truncated: true }, reason: "api-truncated" },
+    { input: marked(body + "…"), reason: "truncated-ending" },
+    { input: marked(body + "...\nhttps://t.co/source"), reason: "truncated-ending" },
+    { input: marked("```text\n" + body), reason: "incomplete-code-fence" },
+    { input: marked("```text\n" + body + "…\n```"), reason: "truncated-ending" },
+    { input: marked(body + "\nhttps://t.co/source"), reason: "unresolved-short-link" },
+    { input: marked("https://example.com/full-instructions"), reason: "insufficient-instructions" },
+    { input: marked(body + "x".repeat(30000)), reason: "instructions-too-long" },
+    { input: marked(visualBody), reason: "ambiguous-modality" },
+    { input: post("123", `Nano Banana Pro and Seedance 2.0\n**Prompt**\n${visualBody}`), reason: "conflicting-modality-evidence" },
+  ];
+  for (const { input, reason } of cases) assert.deepEqual(extractMarkedXPrompt(input), { reason });
+  const result = convertXDiscovery([snapshot(cases.map(({ input }, index) => ({ ...input, id: String(index + 1) })))]);
+  assert.equal(result.candidates.length, 0);
+  assert.equal(result.report.blocked, cases.length);
+});
+
+test("colon-free fenced instructions exclude surrounding prose and remain unpublished drafts", () => {
+  const input = post("123", `An original fixture announcement.\n**Text prompt**\n\`\`\`text\n${body}\n\`\`\`\nSource notes: https://t.co/source`);
+  const { candidates, report } = convertXDiscovery([snapshot([input])]);
+  assert.equal(candidates.length, 1);
+  assert.equal(candidates[0].prompt, body);
+  assert.equal(candidates[0].source.license, "Unspecified");
+  assert.equal(report.publicationBlocked, 1);
+  assert.equal(automaticReviewEligibility(candidates[0]), nativeXPublicationBlocker);
+  const reviewed = applyEditorialReviews(candidates, { [candidates[0].id]: {
+    fingerprint: candidates[0].fingerprint, reviewedAt: "2026-10-12T00:00:00Z", metadata,
+  } });
+  assert.equal(reviewed[0].reviewStatus, "draft");
+  assert.deepEqual(selectLibrary(reviewed, new Set()), []);
+});
+
 test("Japanese explicit prompt labels retain their stated modality without guessing generic labels", () => {
   for (const [label, kind] of [["画像プロンプト", "image"], ["🎬 動画 プロンプト", "video"],
     ["**テキストプロンプト**", "text"], ["### Web プロンプト", "web"], ["ウェブサイトプロンプト", "web"]] as const) {
