@@ -4,6 +4,7 @@ import { repositories, fingerprint, type Candidate } from "./sources.ts";
 import { skillSources } from "./skills.ts";
 import { applyEditorialReviews, editorialMetadataSchema, type Reviews } from "./editorial.ts";
 import { isNativeXDraft, nativeXPublicationBlocker } from "./x-intake.ts";
+import { appendReviewAttempt, replaceReviewAttempt, reviewLedgerSchema, reviewRequestLimit } from "./review-budget.ts";
 
 export const editorialVersion = 1;
 export const editorialModel = "gpt-5.6-luna";
@@ -28,17 +29,19 @@ export const editorialCacheSchema = z.object({ version: z.literal(editorialVersi
     context.addIssue({ code: "custom", path: ["decisions", key], message: "Decision cache identity mismatch" });
 });
 export type EditorialCache = z.infer<typeof editorialCacheSchema>;
-export const editorialLedgerSchema = z.object({ day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), requests: z.literal(1),
+export const editorialAttemptSchema = z.object({ day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), requests: z.literal(1),
   model: z.literal(editorialModel), reservedAt: z.iso.datetime(), candidateIDs: z.array(z.string()).min(1).max(3),
   inputCharacters: z.number().int().min(1).max(16000), state: z.enum(["reserved", "completed", "failed"]),
   inputTokens: z.number().int().nonnegative().optional(), outputTokens: z.number().int().nonnegative().optional(),
   error: z.string().max(500).optional(),
 }).strict();
-export type EditorialLedger = z.infer<typeof editorialLedgerSchema>;
+export const editorialLedgerSchema = reviewLedgerSchema(editorialAttemptSchema);
+export type EditorialAttempt = z.infer<typeof editorialAttemptSchema>;
+export type EditorialLedger = z.output<typeof editorialLedgerSchema>;
 export type EditorialInput = ReturnType<typeof editorialInput>;
 export type EditorialProvider = (items: EditorialInput[]) => Promise<{ decisions: unknown; inputTokens?: number; outputTokens?: number }>;
 export type EditorialReport = { status: "disabled" | "no-pending" | "daily-limit" | "reviewed" | "failed";
-  pending: number; eligible: number; requests: number; attemptedCandidates: number; approved: number; deferred: number; rejected: number;
+  pending: number; eligible: number; requests: number; dailyRequests: number; maxRequests: number; attemptedCandidates: number; approved: number; deferred: number; rejected: number;
   cachedDecisions: number; preflightDeferred: number; inputCharacters: number; model: string; error?: string };
 export const editorialDecisionKey = (item: Pick<Candidate, "id" | "fingerprint">) => `${item.id}:${item.fingerprint}`;
 
@@ -93,15 +96,18 @@ export function editorialQueue(items: readonly Candidate[], previous: readonly P
 }
 
 export async function runEditorialReview(options: { candidates: readonly Candidate[]; previous: readonly Prompt[]; reviews: Reviews;
-  cache: EditorialCache; ledger?: EditorialLedger; day: string; provider?: EditorialProvider; now?: string;
+  cache: EditorialCache; ledger?: EditorialLedger | EditorialAttempt; day: string; provider?: EditorialProvider; now?: string; maxRequests?: number;
   persistCache: (cache: EditorialCache) => Promise<void>; persistReviews: (reviews: Reviews) => Promise<void>;
   persistLedger: (ledger: EditorialLedger) => Promise<void>;
 }) {
   const now = options.now ?? new Date().toISOString();
+  const maxRequests = reviewRequestLimit(options.maxRequests);
+  const savedLedger = options.ledger === undefined ? undefined : editorialLedgerSchema.parse(options.ledger);
+  let ledger = savedLedger?.day === options.day ? savedLedger : undefined;
   const pending = options.candidates.filter(item => options.reviews[item.id]?.fingerprint !== item.fingerprint);
   const report: EditorialReport = { status: options.provider ? "no-pending" : "disabled", pending: pending.length, eligible: 0,
-    requests: 0, attemptedCandidates: 0, approved: 0, deferred: 0, rejected: 0, cachedDecisions: 0, preflightDeferred: 0,
-    inputCharacters: 0, model: editorialModel };
+    requests: 0, dailyRequests: ledger?.requests ?? 0, maxRequests, attemptedCandidates: 0, approved: 0, deferred: 0, rejected: 0,
+    cachedDecisions: 0, preflightDeferred: 0, inputCharacters: 0, model: editorialModel };
   if (!options.provider) return { reviews: options.reviews, report };
   const cache = structuredClone(options.cache);
   const eligible: Candidate[] = [];
@@ -118,60 +124,74 @@ export async function runEditorialReview(options: { candidates: readonly Candida
   }
   if (report.preflightDeferred) await options.persistCache(cache);
   report.eligible = eligible.length;
-  if (options.ledger?.day === options.day) { report.status = "daily-limit"; return { reviews: options.reviews, report }; }
-  const selected: Candidate[] = [];
-  const rotation = Math.floor(Date.parse(options.day + "T00:00:00Z") / 86400000);
-  for (const item of editorialQueue(eligible, options.previous, rotation)) {
-    if (selected.length >= 3) break;
-    if (JSON.stringify([...selected, item].map(editorialInput)).length <= 16000) selected.push(item);
+  if ((ledger?.requests ?? 0) >= maxRequests || ledger?.attempts.some(attempt => attempt.state !== "completed")) {
+    report.status = "daily-limit"; return { reviews: options.reviews, report };
   }
-  if (!selected.length) return { reviews: options.reviews, report };
-  const input = selected.map(editorialInput);
-  const ledger: EditorialLedger = { day: options.day, requests: 1, model: editorialModel, reservedAt: now,
-    candidateIDs: selected.map(item => item.id), inputCharacters: JSON.stringify(input).length, state: "reserved" };
-  // A timeout, partial response, process crash or malformed output consumes the
-  // UTC day's one attempt. Persist BEFORE any provider call and never auto-retry.
-  await options.persistLedger(ledger);
-  report.requests = 1; report.attemptedCandidates = selected.length; report.inputCharacters = ledger.inputCharacters;
+  // A completed reservation remains spent even if its cache or approvals are later missing.
+  const attemptedIDs = new Set(ledger?.attempts.flatMap(attempt => attempt.candidateIDs) ?? []);
+  const rotation = Math.floor(Date.parse(options.day + "T00:00:00Z") / 86400000);
+  let queue = editorialQueue(eligible, options.previous, rotation).filter(item => !attemptedIDs.has(item.id));
   let reviews = options.reviews;
-  try {
-    const result = await options.provider(input);
-    const decisions = editorialOutputSchema.parse({ decisions: result.decisions }).decisions;
-    const missing = selected.filter(item => !decisions.some(value => value.id === item.id)).map(item => item.id);
-    const unexpected = decisions.filter(item => !selected.some(value => value.id === item.id)).map(item => item.id);
-    const mismatch = decisions.filter(item => selected.some(value => value.id === item.id && value.fingerprint !== item.fingerprint)).map(item => item.id);
-    const duplicates = decisions.filter((item, index) => decisions.findIndex(value => value.id === item.id) !== index).map(item => item.id);
-    if (missing.length || unexpected.length || mismatch.length || duplicates.length || decisions.length !== selected.length)
-      throw new Error(`Review identity mismatch: missing=${missing.join(",")}; unexpected=${unexpected.join(",")}; fingerprint=${mismatch.join(",")}; duplicate=${duplicates.join(",")}`);
-    const nextReviews = { ...reviews };
-    for (const decision of decisions) {
-      const candidate = selected.find(item => item.id === decision.id)!;
-      if (decision.decision === "approve") {
-        if (!decision.metadata || decision.metadata.previewLabel !== previewLabel(candidate)) throw new Error("Approval is missing honest editorial metadata");
-        const { cover, ...metadata } = decision.metadata;
-        const entry = { fingerprint: candidate.fingerprint, reviewedAt: now,
-          metadata: editorialMetadataSchema.parse({ ...metadata, ...(cover ? { cover } : {}) }) };
-        if (applyEditorialReviews([candidate], { [candidate.id]: entry })[0].reviewStatus !== "candidate") throw new Error("Approval has no complete source preview");
-        nextReviews[candidate.id] = entry;
-      } else if (decision.metadata !== null) throw new Error("A deferred or rejected review cannot supply publication metadata");
-      cache.decisions[editorialDecisionKey(candidate)] = { ...decision, reviewedAt: now, model: editorialModel };
+  while (queue.length && (ledger?.requests ?? 0) < maxRequests) {
+    const selected: Candidate[] = [];
+    for (const item of queue) {
+      if (selected.length >= 3) break;
+      if (JSON.stringify([...selected, item].map(editorialInput)).length <= 16000) selected.push(item);
     }
-    // Save approvals before their decision cache, so a cache-only success can
-    // never prevent an approved record from reaching the existing review gate.
-    await options.persistReviews(nextReviews);
-    await options.persistCache(cache);
-    ledger.state = "completed";
-    if (Number.isInteger(result.inputTokens) && result.inputTokens! >= 0) ledger.inputTokens = result.inputTokens;
-    if (Number.isInteger(result.outputTokens) && result.outputTokens! >= 0) ledger.outputTokens = result.outputTokens;
-    await options.persistLedger(ledger);
-    reviews = nextReviews;
-    report.status = "reviewed";
-    report.approved = decisions.filter(item => item.decision === "approve").length;
-    report.deferred = decisions.filter(item => item.decision === "defer").length;
-    report.rejected = decisions.filter(item => item.decision === "reject").length;
-  } catch (error) {
-    report.status = "failed"; report.error = (error instanceof Error ? error.message : "Editorial review failed").slice(0, 500);
-    await options.persistLedger({ ...ledger, state: "failed", error: report.error });
+    if (!selected.length) break;
+    const selectedIDs = new Set(selected.map(item => item.id));
+    queue = queue.filter(item => !selectedIDs.has(item.id));
+    const input = selected.map(editorialInput);
+    const attempt: EditorialAttempt = { day: options.day, requests: 1, model: editorialModel, reservedAt: now,
+      candidateIDs: selected.map(item => item.id), inputCharacters: JSON.stringify(input).length, state: "reserved" };
+    const reserved = appendReviewAttempt(ledger, attempt);
+    // Reserve before calling. An ambiguous/failed attempt blocks the rest of this UTC day.
+    await options.persistLedger(reserved);
+    ledger = reserved;
+    report.requests++; report.dailyRequests = ledger.requests;
+    report.attemptedCandidates += selected.length; report.inputCharacters += attempt.inputCharacters;
+    try {
+      const result = await options.provider(input);
+      const decisions = editorialOutputSchema.parse({ decisions: result.decisions }).decisions;
+      const missing = selected.filter(item => !decisions.some(value => value.id === item.id)).map(item => item.id);
+      const unexpected = decisions.filter(item => !selected.some(value => value.id === item.id)).map(item => item.id);
+      const mismatch = decisions.filter(item => selected.some(value => value.id === item.id && value.fingerprint !== item.fingerprint)).map(item => item.id);
+      const duplicates = decisions.filter((item, index) => decisions.findIndex(value => value.id === item.id) !== index).map(item => item.id);
+      if (missing.length || unexpected.length || mismatch.length || duplicates.length || decisions.length !== selected.length)
+        throw new Error(`Review identity mismatch: missing=${missing.join(",")}; unexpected=${unexpected.join(",")}; fingerprint=${mismatch.join(",")}; duplicate=${duplicates.join(",")}`);
+      const nextReviews = { ...reviews };
+      const nextDecisions = { ...cache.decisions };
+      for (const decision of decisions) {
+        const candidate = selected.find(item => item.id === decision.id)!;
+        if (decision.decision === "approve") {
+          if (!decision.metadata || decision.metadata.previewLabel !== previewLabel(candidate)) throw new Error("Approval is missing honest editorial metadata");
+          const { cover, ...metadata } = decision.metadata;
+          const entry = { fingerprint: candidate.fingerprint, reviewedAt: now,
+            metadata: editorialMetadataSchema.parse({ ...metadata, ...(cover ? { cover } : {}) }) };
+          if (applyEditorialReviews([candidate], { [candidate.id]: entry })[0].reviewStatus !== "candidate") throw new Error("Approval has no complete source preview");
+          nextReviews[candidate.id] = entry;
+        } else if (decision.metadata !== null) throw new Error("A deferred or rejected review cannot supply publication metadata");
+        nextDecisions[editorialDecisionKey(candidate)] = { ...decision, reviewedAt: now, model: editorialModel };
+      }
+      // Save approvals before their decision cache, so a cache-only success can
+      // never prevent an approved record from reaching the existing review gate.
+      await options.persistReviews(nextReviews);
+      await options.persistCache({ ...cache, decisions: nextDecisions });
+      const completed = { ...attempt, state: "completed" as const };
+      if (Number.isInteger(result.inputTokens) && result.inputTokens! >= 0) completed.inputTokens = result.inputTokens;
+      if (Number.isInteger(result.outputTokens) && result.outputTokens! >= 0) completed.outputTokens = result.outputTokens;
+      const nextLedger = replaceReviewAttempt(ledger, completed);
+      await options.persistLedger(nextLedger);
+      ledger = nextLedger; reviews = nextReviews; cache.decisions = nextDecisions;
+      report.status = "reviewed";
+      report.approved += decisions.filter(item => item.decision === "approve").length;
+      report.deferred += decisions.filter(item => item.decision === "defer").length;
+      report.rejected += decisions.filter(item => item.decision === "reject").length;
+    } catch (error) {
+      report.status = "failed"; report.error = (error instanceof Error ? error.message : "Editorial review failed").slice(0, 500);
+      await options.persistLedger(replaceReviewAttempt(ledger, { ...attempt, state: "failed", error: report.error }));
+      break;
+    }
   }
   return { reviews, report };
 }

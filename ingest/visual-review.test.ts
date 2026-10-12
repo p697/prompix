@@ -2,9 +2,9 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import type { Prompt } from "../packages/schema/catalog.ts";
-import { runVisualReview, visualCacheSchema, visualInputCharacters, visualProviderInput, visualReviewIdentity,
+import { runVisualReview, visualCacheSchema, visualLedgerSchema, visualInputCharacters, visualProviderInput, visualReviewIdentity,
   visualReviewModel, type PreparedVisualMedia, type VisualAttachment, type VisualCache, type VisualInput,
-  type VisualLedger, type VisualProvider } from "./visual-review.ts";
+  type VisualLedger, type VisualAttempt, type VisualProvider } from "./visual-review.ts";
 
 const day = "2026-10-13", now = `${day}T12:00:00Z`;
 const hash = (value: string) => createHash("sha256").update(value).digest("hex");
@@ -40,20 +40,22 @@ function approve(items: readonly VisualInput[]) {
       reason: "This supplied image corresponds to the described scene." })) })) };
 }
 function harness(items: Prompt[], previous: Prompt[] = []) {
-  const state: { cache: VisualCache; ledger?: VisualLedger; events: string[]; preparedIDs: string[]; inputs: readonly VisualInput[] } = {
-    cache: { version: 1, decisions: {} }, events: [], preparedIDs: [], inputs: [],
+  const state: { cache: VisualCache; ledger?: VisualLedger; events: string[]; preparedIDs: string[]; inputs: readonly VisualInput[];
+    batches: Array<readonly VisualInput[]> } = {
+    cache: { version: 1, decisions: {} }, events: [], preparedIDs: [], inputs: [], batches: [],
   };
   const run = (settings: { prompts?: Prompt[]; previous?: Prompt[]; provider?: VisualProvider | null;
-    prepareMedia?: (item: Prompt) => Promise<PreparedVisualMedia>; day?: string;
+    prepareMedia?: (item: Prompt) => Promise<PreparedVisualMedia>; day?: string; maxRequests?: unknown; ledger?: VisualLedger | VisualAttempt;
     persistCache?: (cache: VisualCache) => Promise<void>; persistLedger?: (ledger: VisualLedger) => Promise<void> } = {}) => runVisualReview({
-    prompts: settings.prompts ?? items, previous: settings.previous ?? previous, cache: state.cache, ledger: state.ledger,
-    day: settings.day ?? day, now,
+    prompts: settings.prompts ?? items, previous: settings.previous ?? previous, cache: state.cache, ledger: settings.ledger ?? state.ledger,
+    day: settings.day ?? day, now, maxRequests: settings.maxRequests,
     provider: settings.provider === null ? undefined : async input => {
-      state.events.push("provider"); state.inputs = input; return (settings.provider ?? (async items => approve(items)))(input);
+      state.events.push("provider"); state.inputs = input; state.batches.push(input);
+      return (settings.provider ?? (async items => approve(items)))(input);
     },
     prepareMedia: async item => { state.preparedIDs.push(item.id); return settings.prepareMedia ? settings.prepareMedia(item) : prepare(item); },
     persistCache: settings.persistCache ?? (async cache => { state.cache = structuredClone(cache); state.events.push("cache"); }),
-    persistLedger: settings.persistLedger ?? (async ledger => { state.ledger = structuredClone(ledger); state.events.push(ledger.state); }),
+    persistLedger: settings.persistLedger ?? (async ledger => { state.ledger = structuredClone(ledger); state.events.push(ledger.attempts.at(-1)!.state); }),
   });
   return { state, run };
 }
@@ -128,9 +130,9 @@ test("real prepared image and sampled video inputs reserve before the provider a
   const result = await run();
   assert.equal(result.report.approved, 2); assert.deepEqual(result.prompts, items);
   assert.deepEqual(state.events, ["reserved", "provider", "cache", "completed"]);
-  assert.equal(state.ledger?.attachments, 9); assert.equal(state.ledger?.attachmentBytes, 900);
-  assert.equal(state.ledger?.inputCharacters, visualInputCharacters(state.inputs));
-  assert.equal(state.ledger?.model, visualReviewModel);
+  assert.equal(state.ledger?.attempts[0].attachments, 9); assert.equal(state.ledger?.attempts[0].attachmentBytes, 900);
+  assert.equal(state.ledger?.attempts[0].inputCharacters, visualInputCharacters(state.inputs));
+  assert.equal(state.ledger?.attempts[0].model, visualReviewModel);
   assert.equal(Object.keys(state.cache.decisions).length, 2); visualCacheSchema.parse(state.cache);
   const evidence = state.cache.decisions[visualReviewIdentity(items[1])];
   assert.equal(evidence.coverage.mode, "sampled-frames");
@@ -229,7 +231,7 @@ test("malformed, missing, duplicate and mismatched provider identities fail the 
     const { run, state } = harness([prompt("invalid-response", "image", 2)]);
     const first = await run({ provider: async items => { const output = approve(items); corrupt(output); return output; } });
     assert.equal(first.report.status, "failed"); assert.deepEqual(first.prompts, []);
-    assert.deepEqual(state.cache.decisions, {}); assert.equal(state.ledger?.state, "failed");
+    assert.deepEqual(state.cache.decisions, {}); assert.equal(state.ledger?.attempts.at(-1)?.state, "failed");
     const calls = state.preparedIDs.length, second = await run();
     assert.equal(second.report.status, "daily-limit"); assert.equal(second.report.requests, 0);
     assert.equal(state.preparedIDs.length, calls); assert.equal(state.events.filter(event => event === "provider").length, 1);
@@ -253,31 +255,31 @@ test("reservation persistence failure makes zero provider calls, while cache per
   const cache = harness([prompt("cache-write")]);
   const result = await cache.run({ persistCache: async () => { throw new Error("No durable evidence"); } });
   assert.equal(result.report.status, "failed"); assert.deepEqual(result.prompts, []);
-  assert.deepEqual(cache.state.cache.decisions, {}); assert.equal(cache.state.ledger?.state, "failed");
+  assert.deepEqual(cache.state.cache.decisions, {}); assert.equal(cache.state.ledger?.attempts.at(-1)?.state, "failed");
 });
 
 test("limits preparation to three candidates and rotates past failed media on later days", async () => {
   const items = Array.from({ length: 10 }, (_, index) => prompt(`item-${index}`)), { run, state } = harness(items);
-  await run({ prepareMedia: async () => { throw new Error("Unreachable synthetic media"); } });
+  await run({ maxRequests: 1, prepareMedia: async () => { throw new Error("Unreachable synthetic media"); } });
   assert.equal(state.preparedIDs.length, 3); const firstIDs = [...state.preparedIDs];
   state.preparedIDs = [];
-  await run({ day: "2026-10-14", prepareMedia: async () => { throw new Error("Unreachable synthetic media"); } });
+  await run({ day: "2026-10-14", maxRequests: 1, prepareMedia: async () => { throw new Error("Unreachable synthetic media"); } });
   assert.equal(state.preparedIDs.length, 3); assert.notDeepEqual(state.preparedIDs, firstIDs);
   assert.deepEqual(state.events, []);
 });
 
 test("three-candidate, sixteen-image and actual byte budgets bound each provider request without truncating galleries", async () => {
   const images = harness(Array.from({ length: 5 }, (_, index) => prompt(`gallery-${index}`, "image", 8)));
-  const result = await images.run();
+  const result = await images.run({ maxRequests: 1 });
   assert.equal(images.state.preparedIDs.length, 3); assert.equal(result.report.attemptedCandidates, 2);
   assert.equal(images.state.inputs.flatMap(item => item.attachments).length, 16);
   assert(images.state.inputs.every(item => item.attachments.length === 8));
   const bytes = harness(Array.from({ length: 3 }, (_, index) => prompt(`bytes-${index}`, "image", 3)));
-  const byteResult = await bytes.run({ prepareMedia: async item => {
+  const byteResult = await bytes.run({ maxRequests: 1, prepareMedia: async item => {
     const media = prepare(item); for (const attachment of media.attachments) attachment.byteLength = 6_000_000; return media;
   } });
   assert.equal(byteResult.report.attemptedCandidates, 1); assert.equal(byteResult.report.attachmentBytes, 18_000_000);
-  assert.equal(bytes.state.preparedIDs.length, 3);
+  assert.equal(bytes.state.preparedIDs.length, 2, "The next intact item is carried instead of preparing past a full batch");
 });
 
 test("shared serialized input budget includes attachment metadata and permits the exact boundary without truncation", async () => {
@@ -301,4 +303,126 @@ test("duplicate input IDs and foreign cache keys fail closed without preparation
   cached.state.events = []; cached.state.preparedIDs = [];
   await assert.rejects(cached.run(), /Visual cache identity mismatch/);
   assert.deepEqual(cached.state.preparedIDs, []); assert.deepEqual(cached.state.events, []);
+});
+
+test("default daily budget completes four durable batches and a repeat run cannot exceed it", async () => {
+  const items = Array.from({ length: 15 }, (_, index) => prompt(`batch-${String(index).padStart(2, "0")}`));
+  const { run, state } = harness(items);
+  const result = await run();
+  assert.equal(result.report.maxRequests, 4); assert.equal(result.report.requests, 4); assert.equal(result.report.dailyRequests, 4);
+  assert.equal(result.report.approved, 12); assert.equal(result.prompts.length, 12); assert.equal(result.withheldIDs.length, 3);
+  assert.equal(state.preparedIDs.length, 12); assert.equal(new Set(state.preparedIDs).size, 12);
+  assert.deepEqual(state.events, Array.from({ length: 4 }, () => ["reserved", "provider", "cache", "completed"]).flat());
+  assert.equal(state.ledger?.requests, 4); assert.equal(state.ledger?.attempts.length, 4);
+  assert(state.ledger?.attempts.every(attempt => attempt.state === "completed" && attempt.candidateIDs.length === 3));
+  visualLedgerSchema.parse(state.ledger);
+  assert.equal(Object.keys(state.cache.decisions).length, 12, "Later batches retain every earlier persisted decision");
+  const repeated = await run();
+  assert.equal(repeated.report.requests, 0); assert.equal(repeated.report.dailyRequests, 4);
+  assert.equal(repeated.report.cachedApproved, 12); assert.equal(repeated.report.status, "daily-limit");
+  assert.equal(state.batches.length, 4); assert.equal(state.preparedIDs.length, 12);
+});
+
+test("later batches preserve whole galleries and every per-request cap", async () => {
+  const { run, state } = harness(Array.from({ length: 5 }, (_, index) => prompt(`full-gallery-${index}`, "image", 8)));
+  const result = await run();
+  assert.equal(result.report.requests, 3); assert.equal(result.report.approved, 5);
+  assert.deepEqual(state.batches.map(batch => batch.length), [2, 2, 1]);
+  assert.equal(state.preparedIDs.length, 5, "Carrying a prepared gallery does not download it again");
+  for (const batch of state.batches) {
+    assert(batch.length <= 3); assert(batch.flatMap(item => item.attachments).length <= 16);
+    assert(batch.every(item => item.attachments.length === 8)); assert(visualInputCharacters(batch) <= 32000);
+    assert(batch.flatMap(item => item.attachments).reduce((sum, attachment) => sum + attachment.byteLength, 0) <= 32_000_000);
+  }
+});
+
+test("legacy completed attempt counts as one and later calls resume within the configured budget", async () => {
+  const { run, state } = harness(Array.from({ length: 8 }, (_, index) => prompt(`legacy-${index}`)));
+  await run({ maxRequests: 1 });
+  const legacy = structuredClone(state.ledger!.attempts[0]);
+  const resumed = await run({ ledger: legacy, maxRequests: "3" });
+  assert.equal(resumed.report.requests, 2); assert.equal(resumed.report.dailyRequests, 3);
+  assert.equal(resumed.report.cachedApproved, 3); assert.equal(resumed.report.approved, 5);
+  assert.equal(resumed.prompts.length, 8); assert.equal(state.ledger?.schemaVersion, 2);
+  assert.deepEqual(state.ledger?.attempts[0], legacy);
+  assert.equal(new Set(state.batches.flatMap(batch => batch.map(item => item.identity))).size, 8);
+});
+
+test("legacy failed and reserved attempts stop the day even when the configured budget increases", async () => {
+  for (const status of ["failed", "reserved"] as const) {
+    const { run, state } = harness([prompt(`legacy-${status}`)]);
+    await run();
+    const legacy: VisualAttempt = { ...state.ledger!.attempts[0], state: status };
+    state.cache = { version: 1, decisions: {} }; state.events = []; state.preparedIDs = [];
+    const result = await run({ ledger: legacy, maxRequests: 20 });
+    assert.equal(result.report.requests, 0); assert.equal(result.report.dailyRequests, 1);
+    assert.equal(result.report.status, "daily-limit"); assert.deepEqual(state.events, []); assert.deepEqual(state.preparedIDs, []);
+  }
+});
+
+test("a failed second batch preserves the first batch and blocks remaining requests until the next UTC day", async () => {
+  const { run, state } = harness(Array.from({ length: 9 }, (_, index) => prompt(`partial-${index}`)));
+  let calls = 0;
+  const failed = await run({ provider: async input => {
+    if (++calls === 2) throw new Error("Synthetic second-batch timeout");
+    return approve(input);
+  } });
+  assert.equal(failed.report.status, "failed"); assert.equal(failed.report.requests, 2); assert.equal(failed.report.dailyRequests, 2);
+  assert.equal(failed.report.approved, 3); assert.equal(failed.prompts.length, 3);
+  assert.equal(Object.keys(state.cache.decisions).length, 3);
+  assert.deepEqual(state.ledger?.attempts.map(attempt => attempt.state), ["completed", "failed"]);
+  const repeated = await run({ maxRequests: 20 });
+  assert.equal(repeated.report.requests, 0); assert.equal(repeated.report.cachedApproved, 3);
+  assert.equal(state.batches.length, 2); assert.equal(state.preparedIDs.length, 6);
+  const tomorrow = await run({ day: "2026-10-14" });
+  assert.equal(tomorrow.report.requests, 2); assert.equal(tomorrow.report.dailyRequests, 2);
+  assert.equal(tomorrow.prompts.length, 9);
+  assert(state.ledger?.attempts.every(attempt => attempt.day === "2026-10-14"));
+});
+
+test("persisted interruption before a second call remains reserved and never replays its identities", async () => {
+  const { run, state } = harness(Array.from({ length: 9 }, (_, index) => prompt(`interrupted-${index}`)));
+  await assert.rejects(run({ persistLedger: async ledger => {
+    state.ledger = structuredClone(ledger);
+    if (ledger.requests === 2 && ledger.attempts.at(-1)?.state === "reserved") throw new Error("Synthetic interruption after reservation");
+  } }), /interruption after reservation/);
+  assert.equal(state.batches.length, 1); assert.equal(Object.keys(state.cache.decisions).length, 3);
+  assert.deepEqual(state.ledger?.attempts.map(attempt => attempt.state), ["completed", "reserved"]);
+  const repeated = await run();
+  assert.equal(repeated.report.status, "daily-limit"); assert.equal(repeated.report.requests, 0);
+  assert.equal(repeated.report.cachedApproved, 3); assert.equal(repeated.report.dailyRequests, 2);
+  assert.equal(state.batches.length, 1);
+});
+
+test("completed identity history prevents duplicate paid review when its cache entry disappears", async () => {
+  const { run, state } = harness(Array.from({ length: 6 }, (_, index) => prompt(`lost-evidence-${index}`)));
+  await run({ maxRequests: 1 });
+  const attempted = new Set(state.ledger!.attempts[0].identities);
+  state.cache = { version: 1, decisions: {} };
+  const resumed = await run({ maxRequests: 2 });
+  assert.equal(resumed.report.requests, 1); assert.equal(resumed.report.dailyRequests, 2);
+  assert.equal(resumed.prompts.length, 3); assert.equal(resumed.withheldIDs.length, 3);
+  assert(state.batches[1].every(item => !attempted.has(item.identity)));
+  assert(resumed.report.items.filter(item => attempted.has(item.identity)).every(item => /Already attempted/.test(item.reason ?? "")));
+});
+
+test("zero budget skips all preparation and invalid budgets fail before any side effect", async () => {
+  for (const maxRequests of [0, "0"]) {
+    const { run, state } = harness([prompt("disabled-budget")]);
+    const result = await run({ maxRequests });
+    assert.equal(result.report.requests, 0); assert.equal(result.report.maxRequests, 0);
+    assert.equal(result.report.status, "daily-limit"); assert.deepEqual(state.events, []); assert.deepEqual(state.preparedIDs, []);
+  }
+  for (const maxRequests of [-1, 21, 1.5, "1.5", "4 ", "all", false, null]) {
+    const { run, state } = harness([prompt("bad-budget")]);
+    await assert.rejects(run({ maxRequests }), /request limit/);
+    assert.deepEqual(state.events, []); assert.deepEqual(state.preparedIDs, []);
+  }
+});
+
+test("preparation failures are bounded by the remaining daily slots without spending provider requests", async () => {
+  const { run, state } = harness(Array.from({ length: 20 }, (_, index) => prompt(`preflight-${index}`)));
+  const result = await run({ prepareMedia: async () => { throw new Error("Synthetic unavailable image"); } });
+  assert.equal(state.preparedIDs.length, 12); assert.equal(result.report.preflightDeferred, 12);
+  assert.equal(result.report.requests, 0); assert.deepEqual(state.events, []);
 });
