@@ -35,6 +35,38 @@ import CryptoKit
         XCTAssertFalse(PromptQuery(text: "unrelatedkeyword").matches(item))
     }
 
+    func testSearchPrioritizesTitleAndCreatorOverIncidentalBodyMentions() {
+        let body = prompt(id: "incidental", body: "Deploy with Supabase as an optional service.")
+        let author = prompt(id: "author", creator: creator(id: "supabase", name: "Supabase", username: "supabase"))
+        let title = prompt(id: "title", title: "Supabase development guide")
+        let exact = prompt(id: "exact", title: "SUPABASE")
+        XCTAssertEqual(PromptQuery(text: " Supabase ").results(in: [body, author, title, exact]).map(\.id), ["exact", "title", "author", "incidental"])
+    }
+
+    func testSearchRanksDisplayedTranslatedTitleAndRetainsBodyOnlyMatches() {
+        var translated = prompt(id: "translated")
+        translated.localization = Prompt.Localization(sourceLanguage: "zh-Hans", sourceFingerprint: String(repeating: "a", count: 64), translations: [
+            ContentLanguage.preferred: .init(title: "Aurorabloom", summary: translated.summary,
+                prompt: translated.prompt, example: translated.example, previewLabel: translated.previewLabel)
+        ])
+        let body = prompt(id: "body", body: "Describe aurorabloom in a poem.")
+        XCTAssertEqual(PromptQuery(text: "aurorabloom").results(in: [body, translated]).map(\.id), ["translated", "body"])
+    }
+
+    func testSearchRetainsEditorialTiesAndFacetFiltering() {
+        let first = prompt(id: "first", title: "Planning ideas")
+        let image = prompt(id: "image", title: "Planning images", kind: .image)
+        let second = prompt(id: "second", title: "Planning notes")
+        XCTAssertEqual(PromptQuery(text: "planning", kind: .text).results(in: [first, image, second]).map(\.id), ["first", "second"])
+        XCTAssertEqual(PromptQuery(text: "  ").results(in: [image, second, first]).map(\.id), ["image", "second", "first"])
+    }
+
+    func testRankedSearchStillRequiresEveryTermAcrossFields() {
+        let relevant = prompt(id: "relevant", title: "Supabase", body: "Deploy a project.")
+        let unrelated = prompt(id: "unrelated", title: "Supabase", body: "Draw a scene.")
+        XCTAssertEqual(PromptQuery(text: "supabase deploy").results(in: [unrelated, relevant]).map(\.id), ["relevant"])
+    }
+
     func testCreatorDirectoryKeepsSameNamedAccountsSeparateAndCountsExactIdentities() {
         let first = creator(id: "x:101", name: "Sam", username: "sam-art")
         let second = creator(id: "github:202", name: "Sam", username: "sam-code", platform: "github")
@@ -848,9 +880,9 @@ import CryptoKit
             profileURL: URL(string: "https://\(platform == "github" ? "github.com" : "x.com")/\(username ?? id.replacingOccurrences(of: ":", with: "-"))")!)
     }
 
-    private func prompt(id: String, kind: PromptKind = .text, creator: Prompt.Creator? = nil, media: Prompt.Media? = nil,
+    private func prompt(id: String, title: String = "周末计划", kind: PromptKind = .text, creator: Prompt.Creator? = nil, media: Prompt.Media? = nil,
                         body: String = "用两句话描述 {{topic}}。", source: Prompt.Source? = nil) -> Prompt {
-        Prompt(id: id, kind: kind, title: "周末计划", summary: "安排一个轻松的周末。", prompt: body,
+        Prompt(id: id, kind: kind, title: title, summary: "安排一个轻松的周末。", prompt: body,
             example: "先说明地点和可用时间。", tags: ["Planning"], model: "Test model", toolURL: nil,
             artwork: "text-editorial", previewLabel: "Original test fixture",
             source: source ?? Prompt.Source(name: "Prompix tests", url: nil, license: "Original test fixture", method: "original"),

@@ -1,4 +1,5 @@
 import XCTest
+import UIKit
 
 /// These opt-in journeys use a staged, validated catalog in the simulator's
 /// Application Support directory. They never install or launch on a phone.
@@ -511,6 +512,138 @@ import XCTest
         app.activate()
         XCTAssertFalse(app.staticTexts["handoffOpenError"].exists)
         XCTAssertEqual(try? Data(contentsOf: try acceptanceDirectory().appendingPathComponent("drafts.json")), drafts)
+    }
+
+    private func openHandoffCard(_ id: String, query: String, locale: String) throws {
+        launch(locale)
+        let card: XCUIElement
+        if id == "quiet-portfolio" {
+            let kind = app.buttons["kind-web"]
+            let picker = app.scrollViews["kindPicker"]
+            for _ in 0..<6 {
+                let visible = kind.frame.intersection(picker.frame)
+                if !visible.isNull && visible.width >= min(44, kind.frame.width) && kind.isHittable { break }
+                picker.swipeLeft()
+            }
+            kind.tap()
+            card = app.buttons["prompt-\(id)"]
+        } else {
+            app.buttons["searchButton"].tap()
+            let search = app.searchFields.firstMatch
+            XCTAssertTrue(search.waitForExistence(timeout: 5))
+            search.tap(); search.typeText(query + "\n")
+            card = app.scrollViews["searchResults"].buttons["prompt-\(id)"]
+        }
+        if !card.waitForExistence(timeout: 5) {
+            capture("missing-handoff-source-card")
+            let hierarchy = XCTAttachment(string: app.debugDescription)
+            hierarchy.name = "missing-handoff-source-card"
+            hierarchy.lifetime = .keepAlways; add(hierarchy)
+        }
+        XCTAssertTrue(card.exists)
+        if !card.isHittable { reveal(card) }
+        if id != "quiet-portfolio" { capture("handoff-search-\(locale)") }
+        card.tap()
+        let use = app.buttons["usePrompt"]
+        XCTAssertTrue(use.waitForExistence(timeout: 5)); use.tap()
+        XCTAssertTrue(app.buttons[id == "quiet-portfolio" ? "handoffOpen" : "copyInstallCommand"].waitForExistence(timeout: 5))
+    }
+
+    private func revealHandoff(_ element: XCUIElement) {
+        for _ in 0..<12 {
+            let fixed = ["handoffOpen", "copyInstallCommand"].map { app.buttons[$0] }.first { $0.exists }
+            let bottom = fixed?.frame.minY ?? app.frame.maxY - 80
+            if element.exists && element.isHittable && element.frame.minY >= 120 && element.frame.maxY < bottom - 8 { return }
+            let reverse = element.exists && element.frame.minY < 120
+            app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: reverse ? 0.4 : 0.65))
+                .press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: reverse ? 0.65 : 0.4)))
+        }
+        XCTFail("Handoff control must be reachable above the fixed action bar.")
+    }
+
+    func testHandoffLargestTextAccessibility() throws {
+        guard ProcessInfo.processInfo.environment["PROMPIX_HANDOFF_ACCESSIBILITY"] == "1" else {
+            throw XCTSkip("Run on the backed-up production simulator with the largest accessibility text size.")
+        }
+        XCTAssertEqual(UIApplication.shared.preferredContentSizeCategory, .accessibilityExtraExtraExtraLarge)
+        let personal = try performancePersonalState()
+        for locale in ["zh-Hans", "de", "ja"] {
+            for skill in [false, true] {
+                try openHandoffCard(skill ? "skill-publisher-supabase-supabase" : "quiet-portfolio",
+                                    query: skill ? "Supabase" : "quiet", locale: locale)
+                let primary = app.buttons[skill ? "copyInstallCommand" : "handoffOpen"]
+                XCTAssertTrue(primary.isHittable)
+                if skill {
+                    revealHandoff(app.buttons["skillCodeOpen"])
+                } else {
+                    let target = app.buttons["destination-claude-code"]
+                    revealHandoff(target); target.tap()
+                    XCTAssertTrue(target.isSelected)
+                }
+                capture("handoff-largest-\(locale)-\(skill ? "skill" : "website")")
+                try app.performAccessibilityAudit(for: [.hitRegion, .sufficientElementDescription])
+                let preview = app.buttons["handoffPreview"]
+                revealHandoff(preview); preview.tap()
+                // SwiftUI propagates DisclosureGroup's identifier to its expanded
+                // text on iOS 27; constrain by static-text role and payload length.
+                let bodies = app.staticTexts.matching(NSPredicate(format: "identifier == 'handoffText' OR identifier == 'handoffPreview'"))
+                var body: XCUIElement?
+                for _ in 0..<8 {
+                    body = bodies.allElementsBoundByIndex.first { $0.label.count > 80 }
+                    if body != nil { break }
+                    app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.65))
+                        .press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.4)))
+                }
+                if body == nil {
+                    capture("missing-handoff-body")
+                    let hierarchy = XCTAttachment(string: app.debugDescription)
+                    hierarchy.name = "missing-handoff-body"
+                    hierarchy.lifetime = .keepAlways; add(hierarchy)
+                }
+                XCTAssertNotNil(body)
+                XCTAssertFalse(try XCTUnwrap(body).label.isEmpty)
+                capture("handoff-largest-\(locale)-\(skill ? "skill" : "website")-expanded")
+                app.terminate()
+            }
+        }
+        XCTAssertEqual(try performancePersonalState(), personal)
+    }
+
+    func testSkillHandoffVoiceOverTraversal() throws {
+        guard ProcessInfo.processInfo.environment["PROMPIX_HANDOFF_ACCESSIBILITY"] == "1" else {
+            throw XCTSkip("Dedicated simulator only; traverse the actual unsent Skill handoff with VoiceOver.")
+        }
+        #if compiler(>=6.4)
+        guard #available(iOS 27.0, *) else { throw XCTSkip("Requires the native VoiceOver test service.") }
+        let personal = try performancePersonalState()
+        try openHandoffCard("skill-publisher-supabase-supabase", query: "Supabase", locale: "zh-Hans")
+        let service = XCUIDevice.shared.voiceOverService
+        var speech: [String] = []
+        defer {
+            do { try service.disable() }
+            catch { XCTFail("Could not restore VoiceOver after handoff traversal: \(error)") }
+            let evidence = XCTAttachment(string: speech.joined(separator: "\n"))
+            evidence.name = "skill-handoff-actual-voiceover"
+            evidence.lifetime = .keepAlways; add(evidence)
+        }
+        if service.isEnabled { try service.disable() }
+        try service.enable()
+        speech.append(try service.currentSpeech().utterance)
+        func isCodeAction(_ value: String) -> Bool { value.contains("Claude Code") && value.contains("安装") && value.contains("按钮") }
+        func isCopyAction(_ value: String) -> Bool { value.contains("复制安装命令") && value.contains("按钮") }
+        let deadline = Date().addingTimeInterval(55)
+        for _ in 0..<45 {
+            if speech.contains(where: isCodeAction) && speech.contains(where: isCopyAction) { break }
+            if Date() >= deadline { break }
+            speech.append(try service.moveForward().utterance)
+        }
+        XCTAssertTrue(speech.contains(where: isCodeAction))
+        XCTAssertTrue(speech.contains(where: isCopyAction))
+        capture("skill-handoff-voiceover")
+        XCTAssertEqual(try performancePersonalState(), personal)
+        #else
+        throw XCTSkip("Requires the iOS 27 SDK.")
+        #endif
     }
 
     func testPublisherSkillPackages() throws {

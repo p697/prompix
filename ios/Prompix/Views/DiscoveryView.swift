@@ -287,7 +287,7 @@ struct SearchView: View {
     @State private var kind: PromptKind?
     @State private var skillsOnly = false
     @State private var recent = UserDefaults.standard.stringArray(forKey: "recentSearches") ?? []
-    private var results: [Prompt] { library.prompts.filter { PromptQuery(text: query, kind: kind, skillsOnly: skillsOnly).matches($0) } }
+    private var results: [Prompt] { PromptQuery(text: query, kind: kind, skillsOnly: skillsOnly).results(in: library.prompts) }
     private var creators: [CreatorEntry] {
         guard !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return [] }
         return CreatorDirectory.entries(in: library.prompts).filter {
