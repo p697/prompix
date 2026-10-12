@@ -782,41 +782,67 @@ import XCTest
         }
     }
 
+    private func performancePersonalState() throws -> [String: Data] {
+        let directory = try acceptanceDirectory()
+        var state: [String: Data] = [:]
+        for file in ["drafts.json", "favorites.json"] {
+            let url = directory.appendingPathComponent(file)
+            if FileManager.default.fileExists(atPath: url.path) { state[file] = try Data(contentsOf: url) }
+        }
+        return state
+    }
+
     private func fullPerformanceCatalog() throws -> CatalogSnapshot {
         guard ProcessInfo.processInfo.environment["PROMPIX_FULL_CATALOG_PERFORMANCE"] == "1" else {
-            throw XCTSkip("Stage the complete translated production catalog and run this opt-in probe with the Release configuration.")
+            throw XCTSkip("Stage the current production catalog and language pack; supply its exact version, count, locale and translated count; run Release.")
         }
         let directory = try acceptanceDirectory()
         let catalog = try readSnapshot(CatalogSnapshot.self, from: directory, file: "catalog.json")
         XCTAssertGreaterThan(catalog.prompts.count, 68, "Performance evidence must exercise the expanded catalog.")
-        XCTAssertTrue(catalog.prompts.allSatisfy { !($0.localization?.translations["en"]?.prompt.isEmpty ?? true) },
-                      "Use the full translated catalog, not the lightweight legacy fixture.")
+        let environment = ProcessInfo.processInfo.environment
+        let expectedVersion = try XCTUnwrap(environment["PROMPIX_PERFORMANCE_VERSION"])
+        let expectedCount = try XCTUnwrap(environment["PROMPIX_PERFORMANCE_COUNT"].flatMap(Int.init))
+        let expectedTranslations = try XCTUnwrap(environment["PROMPIX_PERFORMANCE_TRANSLATED_COUNT"].flatMap(Int.init))
+        let locale = try XCTUnwrap(environment["PROMPIX_PERFORMANCE_LOCALE"])
+        XCTAssertEqual(catalog.version, expectedVersion)
+        XCTAssertEqual(catalog.prompts.count, expectedCount)
+        XCTAssertEqual(catalog.prompts.filter { !($0.localization?.translations[locale]?.prompt.isEmpty ?? true) }.count, expectedTranslations)
+        XCTAssertGreaterThan(expectedTranslations, 0, "Measure a real downloaded language pack with original fallback.")
+        let index = try readSnapshot(LanguagePackIndexSnapshot.self, from: directory, file: "language-packs.json")
+        XCTAssertNotNil(index.downloadedLocales[locale])
         return catalog
     }
 
-    func testTranslatedCatalogProcessLaunchPerformance() throws {
+    func testCurrentCatalogProcessLaunchPerformance() throws {
         let catalog = try fullPerformanceCatalog()
+        let locale = try XCTUnwrap(ProcessInfo.processInfo.environment["PROMPIX_PERFORMANCE_LOCALE"])
+        let personalBefore = try performancePersonalState()
+        let translated = catalog.prompts.filter { !($0.localization?.translations[locale]?.prompt.isEmpty ?? true) }.count
         let options = XCTMeasureOptions()
         options.iterationCount = 5
         measure(metrics: [XCTApplicationLaunchMetric(waitUntilResponsive: true)], options: options) {
             app.terminate()
-            launch("en")
+            launch(locale)
             XCTAssertTrue(app.staticTexts[catalog.prompts.count.formatted()].exists)
             XCTAssertTrue(app.buttons["allCreators"].exists)
             XCTAssertTrue(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'creator-' ")).firstMatch.exists)
         }
         let directory = try acceptanceDirectory()
         XCTAssertEqual(try readSnapshot(CatalogSnapshot.self, from: directory, file: "catalog.json").version, catalog.version)
-        capture("translated-catalog-after-process-launches")
-        let evidence = XCTAttachment(string: "Release configuration must be supplied by the runner. Catalog: \(catalog.version), \(catalog.prompts.count) fully English-translated items. Five measured process launches with XCTApplicationLaunchMetric(waitUntilResponsive: true), each verifying catalog count and the creator entry. Catalog refresh is disabled to measure loading the complete persisted catalog. OS, file, and media caches are not cleared; this is not a reboot or an empty-cache cold-start measurement.")
-        evidence.name = "translated-catalog-process-launch-scope"
+        capture("current-catalog-after-process-launches")
+        XCTAssertEqual(try performancePersonalState(), personalBefore, "Performance probes must not change saved drafts or favorites.")
+        let evidence = XCTAttachment(string: "Release configuration must be supplied by the runner. Catalog: \(catalog.version), \(catalog.prompts.count) items; \(locale) translations: \(translated), remaining items use original fallback. Five measured process launches with XCTApplicationLaunchMetric(waitUntilResponsive: true), each verifying catalog count and the creator entry. Catalog refresh is disabled to measure loading the complete persisted catalog. OS, file, and media caches are not cleared; this is not a reboot or an empty-cache cold-start measurement.")
+        evidence.name = "current-catalog-process-launch-scope"
         evidence.lifetime = .keepAlways
         add(evidence)
     }
 
-    func testTranslatedCatalogBrowsingPerformance() throws {
+    func testCurrentCatalogBrowsingPerformance() throws {
         let catalog = try fullPerformanceCatalog()
-        launch("en")
+        let locale = try XCTUnwrap(ProcessInfo.processInfo.environment["PROMPIX_PERFORMANCE_LOCALE"])
+        let personalBefore = try performancePersonalState()
+        let translated = catalog.prompts.filter { !($0.localization?.translations[locale]?.prompt.isEmpty ?? true) }.count
+        launch(locale)
         XCTAssertTrue(app.staticTexts[catalog.prompts.count.formatted()].exists)
         XCTAssertTrue(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'creator-' ")).firstMatch.exists)
         func visiblePromptIDs() -> Set<String> {
@@ -847,9 +873,10 @@ import XCTest
         XCTAssertGreaterThan(visitedIDs.count, initialIDs.count)
         let directory = try acceptanceDirectory()
         XCTAssertEqual(try readSnapshot(CatalogSnapshot.self, from: directory, file: "catalog.json").version, catalog.version)
-        capture("translated-catalog-after-repeated-scroll")
-        let evidence = XCTAttachment(string: "Release configuration must be supplied by the runner. Catalog: \(catalog.version), \(catalog.prompts.count) fully English-translated items. Visible cards sampled: \(visitedIDs.sorted().joined(separator: ", ")). Three rounds of five forward/five reverse viewport drags. Clock and CPU include XCTest gestures and accessibility queries; these are not frame-rate measurements.")
-        evidence.name = "translated-catalog-performance-scope"
+        capture("current-catalog-after-repeated-scroll")
+        XCTAssertEqual(try performancePersonalState(), personalBefore, "Performance probes must not change saved drafts or favorites.")
+        let evidence = XCTAttachment(string: "Release configuration must be supplied by the runner. Catalog: \(catalog.version), \(catalog.prompts.count) items; \(locale) translations: \(translated), remaining items use original fallback. Visible cards sampled: \(visitedIDs.sorted().joined(separator: ", ")). Three rounds of five forward/five reverse viewport drags. Clock and CPU include XCTest gestures and accessibility queries; these are not frame-rate measurements.")
+        evidence.name = "current-catalog-performance-scope"
         evidence.lifetime = .keepAlways
         add(evidence)
     }

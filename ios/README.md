@@ -137,16 +137,29 @@ downloaded creator, verifies saved source text and all drafts, and repeats the
 checks after a cached restart. It does not fake a slow network or guarantee that a
 fast transfer renders every intermediate progress stage.
 
-After a complete translated catalog is present, opt into
-`testTranslatedCatalogBrowsingPerformance` and
-`testTranslatedCatalogProcessLaunchPerformance` with
-`PROMPIX_FULL_CATALOG_PERFORMANCE=1` and the same explicit container variable.
-Run the Release build with testability enabled. The first probe records three
-rounds of viewport drags and confirms that different real cards become visible;
-CPU and clock values include XCTest gestures and accessibility queries, not FPS.
-The second measures five process launches until responsive, without clearing OS
-or filesystem caches. Both require more than 68 items and complete English prompt
-translations; the small bundled catalog cannot satisfy these gates.
+After staging the actual production catalog and its downloaded language pack,
+opt into `testCurrentCatalogBrowsingPerformance` and
+`testCurrentCatalogProcessLaunchPerformance`. Supply these runner variables:
+
+- `PROMPIX_FULL_CATALOG_PERFORMANCE=1`
+- `PROMPIX_ACCEPTANCE_CONTAINER`: the explicit simulator App data-container path
+- `PROMPIX_PERFORMANCE_VERSION`: the exact staged edition identity
+- `PROMPIX_PERFORMANCE_COUNT`: its total item count
+- `PROMPIX_PERFORMANCE_LOCALE`: the downloaded locale to browse
+- `PROMPIX_PERFORMANCE_TRANSLATED_COUNT`: that locale's actual nonempty prompt count
+
+Use `TEST_RUNNER_` prefixes when passing these variables directly to `xcodebuild`.
+Run with `-configuration Release ENABLE_TESTABILITY=YES ONLY_ACTIVE_ARCH=YES`.
+The probes reject mismatched edition, count, translation coverage or missing
+language-pack registration. Partial translation coverage is valid: untranslated
+items use the production original-text fallback; never manufacture translations
+just to satisfy a performance fixture. The small bundled catalog is rejected.
+
+The first probe records three rounds of viewport drags and confirms that different
+real cards become visible; CPU and clock include XCTest gestures and accessibility
+queries, not FPS. The second measures five process launches until responsive,
+without clearing OS or filesystem caches. Both compare drafts and favorites before
+and after measurement, and attach the exact edition, locale and translation scope.
 
 Supply these variables through the UI test runner environment (for example an
 external `.xctestrun` file). Keep fixtures, screenshots, logs and result bundles
@@ -164,3 +177,5 @@ See the [protocol migration record](../docs/content-protocol-v2.md) for evidence
 and the remaining physical-device acceptance.
 
 Version 0.4.5 adds documented Lovable and Claude Code composer links for website prompts, plus a Code composer action for verified pinned Skill installation commands. Every open retains the complete clipboard text. URL payloads use strict UTF-8 percent encoding and a conservative 8192-byte transport bound; longer text falls back without truncation. No repository, branch or automatic-send parameter is supplied. Nine-language UI guidance distinguishes account prerequisites, prefill and copy fallback. Browser verification is not evidence of installed native Claude behavior; device acceptance remains a release gate.
+
+Current 0.4.5 production-workload Release evidence: 448 items, 376 cached Simplified Chinese translations plus original fallback. Five process launches averaged 3.655 seconds; three scroll rounds averaged 145.79 MB peak physical memory. Both probes passed, with catalog, language index, favorites and drafts byte-identical. This retains OS/file/media caches and is not a cold boot, FPS or device result. See the latest section in [quality evidence](../docs/quality-release.md).
