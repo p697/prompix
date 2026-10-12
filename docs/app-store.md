@@ -53,7 +53,7 @@ Suggested review path:
 2. Save it and open Favorites. Favorites and drafts persist after relaunch.
 3. Choose Image and open a preview. Some items have multiple images with native paging and zoom.
 4. Choose Video and tap a preview. Playback is user-initiated.
-5. Choose Website and open an original example. WebKit only displays bundled first-party demonstrations; external links open through the system.
+5. Choose Website and open an example. WebKit displays bundled first-party demonstrations; the reviewed community website example opens in the system browser.
 6. Open a creator from Discover, browse collected works, save the creator and find them in Favorites.
 7. Select Skills to read source instructions, files and usage guidance.
 8. Switch a detail between an available AI translation and the original. Copy and edit use the selected language; each language has its own local draft.
@@ -89,7 +89,9 @@ Content is editorially selected from allowlisted sources and published as a revi
 
 ## 截图与演示
 
-已有构建8商店候选材料和`~/.local/share/prompix/granola-redesign/demo/index.html`保留为历史证据，画面使用345条目录，不能标成346条或最终构建。当前0.3.2演示位于`~/.local/share/prompix/native-language-downloads/demo/index.html`，包含352条目录的首页、修正译文后的日语详情，以及此前346条目录阶段的创作者主页，共3张真实模拟器截图；每张画面的来源在同目录`evidence.json`中记录。这是截图浏览页，不是可交互App。正式提交前须从最终构建重新拍摄所需设备与语言的商店截图，不把历史材料重新标注成最终版本。
+已有构建8商店候选材料和`~/.local/share/prompix/granola-redesign/demo/index.html`保留为历史证据，画面使用345条目录，不能标成346条或最终构建。当前0.3.2演示位于`~/.local/share/prompix/native-language-downloads/demo/index.html`，包含4张真实模拟器截图：此前352条版的首页与修正译文后的日语详情、346条阶段的创作者主页，以及`edition-v2-b740a025a93331a3`的中文社区网页详情`website-detail.png`。各画面的来源分别保留，不能因两版均为352条而混同。新增网页的分类数量7、详情和点击后由iOS Safari打开托管作品已实际验证，证据为`~/.local/share/prompix/native-web-quality-9/ui-evidence.json`；该检查不代表全部原生界面或九语言UI复验。
+
+演示另含约53秒真实模拟器操作录屏，固定到此前352条版`edition-v2-e1db02bde684049f`，展示发现页、创作者主页、视频详情与原生播放。成片保存为`~/.local/share/prompix/native-walkthrough-9/creators-and-video-30fps.mp4`，同目录`evidence.json`记录SHA-256及范围；演示目录副本名为`walkthrough.mp4`。成片时长52.83秒，仅做H.264／30fps兼容转码，没有重排操作或加入模拟功能画面。本轮未操作用户手机。这个截图与录像浏览页不是可交互App，也不代表全App验收、源视频连续语义审核或商店预览已完成。正式提交前须从最终构建重新拍摄所需设备与语言的商店截图，不把历史材料重新标注成最终版本。
 
 工程同时支持 iPhone 与 iPad。商店拟用 iPhone 1206×2622 与 13 英寸 iPad 2064×2752 的真实截图；每个所需设备组 1–10 张 RGB PNG / JPEG、不带 alpha。应检查实际最终文件、设备比例、语言、内容及顺序，不将测试通过或图库演示直接写成“商店素材已上传”。详细素材与二进制进度统一记在 [交付质量](quality-release.md)。规范依据：[Apple 截图要求](https://developer.apple.com/help/app-store-connect/reference/app-information/screenshot-specifications/)。
 
@@ -97,27 +99,33 @@ Content is editorially selected from allowlisted sources and published as a revi
 
 ## 当前目录的年龄问卷依据
 
-旧 68 条目录的问卷草案已失效。2026-10-12 本次检查固定到 `edition-f0aceae77aac3663`，346 条（201 图片、96 普通文本、33 视频、6 网页、10 Skills），目录 SHA-256 为 `6e0cb598a346a683898a797452c3a04af3fe6a86ec0e9bf5fd35ea09a8e0409f`。每日采集会继续更新；提交前必须针对那时的目录重核。
+旧 68 条目录的问卷草案已失效。2026-10-12 的346条基线检查固定到 `edition-f0aceae77aac3663`（201 图片、96 普通文本、33 视频、6 网页、10 Skills），目录 SHA-256 为 `6e0cb598a346a683898a797452c3a04af3fe6a86ec0e9bf5fd35ea09a8e0409f`。其后的两轮增量审读分别记录如下；提交前仍须针对那时的目录重核。
 
 第三方正文、命中上下文与媒体地址仅保存在开发机：
 
-- 当前目录：`~/.local/share/prompix/release-readiness-8/production-catalog.json`。
+- 346条基线目录：`~/.local/share/prompix/release-readiness-8/production-catalog.json`。
 - 预筛报告：`~/.local/share/prompix/release-readiness/age-rating-audit-0.3.1.json`。
 - 语义复核说明：`~/.local/share/prompix/release-readiness/age-rating-review-notes.md`。
 - 媒体逐项记录：`~/.local/share/prompix/release-readiness/age-rating-media-review-0.3.1.json`，含每条 ID、文件路径、SHA-256、来源对应方式与实际观察。
 
-此次对全部 346 条的原始及展示文字、所有译文字段和 Skill 信息进行中英文词汇预筛，浏览标题索引并复核命中上下文，另完整阅读新增条目的原文。55 条有词汇命中，含否定指令、颜色名、衣服和机器人部位等误报；匹配数不是问卷频次。
+基线检查对全部 346 条的原始及展示文字、所有译文字段和 Skill 信息进行中英文词汇预筛，浏览标题索引并复核命中上下文，另完整阅读新增条目的原文。55 条有词汇命中，含否定指令、颜色名、衣服和机器人部位等误报；匹配数不是问卷频次。
 
 随后实际查看 **37 张高信号及对照图片**（全部 36 个命中图片条目，加一条泳装），并查看 **全部 33 条视频共 233 个代表帧**：每条 5、8 或 12 帧。媒体由既有本地采集缓存对应线上目录，没有新增远程下载；25 条视频的源文件／原采样记录 SHA-256 与发布文件名相同，其余 8 条通过原始 URL 的发布映射对应。33 条的视频探测均无音轨。源图转码前后的分辨率或编码可能不同，逐项记录保留对应依据。
 
-**此轮高信号媒体复核已完成；覆盖范围不是全部 201 条图片或所有图集附图，也不是视频连续播放或九语言逐字审核。** 代表帧之间的瞬间不能据此排除。下表是当前固定目录的问卷准备描述，频次建议仍须与正式问卷和最终发布目录对应，不是 Apple 分级结果。
+**基线高信号媒体复核已完成；覆盖范围不是全部 201 条图片或所有图集附图，也不是视频连续播放或九语言逐字审核。** 代表帧之间的瞬间不能据此排除。
+
+同日对352条版`edition-v2-e1db02bde684049f`完成相对346条基线的增量审读：阅读新增6条原文及54份翻译记录，实际查看3张新增发布图片，并以目录语义相等校验复用已审读的49个翻译prompt修正。其余变化为11个法语example尾随空格、95条来源revision及排列顺序；保留条目的原文与媒体未变。本轮未观察到新的年龄问卷内容类别，已明确记录滑板图中的非性化赤裸上身运动场景。证据在`~/.local/share/prompix/release-readiness-9/incremental-content-audit-0.3.2-9.json`及同目录审读说明；结论仅覆盖该版增量，不代表全部352条、全部媒体或九语言全库逐句复核。
+
+随后发布的`edition-v2-b740a025a93331a3`仍为352条：因字母／动物对应错误暂缓发现目录中的动物字母海报，新增一条prompts.chat社区网页Prompt及原创Outline演示，其余351条逐项保持不变，移除墓碑没有变化。质量暂缓不作为删除用户收藏或草稿的指令。新增条目的英文原文及八种译文已逐项审读，22处译文字段经有记录的授权Agent逐项校正；托管作品已完成桌面与移动端真实交互、HTML及预览图哈希核对。本轮未观察到新的年龄问卷内容类别。作品及发布证据为`~/.local/share/prompix/web-community-review/artifact.json`；中文原生详情与Safari打开证据另存于`native-web-quality-9/ui-evidence.json`。这次单条网页检查不扩展此前图片、视频或全库语言审读的覆盖范围。
+
+下表汇总固定基线及上述增量观察，频次建议仍须与正式问卷和最终发布目录对应，不是 Apple 分级结果。
 
 | 问卷主题 | 已有证据及剩余工作 |
 |---|---|
 | 武器、暴力、血迹 | 图片已确认动漫对打、持剑人物，以及写实风格的僵尸战场、面部／衣物／武器血迹。武器、幻想暴力及写实暴力按“存在、少量”准备；所看媒体未见断肢、内脏或持续施虐，不因题材虚构就把写实暴力填“无” |
 | 恐怖／恐惧 | 实际图像确认吸血鬼嘴角血、骷髅、幽灵与暗黑猎犬；视频含怪物巴士等短暂奇幻形象。按“存在、少量”准备 |
 | 酒精、烟草、药物 | 已看到鸡尾酒、红酒杯、啤酒品牌及酒字招牌，按酒精引用“存在、少量”准备；所看媒体未见烟草／非法药物，睡衣的 champagne 只是颜色 |
-| 成熟、暗示性、裸体 | 已看到低胸／身体强调构图及私密氛围自拍，成熟或暗示主题按“存在、少量”准备。另核对普通连体泳衣、舞蹈服装和露肩时装，不把它们直接算裸体；所看媒体未见私密部位裸露或性行为。机器人胸部与人像裁切词为误报 |
+| 成熟、暗示性、裸体 | 已看到低胸／身体强调构图及私密氛围自拍，成熟或暗示主题按“存在、少量”准备。另核对普通连体泳衣、舞蹈服装、露肩时装及新增滑板图的非性化赤裸上身运动场景；所看媒体未见私密部位裸露或性行为。机器人胸部与人像裁切词为误报 |
 | 健康／身心主题 | 存在情绪反思和饮食话题。实际营养信息图还出现药物相互作用与健康状况提示，因此医学信息引用按“存在、少量”准备，不能只归为生活反思；本次没有验证图中医学主张的正确性 |
 | 博彩／抽奖 | App 没有下注、奖金、抽奖或战利品箱机制。塔罗、星盘和随机周末写作题不能仅因词名判成赌博 |
 | 粗俗语言 | 词表与已看媒体文字未发现粗俗用语；有善意吐槽和轻喜剧。全部视频无音轨，仍不把文字预筛说成九语言逐字审核 |
