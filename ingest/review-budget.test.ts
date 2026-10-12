@@ -9,8 +9,8 @@ const attempt = editorialAttemptSchema.parse({ day, requests: 1, model: "gpt-5.6
 
 test("review limits accept only bounded integer counts, including explicit zero", () => {
   assert.equal(reviewRequestLimit(), 4);
-  for (const value of [0, 4, 20, "0", "4", "20"]) assert.equal(reviewRequestLimit(value), Number(value));
-  for (const value of [null, true, -1, 1.5, 21, Infinity, NaN, "", "4.0", "4e0", " 4", "4 ", "-1", "21"])
+  for (const value of [0, 4, 20, 32, 40, "0", "4", "20", "40"]) assert.equal(reviewRequestLimit(value), Number(value));
+  for (const value of [null, true, -1, 1.5, 41, Infinity, NaN, "", "4.0", "4e0", " 4", "4 ", "-1", "41"])
     assert.throws(() => reviewRequestLimit(value), /request limit/);
 });
 

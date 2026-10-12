@@ -1,19 +1,18 @@
 import { readFile, readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
-import { createHash } from "node:crypto";
 import { z } from "zod";
 import { creatorSchema, type Prompt } from "../packages/schema/catalog.ts";
 import { fingerprint, type Candidate } from "./sources.ts";
 import type { CreatorCache } from "./creators.ts";
 
-export const nativeXSourceName = "X";
-export const nativeXPublicationBlocker = "Native X drafts await source and publication review";
+import { nativeXSourceName, nativeXPublicationBlocker, nativeXSourceDigest, nativeXSourceIssue } from "./x-source.ts";
+export { isNativeXDraft, nativeXPublicationBlocker, nativeXSourceDigest } from "./x-source.ts";
 const entitiesSchema = z.object({ urls: z.array(z.object({ url: z.string(), expanded_url: z.string().optional(), unwound_url: z.string().optional(),
   media_key: z.string().optional() })).max(100).optional() });
 const noteSchema = z.object({ text: z.string().min(1).max(50000), truncated: z.boolean().optional(), entities: entitiesSchema.optional() });
 const postSchema = z.object({
   id: z.string().regex(/^\d+$/), author_id: z.string().regex(/^\d+$/), text: z.string().max(50000),
-  created_at: z.iso.datetime().optional(), truncated: z.boolean().optional(), entities: entitiesSchema.optional(),
+  created_at: z.iso.datetime().optional(), withheld: z.unknown().optional(), truncated: z.boolean().optional(), entities: entitiesSchema.optional(),
   note_tweet: noteSchema.optional(), note_post: noteSchema.optional(),
   attachments: z.object({ media_keys: z.array(z.string()).max(20).optional() }).optional(),
 });
@@ -31,16 +30,6 @@ export type XIntakeRecord = { postID: string; authorID?: string; sourceURL?: str
   expandedLinks?: string[]; hasCreatorProfile?: boolean; mediaItems?: number; attachedMediaKeys?: string[] };
 export type XIntakeReport = { snapshots: number; discovered: number; duplicatePosts: number; drafted: number; blocked: number;
   publicationBlocked: number; reviewedDrafts: number; reasons: Record<string, number>; snapshotErrors: { snapshot: string; reason: string }[] };
-
-/** These are reviewable native drafts, never an implicit grant to republish X text. */
-export function isNativeXDraft(item: Pick<Prompt, "source">): boolean { return item.source.name === nativeXSourceName; }
-
-/** Exact source identity for publication review; profile enrichment and editorial metadata are deliberately excluded. */
-export function nativeXSourceDigest(item: Pick<Prompt, "id" | "kind" | "prompt" | "model" | "source" | "creator" | "media">): string {
-  return createHash("sha256").update(JSON.stringify(["prompix-x-source-1", item.id, item.kind, item.model, item.prompt,
-    item.source.url, item.creator?.externalID ?? null,
-    item.media?.imageURL ?? null, item.media?.imageURLs ?? [], item.media?.videoURL ?? null, item.media?.demoURL ?? null])).digest("hex");
-}
 
 function safeURL(value: string | undefined, hosts?: readonly string[]) {
   if (!value) return;
@@ -197,7 +186,7 @@ export function convertXDiscovery(snapshots: readonly Snapshot[], creators: Crea
   const records: XIntakeRecord[] = [], candidates: Candidate[] = [];
   const report: XIntakeReport = { snapshots: snapshots.length, discovered: 0, duplicatePosts: 0, drafted: 0, blocked: 0,
     publicationBlocked: 0, reviewedDrafts: 0, reasons: {}, snapshotErrors: [] };
-  const posts = new Map<string, { post?: XPost; snapshot: string; creators: z.infer<typeof creatorSchema>[]; media: XMedia[] }>();
+  const posts = new Map<string, { post?: XPost; snapshot: string; capturedAt?: string; creators: z.infer<typeof creatorSchema>[]; media: XMedia[] }>();
   const capturedAt = (snapshot: Snapshot) => {
     const parsed = snapshotSchema.safeParse(snapshot.data);
     return parsed.success && parsed.data.capturedAt ? parsed.data.capturedAt : snapshot.name.slice(0, 10) + "T00:00:00.000Z";
@@ -216,12 +205,12 @@ export function convertXDiscovery(snapshots: readonly Snapshot[], creators: Crea
       // Deduplicate identity before validation, so a later corrected snapshot
       // replaces a stale failure and a later invalid snapshot remains visible.
       if (posts.has(sourceID)) report.duplicatePosts++;
-      posts.set(sourceID, { post: parsedPost.success ? parsedPost.data : undefined, snapshot: snapshot.name, creators: parsed.data.creators ?? [], media });
+      posts.set(sourceID, { post: parsedPost.success ? parsedPost.data : undefined, snapshot: snapshot.name, capturedAt: parsed.data.capturedAt, creators: parsed.data.creators ?? [], media });
     }
   }
-  for (const [postID, { post, snapshot, creators: profiles, media }] of posts) {
+  for (const [postID, { post, snapshot, capturedAt, creators: profiles, media }] of posts) {
     const sourceURL = `https://x.com/i/web/status/${postID}`;
-    if (!post) {
+    if (!post || post.withheld !== undefined) {
       records.push({ postID, sourceURL, snapshot, state: "blocked", reason: "invalid-post" });
       continue;
     }
@@ -244,12 +233,20 @@ export function convertXDiscovery(snapshots: readonly Snapshot[], creators: Crea
       source: { name: nativeXSourceName, url: sourceURL, author, license: "Unspecified", method: "X API discovery" },
       media: attachedMedia(post, media), ...(post.created_at ? { publishedAt: post.created_at } : {}),
       fingerprint: hash, featured: false, reviewStatus: "draft" });
-    records.push({ ...record, state: "draft", reason: nativeXPublicationBlocker, candidateID: id, fingerprint: hash, sourceDigest: nativeXSourceDigest(candidates.at(-1)!) });
+    const candidate = candidates.at(-1)!;
+    if (capturedAt && post.created_at && profile?.username) {
+      candidate.source.post = { id: post.id, authorID: post.author_id, text: fullText(post).text,
+        createdAt: post.created_at, checkedAt: capturedAt };
+      candidate.source.license = "X-API-Terms";
+      candidate.source.method = "X API — prompt extracted from the original post";
+      candidate.source.revision = nativeXSourceDigest(candidate);
+    }
+    records.push({ ...record, state: "draft", reason: nativeXSourceIssue(candidate) ?? "awaiting-editorial-and-preview-review", candidateID: id, fingerprint: hash, sourceDigest: nativeXSourceDigest(candidates.at(-1)!) });
   }
   report.discovered = records.length;
   report.drafted = candidates.length;
   report.blocked = records.filter(item => item.state === "blocked").length;
-  report.publicationBlocked = candidates.length;
+  report.publicationBlocked = candidates.filter(item => nativeXSourceIssue(item)).length;
   for (const record of records) report.reasons[record.reason] = (report.reasons[record.reason] ?? 0) + 1;
   return { candidates, records, report };
 }
@@ -258,7 +255,7 @@ export function convertXDiscovery(snapshots: readonly Snapshot[], creators: Crea
 export async function readXIntake(root: string, creators: CreatorCache = {}) {
   const directory = join(root, "x-discovery");
   let names: string[];
-  try { names = (await readdir(directory)).filter(name => /^\d{4}-\d{2}-\d{2}(?:-feed-\d{3})?\.json$/.test(name)); }
+  try { names = (await readdir(directory)).filter(name => /^\d{4}-\d{2}-\d{2}(?:-(?:feed|check)-\d{3})?\.json$/.test(name)); }
   catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return convertXDiscovery([], creators); throw error; }
   const snapshots: Snapshot[] = [], errors: XIntakeReport["snapshotErrors"] = [];
   for (const name of names.sort()) {

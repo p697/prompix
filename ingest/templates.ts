@@ -4,7 +4,7 @@ import type { Reviews } from "./editorial.ts";
 /** Expand only the upstream's exact named-default notation, after review. */
 export function publicationText(candidate: Candidate, reviews: Reviews): string {
   // Registry files are hash-verified artifacts, not templates owned by Prompix.
-  if (candidate.contentType === "skill") return candidate.prompt;
+  if (candidate.contentType === "skill" || candidate.source.name === "X") return candidate.prompt;
   if (reviews[candidate.id]?.fingerprint !== candidate.fingerprint) return candidate.prompt;
   // A default may itself be a named input such as {{PERSON_NAME_OR_IMAGE}}.
   // Remove the source wrapper while leaving that editable input visible.

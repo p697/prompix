@@ -1,3 +1,4 @@
+import { prepareXAvailability, filterXAvailability, assertXAvailability } from "./x-availability.ts";
 import { mkdir, readFile, writeFile, rm } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
@@ -39,6 +40,8 @@ const resumePublishing = process.argv.includes("--resume-publishing");
 if (resumePublishing && !publishing) throw new Error("--resume-publishing requires --publish");
 const mediaHosts = [
   "api.prompix.dev",
+  "pbs.twimg.com",
+  "video.twimg.com",
   "cms-assets.youmind.com",
   "cdn.youmind.com",
   "customer-qs6wnyfuv0gcybzj.cloudflarestream.com",
@@ -88,6 +91,16 @@ async function run() {
   try {
     const qualityHolds = await readQualityHolds(root);
     // Registry availability must be fresh even when resuming a retained target.
+    const xAvailability = await prepareXAvailability(root, { enabled: publishing, bearer: process.env.X_BEARER_TOKEN });
+    report.sources["x-availability"] = xAvailability.report;
+    if (publishing) {
+      const removed = Object.entries(xAvailability.state).filter(([, state]) => state.removed).map(([id]) => id);
+      if (removed.length) {
+        const moderationPath = join(root, "moderation.json");
+        const current = moderationSchema.parse(await json(moderationPath, { removedIDs: [] }));
+        await atomic(moderationPath, { ...current, removedIDs: [...new Set([...current.removedIDs, ...removed])].sort() });
+      }
+    }
     const communitySkills = await prepareClawHub(root);
     report.sources.clawhub = communitySkills.report;
     // Reconcile retained publication work before any collectors or paid models run.
@@ -171,7 +184,7 @@ async function run() {
     const xIntake = await readXIntake(root, creators);
     xIntake.report.reviewedDrafts = xIntake.candidates.filter(item => reviews[item.id]?.fingerprint === item.fingerprint).length;
     report.sources["x-intake"] = xIntake.report;
-    all.push(...xIntake.candidates);
+    all.push(...filterXAvailability(xIntake.candidates, xAvailability.state).prompts);
     await atomic(join(root, "candidates", "x-native.json"), xIntake.candidates);
     await atomic(join(root, "x-intake", "status.json"), { updatedAt: new Date().toISOString(), ...xIntake.report, records: xIntake.records });
     report.sources[videoArchive.id] = { status: "retired", count: 0 };
@@ -333,7 +346,9 @@ async function run() {
     report.qualityHeldIDs = visible.withheldIDs;
     const registryVisible = filterClawHubAvailability(visible.prompts, communitySkills.state);
     report.registryWithheldIDs = registryVisible.withheldIDs;
-    let complete = enrichCreators(registryVisible.prompts, creators);
+    const xVisible = filterXAvailability(registryVisible.prompts, xAvailability.state);
+    report.sources["x-withheld"] = { ids: xVisible.withheldIDs };
+    let complete = enrichCreators(xVisible.prompts, creators);
     if (publishing) complete = await mirrorCreatorAvatars(complete, async url => {
       const mirrored = await publishAvatar(url, root, mediaMap, upload);
       await atomic(join(root, "media-map.json"), mediaMap);
@@ -348,7 +363,7 @@ async function run() {
     if (previous) report.changes = libraryDelta(previous.prompts, prompts);
     if (
       publishing &&
-      prompts.filter((p) => p.source.name === "YouMind OpenLab").length < 6
+      prompts.filter((p) => p.kind === "image" && p.media?.imageURL).length < 6
     )
       throw new Error(
         "Too few verified community previews; current release preserved",
@@ -409,6 +424,7 @@ async function run() {
     if (publishing) {
       assertNoQualityHolds(stored, await readQualityHolds(root));
       await assertClawHubAvailability(root, stored);
+      await assertXAvailability(root, stored);
       await upload(
         `releases/${version}/catalog.json`,
         catalogPath,
@@ -417,6 +433,7 @@ async function run() {
       await remoteCatalog(manifest);
       assertNoQualityHolds(stored, await readQualityHolds(root));
       await assertClawHubAvailability(root, stored);
+      await assertXAvailability(root, stored);
       // Activate LAST. Any earlier failure leaves clients on the previous complete edition.
       await upload("v1/latest.json", manifestPath, "application/json");
       await atomic(latestPath, manifest);

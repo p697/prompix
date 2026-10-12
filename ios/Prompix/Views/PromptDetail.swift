@@ -130,8 +130,18 @@ struct PromptDetail: View {
                             HStack { sourceAuthor; Spacer(); sourceKind }
                             VStack(alignment: .leading, spacing: 6) { sourceAuthor; sourceKind }
                         }
-                        Text(item.source.license).font(.footnote).foregroundStyle(Palette.muted)
+                        Text(item.source.license == "X-API-Terms" ? String(localized: "通过 X API 收录") : item.source.license).font(.footnote).foregroundStyle(Palette.muted)
                             .accessibilityLabel(String(localized: "内容许可：\(spokenLicense)"))
+                        if let post = item.source.post {
+                            if let date = post.date {
+                                Text(date, format: .dateTime.year().month().day().hour().minute())
+                                    .font(.caption).foregroundStyle(Palette.muted)
+                            }
+                            DisclosureGroup(String(localized: "查看 X 原帖")) {
+                                Text(post.text).font(.subheadline).lineSpacing(5).textSelection(.enabled)
+                                    .frame(maxWidth: .infinity, alignment: .leading).padding(.vertical, 10)
+                            }.font(.subheadline).accessibilityIdentifier("originalXPost")
+                        }
                         if let repository = item.source.repository { Link(destination: repository) { Text(String(localized: "收录于 \(item.source.name)")).font(.footnote).frame(minHeight: 44).contentShape(Rectangle()) } }
                         if let source = item.source.url { Link(destination: source) { Text(String(localized: "查看原始来源 ↗")).font(.footnote).frame(minHeight: 44).contentShape(Rectangle()) } }
                         Link(destination: SupportLinks.url(.report, contentID: item.id)) { Text(String(localized: "反馈这条内容")).font(.footnote).frame(minHeight: 44).contentShape(Rectangle()) }.accessibilityIdentifier("reportContent")

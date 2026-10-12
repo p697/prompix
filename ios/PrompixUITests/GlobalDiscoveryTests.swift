@@ -458,6 +458,48 @@ import XCTest
         capture("independent-03-new-skill-use")
     }
 
+    func testIndependentXImageAndVideoJourney() throws {
+        guard ProcessInfo.processInfo.environment["PROMPIX_NATIVE_X_ACCEPTANCE"] == "1" else {
+            throw XCTSkip("Requires a published native X image and video, with a backed-up simulator container.")
+        }
+        launch(online: true)
+        var targets: [[String: Any]] = []
+        let downloaded = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            guard let directory = try? self.acceptanceDirectory(),
+                  let bytes = try? Data(contentsOf: directory.appendingPathComponent("catalog.json")),
+                  let catalog = (try? JSONSerialization.jsonObject(with: bytes)) as? [String: Any],
+                  let prompts = catalog["prompts"] as? [[String: Any]] else { return false }
+            let native = prompts.filter { ($0["source"] as? [String: Any])?["name"] as? String == "X" }
+            targets = ["image", "video"].compactMap { kind in native.first { $0["kind"] as? String == kind } }
+            return targets.count == 2
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [downloaded], timeout: 90), .completed)
+        capture("native-x-01-updated-discovery")
+        for target in targets {
+            let id = try XCTUnwrap(target["id"] as? String)
+            let title = try XCTUnwrap(target["title"] as? String)
+            let kind = try XCTUnwrap(target["kind"] as? String)
+            app.buttons["searchButton"].tap()
+            let search = app.searchFields.firstMatch
+            XCTAssertTrue(search.waitForExistence(timeout: 5)); search.tap(); search.typeText(title)
+            let card = app.buttons["prompt-\(id)"]
+            reveal(card); card.tap()
+            XCTAssertTrue(app.buttons["usePrompt"].waitForExistence(timeout: 5))
+            capture("native-x-\(kind)-detail")
+            let original = app.buttons["originalXPost"]
+            reveal(original); original.tap()
+            capture("native-x-\(kind)-original-post")
+            app.buttons["usePrompt"].tap()
+            XCTAssertTrue(app.buttons["handoffOpen"].waitForExistence(timeout: 5))
+            XCTAssertGreaterThan(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'destination-' ")).count, 0)
+            capture("native-x-\(kind)-tool-destination")
+            app.buttons["handoffOpen"].tap(); app.activate()
+            XCTAssertFalse(app.staticTexts["handoffOpenError"].exists)
+            app.navigationBars.buttons["完成"].tap()
+            launch()
+        }
+    }
+
     func testPromptAndSkillHandoff() {
         launch()
         app.buttons["kind-text"].tap()

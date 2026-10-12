@@ -1,3 +1,4 @@
+import { assertXAvailability, filterXAvailability, readXAvailability } from "./x-availability.ts";
 import { readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { z } from "zod";
@@ -201,6 +202,7 @@ export async function stageRelease(root: string, input: Catalog, previous: Publi
   const qualityHolds = await readQualityHolds(root);
   assertNoQualityHolds(catalog, qualityHolds);
   await assertClawHubAvailability(root, catalog);
+  await assertXAvailability(root, catalog);
   assertRemovals(catalog, [...(previous.v1.catalog.removedIDs ?? []), ...(previous.v2?.catalog.removedIDs ?? [])]);
   // Measure only after full schema validation; arbitrary failures must not freeze v1.
   const fullBytes = Buffer.from(JSON.stringify(catalog) + "\n");
@@ -209,7 +211,7 @@ export async function stageRelease(root: string, input: Catalog, previous: Publi
   if (freezeV1) {
     const removedIDs = [...new Set([...(previous.v1.catalog.removedIDs ?? []), ...(catalog.removedIDs ?? [])])].sort();
     const qualityVisible = applyQualityHolds(previous.v1.catalog.prompts.filter(item => !removedIDs.includes(item.id)), qualityHolds).prompts;
-    const prompts = filterClawHubAvailability(qualityVisible, await readClawHubState(root)).prompts;
+    const prompts = filterXAvailability(filterClawHubAvailability(qualityVisible, await readClawHubState(root)).prompts, await readXAvailability(root)).prompts;
     legacy = preserveCatalogText({ schemaVersion: 1, version: editionVersion(prompts, removedIDs), publishedAt: catalog.publishedAt, prompts, removedIDs });
   }
   let v1: Manifest;
@@ -278,6 +280,7 @@ export async function resumePublication(root: string, hooks: PublicationHooks = 
   const qualityHolds = await readQualityHolds(root);
   assertNoQualityHolds(catalog, qualityHolds);
   await assertClawHubAvailability(root, catalog);
+  await assertXAvailability(root, catalog);
   assertRemovals(catalog, hooks.requiredRemovedIDs);
   const descriptors = [intent.targets.v2.base, ...Object.values(intent.targets.v2.locales)];
   for (const descriptor of descriptors) await ensureRemoteArtifact(root, descriptor.url, languagePackByteLimit, transport, bytes => {
@@ -290,6 +293,7 @@ export async function resumePublication(root: string, hooks: PublicationHooks = 
   });
   // Reassemble every advertised remote pack before changing either pointer.
   await assertClawHubAvailability(root, legacyCatalog!);
+  await assertXAvailability(root, legacyCatalog!);
   await readV2(intent.targets.v2, async (url, maximum) => (await remoteBytes(transport, url, maximum))!);
   if (intent.operation === "rollback" && !hooks.beforeActivation) throw new Error("Rollback requires a durable hold callback");
   if (intent.holdToClear && !hooks.afterActivation) throw new Error("Resuming held publication requires a hold cleanup callback");
@@ -299,7 +303,9 @@ export async function resumePublication(root: string, hooks: PublicationHooks = 
   assertNoQualityHolds(catalog, activeHolds);
   assertNoQualityHolds(legacyCatalog!, activeHolds);
   await assertClawHubAvailability(root, catalog);
+  await assertXAvailability(root, catalog);
   await assertClawHubAvailability(root, legacyCatalog!);
+  await assertXAvailability(root, legacyCatalog!);
   await activate(root, "v2", intent, transport);
   await activate(root, "v1", intent, transport);
   const published = await readPublishedState(root, {}, transport);

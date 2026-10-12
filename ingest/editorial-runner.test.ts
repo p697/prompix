@@ -301,7 +301,7 @@ test("zero limit disables new requests and invalid daily limits or journals fail
     provider: async (input: EditorialInput[]) => { calls++; return approve(input); },
     persistCache: async () => {}, persistReviews: async () => {}, persistLedger: async () => {} };
   assert.equal((await runEditorialReview({ ...options, maxRequests: 0 })).report.status, "daily-limit");
-  for (const maxRequests of [-1, 1.5, 21, NaN]) await assert.rejects(runEditorialReview({ ...options, maxRequests }), /request limit/);
+  for (const maxRequests of [-1, 1.5, 41, NaN]) await assert.rejects(runEditorialReview({ ...options, maxRequests }), /request limit/);
   const corrupt = { schemaVersion: 2, day, requests: 1, attempts: [legacyAttempt(), legacyAttempt("reserved")] } as EditorialLedger;
   await assert.rejects(runEditorialReview({ ...options, ledger: corrupt }));
   assert.equal(calls, 0);
@@ -348,7 +348,7 @@ process.stdin.on("end", () => {
       { ...environment, PROMPIX_EDITORIAL_MAX_REQUESTS: "4" });
     assert.equal(next.report.requests, 1); assert.equal(next.report.dailyRequests, 4);
     assert.ok((await readdir(join(directory, "responses"))).includes(`${today}-004.json`));
-    for (const invalid of ["", "2.5", "21", "-1", "Infinity", " 4 "]) await assert.rejects(
+    for (const invalid of ["", "2.5", "41", "-1", "Infinity", " 4 "]) await assert.rejects(
       prepareDailyEditorial(items, {}, [], root, true, { ...environment, PROMPIX_EDITORIAL_MAX_REQUESTS: invalid }), /request limit/);
     let clockReads = 0;
     const tomorrow = new Date(Date.parse(`${today}T00:00:00Z`) + 86400000);

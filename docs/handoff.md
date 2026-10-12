@@ -50,3 +50,6 @@
 官方 GitHub Skill 可以复制或分享 `npx skills add` 命令，固定审核时的 commit、目录与 Skill 名称。只为经过路径校验的官方目录生成命令，无自动确认、全局安装或自动执行。依据为 [Skills CLI 文档](https://github.com/vercel-labs/skills#source-formats)。社区 Skill 继续提供完整来源链接，不编造通用安装命令。原始 SKILL.md 仍可在详情复制。
 
 Claude 官方目前记录了 [Code 页深链](https://support.claude.com/en/articles/14898120-open-the-claude-mobile-app-with-a-link)，需要 Claude Code 权限，不等同于普通聊天预填。因此这版采用明确的复制加打开，不向所有用户显示未经真机验证的预填承诺。
+
+
+0.4.1 补齐已识别模型的官方入口：Nano Banana→Gemini、GPT Image→ChatGPT、Midjourney→官网、Seedance→Dreamina、Veo→Flow、Runway→应用站。仅在内容未自带工具 URL 时采用，未知视频模型不猜链接；仍由用户在目标工具粘贴、选择模型与提交。

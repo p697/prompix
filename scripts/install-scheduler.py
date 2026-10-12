@@ -104,7 +104,7 @@ log="$HOME/.local/share/prompix/daily.log"
 if [ -f "$log" ] && [ "$(wc -c < "$log")" -gt 1000000 ]; then mv "$log" "$log.previous"; fi
 exec ''' + shlex.quote(sys.executable) + ' ' + shlex.quote(str(helper)) + ' ' + shlex.quote(node) + ''' >> "$log" 2>&1
 '''
-            job = {'Label': 'dev.prompix.collect', 'ProgramArguments': ['/bin/sh', str(runner)], 'StartCalendarInterval': {'Hour': 8, 'Minute': 0}, 'ProcessType': 'Background', 'LowPriorityIO': True, 'StandardErrorPath': str(base / 'launchd-error.log')}
+            job = {'Label': 'dev.prompix.collect', 'ProgramArguments': ['/bin/sh', str(runner)], 'StartCalendarInterval': [{'Hour': hour, 'Minute': 0} for hour in [2, 8, 14, 20]], 'ProcessType': 'Background', 'LowPriorityIO': True, 'StandardErrorPath': str(base / 'launchd-error.log')}
             changed = True
             write_atomic(helper, (repo / 'scripts/scheduler_runtime.py').read_bytes())
             write_atomic(runner, runner_text.encode(), 0o700)
@@ -137,7 +137,7 @@ exec ''' + shlex.quote(sys.executable) + ' ' + shlex.quote(str(helper)) + ' ' + 
             print(f'Removed {len(removed)} obsolete Prompix runtimes; active and rollback runtimes retained.')
         else:
             print('Runtime guard installed. Existing runtimes are retained until the next successful upgrade.')
-        print('Installed daily collection at 08:00 in this Mac’s local timezone.')
+        print('Installed collection at 02:00, 08:00, 14:00 and 20:00; paid daily budgets remain shared.')
 
 
 if __name__ == '__main__':
