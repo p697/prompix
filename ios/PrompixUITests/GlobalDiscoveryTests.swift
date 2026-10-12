@@ -454,8 +454,8 @@ import XCTest
         capture("independent-02-new-official-skill")
         app.buttons["usePrompt"].tap()
         XCTAssertTrue(app.buttons["copyInstallCommand"].waitForExistence(timeout: 5))
-        app.buttons["copyInstallCommand"].tap()
         capture("independent-03-new-skill-use")
+        app.buttons["copyInstallCommand"].tap()
     }
 
     func testIndependentXImageAndVideoJourney() throws {
@@ -482,7 +482,7 @@ import XCTest
             app.buttons["searchButton"].tap()
             let search = app.searchFields.firstMatch
             XCTAssertTrue(search.waitForExistence(timeout: 5)); search.tap(); search.typeText(title)
-            let card = app.buttons["prompt-\(id)"]
+            let card = app.scrollViews["searchResults"].buttons["prompt-\(id)"]
             reveal(card); card.tap()
             XCTAssertTrue(app.buttons["usePrompt"].waitForExistence(timeout: 5))
             capture("native-x-\(kind)-detail")
