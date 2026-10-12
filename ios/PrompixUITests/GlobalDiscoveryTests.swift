@@ -31,14 +31,19 @@ import UIKit
 
     private func reveal(_ element: XCUIElement, attempts: Int = 8) {
         for _ in 0..<attempts {
+            // Search presents a centered sheet on iPad. Whole-display gestures
+            // can start on its fixed action bar instead of scrolling the content.
+            let containingScroll = app.scrollViews.containing(.any, identifier: element.identifier).firstMatch
+            let viewport: XCUIElement = containingScroll.exists ? containingScroll : app
             // XCTest can report partially covered controls as hittable. Keep
             // their entire target above the detail screen's fixed action bar.
             let copy = app.buttons["copyPrompt"]
-            let bottom = copy.exists ? copy.frame.minY - 12 : app.frame.maxY - 100
-            if element.exists && element.isHittable && element.frame.minY >= 110 && element.frame.maxY <= bottom { return }
-            let scrollDown = element.exists && element.frame.minY < 110
-            let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: scrollDown ? 0.4 : 0.7))
-            let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: scrollDown ? 0.7 : 0.4))
+            let top = max(110, viewport.frame.minY + 12)
+            let bottom = min(viewport.frame.maxY - 12, copy.exists ? copy.frame.minY - 12 : app.frame.maxY - 100)
+            if element.exists && element.isHittable && element.frame.minY >= top && element.frame.maxY <= bottom { return }
+            let scrollDown = element.exists && element.frame.minY < top
+            let start = viewport.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: scrollDown ? 0.4 : 0.7))
+            let end = viewport.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: scrollDown ? 0.7 : 0.4))
             start.press(forDuration: 0.05, thenDragTo: end)
         }
         XCTAssertTrue(element.isHittable)

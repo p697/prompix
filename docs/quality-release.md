@@ -248,3 +248,15 @@ iPhone 18 Pro 连续五屏浏览及每屏详情返回位置通过，五张截图
 恢复正常字号后，实际 VoiceOver 服务遍历 Skill 面板，31.538 秒通过。朗读记录包含标题、完成、内容名称、手机继续、Claude Code 准备安装按钮、权限说明、展开正文、复制／分享、来源链接与复制安装命令按钮；未发送或执行命令。退出时关闭 VoiceOver，字号恢复到测试前的 large。目录、语言索引、收藏和草稿与前轮 SHA-256 一致。
 
 证据位于 `/Volumes/Lucy-SSD/Prompix-Codex/Evidence/handoff-accessibility/`：`ranked-largest-verified.xcresult`、`voiceover.xcresult`、截图与朗读附件、`preservation.json`。前期脚本定位、编译和无障碍标签失败保留作诊断，不计入通过项。本轮未重测性能、未部署内容、未安装真机。其他语言／屏幕、iPad、完整离线／慢网及最终真机验收仍须继续。
+
+## 0.4.5 iPad 真实升级与使用流程（2026-10-13）
+
+在保留旧数据的 iPad Pro 13-inch（M5）／iOS 27 专用模拟器中，当前构建通过真实生产刷新，将 `edition-88b8060efc9b5ed5` 的 345 条升级到 `edition-v2-10bd3a60d249975b` 的 448 条。旧条目 ID 无缺失；升级前后草稿、内容收藏、创作者收藏均逐字节不变。没有预先替换为新版目录。
+
+四条竖屏 UI 流程通过：创作者主页／作品回链／收藏后重启／Skills 分类（43.132 秒）；Expo 与 Supabase 官方 Skill 的搜索、完整文件清单、来源及安装命令复制（51.757 秒）；文本工具选择、记忆选择、打开后返回与 PDF Skill 交接（31.546 秒）；固定分类、卡片快捷复制、阅读／编辑器、专题和收藏切换（38.590 秒）。实际检查了文件列表与使用面板截图，固定动作可达；Supabase 的 158 字节剪贴板与固定版本安装命令完全相同，未执行命令。打开目标工具不代表完成登录或生成。
+
+首轮 Skill 文件入口检查失败：iPad 搜索详情位于居中面板，按整块屏幕计算的测试拖动落在固定动作区。测试辅助方法改为在包含目标的实际滚动视图中拖动，保留固定按钮遮挡判断；没有通过修改 App 布局或降低断言来绕过失败。失败结果与修正后的通过结果均保存。流程中的测试收藏完成后恢复为升级前的原始文件；草稿全程未变，保留新版内容缓存。
+
+证据目录 `/Volumes/Lucy-SSD/Prompix-Codex/Evidence/ipad-current-upgrade/` 包含 `publisher.xcresult`（首轮失败）、`publisher-scoped.xcresult`、`browsing-handoff.xcresult`、实际截图、`upgrade-preservation.json`、`clipboard-verification.json`、`personal-restoration.json`。这轮是中文、正常字号、竖屏的功能证据，不替代 iPad 横屏／分屏、大字、完整离线／慢网或最终真机测试；未安装用户手机。
+
+同一测试辅助方法在专用 iPhone 18 Pro／iOS 27 模拟器完成两个官方 Skill 包流程回归，61.176 秒通过，结果为同目录 `phone-regression.xcresult`。它验证普通手机滚动未因面板范围修正而失效，不是新增性能测量。
