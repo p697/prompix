@@ -187,3 +187,24 @@ The larger official Skills require a complete review input: the metadata batch n
 The local scheduler now runs at 02:00, 08:00, 14:00 and 20:00. Search and model usage budgets remain shared per UTC day. Editorial/visual request limits accept 0–40 (default 4); increasing a configured ceiling never clears failed or reserved attempts. Current operational settings and actual publication evidence are in `docs/content-operations.md`.
 
 Video policy `sampled-video-relevance-2` checks visible subject, setting, style and sampled story progression. Generic motion/music requests do not make all sampled video evidence unusable, but defining audio/lip-sync or unobserved frame-accurate requirements remain uncertain. Video identities include the policy version so earlier evidence is preserved rather than silently reinterpreted; image identities are unchanged. Match is not a claim of complete reproduction or of listening to audio.
+
+### Public author replies
+
+`npm run collect:x -- --fetch --replies` recovers public reply leads only, using
+exactly the same UTC request/post ledger as ordinary discovery. Without
+`--replies`, the scheduled collector alternates recovery and topic searches when
+leads exist. A source must explicitly point to public replies/comments; private
+DM giveaways do not qualify. Query handles are hints; numeric author IDs,
+conversation IDs, chronological parent references and completed pagination are
+validated separately. The original discovery query identity is unchanged.
+
+Exact page responses live under `x-replies/<root>/<window>/` outside Git.
+`analysis.json` reports linked/blocked source chains, not publication approval.
+Page cursors survive restarts and expire after 48 hours; completed roots are
+eligible again after 24 hours, while posts older than six days leave recent
+search recovery. Each window is bounded to twenty pages. Conflicting source text
+across pages prevents a complete result; changing engagement metrics do not.
+Missing ancestors are never invented. Original root and reply text remain
+separate, and the regular single-post intake does not read these snapshots.
+Multi-post availability, media attribution and native presentation remain the
+next publication integration step.
