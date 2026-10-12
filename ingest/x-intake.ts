@@ -117,31 +117,43 @@ function inferModality(label: string, context: string, body: string, post: XPost
   ];
   const matched = models.flatMap(model => { const match = context.match(model.pattern); return match ? [{ kind: model.kind, model: match[0] }] : []; });
   if (explicit) return { kind: explicit, ...(matched.find(model => model.kind === explicit) ?? {}) };
-  const evidence = new Set(matched.map(model => model.kind));
+  // ChatGPT/Claude can host image generation or website building. Their names
+  // alone are weaker output evidence than a dedicated model or the instructions.
+  const evidence = new Set(matched.filter(model => model.kind !== "text").map(model => model.kind));
   if (/\b(?:write|draft|rewrite)\b[^\n.!?]{0,80}\b(?:story|stories|essay|email|letter|article|poem|response|reply|summary|outline|report|paragraph|blog post)\b|\b(?:summari[sz]e|translate|proofread)\b|\b(?:answer|respond to)\s+(?:my|the|these|each)\s+questions?\b|(?:撰写|改写|翻译|总结|概括|润色|回答)[^\n。！？]{0,40}(?:文本|文章|故事|邮件|问题|内容|段落)/iu.test(body)) evidence.add("text");
   if (/\b(?:build|create|implement|design|code)\b[^\n.!?]{0,80}\b(?:website|web page|landing page|web app)\b|(?:创建|搭建|开发|设计)[^\n。！？]{0,40}(?:网页|网站)/iu.test(body)) evidence.add("web");
   if (evidence.size > 1) return { reason: "conflicting-modality-evidence" };
   if (evidence.size === 1) { const kind = [...evidence][0]; return { kind, ...(matched.find(model => model.kind === kind) ?? {}) }; }
+  const textModel = matched.find(model => model.kind === "text");
+  if (textModel) return { kind: "text", model: textModel.model };
   const attachedKinds = new Set(verifiedMedia(post, media).map(item => item.type === "photo" ? "image" as const : "video" as const));
   return attachedKinds.size === 1 ? { kind: [...attachedKinds][0] } : { reason: "ambiguous-modality" };
 }
 
 const promptMarkerPrefix = /^[\t ]*(?:(?:#{1,6}|>|[-+*•▪◦]|\d{1,2}[.)])[\t ]+|(?:\p{Extended_Pictographic}|\p{Emoji_Presentation})[\uFE0F\u200D\p{Emoji_Modifier}]*[\t ]*)*/u.source;
 const promptMarkerLabel = /(?:(?:full|text|image|video|web|website)[\t ]+)?prompt|完整提示词|文本提示词|图片提示词|视频提示词|网页提示词|提示词|(?:(?:画像|動画|テキスト|ウェブサイト|ウェブ|web)[\t ]*)?プロンプト/.source;
-const colonPromptMarker = new RegExp(String.raw`${promptMarkerPrefix}(?:\*\*|__)?(${promptMarkerLabel})(?:\*\*|__)?[\t ]*[:：](?:\*\*|__)?[\t ]*`, "gimu");
+// Recognize a small, explicit model-qualified heading, never arbitrary prose
+// ending in "prompt". Downward arrows are heading decoration, not instructions.
+const modelHeadingPrefix = /(?:(?:GPT[- ]Image(?:[- ]?[\t ]*\d+(?:\.\d+)*)?|Nano Banana(?: Pro|[\t ]+\d+(?:\.\d+)*)?|Seedance(?:[\t ]+\d+(?:\.\d+)*)?)[\t ]*)?/.source;
+const downArrow = /(?:[👇⬇⤵⏬↓][\uFE0F\p{Emoji_Modifier}]*[\t ]*)+/u.source;
+const colonPromptMarker = new RegExp(String.raw`${promptMarkerPrefix}${modelHeadingPrefix}(?:\*\*|__)?(${promptMarkerLabel})(?:\*\*|__)?[\t ]*[:：](?:\*\*|__)?[\t ]*`, "gimu");
 // A colon-free label must fill its line and have either matching bold delimiters
 // or no delimiters. The newline stays outside the match so adjacent headings count.
-const standalonePromptMarker = new RegExp(String.raw`${promptMarkerPrefix}(\*\*|__|)(${promptMarkerLabel})\1[\t ]*(?=\r?\n)`, "gimu");
+const standalonePromptMarker = new RegExp(String.raw`${promptMarkerPrefix}${modelHeadingPrefix}(\*\*|__|)(${promptMarkerLabel})\1[\t ]*(?=\r?\n)`, "gimu");
+
+const decoratedPromptMarker = new RegExp(String.raw`${promptMarkerPrefix}${modelHeadingPrefix}(\*\*|__|)(${promptMarkerLabel})\1[\t ]*(?:[.;；]|(?:below[\t ]*)?${downArrow})[\t ]*[:：]?[\t ]*(?=\r?\n)`, "gimu");
 
 /** Only explicit instruction boundaries qualify. No fetch, continuation guessing or prose generation. */
 export function extractMarkedXPrompt(post: XPost, media: readonly XMedia[] = []): { body: string; kind: Prompt["kind"]; model?: string } | { reason: string } {
   const source = fullText(post), text = source.text.trim();
   if (source.truncated) return { reason: "api-truncated" };
   if (truncatedEnding.test(text)) return { reason: "truncated-ending" };
-  const markers = [
-    ...[...text.matchAll(colonPromptMarker)].map(match => ({ end: match.index! + match[0].length, label: match[1] })),
-    ...[...text.matchAll(standalonePromptMarker)].map(match => ({ end: match.index! + match[0].length, label: match[2] })),
+  const matches = [
+    ...[...text.matchAll(colonPromptMarker)].map(match => ({ start: match.index!, end: match.index! + match[0].length, label: match[1] })),
+    ...[...text.matchAll(standalonePromptMarker)].map(match => ({ start: match.index!, end: match.index! + match[0].length, label: match[2] })),
+    ...[...text.matchAll(decoratedPromptMarker)].map(match => ({ start: match.index!, end: match.index! + match[0].length, label: match[2] })),
   ];
+  const markers = [...new Map(matches.sort((a, b) => a.end - b.end).map(match => [match.start, match])).values()];
   if (!markers.length) return { reason: "missing-prompt-boundary" };
   if (markers.length !== 1) return { reason: "multiple-prompt-boundaries" };
   const marker = markers[0];

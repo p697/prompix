@@ -389,3 +389,34 @@ test("same-day feed and legacy snapshots use capture time, with fresh profile ex
   assert.equal(result.candidates[0].prompt, `${body} Add a final sentence.`);
   assert.equal(result.candidates[0].creator?.displayName, "Fresh Name");
 });
+
+test("decorated and model-qualified headings recover exact bodies without accepting marketing prose", () => {
+  for (const marker of ["Prompt 👇", "Prompt👇🏽", "PROMPT⤵️:", "**Prompt** ↓", "Prompt below 👇", "Prompt;", "Prompt.",
+    "GPT Image 2.5 提示词：", "GPT image 2.5提示词：", "Nano Banana Pro Image prompt:"]) {
+    const result = extractMarkedXPrompt(post("123", `${marker}\r\n${visualBody}`), [photo]);
+    // Attachments must be explicitly associated with this post.
+    const attached = extractMarkedXPrompt({ ...post("123", `${marker}\r\n${visualBody}`), attachments: { media_keys: [photo.media_key] } }, [photo]);
+    assert.ok("body" in attached, marker); assert.equal(attached.body, visualBody);
+    if (!/GPT|Nano/.test(marker)) assert.deepEqual(result, { reason: "ambiguous-modality" });
+  }
+  for (const marker of ["Prompt in the first reply", "Prompt in comments 👇", "Prompt below https://example.com", "Prompt from @someone 👇",
+    "Reply PROMPT and I will DM you", "Prompt 👇 download it", "Prompt 🔥", "Prompting 👇", "A new GPT Image prompt:"]) {
+    assert.deepEqual(extractMarkedXPrompt(post("123", `${marker}\n${body}`)), { reason: "missing-prompt-boundary" }, marker);
+  }
+  assert.deepEqual(extractMarkedXPrompt(post("123", `Prompt 👇\nhttps://example.com`)), { reason: "insufficient-instructions" });
+  assert.deepEqual(extractMarkedXPrompt(post("123", `Prompt 👇\n${body}\nPrompt;\n${body}`)), { reason: "multiple-prompt-boundaries" });
+});
+
+test("hosting tool names do not conflict with specific output models or website instructions", () => {
+  for (const context of ["GPT Image 2.5 on ChatGPT", "GPT Image 2.5 via ChatGPT", "Nano Banana Pro compared to GPT 2.5"]) {
+    const value = extractMarkedXPrompt(post("123", `${context}\nPrompt:\n${visualBody}`));
+    assert.ok("body" in value); assert.equal(value.kind, "image");
+  }
+  const web = extractMarkedXPrompt(post("123", "Claude\nPrompt:\nBuild a website with a working pricing calculator and a responsive navigation bar."));
+  assert.ok("body" in web); assert.equal(web.kind, "web");
+  const text = extractMarkedXPrompt({ ...post("123", `ChatGPT\nPrompt:\n${body}`), attachments: { media_keys: [photo.media_key] } }, [photo]);
+  assert.ok("body" in text); assert.equal(text.kind, "text");
+  const role = extractMarkedXPrompt({ ...post("123", "Claude\nPrompt:\nYou are my patient language tutor. Ask one question at a time and wait for me."), attachments: { media_keys: [photo.media_key] } }, [photo]);
+  assert.ok("body" in role); assert.equal(role.kind, "text", "An attached cover must not turn a role prompt into image generation");
+  assert.deepEqual(extractMarkedXPrompt(post("123", `GPT Image and Seedance\nPrompt:\n${visualBody}`)), { reason: "conflicting-modality-evidence" });
+});
