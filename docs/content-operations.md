@@ -135,3 +135,9 @@ Cloudflare 上传显式使用 `services/content/wrangler.jsonc` 中指定的项�
 PR34合并后，08:00运行器已升级至 `runtimes/1791798005082111000`，保留前一副本。通过安装后的启动器真实复跑，发布 `edition-9dfa3763da42be10`：全部346个既有ID保留、移除0、九语言完整；解码目录7,345,871字节，SHA-256为 `6959cf63c4cfee1365a09935b5609b4f027b8ec7fc43cf47388cdcc755673264`。95条来源commit元数据及排序变化导致新版本，正文和译文没有改变。新来源123条仅进入候选；本次X、作者资料、元数据、视觉及翻译新增请求均为0。线上哈希、范围请求及访问边界检查通过。运行摘要见开发机 `~/.local/share/prompix/x-discovery-next/runtime-verification.json`。
 
 该次运行还暴露了GitHub匿名API额度用尽：10个Skill全部沿用缓存。改为复用本机已登录的GitHub CLI后，真实只读采集取得10个完整清单（每包2至83个文件），Anthropic仓库固定在 `dbd4588f9e1033efb41dad4bef2f7947c8993d44`，OpenAI仓库固定在 `49f948faa9258a0c61caceaf225e179651397431`。206项内容测试、类型检查与调度器隔离测试通过。此段记录修复的独立采集验证，运行器升级后的状态须以实际 `status.json` 为准；原始Skill仅保存在仓库外 `~/.local/share/prompix/skill-inventory-fix/`，未进入Git或触发模型调用。
+
+PR35通过内容及iOS CI后合并，已安装 `runtimes/1791799379692116000`，上一运行副本保留。2026-10-12 10:03 UTC通过正式启动器复跑，10个Skill均为 `ok`，线上版本和SHA保持 `edition-9dfa3763da42be10` 不变，346条九语完整、媒体错误0。X、作者查询、元数据和视觉账本未变；翻译累计尝试仍为9，新增0。翻译账本会刷新 `updatedAt`，不能因文件哈希变化就误报新的模型调用。详细证据在 `~/.local/share/prompix/skill-inventory-fix/runtime-verification.json`。
+
+## 按语言分发的迁移状态
+
+[v2协议](content-protocol-v2.md)已实现纯拆分、校验与完整重组，并通过真实目录本地验证；没有改动当前daily、Worker或客户端。保持v1发布流程和容量限制。后续启用v2时，必须先上传并回读全部原文／语言文件，再激活清单；daily保留与回滚必须读取全部语言，不得使用单语言的客户端快照。仅有本地分包文件不能视为线上已发布。
