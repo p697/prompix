@@ -58,7 +58,9 @@ struct PromptUseSheet: View {
                                     Image(systemName: destination?.id == target.id ? "checkmark.circle.fill" : "circle")
                                         .foregroundStyle(destination?.id == target.id ? Palette.accent : Palette.muted)
                                 }.padding(.vertical, 5).contentShape(Rectangle())
-                            }.accessibilityIdentifier("destination-\(target.id)")
+                            }.accessibilityLabel(target.id == "v0" ? Prompt.localizedModel("v0 / 网站生成工具") : target.name)
+                                .accessibilityValue(target.url.host ?? "")
+                                .accessibilityIdentifier("destination-\(target.id)")
                                 .accessibilityAddTraits(destination?.id == target.id ? .isSelected : [])
                         }
                     } header: {

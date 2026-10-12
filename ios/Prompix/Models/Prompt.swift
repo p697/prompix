@@ -233,6 +233,31 @@ struct PromptQuery {
     var model: String?
     var skillsOnly = false
     var creatorID: String?
+    /// Rank direct intent matches before incidental mentions in long instructions.
+    /// Preserve editorial order for empty queries and equal relevance.
+    func results(in items: [Prompt]) -> [Prompt] {
+        let query = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let terms = query.split(whereSeparator: { $0.isWhitespace }).map(String.init)
+        func containsTerms(_ value: String) -> Bool {
+            terms.allSatisfy { value.localizedStandardContains($0) }
+        }
+        func relevance(_ item: Prompt) -> Int {
+            guard !terms.isEmpty else { return 0 }
+            let titles = [item.title, item.displayTitle]
+            if titles.contains(where: { $0.compare(query, options: [.caseInsensitive, .diacriticInsensitive, .widthInsensitive], locale: .current) == .orderedSame }) { return 4 }
+            if titles.contains(where: containsTerms) { return 3 }
+            if containsTerms(item.creator?.searchableIdentity ?? item.source.author ?? "") { return 2 }
+            if containsTerms(([item.model, item.displayModel] + item.tags).joined(separator: " ")) { return 1 }
+            return 0
+        }
+        var ranked: [(offset: Int, item: Prompt, rank: Int)] = []
+        for (offset, item) in items.enumerated() where matches(item) {
+            ranked.append((offset, item, relevance(item)))
+        }
+        ranked.sort { $0.rank == $1.rank ? $0.offset < $1.offset : $0.rank > $1.rank }
+        return ranked.map { $0.item }
+    }
+
     func matches(_ prompt: Prompt) -> Bool {
         if let kind, prompt.kind != kind || prompt.isSkill { return false }
         if skillsOnly && !prompt.isSkill { return false }
