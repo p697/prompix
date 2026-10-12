@@ -49,3 +49,13 @@ test("unknown macros, residual placeholders and JSON without defaults stay intac
   const { candidate, reviews } = fixture('Use {argument name="color" default="blue"} with {unfilled} and {argument name="other"}.');
   assert.equal(publicationText(candidate, reviews), 'Use blue with {unfilled} and {argument name="other"}.');
 });
+
+test("reviewed JSON defaults preserve a named input placeholder without leaking source macros", () => {
+  const source = JSON.stringify({ subject: '{argument name="person" default="{{PERSON_NAME_OR_IMAGE}}"}', lighting: "Butterfly lighting" });
+  const { candidate, reviews } = fixture(source);
+  const published = publicationText(candidate, reviews);
+  assert.deepEqual(JSON.parse(published), { subject: "{{PERSON_NAME_OR_IMAGE}}", lighting: "Butterfly lighting" });
+  assert.equal(candidate.prompt, source);
+  assert.equal(publicationText(candidate, {}), source);
+  assert.ok(!published.includes("{argument"));
+});

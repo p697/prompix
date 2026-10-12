@@ -4,8 +4,10 @@ import type { Reviews } from "./editorial.ts";
 /** Expand only the upstream's exact named-default notation, after review. */
 export function publicationText(candidate: Candidate, reviews: Reviews): string {
   if (reviews[candidate.id]?.fingerprint !== candidate.fingerprint) return candidate.prompt;
+  // A default may itself be a named input such as {{PERSON_NAME_OR_IMAGE}}.
+  // Remove the source wrapper while leaving that editable input visible.
   const replace = (text: string) => text.replace(
-    /\{argument name="[^"\r\n{}]+" default="([^"\r\n{}]*)"\}/g,
+    /\{argument name="[^"\r\n{}]+" default="((?:[^"\r\n{}]|\{\{[A-Za-z0-9_]+\}\})*)"\}/g,
     (_match, value: string) => value,
   );
   // Some source prompts are JSON documents. Decode string values first so the

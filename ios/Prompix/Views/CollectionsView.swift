@@ -7,7 +7,7 @@ struct Collection: Identifiable {
     let tags: Set<String>
     var kind: PromptKind? = nil
     static let all: [Collection] = [
-        .init(id: "play", title: String(localized: "趣味聊天"), subtitle: String(localized: "猜谜、角色扮演与趣味互动"), tags: ["好玩一点", "趣味互动"]),
+        .init(id: "play", title: String(localized: "趣味聊天"), subtitle: String(localized: "猜谜、角色扮演与趣味互动"), tags: ["好玩一点", "趣味互动"], kind: .text),
         .init(id: "portraits", title: String(localized: "人像与角色"), subtitle: String(localized: "摄影布光、人物造型与原创角色"), tags: ["人物肖像", "人像摄影", "肖像", "人像", "写真", "角色创作", "角色设计"]),
         .init(id: "products", title: String(localized: "产品与商业摄影"), subtitle: String(localized: "商品静物、场景布置与品牌画面"), tags: ["产品摄影", "产品设计", "商品摄影", "商业摄影", "产品海报", "品牌视觉"]),
         .init(id: "graphics", title: String(localized: "海报与信息图"), subtitle: String(localized: "文字排版、视觉层次与信息表达"), tags: ["海报设计", "信息图", "信息图表", "排版", "平面设计", "字体设计"]),
@@ -19,8 +19,8 @@ struct Collection: Identifiable {
         .init(id: "web", title: String(localized: "网页与小工具"), subtitle: String(localized: "作品集、网站与可以操作的工具"), tags: [], kind: .web)
     ]
     func includes(_ prompt: Prompt) -> Bool {
-        if let kind { return prompt.kind == kind }
-        return !tags.isDisjoint(with: prompt.tags)
+        if let kind, prompt.kind != kind { return false }
+        return tags.isEmpty || !tags.isDisjoint(with: prompt.tags)
     }
     @MainActor func items(in library: Library) -> [Prompt] { library.prompts.filter(includes) }
     func covers(from items: [Prompt]) -> [Prompt] {
