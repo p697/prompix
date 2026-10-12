@@ -4,7 +4,8 @@ import { mkdtemp, mkdir, readFile, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { discoverX } from "./x-discovery.ts";
-import { searchX, xSearchFingerprint, xSearchRequest } from "./x.ts";
+import { parseXLookupResponse, searchX, xLookupRequest, xSearchFingerprint, xSearchRequest } from "./x.ts";
+import { readXIntake } from "./x-intake.ts";
 
 const now = new Date("2026-10-13T00:00:00Z");
 const stateFile = (root: string) => join(root, "x-state.json");
@@ -108,4 +109,115 @@ test("invalid budget state fails closed before a paid request", () => fixture(as
   await assert.rejects(discoverX(root, { publishing: true, bearer: "fixture-secret", now,
     search: async () => { calls++; return result(); } }));
   assert.equal(calls, 0);
+}));
+
+async function cachedDiscovery(root: string) {
+  await mkdir(join(root, "x-discovery"), { recursive: true });
+  await writeFile(join(root, "x-discovery/2026-10-12.json"), JSON.stringify({ posts: [
+    { id: "123", author_id: "456", text: "Prompt: https://t.co/incomplete" },
+    { id: "124", author_id: "456", text: "The instructions are in a longer post." },
+  ] }));
+}
+const fullBody = "Write an original short story with three scenes. Preserve  this double space and end with a surprising question.";
+function lookupResult(ids: readonly string[], author = "456") {
+  return { ...parseXLookupResponse({ data: ids.map(id => ({ id, author_id: author, text: "A short preview…",
+    note_tweet: { text: `Text prompt:\n${fullBody}` } })) }, ids), request: xLookupRequest(ids) };
+}
+
+test("rich lookup spends the existing daily slot and repairs cached intake without moving search cursors", () => fixture(async root => {
+  await cachedDiscovery(root);
+  const before = await readXIntake(root);
+  assert.equal(before.report.drafted, 0);
+  await writeFile(stateFile(root), JSON.stringify({ day: "2026-10-12", cursors: { [xSearchFingerprint]: "999" } }));
+  let lookupCalls = 0, searchCalls = 0;
+  const run = await discoverX(root, { publishing: true, bearer: "fixture-secret", now, lookupIDs: ["123", "124"],
+    search: async () => { searchCalls++; throw new Error("Lookup must replace search"); }, lookup: async (_bearer, ids) => {
+      lookupCalls++;
+      assert.deepEqual(ids, ["123", "124"]);
+      assert.equal((await read(stateFile(root))).day, "2026-10-13");
+      const reserved = await read(join(root, "x-search-attempts/2026-10-13.json"));
+      assert.equal(reserved.state, "reserved"); assert.equal(reserved.operation, "lookup");
+      assert.equal(reserved.request.requestFingerprint, xLookupRequest(ids).requestFingerprint);
+      return lookupResult(ids);
+    } });
+  assert.equal(run.report.status, "ok"); assert.equal(run.report.operation, "lookup");
+  assert.equal(run.report.requestedPosts, 2); assert.equal(run.report.cursorUsed, undefined);
+  assert.equal(searchCalls, 0); assert.equal(lookupCalls, 1);
+  assert.equal((await read(stateFile(root))).cursors[xSearchFingerprint], "999");
+  const snapshot = await read(join(root, "x-discovery/2026-10-13.json"));
+  assert.equal(snapshot.operation, "lookup"); assert.equal(snapshot.newest, undefined);
+  assert.equal((await read(join(root, "x-discovery/2026-10-12.json"))).posts[0].text, "Prompt: https://t.co/incomplete");
+  const after = await readXIntake(root);
+  assert.equal(after.report.discovered, 2); assert.equal(after.report.duplicatePosts, 2);
+  assert.equal(after.report.drafted, 2); assert.equal(after.report.publicationBlocked, 2);
+  assert.ok(after.candidates.every(item => item.prompt === fullBody && item.reviewStatus === "draft" && item.source.license === "Unspecified"));
+  assert.equal((await discoverX(root, { publishing: true, bearer: "fixture-secret", now,
+    search: async () => { searchCalls++; return result(); } })).report.status, "daily-limit");
+  assert.equal(searchCalls, 0);
+}));
+
+test("search, failed lookup and changed lookup IDs share one global daily reservation", () => fixture(async root => {
+  await cachedDiscovery(root);
+  let calls = 0;
+  const options = { publishing: true, bearer: "fixture-secret", now, lookupIDs: ["123"], lookup: async () => {
+    calls++; throw new Error("fixture-secret ambiguous lookup failure");
+  } };
+  const failed = await discoverX(root, options);
+  assert.equal(failed.report.status, "failed"); assert.equal(failed.report.message?.includes("fixture-secret"), false);
+  assert.equal((await discoverX(root, { ...options, lookupIDs: ["124"] })).report.status, "daily-limit");
+  assert.equal((await discoverX(root, { ...options, lookupIDs: undefined })).report.status, "daily-limit");
+  assert.equal(calls, 1); assert.equal((await readXIntake(root)).report.drafted, 0);
+  await assert.rejects(readFile(join(root, "x-discovery/2026-10-13.json")), { code: "ENOENT" });
+  const next = new Date("2026-10-14T00:00:00Z");
+  await discoverX(root, { publishing: true, bearer: "fixture-secret", now: next, search: async () => result() });
+  assert.equal((await discoverX(root, { ...options, now: next })).report.status, "daily-limit");
+  assert.equal(calls, 1);
+}));
+
+test("lookup rejects unknown IDs before reservation and changed cached authors after reservation", () => fixture(async root => {
+  await cachedDiscovery(root);
+  let calls = 0;
+  const options = { publishing: true, bearer: "fixture-secret", now, lookupIDs: ["999"], lookup: async (_bearer: string, ids: readonly string[]) => {
+    calls++; return lookupResult(ids, "999");
+  } };
+  await assert.rejects(discoverX(root, options), /cached discovery IDs/);
+  await assert.rejects(readFile(stateFile(root)), { code: "ENOENT" });
+  assert.equal(calls, 0);
+  const changed = await discoverX(root, { ...options, lookupIDs: ["123"] });
+  assert.equal(changed.report.status, "failed"); assert.match(changed.report.message!, /changed cached post identity/);
+  assert.equal(calls, 1); assert.equal((await readXIntake(root)).report.drafted, 0);
+}));
+
+test("lookup snapshot write failure consumes reservation and retains prior source snapshot", () => fixture(async root => {
+  await cachedDiscovery(root);
+  await mkdir(join(root, "x-discovery/2026-10-13.json"));
+  let calls = 0;
+  const options = { publishing: true, bearer: "fixture-secret", now, lookupIDs: ["123"], lookup: async (_bearer: string, ids: readonly string[]) => {
+    calls++; return lookupResult(ids);
+  } };
+  assert.equal((await discoverX(root, options)).report.status, "failed");
+  assert.equal((await discoverX(root, options)).report.status, "daily-limit");
+  assert.equal(calls, 1);
+  assert.equal((await read(join(root, "x-discovery/2026-10-12.json"))).posts[0].text, "Prompt: https://t.co/incomplete");
+}));
+
+test("a malformed newer snapshot cannot erase the author check on reacquisition", () => fixture(async root => {
+  await cachedDiscovery(root);
+  await writeFile(join(root, "x-discovery/2026-10-13.json"), JSON.stringify({ posts: [{ id: "123", text: "Missing author" }] }));
+  let calls = 0;
+  await assert.rejects(discoverX(root, { publishing: true, bearer: "fixture-secret", now: new Date("2026-10-14T00:00:00Z"), lookupIDs: ["123"],
+    lookup: async (_bearer, ids) => { calls++; return lookupResult(ids, "999"); } }), /valid author identities/);
+  assert.equal(calls, 0);
+  await assert.rejects(readFile(stateFile(root)), { code: "ENOENT" });
+  assert.equal((await readXIntake(root)).records.find(record => record.postID === "123")?.reason, "invalid-post");
+}));
+
+test("lookup dry-run and absent credentials cannot perform hydration or reserve a day", () => fixture(async root => {
+  let calls = 0;
+  const options = { publishing: true, bearer: "fixture-secret", now, lookupIDs: ["123"], lookup: async (_bearer: string, ids: readonly string[]) => {
+    calls++; return lookupResult(ids);
+  } };
+  assert.equal((await discoverX(root, { ...options, publishing: false })).report.status, "dry-run");
+  assert.equal((await discoverX(root, { ...options, bearer: undefined })).report.status, "not-configured");
+  assert.equal(calls, 0); await assert.rejects(readFile(stateFile(root)), { code: "ENOENT" });
 }));

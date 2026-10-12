@@ -146,7 +146,9 @@ async function run() {
         report.sources[`skill-${source.id}`] = { status: "failed", message: String(error) };
       }
     }
-    const discovery = await discoverX(root, { publishing, bearer: process.env.X_BEARER_TOKEN });
+    const discovery = await discoverX(root, { publishing, bearer: process.env.X_BEARER_TOKEN,
+      ...(process.env.PROMPIX_X_LOOKUP_IDS !== undefined
+        ? { lookupIDs: process.env.PROMPIX_X_LOOKUP_IDS.split(",").map(id => id.trim()) } : {}) });
     report.sources.x = discovery.report;
     if (discovery.result) {
       creators = mergeCreatorCache(creators, discovery.result.creators);

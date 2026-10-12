@@ -92,6 +92,27 @@ export function xSearchRequest(since?: string) {
   return { ...xSearchIdentity(), ...(since !== undefined ? { since } : {}), url, requestFingerprint: digest(url) };
 }
 
+const lookupFields = Object.freeze({ ...searchConfiguration.fields,
+  "tweet.fields": `${searchConfiguration.fields["tweet.fields"]},conversation_id,in_reply_to_user_id,referenced_tweets`,
+});
+function lookupIDs(ids: readonly string[]): string[] {
+  if (!ids.length || ids.length > 10 || ids.some(id => !/^\d{1,19}$/.test(id)) || new Set(ids).size !== ids.length)
+    throw new Error("X post lookup requires 1–10 unique numeric post IDs");
+  return [...ids];
+}
+/** Reacquire known posts, without following links or expanding additional posts. */
+export function xLookupURL(ids: readonly string[]): URL {
+  const url = new URL("https://api.x.com/2/tweets");
+  url.searchParams.set("ids", lookupIDs(ids).join(","));
+  for (const [field, value] of Object.entries(lookupFields)) url.searchParams.set(field, value);
+  return url;
+}
+export function xLookupRequest(ids: readonly string[]) {
+  const url = xLookupURL(ids).toString();
+  const identity = { endpoint: "https://api.x.com/2/tweets", ids: lookupIDs(ids), fields: lookupFields };
+  return { ...identity, fingerprint: digest(JSON.stringify(identity)), url, requestFingerprint: digest(url) };
+}
+
 const searchIDSchema = z.string().regex(/^\d{1,19}$/);
 const searchEntitiesSchema = z.object({
   urls: z.array(z.object({
@@ -178,24 +199,60 @@ export function parseXSearchResponse(value: unknown, since?: string) {
   return { posts, creators: parseXUsers(users), media, newest: body.meta.newest_id, coverage: searchCoverage(body) };
 }
 
-/** Discovery only. One bounded request, no retries, redirects or implicit pagination. */
-export async function searchX(bearer: string, since?: string) {
-  const request = xSearchRequest(since);
+const lookupResponseSchema = z.object({
+  data: z.array(searchPostSchema.extend({ author_id: searchIDSchema })).max(10),
+  errors: z.array(z.unknown()).optional(), includes: searchResponseSchema.shape.includes,
+}).passthrough();
+
+/** A missing/deleted/withheld post is an incomplete lookup, not a replacement snapshot. */
+export function parseXLookupResponse(value: unknown, ids: readonly string[]) {
+  const requested = lookupIDs(ids);
+  const parsed = lookupResponseSchema.safeParse(value);
+  if (!parsed.success) throw new Error("X lookup returned an invalid response; cached posts unchanged");
+  const body = parsed.data, posts = body.data;
+  if (body.errors?.length) throw new Error("X lookup returned partial errors; cached posts unchanged");
+  if (posts.length !== requested.length || new Set(posts.map(post => post.id)).size !== posts.length ||
+    posts.some(post => !requested.includes(post.id)))
+    throw new Error("X lookup returned inconsistent post IDs; cached posts unchanged");
+  const users = body.includes?.users ?? [], media = body.includes?.media ?? [];
+  if (new Set(users.map(user => user.id)).size !== users.length || new Set(media.map(item => item.media_key)).size !== media.length)
+    throw new Error("X lookup returned duplicate expansions; cached posts unchanged");
+  return { posts, creators: parseXUsers(users), media,
+    coverage: searchCoverage({ ...body, meta: { result_count: posts.length } }) };
+}
+
+/** One bounded request. Never retry a paid read or probe another field convention. */
+async function requestX(url: string, bearer: string, operation: "search" | "lookup") {
+  const unchanged = operation === "search" ? "cursor unchanged" : "cached posts unchanged";
   let response: Response;
   try {
-    response = await fetch(request.url, {
+    response = await fetch(url, {
       headers: { Authorization: `Bearer ${bearer}` }, redirect: "manual", signal: AbortSignal.timeout(60_000),
     });
-  } catch { throw new Error("X search request failed; cursor unchanged"); }
+  } catch { throw new Error(`X ${operation} request failed; ${unchanged}`); }
   if (!response.ok) {
     try { await response.body?.cancel(); } catch { /* Discard error bodies and transport diagnostics. */ }
-    throw new Error(`X search returned HTTP ${response.status}; cursor unchanged`);
+    throw new Error(`X ${operation} returned HTTP ${response.status}; ${unchanged}`);
   }
   let bytes: Buffer;
   try { bytes = await readResponseBytes(response, 500_000); }
-  catch { throw new Error("X search response exceeded its limit or was interrupted; cursor unchanged"); }
+  catch { throw new Error(`X ${operation} response exceeded its limit or was interrupted; ${unchanged}`); }
   let body: unknown;
   try { body = JSON.parse(bytes.toString()); }
-  catch { throw new Error("X search returned invalid JSON; cursor unchanged"); }
+  catch { throw new Error(`X ${operation} returned invalid JSON; ${unchanged}`); }
+  return body;
+}
+
+/** Discovery only. One bounded request, no retries, redirects or implicit pagination. */
+export async function searchX(bearer: string, since?: string) {
+  const request = xSearchRequest(since);
+  const body = await requestX(request.url, bearer, "search");
   return { ...parseXSearchResponse(body, since), request };
+}
+
+/** Rich lookup uses the same documented field convention as discovery. */
+export async function lookupX(bearer: string, ids: readonly string[]) {
+  const request = xLookupRequest(ids);
+  const body = await requestX(request.url, bearer, "lookup");
+  return { ...parseXLookupResponse(body, ids), request };
 }
