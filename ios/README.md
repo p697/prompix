@@ -116,8 +116,13 @@ checks five consecutive screens and return positions, while
 `testExpandedLibraryBrowsingAndSearch` requires at least 100 distinct, actually
 visible cards, checks return positions, and searches/copies newly reviewed text.
 `testEveryPublishedVideoPlaysAndBackgroundPauses` reads the published inventory and
-requires each video playback clock to advance. Keep the content edition unchanged
-during the latter run. `testShareCancellationKeepsDetailUsable` and
+requires each video playback clock to advance. It uses one continuous App session,
+returns from every preview to its detail and preserved search text, then clears the
+search for the next item. Process-launch performance is measured separately. Keep
+the content edition unchanged during this run. Leave at least 5 GB free on the
+system volume: simulator recordings and temporary data use it even when DerivedData
+and result bundles live on an external SSD. Failed and interrupted results must be
+retained separately from a completed inventory. `testShareCancellationKeepsDetailUsable` and
 `testCopiedPromptCanOpenExternalToolAndReturn` cover cancellation and external-tool
 return; opening Safari is not proof of tool login, prompt prefill or generation.
 Native tab selection supports both the iPhone bottom bar and iPad floating tabs.

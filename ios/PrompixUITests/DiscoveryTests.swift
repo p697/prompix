@@ -1008,12 +1008,13 @@ import UIKit
         }
         app.terminate()
         app.launchArguments.removeAll { $0 == "--offline" }
+        app.launch()
+        app.buttons["searchButton"].tap()
+        let search = app.searchFields.firstMatch
+        XCTAssertTrue(search.waitForExistence(timeout: 5))
         for (index, video) in videos.enumerated() {
-            app.launch()
-            app.buttons["searchButton"].tap()
-            let search = app.searchFields.firstMatch
-            XCTAssertTrue(search.waitForExistence(timeout: 5))
             search.tap()
+            if index > 0 { search.buttons["清除文本"].tap() }
             search.typeText(video.title)
             let matchingCards = app.buttons.matching(identifier: "prompt-\(video.id)")
             XCTAssertTrue(matchingCards.firstMatch.waitForExistence(timeout: 35), "The published video must be loaded: \(video.id)")
@@ -1045,7 +1046,9 @@ import UIKit
             }
             app.buttons["完成"].tap()
             XCTAssertTrue(app.buttons["copyPrompt"].waitForExistence(timeout: 5))
-            app.terminate()
+            app.navigationBars.buttons.element(boundBy: 0).tap()
+            XCTAssertTrue(search.waitForExistence(timeout: 5), "Closing a preview must preserve its search context")
+            XCTAssertEqual(search.value as? String, video.title, "Returning must preserve the search text")
         }
         XCTAssertEqual(Set(played), Set(videos.map(\.id)))
     }
