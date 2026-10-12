@@ -78,7 +78,7 @@ export function interleaveLibrary(
   return prompts;
 }
 
-export type RetentionReason = "awaiting-review" | "media-failed" | "source-missing" | "not-prepared" | "duplicate-update";
+export type RetentionReason = "awaiting-review" | "awaiting-media-review" | "media-failed" | "source-missing" | "not-prepared" | "duplicate-update";
 export type RetentionReport = { counts: KindCounts; reasons: Record<RetentionReason, number> };
 
 /** Keep a complete published snapshot until a replacement is ready or explicitly removed. */
@@ -92,7 +92,7 @@ export function retainPublishedLibrary(
   const active = previous.filter(item => !excluded.has(item.id));
   const previousByHash = new Map(active.map(item => [fingerprint(item.prompt), item.id]));
   const retained: Prompt[] = [];
-  const reasons: RetentionReport["reasons"] = { "awaiting-review": 0, "media-failed": 0, "source-missing": 0, "not-prepared": 0, "duplicate-update": 0 };
+  const reasons: RetentionReport["reasons"] = { "awaiting-review": 0, "awaiting-media-review": 0, "media-failed": 0, "source-missing": 0, "not-prepared": 0, "duplicate-update": 0 };
   const replacements = new Map(active.map(item => {
     const update = readyByID.get(item.id);
     const conflictingID = update ? previousByHash.get(fingerprint(update.prompt)) : undefined;

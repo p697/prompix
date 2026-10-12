@@ -13,7 +13,7 @@ import {
   videoArchive,
 } from "./sources.ts";
 import { download } from "./network.ts";
-import { searchX } from "./x.ts";
+import { discoverX } from "./x-discovery.ts";
 import { readXIntake } from "./x-intake.ts";
 import { collectSkill, skillRepositoryRevision, skillSources } from "./skills.ts";
 import { enrichCreators, mergeCreatorCache, mirrorCreatorAvatars, type CreatorCache } from "./creators.ts";
@@ -24,6 +24,8 @@ import { inheritPreviousTranslations } from "./translation.ts";
 import { applyEditorialReviews, reviewsSchema } from "./editorial.ts";
 import { prepareDailyEditorial } from "./editorial-daily.ts";
 import type { EditorialReport } from "./editorial-runner.ts";
+import { prepareDailyVisualReview } from "./visual-daily.ts";
+import type { VisualReport } from "./visual-review.ts";
 import { aspectRatio, prepareJPEG, publishStudioImages } from "./images.ts";
 import { publicationText } from "./templates.ts";
 import { countByKind, interleaveLibrary, libraryDelta, retainPublishedLibrary, selectLibrary, type KindCounts, type RetentionReport } from "./library.ts";
@@ -56,6 +58,7 @@ async function run() {
     changes?: ReturnType<typeof libraryDelta>;
     retainedPrevious?: RetentionReport;
     editorial?: EditorialReport;
+    visualReview?: VisualReport;
     counts: {
       candidates: KindCounts | null;
       reviewed: KindCounts | null;
@@ -126,35 +129,12 @@ async function run() {
         report.sources[`skill-${source.id}`] = { status: "failed", message: String(error) };
       }
     }
-    const xStatePath = join(root, "x-state.json");
-    const xState = await json<{ day?: string; newest?: string }>(
-      xStatePath,
-      {},
-    );
-    const day = new Date().toISOString().slice(0, 10);
-    if (publishing && process.env.X_BEARER_TOKEN && xState.day !== day) {
-      // Persist the daily attempt BEFORE making a paid request. No retries on ambiguous responses.
-      await atomic(xStatePath, { ...xState, day });
-      try {
-        const result = await searchX(process.env.X_BEARER_TOKEN, xState.newest);
-        creators = mergeCreatorCache(creators, result.creators);
-        await atomic(creatorsPath, creators);
-        await atomic(join(root, "x-discovery", `${day}.json`), {
-          ...result,
-          reviewStatus: "draft",
-        });
-        await atomic(xStatePath, {
-          day,
-          newest: result.newest ?? xState.newest,
-        });
-        report.sources.x = { status: "ok", requests: 1, requestedPosts: 10, count: result.posts.length, creators: result.creators.length };
-      } catch (e) {
-        report.sources.x = { status: "failed", requests: 1, requestedPosts: 10, message: String(e) };
-      }
-    } else
-      report.sources.x = {
-        status: !publishing ? "dry-run" : process.env.X_BEARER_TOKEN ? "daily-limit" : "not-configured", requests: 0,
-      };
+    const discovery = await discoverX(root, { publishing, bearer: process.env.X_BEARER_TOKEN });
+    report.sources.x = discovery.report;
+    if (discovery.result) {
+      creators = mergeCreatorCache(creators, discovery.result.creators);
+      await atomic(creatorsPath, creators);
+    }
     // Cached discoveries still enter intake when today's paid search is disabled.
     // Marked source bodies are drafts; incomplete posts keep an explicit reason.
     let reviews = reviewsSchema.parse(await json(join(root, "editorial.json"), {}));
@@ -301,6 +281,9 @@ async function run() {
         report.counts.mediaFailed[prompt.kind]++;
       }
     }
+    const visual = await prepareDailyVisualReview(published, previous?.prompts ?? [], root, publishing);
+    report.visualReview = visual.report;
+    const mediaAwaitingReview = new Set(visual.withheldIDs);
     if (publishing) {
       bundled = await publishStudioImages(bundled, join(repo, "ios/Prompix/Resources/Assets.xcassets"), mediaMap, async input => {
         await mkdir(join(root, "tmp"), { recursive: true });
@@ -316,8 +299,9 @@ async function run() {
       await atomic(join(root, "media-map.json"), mediaMap);
     }
     const reviewedByID = new Map(reviewed.map(item => [item.id, item]));
-    const retained = retainPublishedLibrary(interleaveLibrary(published, bundled, excluded), previous?.prompts ?? [], excluded, item => {
+    const retained = retainPublishedLibrary(interleaveLibrary(visual.prompts, bundled, excluded), previous?.prompts ?? [], excluded, item => {
       if (mediaFailedIDs.has(item.id)) return "media-failed";
+      if (mediaAwaitingReview.has(item.id)) return "awaiting-media-review";
       const candidate = reviewedByID.get(item.id);
       if (!candidate) return "source-missing";
       return candidate.reviewStatus === "draft" ? "awaiting-review" : "not-prepared";
