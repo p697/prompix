@@ -154,4 +154,12 @@ Debug、`--offline`、30条内置内容的五次启动测量为4.861194、4.8153
 
 只读复查构建20的编辑路径：sheet位于ArrangementView外，EditorContext UUID只在明确开始编辑时创建；编辑控件处于固定结构位置，没有按姿态/宽度换ID或在折叠时主动清焦点的代码。正文保留不足以证明底层原生控件身份保留，因为新出现的编辑器也可从已保存草稿恢复String。既有截图的空格键仍显示“拼”，因此只记录候选结束并出现英文预测，不推断输入法切为英语。
 
-当前没有markedTextRange、first responder及控件/window/scene身份轨迹，不能将原因归于应用或系统。下一项有界实验是独立诊断构建的一次展开→折叠：记录编辑任务和状态生命周期UUID、原生输入控件/窗口/场景身份、marked与selection范围及输入模式；正文仅记录长度/哈希，不恢复焦点或干预组合态。依据Apple的[SwiftUI身份与生命周期说明](https://developer.apple.com/videos/play/wwdc2021/10022/)与[markedTextRange定义](https://developer.apple.com/documentation/uikit/uitextinput/markedtextrange)。不重复已撤回的selection/FocusState A/B，也不以未经证明的原因重写UIKit编辑器。本次没有新模拟器运行或更改构建20验收现场。
+截至上述只读复查，尚无markedTextRange、first responder及控件/window/scene身份轨迹，不能将原因归于应用或系统。下一项有界实验是独立诊断构建的一次展开→折叠：记录编辑任务和状态生命周期UUID、原生输入控件/窗口/场景身份、marked与selection范围及输入模式；正文仅记录长度/哈希，不恢复焦点或干预组合态。依据Apple的[SwiftUI身份与生命周期说明](https://developer.apple.com/videos/play/wwdc2021/10022/)与[markedTextRange定义](https://developer.apple.com/documentation/uikit/uitextinput/markedtextrange)。不重复已撤回的selection/FocusState A/B，也不以未经证明的原因重写UIKit编辑器。本次没有新模拟器运行或更改构建20验收现场。
+
+### 2026-10-14：独立组合输入轨迹
+
+上述有界实验已在另一台专用QA Duo（`D8806C86-F0EF-4152-8D6A-F73A8D9D4520`）完成一次展开→折叠，未改动用户验收Duo。诊断包基于`3c39109`，使用独立Bundle ID `com.p697.prompix.imeprobe`；仅在Debug模拟器显式开启只读观测，不替换TextEditor或更改焦点、选区、组合文本。Xcode27.1RC一次编译成功，观测于120.002秒按时限结束。固定样本为`niDuo keeps this `（含末尾空格，共17字符）；AX设置基文后光标在开头，随后用拼音软件键盘输入`ni`，与历史19字符样本不同。
+
+35条记录显示：22.993秒marked范围为0..2；45.505秒marked变为null时，原生first responder和SwiftUI焦点仍为true；45.522秒原生first responder变为false，45.537秒SwiftUI焦点回调为false。所捕获状态中的编辑任务、SwiftUI生命周期、UITextView、window、scene身份均保持，输入语言始终为`zh-Hans`，切屏前后选区均为2..2，17字符正文与绑定的SHA一致。该次记录不支持编辑器被替换、任务重建或正文覆盖导致现象，也未观察到App先将焦点绑定清空；但状态回调顺序不是调用因果链，未采集presentation控制器或调用栈，不能排除呈现适配期间某层请求结束输入，更不能认定为Apple已知bug。展开sheet切换为紧凑呈现是尚未验证的假设，本轮不追加实验或据此修改编辑器。
+
+证据在外置SSD `Prompix-Codex/Evidence/duo-ime-probe-20261014/`：`1F4009C2-EF37-4200-A4DB-382F5ED041E4.jsonl`保留完整轨迹，`build-identity.json`和`source-identity.json`记录诊断构建身份；`after-fold.png`已实际打开检查，显示17字符且键盘收起。`before-fold.png`为空文件，不作为证据。这个单次诊断缩小了原因范围，未修复或关闭候选版的组合输入限制。
