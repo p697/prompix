@@ -2,7 +2,10 @@ import SwiftUI
 
 struct PromptUseSheet: View {
     let item: Prompt
-    let text: String
+    @State private var text: String
+    private let onPrepared: ((String) -> Bool)?
+    @State private var variablesPresented = false
+    @State private var saveFailed = false
     var title: String? = nil
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
@@ -10,6 +13,11 @@ struct PromptUseSheet: View {
     @State private var selected: String?
     @State private var copied = false
     @State private var openFailed = false
+    init(item: Prompt, text: String, title: String? = nil, onPrepared: ((String) -> Bool)? = nil) {
+        self.item = item; self.title = title; self.onPrepared = onPrepared
+        _text = State(initialValue: text)
+    }
+    private var template: PromptTemplate { PromptTemplate(text, enabled: !item.isSkill) }
     private var destinations: [PromptDestination] { PromptDestination.choices(for: item) }
     private var destination: PromptDestination? {
         destinations.first { $0.id == (selected ?? preferred) } ?? destinations.first
@@ -43,6 +51,19 @@ struct PromptUseSheet: View {
                             .font(.subheadline).foregroundStyle(Palette.muted)
                     }
                 }.listRowBackground(Palette.surface)
+                if !template.fields.isEmpty {
+                    Section {
+                        Button { variablesPresented = true } label: {
+                            Label(String(localized: "填写变量"), systemImage: "square.and.pencil").frame(minHeight: 44)
+                        }.accessibilityIdentifier("preparePromptVariables")
+                    }.listRowBackground(Palette.surface)
+                }
+                if saveFailed {
+                    Section {
+                        Text(String(localized: "尚未保存，可先复制保留")).accessibilityIdentifier("preparedPromptSaveError")
+                        Button(String(localized: "重试保存")) { saveFailed = !(onPrepared?(text) ?? true) }
+                    }.listRowBackground(Palette.surface)
+                }
                 if !item.isSkill && !destinations.isEmpty {
                     Section {
                         ForEach(destinations) { target in
@@ -110,6 +131,12 @@ struct PromptUseSheet: View {
                 }
             }
             .scrollContentBackground(.hidden).background(Palette.paper)
+            .sheet(isPresented: $variablesPresented) {
+                PromptVariablesSheet(template: template) { prepared in
+                    text = prepared; copied = false; openFailed = false
+                    saveFailed = !(onPrepared?(prepared) ?? true)
+                }
+            }
             .navigationTitle(item.isSkill ? String(localized: "使用这个 Skill") : String(localized: "使用 Prompt"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button(String(localized: "完成")) { dismiss() } } }
