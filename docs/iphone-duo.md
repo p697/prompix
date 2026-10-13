@@ -113,7 +113,7 @@ Debug、`--offline`、30条内置内容的五次启动测量为4.861194、4.8153
 
 ## 现场验收入口
 
-在外置 SSD 安装的 Xcode27.1RC 中打开 Device Hub，选择 **Prompix iPhone Duo** 并打开 Prompix 0.4.7（18）。验收入口保持465条缓存目录、中文界面、普通字号和浅色；辅助测试的减少动态效果和VoiceOver已关闭，三份个人文件恢复并逐字节核对。用户手机未安装本版。
+在外置 SSD 安装的 Xcode27.1RC 中打开 Device Hub，选择 **Prompix iPhone Duo** 并打开 Prompix 0.4.7（18）。当前已通过设置更新到527条，保持中文界面、普通字号和浅色；辅助测试的减少动态效果和VoiceOver已关闭，本次内容更新前后三份个人文件逐字节不变。上文姿态与交互证据保留其465条阶段范围，新增内容更新及单条复制验证见[运行记录](content-operations.md#2026-10-13新增内容审读补译与质量暂缓)。用户手机未安装本版。
 
 建议依次体验发现页宽窄网格、创作者横滑和返回、网页或图片详情的阅读／预览、使用面板、编辑、开合旋转、图库／视频返回，以及Safari左右50/50多任务。外置证据目录的 `ACCEPTANCE.md` 提供具体步骤，`current-evidence-index.json` 汇总最终与历史证据，`final-validation/installed-delivery-verification.json` 证明已安装App与测试候选二进制一致。
 

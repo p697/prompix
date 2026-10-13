@@ -1,5 +1,7 @@
 # 内容运行手册
 
+当前目录为 `edition-v2-3f5988eec9fb6296`，527条、70个Skill；本轮审读、补译及质量暂缓见本文末尾记录。历史条数和旧排程记录保留其原始范围。
+
 ## 本机运行
 
 - 任务：`dev.prompix.collect`，每天本机时间 02:00／08:00／14:00／20:00；当前 Mac 为 Asia/Tokyo。
@@ -361,3 +363,21 @@ PR70 合并后已安装到 Mac 的版本化定时运行副本；按正常内容�
 线上 v1／v2 哈希、完整下载、条件请求、HEAD、视频 Range、九语包和全量拼装检查通过。中英文完整译文仍各为 465 条，新增 63 条沿用原文；其余七语仍为 375–377 条，不称为全库九语完成。一个未发布视频候选因下载体积上限暂缓，四个作者头像请求失败采用既有回退，未为了扩量放宽审核条件。
 
 证据位于开发机 SSD 的 `Evidence/collector-storage-20261013/`：`migration.json`、`before.json`、`recovery.json`、`all-paid-ledgers-verification.json`、`published-delta.json`、`deployment-check.log` 和原运行日志。**这是手动恢复成功，不是下一次自然排程通过**；launchd 最近自然退出仍为 1，继续等真实定时触发的结果再关闭排程验收。本轮没有执行新增内容的完整原生 UI 验收，Duo 的 465 条截图和测试保留原有范围。
+
+## 2026-10-13：新增内容审读、补译与质量暂缓
+
+对恢复版528条相对465条的新增63条完成原文与可见说明审读（46条文本、17个Skill）。唯一阻断项为 `skill-publisher-expo-expo-dev-client`：固定来源版本的第169–174行在检查CLI版本步骤中加入 `eas update`。该命令进入更新发布流程，不是CLI版本查询或升级；依据[Expo官方CLI说明](https://docs.expo.dev/eas/cli/)。未执行该命令，也不声称裸命令无需参数或确认就必然发布。按原文／来源身份和证据哈希记录质量暂缓，保留原内容和用户收藏身份，不增加删除墓碑。其余62条在本轮审读范围内未发现阻断，仍有10项非阻断说明／格式改进；这不是参考文件、媒体、实际运行或九语言全文验收。
+
+补译复用既有 `prepareDailyTranslations`、Codex / gpt-5.6-luna、缓存和当日预算，累计请求57→77，严格新增20次；成功575段、拒绝2段、请求失败0。不更改私有配置或重置预算。528条范围内新增111个完整语种记录，涉及62个条目，其中49条补齐中英文；进行全部新增记录的代码块、frontmatter、inline-code值及次数等结构检查，以及9条重点语义抽检。
+
+发布前对3条简中分段作精确审读修正：土耳其语翻译例句保留4处原始句点，两个EAS Skill恢复3处Markdown链接括号；其余文本、保护标记、链接目标不变。缓存记录 `prompix-agent-review / agent-reviewed-correction`，保存前后哈希与完整外部证据，经过既有分段、语义拒绝及重建校验；没有额外模型请求。
+
+09:05:44–09:08:43 UTC 使用既有双通道发布协议完成一次明确的手动“已审译文＋质量暂缓”更新，没有重新采集。线上v2现为 `edition-v2-3f5988eec9fb6296`，**527条、70个Skill、242个创作者身份**。527条保留原文字段全部相同，只移出上述1个Skill；墓碑不变。v1继续冻结在455条 `edition-v2-29da92c29a4413a4`。发布前后9个付费账本文件和1个X可用性状态文件逐字节一致。
+
+当前完整记录覆盖为 en 526、zh-Hans 514、zh-Hant 377、ja 376、ko 375、es 375、pt-BR 376、fr 376、de 377。英文剩1条、简中剩13条，其余语言继续排队；未通过验证或不完整时回退原文，不声称全量九语或中英完成。部署核对通过两通道hash/大小、200/304/206/HEAD、私有路径404、写入405及v2全部九包重建。
+
+Duo模拟器0.4.7（18）通过设置中的实际更新从528变为527，Expo创作者显示23条；打开新增简中EAS Observe详情，复制全文5,494字节，与线上修正后正文完全相同，Markdown目标完整。收藏、草稿和作者收藏三文件均与本次更新前逐字节相同。这是单条详情／复制与实际增量证据，不是527条全库UI或全姿态重测；未重装模拟器或用户手机。模拟器保持新版发现页供验收。
+
+外部证据位于 `/Volumes/Lucy-SSD/Prompix-Codex/Evidence/translations-528-20261013/`：`source-quality-review.json`、`summary.json`、`structural-review.json`、`semantic-review.json`、`corrections.json`、`reviewed-publication.json`、`publication-ledger-verification.json`、`publication-original-preservation.json`、`deployment-check.log`、`native-update-verification.json`、`native-copy-verification.json`和实际截图。目录名保留受审基线528，不表示最终公开条数。
+
+同轮PR78的状态写入修复已通过CI并安装，运行代码与合并提交 `08636e2` 逐文件一致。新的启动/终态标识不会掩盖原始异常，隔离故障与完整449项内容测试通过；CI另修复了视觉临时目录检查误读其他并发测试文件的竞争。安装记录在 `Evidence/collector-status-20261013/`。本轮没有人为触发daily；自然20点排程仍待验证。根 `status.json` 保留此前手动恢复的528条运行结果，本次527条手动发布另见上述operation记录，不能把旧运行结果误当最新线上指针或自然排程成功。
