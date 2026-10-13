@@ -2,8 +2,11 @@ import SwiftUI
 
 struct PromptUseSheet: View {
     let item: Prompt
+    let language: String?
     @State private var text: String
-    private let onPrepared: ((String) -> Bool)?
+    private let onPrepared: (String) -> Bool
+    private let onEdit: ((String) -> Void)?
+    @State private var editorPresented = false
     @State private var variablesPresented = false
     @State private var saveFailed = false
     var title: String? = nil
@@ -13,8 +16,8 @@ struct PromptUseSheet: View {
     @State private var selected: String?
     @State private var copied = false
     @State private var openFailed = false
-    init(item: Prompt, text: String, title: String? = nil, onPrepared: ((String) -> Bool)? = nil) {
-        self.item = item; self.title = title; self.onPrepared = onPrepared
+    init(item: Prompt, text: String, title: String? = nil, language: String? = nil, onEdit: ((String) -> Void)? = nil, onPrepared: @escaping (String) -> Bool) {
+        self.item = item; self.title = title; self.language = language; self.onPrepared = onPrepared; self.onEdit = onEdit
         _text = State(initialValue: text)
     }
     private var template: PromptTemplate { PromptTemplate(text, enabled: !item.isSkill) }
@@ -51,17 +54,24 @@ struct PromptUseSheet: View {
                             .font(.subheadline).foregroundStyle(Palette.muted)
                     }
                 }.listRowBackground(Palette.surface)
-                if !template.fields.isEmpty {
+                if !item.isSkill {
                     Section {
-                        Button { variablesPresented = true } label: {
-                            Label(String(localized: "填写变量"), systemImage: "square.and.pencil").frame(minHeight: 44)
-                        }.accessibilityIdentifier("preparePromptVariables")
+                        Button {
+                            if let onEdit { onEdit(text) } else { editorPresented = true }
+                        } label: {
+                            Label(String(localized: "编辑 Prompt"), systemImage: "square.and.pencil").frame(minHeight: 44)
+                        }.accessibilityIdentifier("editPreparedPrompt")
+                        if !template.fields.isEmpty {
+                            Button { variablesPresented = true } label: {
+                                Label(String(localized: "填写变量"), systemImage: "text.cursor").frame(minHeight: 44)
+                            }.accessibilityIdentifier("preparePromptVariables")
+                        }
                     }.listRowBackground(Palette.surface)
                 }
                 if saveFailed {
                     Section {
                         Text(String(localized: "尚未保存，可先复制保留")).accessibilityIdentifier("preparedPromptSaveError")
-                        Button(String(localized: "重试保存")) { saveFailed = !(onPrepared?(text) ?? true) }
+                        Button(String(localized: "重试保存")) { saveFailed = !onPrepared(text) }
                     }.listRowBackground(Palette.surface)
                 }
                 if !item.isSkill && !destinations.isEmpty {
@@ -131,16 +141,25 @@ struct PromptUseSheet: View {
                 }
             }
             .scrollContentBackground(.hidden).background(Palette.paper)
+            .sheet(isPresented: $editorPresented) {
+                PromptEditor(item: item, language: language, initialText: text) { updated in
+                    let saved = onPrepared(updated)
+                    if saved {
+                        text = updated; copied = false; openFailed = false; saveFailed = false
+                    }
+                    return saved
+                }
+            }
             .sheet(isPresented: $variablesPresented) {
                 PromptVariablesSheet(template: template) { prepared in
                     text = prepared; copied = false; openFailed = false
-                    saveFailed = !(onPrepared?(prepared) ?? true)
+                    saveFailed = !onPrepared(prepared)
                 }
             }
             .navigationTitle(item.isSkill ? String(localized: "使用这个 Skill") : String(localized: "使用 Prompt"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button(String(localized: "完成")) { dismiss() } } }
-            .safeAreaInset(edge: .bottom) {
+            .promptActionBar {
                 if let destination {
                     Button {
                         preferred = destination.id

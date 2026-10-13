@@ -46,6 +46,7 @@
 		D768BB1B4774FD14B92F2B9E /* PromptTemplate.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD7AE0F6CA527071AD9FE149 /* PromptTemplate.swift */; };
 		E041E453BA55806DC712B2CD /* DiscoveryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 418BCEB58EAD4602BDCA4D1F /* DiscoveryView.swift */; };
 		E9D34BCD75567272674C1BDE /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 1E2C056B19ECC4C3925366AD /* Localizable.xcstrings */; };
+		ED9CEFD6045D9E9BED6A925E /* DuoDeliveryUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FCD37BB2DAA5B28116E54C54 /* DuoDeliveryUITests.swift */; };
 		F18619EACA9AF20C0522CC0A /* SkillInformation.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA363661EA255190496CC133 /* SkillInformation.swift */; };
 		F3F5AE59AC45DFED38C01B3A /* LanguagePackCacheTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56132BA164AC4C48DAEDFEC0 /* LanguagePackCacheTests.swift */; };
 /* End PBXBuildFile section */
@@ -108,6 +109,7 @@
 		F25927E3A42CA9CBF1DF125A /* playback-fixture.mp4 */ = {isa = PBXFileReference; includeInIndex = 1; path = "playback-fixture.mp4"; sourceTree = "<group>"; };
 		F6BB6DB6812418AEA087AA4C /* PromptHandoffTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PromptHandoffTests.swift; sourceTree = "<group>"; };
 		F7FEA8CDF7268B83623B5A3C /* CreatorViews.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = CreatorViews.swift; path = Views/CreatorViews.swift; sourceTree = "<group>"; };
+		FCD37BB2DAA5B28116E54C54 /* DuoDeliveryUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DuoDeliveryUITests.swift; sourceTree = "<group>"; };
 		FD7AE0F6CA527071AD9FE149 /* PromptTemplate.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = PromptTemplate.swift; path = Models/PromptTemplate.swift; sourceTree = "<group>"; };
 		FDED15EF12D7E7108F3D500C /* PrompixUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PrompixUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -153,6 +155,7 @@
 			children = (
 				243EFE6F0844D0EF888FE71F /* DiscoveryTests.swift */,
 				E64E60E95FE9245A77FC6D5D /* GlobalDiscoveryTests.swift */,
+				FCD37BB2DAA5B28116E54C54 /* DuoDeliveryUITests.swift */,
 			);
 			name = PrompixUITests;
 			path = PrompixUITests;
@@ -390,6 +393,7 @@
 			files = (
 				00A3BAF655F16C8A59777842 /* DiscoveryTests.swift in Sources */,
 				D64D33021C0173DE21E8CF2F /* GlobalDiscoveryTests.swift in Sources */,
+				ED9CEFD6045D9E9BED6A925E /* DuoDeliveryUITests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -492,12 +496,12 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CLANG_ENABLE_OBJC_WEAK = NO;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 17;
+				CURRENT_PROJECT_VERSION = 18;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				INFOPLIST_FILE = Prompix/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
-				MARKETING_VERSION = 0.4.6;
+				MARKETING_VERSION = 0.4.7;
 				PRODUCT_BUNDLE_IDENTIFIER = com.p697.prompix;
 				PRODUCT_NAME = Prompix;
 				SDKROOT = iphoneos;
@@ -661,12 +665,12 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CLANG_ENABLE_OBJC_WEAK = NO;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 17;
+				CURRENT_PROJECT_VERSION = 18;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				INFOPLIST_FILE = Prompix/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
-				MARKETING_VERSION = 0.4.6;
+				MARKETING_VERSION = 0.4.7;
 				PRODUCT_BUNDLE_IDENTIFIER = com.p697.prompix;
 				PRODUCT_NAME = Prompix;
 				SDKROOT = iphoneos;

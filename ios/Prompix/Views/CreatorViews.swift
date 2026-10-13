@@ -364,7 +364,7 @@ struct CreatorDetail: View {
                 Button {
                     if library.toggleCreator(creator) { savedFeedback.toggle() }
                 } label: {
-                    Image(systemName: library.isCreatorSaved(creator) ? "bookmark.fill" : "bookmark")
+                    Label(library.isCreatorSaved(creator) ? String(localized: "取消收藏创作者") : String(localized: "收藏创作者"), systemImage: library.isCreatorSaved(creator) ? "bookmark.fill" : "bookmark")
                         .frame(minWidth: 44, minHeight: 44)
                 }.accessibilityLabel(library.isCreatorSaved(creator) ? String(localized: "取消收藏创作者") : String(localized: "收藏创作者"))
                     .accessibilityIdentifier("saveCreator").sensoryFeedback(.selection, trigger: savedFeedback)

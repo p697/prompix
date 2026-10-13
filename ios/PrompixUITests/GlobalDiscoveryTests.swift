@@ -23,10 +23,12 @@ import UIKit
     }
 
     private func capture(_ name: String) {
-        let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-        attachment.name = name
-        attachment.lifetime = .keepAlways
-        add(attachment)
+        for (index, screen) in XCUIScreen.screens.enumerated() {
+            let attachment = XCTAttachment(screenshot: screen.screenshot())
+            attachment.name = "\(name)-display-\(index)"
+            attachment.lifetime = .keepAlways
+            add(attachment)
+        }
     }
 
     private func reveal(_ element: XCUIElement, attempts: Int = 8) {
@@ -44,7 +46,7 @@ import UIKit
             let copy = app.buttons["copyPrompt"]
             let top = max(110, viewport.frame.minY + 12)
             let bottom = min(viewport.frame.maxY - 12, copy.exists ? copy.frame.minY - 12 : app.frame.maxY - 100)
-            if element.exists && element.isHittable && element.frame.minY >= top && element.frame.maxY <= bottom { return }
+            if element.exists && element.frame.minY >= top && element.frame.maxY <= bottom && element.isHittable { return }
             let scrollDown = element.exists && element.frame.minY < top
             let start = viewport.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: scrollDown ? 0.4 : 0.7))
             let end = viewport.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: scrollDown ? 0.7 : 0.4))
@@ -654,15 +656,52 @@ import UIKit
     }
 
     private func revealHandoff(_ element: XCUIElement) {
+        // A centered native Form does not occupy the whole expanded display.
+        // Target its own scroll area, rather than the app window behind it.
+        let form = app.collectionViews.firstMatch
+        let viewport: XCUIElement = form.exists ? form : app.scrollViews.firstMatch
+        XCTAssertTrue(viewport.exists)
         for _ in 0..<12 {
             let fixed = ["handoffOpen", "copyInstallCommand"].map { app.buttons[$0] }.first { $0.exists }
-            let bottom = fixed?.frame.minY ?? app.frame.maxY - 80
-            if element.exists && element.isHittable && element.frame.minY >= 120 && element.frame.maxY < bottom - 8 { return }
-            let reverse = element.exists && element.frame.minY < 120
-            app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: reverse ? 0.4 : 0.65))
-                .press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: reverse ? 0.65 : 0.4)))
+            let frame = viewport.frame
+            let window = app.windows.containing(.any, identifier: fixed?.identifier ?? element.identifier).firstMatch
+            let bounds = window.exists ? frame.intersection(window.frame) : frame
+            // Forms extend under translucent navigation bars. Use the actual
+            // bar boundary rather than mistaking the Form's origin for it.
+            let navigationBottom = app.navigationBars.allElementsBoundByIndex.map(\.frame)
+                .filter { $0.intersection(bounds).width > bounds.width / 2 && $0.minY < bounds.midY }
+                .map(\.maxY).max() ?? bounds.minY
+            let top = max(bounds.minY, navigationBottom) + 8
+            let bottom = min(bounds.maxY, fixed?.frame.minY ?? bounds.maxY) - 8
+            let height = bottom - top
+            guard height > 40 else { break }
+            let step = min(CGFloat(140), height * 0.35)
+            var distance = -step // Materialize a still-lazy row by moving down.
+            if element.exists {
+                let target = element.frame
+                guard target.height <= height else { break }
+                if target.minY >= top && target.maxY <= bottom {
+                    if target.minX >= bounds.minX && target.maxX <= bounds.maxX && element.isHittable { return }
+                    break // Scrolling cannot fix a fully visible but blocked control.
+                }
+                let margin = min(CGFloat(8), (height - target.height) / 2)
+                distance = target.minY < top
+                    ? min(step, max(12, top + margin - target.minY))
+                    : -min(step, max(12, target.maxY - bottom + margin))
+            }
+            let center = (top + bottom) / 2
+            let start = viewport.coordinate(withNormalizedOffset: CGVector(
+                dx: (bounds.midX - frame.minX) / frame.width, dy: (center - distance / 2 - frame.minY) / frame.height))
+            let end = viewport.coordinate(withNormalizedOffset: CGVector(
+                dx: (bounds.midX - frame.minX) / frame.width, dy: (center + distance / 2 - frame.minY) / frame.height))
+            // A short, slow drag plus an end hold avoids inertial overshoot and
+            // the previous above/below oscillation with a half-Form swipe.
+            start.press(forDuration: 0.05, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 0.1)
         }
-        XCTFail("Handoff control must be reachable above the fixed action bar.")
+        capture("handoff-control-unreachable")
+        let layout = XCTAttachment(string: "Viewport: \(viewport.frame); target: \(element.frame)\n\(app.debugDescription)")
+        layout.name = "Handoff scroll geometry"; layout.lifetime = .keepAlways; add(layout)
+        XCTFail("Handoff control must be reachable inside its Form and clear of the action bar.")
     }
 
     func testHandoffLargestTextAccessibility() throws {
@@ -670,7 +709,7 @@ import UIKit
             throw XCTSkip("Run on the backed-up production simulator with the largest accessibility text size.")
         }
         XCTAssertEqual(UIApplication.shared.preferredContentSizeCategory, .accessibilityExtraExtraExtraLarge)
-        let personal = try performancePersonalState()
+        let personal = try handoffPersonalState()
         for locale in ["zh-Hans", "de", "ja"] {
             for skill in [false, true] {
                 try openHandoffCard(skill ? "skill-publisher-supabase-supabase" : "quiet-portfolio",
@@ -710,7 +749,7 @@ import UIKit
                 app.terminate()
             }
         }
-        XCTAssertEqual(try performancePersonalState(), personal)
+        XCTAssertEqual(try handoffPersonalState(), personal)
     }
 
     func testSkillHandoffVoiceOverTraversal() throws {
@@ -782,7 +821,7 @@ import UIKit
         XCTAssertEqual(try readSnapshot([String: String].self, from: try acceptanceDirectory(), file: "drafts.json"), before)
         reveal(prepare); prepare.tap()
         capture("variables-01-empty-form")
-        let values = ["Kyoto & Uji", "2026-11-01", "500 USD", "Bookshops\nQuiet cafes"]
+        let values = ["Kyoto & Uji", "2026-11-01", "500 USD", "Bookshops\nQuiet cafes", "Relaxed", "Public transport"]
         for (index, value) in values.enumerated() {
             let field = input(index)
             // Form is a collection view; keep gestures above the keyboard and fixed action.
@@ -805,13 +844,30 @@ import UIKit
         capture("variables-02-filled-with-keyboard")
         apply.tap()
         XCTAssertTrue(app.buttons["handoffOpen"].waitForExistence(timeout: 5))
-        let expected = zip(["${city}", "${dates}", "${budget}", "${interests}"], values).reduce(original) {
+        var expected = zip(["${city}", "${dates}", "${budget}", "${interests}", "${pace}", "${constraints}"], values).reduce(original) {
             $0.replacingOccurrences(of: $1.0, with: $1.1)
         }
         var expectedDrafts = before; expectedDrafts[id + "::zh-Hans"] = expected
         XCTAssertEqual(try readSnapshot([String: String].self, from: try acceptanceDirectory(), file: "drafts.json"), expectedDrafts)
+        // Fully substituted content must remain editable without leaving the use flow.
+        XCTAssertTrue(app.buttons["preparePromptVariables"].waitForNonExistence(timeout: 5))
+        let editPrepared = app.buttons["editPreparedPrompt"]
+        revealHandoff(editPrepared); editPrepared.tap()
+        let preparedEditor = app.textViews["promptEditor"]
+        XCTAssertTrue(preparedEditor.waitForExistence(timeout: 5))
+        XCTAssertEqual(preparedEditor.value as? String, expected)
+        XCTAssertFalse(app.buttons["useEditedPrompt"].exists, "Do not nest another use flow inside its editor.")
+        let note = " Add a rainy-day alternative."
+        preparedEditor.tap(); preparedEditor.typeText(note)
+        let revised = try XCTUnwrap(preparedEditor.value as? String)
+        XCTAssertEqual(revised.replacingOccurrences(of: note, with: ""), expected)
+        expected = revised; expectedDrafts[id + "::zh-Hans"] = expected
+        capture("variables-03-edit-within-use")
+        app.buttons["finishPromptEditing"].tap()
+        XCTAssertTrue(app.buttons["handoffOpen"].waitForExistence(timeout: 5))
+        XCTAssertEqual(try readSnapshot([String: String].self, from: try acceptanceDirectory(), file: "drafts.json"), expectedDrafts)
         let copy = app.buttons["handoffCopy"]
-        reveal(copy); copy.tap(); XCTAssertTrue(copy.label.contains("已复制"))
+        revealHandoff(copy); copy.tap(); XCTAssertTrue(copy.label.contains("已复制"))
         capture("variables-03-ready-to-use")
         let evidence = XCTAttachment(string: expected); evidence.name = "variables-expected-clipboard"
         evidence.lifetime = .keepAlways; add(evidence)
@@ -826,6 +882,66 @@ import UIKit
         XCTAssertTrue(editor.waitForExistence(timeout: 5)); XCTAssertTrue(editor.value as? String == expected)
         capture("variables-04-restored-editor")
         XCTAssertEqual(try readSnapshot([String: String].self, from: try acceptanceDirectory(), file: "drafts.json"), expectedDrafts)
+    }
+
+    func testPreparedVariablesSurviveFailedSaveAndReturnToEditor() throws {
+        guard ProcessInfo.processInfo.environment["PROMPIX_VARIABLE_ACCEPTANCE"] == "1" else {
+            throw XCTSkip("Requires the backed-up production simulator and explicit variable acceptance opt-in.")
+        }
+        launch()
+        let id = "pc-f404f3161372c6cf4986"
+        let directory = try acceptanceDirectory()
+        let file = directory.appendingPathComponent("drafts.json")
+        let before = try Data(contentsOf: file)
+        let drafts = try JSONDecoder().decode([String: String].self, from: before)
+        XCTAssertNil(drafts[id + "::zh-Hans"])
+        let catalog = try readSnapshot(CatalogSnapshot.self, from: directory, file: "catalog.json")
+        let original = try XCTUnwrap(catalog.prompts.first { $0.id == id }?.localization?.translations["zh-Hans"]?.prompt)
+        let marker = "Kyoto recovery acceptance"
+        let expected = original.replacingOccurrences(of: "${city}", with: marker)
+        XCTAssertNotEqual(expected, original)
+        addTeardownBlock { @MainActor in
+            self.app.terminate()
+            if FileManager.default.fileExists(atPath: file.path) { try FileManager.default.removeItem(at: file) }
+            try before.write(to: file, options: .atomic)
+            XCTAssertEqual(try Data(contentsOf: file), before)
+        }
+        app.buttons["searchButton"].tap()
+        let search = app.searchFields.firstMatch
+        XCTAssertTrue(search.waitForExistence(timeout: 5)); search.tap(); search.typeText("旅行想法")
+        let card = app.scrollViews["searchResults"].buttons["prompt-\(id)"]
+        reveal(card); card.tap()
+        app.buttons["编辑后使用"].tap()
+        let editor = app.textViews["promptEditor"]
+        XCTAssertTrue(editor.waitForExistence(timeout: 5))
+        app.buttons["useEditedPrompt"].tap()
+        let prepare = app.buttons["preparePromptVariables"]
+        revealHandoff(prepare); prepare.tap()
+        let field = app.textFields["promptVariable-0"].exists ? app.textFields["promptVariable-0"] : app.textViews["promptVariable-0"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5)); field.tap(); field.typeText(marker)
+        try FileManager.default.removeItem(at: file)
+        try FileManager.default.createDirectory(at: file, withIntermediateDirectories: false)
+        app.buttons["applyPromptVariables"].tap()
+        let failure = app.staticTexts["preparedPromptSaveError"]
+        XCTAssertTrue(failure.waitForExistence(timeout: 5))
+        let edit = app.buttons["editPreparedPrompt"]
+        revealHandoff(edit); edit.tap()
+        XCTAssertTrue(app.buttons["handoffOpen"].waitForNonExistence(timeout: 5))
+        XCTAssertEqual(app.textViews.matching(identifier: "promptEditor").count, 1)
+        XCTAssertEqual(editor.value as? String, expected, "Explicitly returning to the same editor must retain the unsaved variables.")
+        let retry = app.buttons["retryDraftSave"]
+        XCTAssertTrue(retry.waitForExistence(timeout: 5))
+        capture("prepared-save-failure-retains-editor-buffer")
+        try FileManager.default.removeItem(at: file)
+        try before.write(to: file, options: .atomic)
+        retry.tap()
+        XCTAssertTrue(retry.waitForNonExistence(timeout: 5))
+        var saved = drafts; saved[id + "::zh-Hans"] = expected
+        XCTAssertEqual(try readSnapshot([String: String].self, from: directory, file: "drafts.json"), saved)
+        app.buttons["finishPromptEditing"].tap()
+        app.buttons["编辑后使用"].tap()
+        XCTAssertTrue(editor.waitForExistence(timeout: 5)); XCTAssertEqual(editor.value as? String, expected)
+        capture("prepared-save-recovery-restores-exact-draft")
     }
 
     func testPublishedTranslationCatchUp() throws {
@@ -1248,14 +1364,44 @@ import UIKit
             reveal(item)
             item.tap()
             XCTAssertTrue(app.buttons["copyPrompt"].waitForExistence(timeout: 5))
-            XCTAssertTrue(app.buttons["contentLanguage"].exists)
-            XCTAssertTrue(app.buttons["contentLanguage"].label.contains(contentLanguage), "Content must follow the selected interface language.")
+            let languageMenu = app.buttons["contentLanguage"]
+            XCTAssertTrue(languageMenu.exists)
+            // Production editions download translations on demand. A cached-only
+            // launch must not pretend that all nine packs are already installed.
+            if !languageMenu.label.contains(contentLanguage) {
+                reveal(languageMenu); languageMenu.tap()
+                let choice = app.buttons["contentLanguage-\(language)"]
+                XCTAssertTrue(choice.waitForExistence(timeout: 5)); choice.tap()
+                let translated = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+                    languageMenu.exists && languageMenu.label.contains(contentLanguage)
+                }, object: nil)
+                XCTAssertEqual(XCTWaiter.wait(for: [translated], timeout: 60), .completed)
+            }
+            XCTAssertTrue(languageMenu.label.contains(contentLanguage), "Downloaded content must use the selected interface language.")
             capture("language-\(language)-detail")
             let beforeCopy = app.buttons["copyPrompt"].label
             app.buttons["copyPrompt"].tap()
             XCTAssertNotEqual(app.buttons["copyPrompt"].label, beforeCopy)
             app.terminate()
         }
+    }
+
+    private func handoffPersonalState() throws -> [String: Data] {
+        var state = try performancePersonalState()
+        if let data = state["favorites.json"] {
+            var favorites = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [[String: Any]])
+            for index in favorites.indices {
+                if var localization = favorites[index]["localization"] as? [String: Any] {
+                    // Switching interface languages refreshes derived translations.
+                    // Preserve strict checks for order, identity, original content,
+                    // source fingerprint and every other saved field, plus draft bytes.
+                    localization.removeValue(forKey: "translations")
+                    favorites[index]["localization"] = localization
+                }
+            }
+            state["favorites.json"] = try JSONSerialization.data(withJSONObject: favorites, options: [.sortedKeys])
+        }
+        return state
     }
 
     private func performancePersonalState() throws -> [String: Data] {

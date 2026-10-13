@@ -14,12 +14,32 @@ import UIKit
         app.launchArguments += ["--offline", "-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN"]
         app.launch()
     }
+    private func dismissUnsavedDraftPopover() throws {
+        let window = app.windows.containing(.button, identifier: "copyDraftAndLeave").firstMatch
+        let popover = app.popovers.containing(.button, identifier: "copyDraftAndLeave").firstMatch
+        XCTAssertTrue(window.exists && popover.exists)
+        guard window.exists && popover.exists else { throw NSError(domain: "Acceptance", code: 1) }
+        let point = CGPoint(x: (popover.frame.maxX + window.frame.maxX) / 2, y: window.frame.midY)
+        XCTAssertTrue(window.frame.contains(point) && !popover.frame.contains(point))
+        // Anchor input to the actual dialog display, not the application's outer display.
+        window.coordinate(withNormalizedOffset: .zero)
+            .withOffset(CGVector(dx: point.x - window.frame.minX, dy: point.y - window.frame.minY)).tap()
+    }
+
     func capture(_ name: String) {
-        let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-        shot.name = name; shot.lifetime = .keepAlways; add(shot)
+        for (index, screen) in XCUIScreen.screens.enumerated() {
+            let shot = XCTAttachment(screenshot: screen.screenshot())
+            shot.name = "\(name)-display-\(index)"; shot.lifetime = .keepAlways; add(shot)
+        }
     }
     private func selectTab(_ title: String) {
         app.selectPrompixTab(title)
+    }
+    private func visibleFrame(of element: XCUIElement) -> CGRect {
+        let window = app.windows.containing(.any, identifier: element.identifier).firstMatch
+        let bounds = window.exists ? window.frame : app.frame
+        // The application frame may still describe Duo's inactive outer display.
+        return element.frame.intersection(bounds)
     }
     // Run with a Release configuration; record simulator and device results separately.
     // These are process launches, not a claim of empty OS caches or a reboot.
@@ -79,10 +99,8 @@ import UIKit
             let value = normalized(value)
             return value.contains(title) && value.contains("收藏")
         }
-        func reachedNavigation() -> Bool {
-            speech.contains { normalized($0).contains("prompix") }
-                && speech.contains { $0.contains("搜索") }
-                && speech.contains { $0.contains("设置") }
+        func isHeading(_ value: String) -> Bool {
+            normalized(value).contains("prompix") && value.contains("标题")
         }
 
         // This reads VoiceOver's actual output, not the broader XCTest element tree.
@@ -102,15 +120,32 @@ import UIKit
             XCTAssertLessThan(titleIndex, bookmarkIndex, "Read the card title before its bookmark action.")
         }
 
-        // Enabling VoiceOver can restore a previous focus. Walk back from the card
-        // to verify the native header and toolbar actions without assuming a start index.
+        // Verify the heading through sequential navigation. Native side toolbars
+        // can follow the content, so their actions are explored separately below.
         let backwardDeadline = Date().addingTimeInterval(45)
         for _ in 0..<36 {
-            if reachedNavigation() { break }
+            if let current = speech.last, isHeading(current) { break }
             if Date() >= backwardDeadline { break }
             speech.append(try voiceOver.moveBackward().utterance)
         }
-        XCTAssertTrue(reachedNavigation(), "VoiceOver must expose the Prompix heading, Search, and Settings actions.")
+        XCTAssertTrue(speech.contains(where: isHeading), "VoiceOver must expose Prompix as a heading.")
+        // With the default flat VoiceOver navigation, native side-toolbar
+        // actions can follow the feed. Traverse that real order rather than
+        // assuming a top bar or requiring the optional Groups navigation style.
+        func reachedActions() -> Bool {
+            ["搜索", "设置"].allSatisfy { name in
+                speech.contains { $0.contains(name) && $0.contains("按钮") }
+            }
+        }
+        let toolbarDeadline = Date().addingTimeInterval(100)
+        var repeated = 0
+        for _ in 0..<180 {
+            if reachedActions() || Date() >= toolbarDeadline || repeated >= 3 { break }
+            let value = try voiceOver.moveForward().utterance
+            repeated = speech.last == value ? repeated + 1 : 0
+            speech.append(value)
+        }
+        XCTAssertTrue(reachedActions(), "Native VoiceOver navigation must reach Search and Settings as buttons.")
         XCTAssertFalse(speech.contains { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }, "Focused elements must produce meaningful speech.")
         for decoration in ["A LITTLE PERSPECTIVE", "今天，慢慢来。"] {
             XCTAssertFalse(speech.contains { normalized($0).contains(normalized(decoration)) }, "Decorative cover text must not become a separate VoiceOver stop: \(decoration)")
@@ -405,11 +440,30 @@ import UIKit
         }
         func durableDraft() throws -> String? {
             let values = try JSONDecoder().decode([String: String].self, from: Data(contentsOf: draftFile))
-            return values["gentle-tarot"]
+            return values["gentle-tarot::zh-Hans"]
+        }
+        let useMode = ProcessInfo.processInfo.environment["PROMPIX_PREPARED_DRAFT_ACCEPTANCE"]
+        let fromUse = useMode != nil
+        func openEditor(fromDetail: Bool) throws {
+            if fromUse {
+                if useMode == "nested" && !fromDetail {
+                    app.buttons["编辑后使用"].tap()
+                    return
+                }
+                if fromDetail {
+                    if useMode == "nested" {
+                        app.buttons["编辑后使用"].tap()
+                        try require(app.buttons["useEditedPrompt"].waitForExistence(timeout: 5), "Outer editor must expose use")
+                        app.buttons["useEditedPrompt"].tap()
+                    } else { app.buttons["usePrompt"].tap() }
+                }
+                try require(app.buttons["editPreparedPrompt"].waitForExistence(timeout: 5), "Use panel must offer editing")
+                app.buttons["editPreparedPrompt"].tap()
+            } else { app.buttons["编辑后使用"].tap() }
         }
         app.buttons["kind-text"].tap()
         app.buttons["prompt-gentle-tarot"].tap()
-        app.buttons["编辑后使用"].tap()
+        try openEditor(fromDetail: true)
         let editor = app.textViews["promptEditor"]
         try require(editor.waitForExistence(timeout: 5), "Editor must open")
         editor.tap()
@@ -424,16 +478,31 @@ import UIKit
         try require(app.buttons["retryDraftSave"].waitForExistence(timeout: 5), "Inline failure must preserve the editor")
         try require(editor.exists, "Storage failure must not dismiss the editor")
         let recovered = try XCTUnwrap(editor.value as? String)
+        if !recovered.contains("Recovered write-failure note.") {
+            let evidence = XCTAttachment(string: "Baseline: \(baseline)\nRecovered: \(recovered)")
+            evidence.name = "Write-failure actual editor buffer"; evidence.lifetime = .keepAlways; add(evidence)
+            capture("write-failure-buffer-mismatch")
+        }
         try require(recovered.contains("Recovered write-failure note."), "The typed failure note must stay intact")
         try require(app.buttons["retryDraftSave"].waitForExistence(timeout: 5), "Write failure must expose Retry")
         try require(app.staticTexts["draftStatus"].label.contains("尚未保存"), "Failure status must remain visible")
         if ProcessInfo.processInfo.environment["PROMPIX_DRAFT_LAYOUT_ONLY"] == "1" {
             capture("acceptance-write-failure-largest-text")
             let copyFrame = app.buttons["copyEditedPrompt"].frame
-            let visibleEditorHeight = max(0, min(app.frame.maxY, copyFrame.minY) - editor.frame.minY)
-            let layout = XCTAttachment(string: "Preferred body font: \(UIFont.preferredFont(forTextStyle: .body).pointSize); editor frame: \(editor.frame); copy frame: \(copyFrame); visible editor height above copy: \(visibleEditorHeight); retry frame: \(app.buttons["retryDraftSave"].frame); leave frame: \(app.buttons["leaveUnsavedDraft"].frame)")
+            let editorFrame = visibleFrame(of: editor)
+            let keyboard = app.keyboards.firstMatch
+            let keyboardFrame = keyboard.exists ? keyboard.frame.intersection(app.frame) : CGRect.null
+            let keyboardOverlap = editorFrame.intersection(keyboardFrame)
+            // Measure a contiguous, full-width text area. A native Copy action
+            // can be in a side toolbar and does not define the editor's bottom.
+            let visibleEditorHeight = editorFrame.isNull || editorFrame.isEmpty ? 0 :
+                keyboardOverlap.isNull || keyboardOverlap.isEmpty ? editorFrame.height :
+                max(keyboardOverlap.minY - editorFrame.minY, editorFrame.maxY - keyboardOverlap.maxY)
+            let lineHeight = UIFont.preferredFont(forTextStyle: .body).lineHeight
+            let layout = XCTAttachment(string: "Preferred body font: \(UIFont.preferredFont(forTextStyle: .body).pointSize); editor frame: \(editor.frame); window-clipped editor frame: \(editorFrame); keyboard frame: \(keyboardFrame); copy frame: \(copyFrame); unobscured editor height: \(visibleEditorHeight); required line height: \(lineHeight); retry frame: \(app.buttons["retryDraftSave"].frame); leave frame: \(app.buttons["leaveUnsavedDraft"].frame)")
             layout.name = "Largest-text recovery layout"; layout.lifetime = .keepAlways; add(layout)
-            try require(editor.isHittable && visibleEditorHeight >= UIFont.preferredFont(forTextStyle: .body).lineHeight, "Failure state must retain at least one full editor line above the fixed copy action")
+            try require(editor.isHittable && !editorFrame.isNull && editorFrame.width >= lineHeight && visibleEditorHeight >= lineHeight,
+                        "Failure state must retain at least one full editor line inside its window and clear of the visible keyboard")
             let header = app.scrollViews["draftStatusScroll"]
             try require(header.waitForExistence(timeout: 5), "Recovery header must scroll independently")
             func reveal(_ button: XCUIElement) throws {
@@ -452,15 +521,23 @@ import UIKit
             capture("acceptance-write-failure-largest-text-actions")
             leave.tap()
             try require(app.buttons["copyDraftAndLeave"].firstMatch.waitForExistence(timeout: 5), "Leave action must open its native confirmation")
+            try require(app.keyboards.firstMatch.waitForNonExistence(timeout: 5), "Explicitly leaving must dismiss the keyboard so the confirmation has its full height")
             capture("acceptance-write-failure-largest-text-dialog")
-            if app.buttons["继续编辑"].firstMatch.exists {
-                app.buttons["继续编辑"].firstMatch.tap()
+            for identifier in ["copyDraftAndLeave", "discardDraftAndLeave"] {
+                let action = app.buttons[identifier].firstMatch
+                try require(action.isHittable && visibleFrame(of: action).contains(action.frame),
+                            "Both recovery choices must be visible inside the confirmation window")
+            }
+            let continueEditing = app.alerts["本次修改尚未保存"].buttons["继续编辑"]
+            try require(continueEditing.isHittable, "The safe Continue Editing choice must remain directly reachable")
+            if app.alerts["本次修改尚未保存"].exists {
+                app.alerts["本次修改尚未保存"].buttons["继续编辑"].tap()
             } else {
-                app.coordinate(withNormalizedOffset: CGVector(dx: 0.01, dy: 0.5)).tap()
+                try dismissUnsavedDraftPopover()
             }
             try require(app.buttons["copyDraftAndLeave"].firstMatch.waitForNonExistence(timeout: 5), "Cancelling must dismiss the native leave dialog")
             try require(editor.exists && editor.value as? String == recovered, "Cancelling leave must keep the large-text buffer")
-            for button in [app.buttons["copyEditedPrompt"], app.buttons["完成"]] {
+            for button in [app.buttons["copyEditedPrompt"], app.buttons["finishPromptEditing"]] {
                 try require(button.isHittable, "Fixed completion actions must remain reachable")
             }
             return
@@ -469,24 +546,24 @@ import UIKit
             .press(forDuration: 0.1, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.85)))
         try require(editor.exists, "Failed draft must resist interactive dismissal")
         try require(editor.value as? String == recovered, "Swipe must keep the entire buffer")
-        app.buttons["完成"].tap()
+        app.buttons["finishPromptEditing"].tap()
         try require(editor.exists && editor.value as? String == recovered, "Done must keep the failed-save buffer")
         capture("acceptance-write-failure-buffer-protected")
         app.buttons["leaveUnsavedDraft"].tap()
         capture("acceptance-write-failure-leave-dialog")
-        if app.buttons["继续编辑"].exists {
-            app.buttons["继续编辑"].tap()
+        if app.alerts["本次修改尚未保存"].exists {
+            app.alerts["本次修改尚未保存"].buttons["继续编辑"].tap()
         } else {
             // Native popover presentations omit the cancel row; tapping outside cancels.
-            app.coordinate(withNormalizedOffset: CGVector(dx: 0.01, dy: 0.5)).tap()
+            try dismissUnsavedDraftPopover()
         }
         try require(editor.exists && editor.value as? String == recovered, "Cancelling leave must preserve the buffer")
         try restore(baselineBytes)
         app.buttons["retryDraftSave"].tap()
         try require(app.buttons["retryDraftSave"].waitForNonExistence(timeout: 5), "Retry must recover after storage is restored")
         try require(try durableDraft() == recovered, "Retry must save the exact current buffer")
-        app.buttons["完成"].tap()
-        app.buttons["编辑后使用"].tap()
+        app.buttons["finishPromptEditing"].tap()
+        try openEditor(fromDetail: false)
         try require(editor.waitForExistence(timeout: 5) && editor.value as? String == recovered, "Recovered draft must reopen intact")
         capture("acceptance-write-failure-recovered")
 
@@ -514,7 +591,7 @@ import UIKit
         app.launch()
         app.buttons["kind-text"].tap()
         app.buttons["prompt-gentle-tarot"].tap()
-        app.buttons["编辑后使用"].tap()
+        try openEditor(fromDetail: true)
         try require(editor.waitForExistence(timeout: 5) && editor.value as? String == recovered, "Relaunch must preserve the prior durable draft after explicit copy-only exit")
         try require(try durableDraft() == recovered, "Copy-only exit must not overwrite the prior durable draft")
         capture("acceptance-copy-only-exit-durable-draft")
@@ -548,16 +625,24 @@ import UIKit
         app.buttons["prompt-gentle-tarot"].tap()
         try auditScreen("text-detail")
         let report = app.descendants(matching: .any).matching(identifier: "reportContent").firstMatch
-        let contentBottom = app.buttons["copyPrompt"].frame.minY - 16
+        let readingPane = app.scrollViews["detailReadingPane"]
         func sourceIsVisible() -> Bool {
-            report.exists && report.isHittable && report.frame.minY > 100 && report.frame.maxY < contentBottom
+            guard report.exists, report.isHittable else { return false }
+            let viewport = readingPane.exists ? visibleFrame(of: readingPane) : app.frame
+            guard !viewport.isNull, viewport.contains(report.frame) else { return false }
+            let controls = ["copyPrompt", "usePrompt", "editPromptAction", "detailFavorite", "sharePrompt"].map { app.buttons[$0] }
+            let bars = app.navigationBars.allElementsBoundByIndex + app.toolbars.allElementsBoundByIndex
+            return !(controls + bars).contains { obstacle in
+                obstacle.exists && !obstacle.frame.isEmpty && obstacle.frame.intersects(report.frame)
+            }
         }
         for _ in 0..<30 {
             if sourceIsVisible() { break }
-            app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.7))
-                .press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.4)))
+            let viewport: XCUIElement = readingPane.exists ? readingPane : app
+            viewport.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.7))
+                .press(forDuration: 0.05, thenDragTo: viewport.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.4)))
         }
-        XCTAssertTrue(sourceIsVisible(), "Source actions must be visible above the fixed action bar before auditing")
+        XCTAssertTrue(sourceIsVisible(), "Source actions must be fully inside the reading pane and clear of native bars and actions before auditing")
         try auditScreen("text-detail-source")
         if app.buttons["detailFavorite"].label != "取消收藏" { app.buttons["detailFavorite"].tap() }
         app.buttons["编辑后使用"].tap()

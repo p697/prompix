@@ -16,6 +16,26 @@ import CryptoKit
         try? FileManager.default.removeItem(at: directory)
     }
 
+    func testPromptGridFitsNarrowPanesAndAsymmetricDivision() {
+        for width: CGFloat in [240, 390, 680, 900] {
+            let layout = PromptGridLayout(width: width)
+            XCTAssertEqual(layout.columns, width >= 760 ? 4 : 2)
+            XCTAssertEqual(layout.widths.reduce(0, +) + layout.gaps.reduce(0, +), width, accuracy: 0.01)
+            XCTAssertTrue(layout.widths.allSatisfy { $0 > 0 })
+        }
+        let division = CGRect(x: 430, y: 0, width: 56, height: 600)
+        let divided = PromptGridLayout(width: 850, division: division)
+        XCTAssertEqual(divided.widths[0] + divided.gaps[0] + divided.widths[1], division.minX - 8, accuracy: 0.01)
+        XCTAssertEqual(divided.gaps[1], division.width + 16)
+        XCTAssertEqual(divided.widths.reduce(0, +) + divided.gaps.reduce(0, +), 850, accuracy: 0.01)
+        XCTAssertGreaterThan(divided.widths[0], divided.widths[3])
+        let edgeDivision = PromptGridLayout(width: 900, division: CGRect(x: 30, y: 0, width: 40, height: 600))
+        XCTAssertTrue(edgeDivision.widths.allSatisfy { $0 >= 140 }, "An edge sliver must not become a column.")
+        let narrowHalf = PromptGridLayout(width: 800, division: CGRect(x: 210, y: 0, width: 50, height: 600))
+        XCTAssertEqual(narrowHalf.columns, 2)
+        XCTAssertTrue(narrowHalf.widths.allSatisfy { $0 >= 140 })
+    }
+
     func testCreatorSearchAcceptsDisplayedHandlesAndMultipleIdentityTerms() {
         let author = creator(id: "github-sample", name: "Sample Artist", username: "sample_artist", platform: "github")
         XCTAssertTrue(author.matchesSearch("@SAMPLE_artist"))
