@@ -47,6 +47,33 @@ test("declared video artifacts outrank intermediate image and text tools, but ex
   assert.ok("kind" in extracted); assert.equal(extracted.kind, "text");
 });
 
+test("attachment-based reply modality follows its own verified media before root media", () => {
+  const plainRoot = { ...root, text: "My latest experiment. Prompt in first reply." };
+  const photo = { media_key: "p1", type: "photo" as const, url: "https://pbs.twimg.com/media/reply.jpg" };
+  const plainReply = { ...reply, text: "Prompt:\nA tiny blue cottage beneath a glowing moon, watercolor texture, soft shadows and a restrained color palette.",
+    attachments: { media_keys: ["p1"] } };
+  for (const rootAttachments of [undefined, root.attachments]) {
+    const result = convertXThread({ ...snapshot, posts: [{ ...plainRoot, attachments: rootAttachments }, plainReply], media: [...media, photo] }, "100");
+    assert.equal(result.candidates.length, 1);
+    const item = result.candidates[0];
+    assert.equal(item.kind, "image"); assert.equal(item.media?.imageURL, photo.url);
+    assert.equal(item.media?.videoURL, undefined); assert.equal(item.source.mediaPostID, plainReply.id);
+    assert.equal(item.prompt, plainReply.text.slice("Prompt:\n".length));
+    assert.equal(nativeXSourceIssue(item), undefined);
+  }
+  // Unattached or unverified media must not override a verified root attachment.
+  for (const replyAttachments of [undefined, { media_keys: ["unknown"] }, { media_keys: ["unsafe"] }]) {
+    const result = convertXThread({ ...snapshot, posts: [plainRoot, { ...plainReply, attachments: replyAttachments }],
+      media: [...media, photo, { ...photo, media_key: "unsafe", url: "https://example.com/unverified.jpg" }] }, "100");
+    assert.equal(result.candidates[0].kind, "video");
+    assert.equal(result.candidates[0].source.mediaPostID, root.id);
+    assert.equal(result.candidates[0].media?.videoURL, media[0].variants[0].url);
+  }
+  const mixed = convertXThread({ ...snapshot, posts: [plainRoot, { ...plainReply, attachments: { media_keys: ["p1", "v1"] } }], media: [...media, photo] }, "100");
+  assert.equal(mixed.candidates.length, 0);
+  assert.equal(mixed.records[0].reason, "ambiguous-modality");
+});
+
 test("context changes invalidate approval while recheck timestamps do not", () => {
   const item = candidate(), before = nativeXSourceDigest(item);
   const changed = structuredClone(item); changed.source.context![0].text += " Changed reference.";
