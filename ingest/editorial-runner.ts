@@ -44,9 +44,10 @@ export type EditorialAttempt = z.infer<typeof editorialAttemptSchema>;
 export type EditorialLedger = z.output<typeof editorialLedgerSchema>;
 export type EditorialInput = ReturnType<typeof editorialInput>;
 export type EditorialProvider = (items: EditorialInput[]) => Promise<{ decisions: unknown; inputTokens?: number; outputTokens?: number }>;
-export type EditorialReport = { status: "disabled" | "no-pending" | "daily-limit" | "reviewed" | "failed";
+export type EditorialReport = { status: "disabled" | "no-pending" | "daily-limit" | "prior-attempt-blocked" | "reviewed" | "failed";
   pending: number; eligible: number; requests: number; dailyRequests: number; maxRequests: number; attemptedCandidates: number; approved: number; deferred: number; rejected: number;
-  cachedDecisions: number; preflightDeferred: number; inputCharacters: number; model: string; error?: string };
+  cachedDecisions: number; preflightDeferred: number; inputCharacters: number; model: string; error?: string;
+  blockedAttempt?: { ordinal: number; state: "reserved" | "failed"; reservedAt: string } };
 type ReviewIdentityInput = Pick<Candidate, "id" | "fingerprint"> & Partial<Pick<Candidate, "source" | "skill">>;
 export function editorialReviewContext(item: ReviewIdentityInput): string | undefined {
   if (!item.source || !isPublisherSkill({ id: item.id, source: item.source })) return;
@@ -151,8 +152,14 @@ export async function runEditorialReview(options: { candidates: readonly Candida
   }
   if (report.preflightDeferred) await options.persistCache(cache);
   report.eligible = eligible.length;
-  if ((ledger?.requests ?? 0) >= maxRequests || ledger?.attempts.some(attempt => attempt.state !== "completed")) {
+  if ((ledger?.requests ?? 0) >= maxRequests) {
     report.status = "daily-limit"; return { reviews: options.reviews, report };
+  }
+  const lastAttempt = ledger?.attempts.at(-1);
+  if (lastAttempt && lastAttempt.state !== "completed") {
+    report.status = "prior-attempt-blocked";
+    report.blockedAttempt = { ordinal: report.dailyRequests, state: lastAttempt.state, reservedAt: lastAttempt.reservedAt };
+    return { reviews: options.reviews, report };
   }
   // A completed reservation remains spent even if its cache or approvals are later missing.
   const attemptedIDs = new Set(ledger?.attempts.flatMap(attempt => attempt.candidateIDs) ?? []);

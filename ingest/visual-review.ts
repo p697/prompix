@@ -103,11 +103,12 @@ export function visualInputCharacters(items: readonly VisualInput[]): number {
 
 export type VisualItemReport = { id: string; identity: string;
   status: "not-required" | "previous-snapshot" | "cached-approved" | "website-reviewed" | "approved" | "deferred"; reason?: string };
-export type VisualReport = { status: "disabled" | "no-pending" | "daily-limit" | "reviewed" | "failed";
+export type VisualReport = { status: "disabled" | "no-pending" | "daily-limit" | "prior-attempt-blocked" | "reviewed" | "failed";
   considered: number; notRequired: number; previousSnapshots: number; cachedApproved: number; cachedDeferred: number; websitesReviewed: number;
   pending: number; prepared: number; requests: number; dailyRequests: number; maxRequests: number; attemptedCandidates: number; approved: number; deferred: number;
   preflightDeferred: number; inputCharacters: number; attachments: number; attachmentBytes: number; model: string;
-  items: VisualItemReport[]; error?: string };
+  items: VisualItemReport[]; error?: string;
+  blockedAttempt?: { ordinal: number; state: "reserved" | "failed"; reservedAt: string } };
 
 function imageURLs(item: Prompt): string[] {
   return item.media?.imageURLs ? [...item.media.imageURLs] : item.media?.imageURL ? [item.media.imageURL] : [];
@@ -252,8 +253,14 @@ export async function runVisualReview(options: {
   }
   report.pending = pending.length;
   if (!options.provider || !pending.length) return finish();
-  if (report.dailyRequests >= maxRequests || (ledger && ledger.attempts.at(-1)?.state !== "completed")) {
+  if (report.dailyRequests >= maxRequests) {
     report.status = "daily-limit"; return finish();
+  }
+  const lastAttempt = ledger?.attempts.at(-1);
+  if (lastAttempt && lastAttempt.state !== "completed") {
+    report.status = "prior-attempt-blocked";
+    report.blockedAttempt = { ordinal: report.dailyRequests, state: lastAttempt.state, reservedAt: lastAttempt.reservedAt };
+    return finish();
   }
   const attempted = new Set(ledger?.attempts.flatMap(attempt => attempt.identities) ?? []);
   // Limit preparation as well as model input. Rotate stable pending identities so
