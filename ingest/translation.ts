@@ -174,7 +174,8 @@ const humanLanguageNames = {
   ko: /韩文|韩语|韓文|韓語|韓国語|한국어|\b(?:korean\w*|cor[eé]en\w*|corean\w*)\b/iu,
   es: /西班牙语|西班牙語|スペイン語|스페인어|\b(?:spanish|spanisch\w*|espa[ñgn]+ol\w*|espanh\w*)\b/iu,
   pt: /葡萄牙语|葡萄牙語|ポルトガル語|포르투갈어|\bportug[ui]\w*/iu,
-  fr: /法语|法語|法文|フランス語|프랑스어|\b(?:french|fran[cç]ais\w*|franz[oö]s\w*|franc[eéê]s\w*)\b/iu,
+  // In 语法文档 / 語法文件, 法文 spans "syntax" and "documentation", not French.
+  fr: /法语|法語|(?<![语語])法文|フランス語|프랑스어|\b(?:french|fran[cç]ais\w*|franz[oö]s\w*|franc[eéê]s\w*)\b/iu,
   de: /德语|德語|德文|ドイツ語|독일어|\b(?:german|deutsch\w*|allemand\w*|alem[aáã]\w*)\b/iu,
 };
 function requiredHumanLanguages(source: string): (keyof typeof humanLanguageNames)[] {
