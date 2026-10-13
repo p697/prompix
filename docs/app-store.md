@@ -6,7 +6,9 @@
 
 2026-10-13已在现有开发者账号创建[Prompix商店记录](https://appstoreconnect.apple.com/apps/6822283489/distribution)，Apple ID为`6822283489`，沿用`com.p697.prompix`，SKU为`prompix-ios`。版本为0.4.7、状态为“准备提交”，主语言英语（美国），主分类图形和设计、次分类效率。已保存英文和简体中文的名称、副标题、推广文本、描述、关键词、支持与营销网址；版本采用手动发布，审核说明已保存并取消“需要登录”。
 
-保存后实际页面显示已保存；截图与字段核对保存在开发机外置盘 `Prompix-Codex/Evidence/app-store-draft-20261013/`。其余七语文案仍是本地草稿，隐私网址与问卷、年龄分级、版权、联系人、发行地区、最终截图及构建版本仍未完成。没有填写或提交无法由项目事实证明的主体资料或问卷。
+随后补齐繁体中文、日语、韩语、西班牙语（西班牙）、葡萄牙语（巴西）、法语和德语；九语名称、副标题、推广文本、描述、关键词、支持与营销网址均已保存。隐私网址也已按九语保存：简繁中文指向现有简中页面，其余指向英文页面。离开页面并重新加载后，逐语言回读上述八个字段，全部与仓库原稿一致。截图与逐字段证据保存在开发机外置盘 `Prompix-Codex/Evidence/app-store-draft-20261013/nine-locale-readback.json` 和 `nine-locale-privacy-proof.jpg`。
+
+英文和中文隐私页已通过普通Chrome实际打开并读取正文；单独的Python HTTP请求返回403，网页提取工具不可用，因此不将浏览器可用扩大为所有自动审核抓取均通过。隐私收集问卷、年龄分级、版权、联系人、发行地区、最终截图及构建版本仍未完成。没有填写或提交无法由项目事实证明的主体资料或问卷。
 
 页面已有非交易商声明提示，这是账号／新App的既有状态，本轮未修改，也未验证其法律事实；不将它当作发行地区已确认。商店记录和文案保存不等于二进制上传、TestFlight可用、正式提交审核或公开上架。
 
@@ -26,7 +28,7 @@
 | Français (France) | Des prompts pour vos idées |
 | Deutsch | Prompts für deine Ideen |
 
-九份文案已校验名称与副标题不超过 30 字符、推广文本不超过 170 字符、描述不超过 4,000 字符、关键词不超过 100 UTF-8 字节。关键词按逗号分隔、无重复项，每项超过两个字符；未使用其他 App 或公司的名称。描述说明 AI 翻译、原文回退、外部工具可能收费、离线与视频范围。依据 [Apple 版本信息字段](https://developer.apple.com/help/app-store-connect/reference/app-information/platform-version-information/)。这些文案尚未经过各市场母语人员润色；英文和简体中文已保存到 App Store Connect 草稿，其余七语尚未写入。
+九份文案已校验名称与副标题不超过 30 字符、推广文本不超过 170 字符、描述不超过 4,000 字符、关键词不超过 100 UTF-8 字节。关键词按逗号分隔、无重复项，每项超过两个字符；未使用其他 App 或公司的名称。描述说明 AI 翻译、原文回退、外部工具可能收费、离线与视频范围。依据 [Apple 版本信息字段](https://developer.apple.com/help/app-store-connect/reference/app-information/platform-version-information/)。九语文案均已保存到App Store Connect草稿；尚未经过各市场母语人员润色，不代表内容库九语全文覆盖或正式上架完成。
 
 商店草稿已采用主分类 Graphics & Design、次分类 Productivity，主语言为英语（美国）。首个公开版本不填 “What's New”；该字段用于后续版本更新。预览视频可选，不是首发必须项。
 

@@ -148,3 +148,10 @@ Debug、`--offline`、30条内置内容的五次启动测量为4.861194、4.8153
 建议依次体验发现页宽窄网格、创作者横滑和返回、网页或图片详情的阅读／预览、使用面板、编辑、开合旋转、图库／视频返回，以及Safari左右50/50多任务。外置证据目录的 `ACCEPTANCE.md` 提供具体步骤，`current-evidence-index.json` 汇总最终与历史证据，`final-validation/installed-delivery-verification.json` 记录构建18的身份。构建19保留在原交付目录；当前构建20独立保存在 `Prompix-Codex/Deliveries/Prompix-0.4.7-20-Duo/`，本轮哈希与个人数据核对见 `media-recovery-20261013/`，不将旧版测试自动重新标为20全量通过。
 
 本轮提供可操作的Duo验收候选版，明确保留上述组合输入限制；不声称完整项目上架已完成，也不承诺Apple编辑推荐。
+
+
+### 2026-10-13：组合输入根因审计
+
+只读复查构建20的编辑路径：sheet位于ArrangementView外，EditorContext UUID只在明确开始编辑时创建；编辑控件处于固定结构位置，没有按姿态/宽度换ID或在折叠时主动清焦点的代码。正文保留不足以证明底层原生控件身份保留，因为新出现的编辑器也可从已保存草稿恢复String。既有截图的空格键仍显示“拼”，因此只记录候选结束并出现英文预测，不推断输入法切为英语。
+
+当前没有markedTextRange、first responder及控件/window/scene身份轨迹，不能将原因归于应用或系统。下一项有界实验是独立诊断构建的一次展开→折叠：记录编辑任务和状态生命周期UUID、原生输入控件/窗口/场景身份、marked与selection范围及输入模式；正文仅记录长度/哈希，不恢复焦点或干预组合态。依据Apple的[SwiftUI身份与生命周期说明](https://developer.apple.com/videos/play/wwdc2021/10022/)与[markedTextRange定义](https://developer.apple.com/documentation/uikit/uitextinput/markedtextrange)。不重复已撤回的selection/FocusState A/B，也不以未经证明的原因重写UIKit编辑器。本次没有新模拟器运行或更改构建20验收现场。
