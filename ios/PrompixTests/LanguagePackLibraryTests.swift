@@ -113,10 +113,46 @@ import CryptoKit
         addTeardownBlock { session.invalidateAndCancel(); PackLibraryProtocol.registry.remove(identifier) }
         return (network, session)
     }
-    private func waitForRequest(_ network: PackLibraryNetwork, path: String, count: Int = 1) async throws {
+    private func prepareHeldNetwork(_ network: PackLibraryNetwork, session: URLSession) async throws {
+        // Establish this session's transport before measuring the ordering of held
+        // requests. This route never enters the business request log or hold set.
+        network.recordStage("readiness started")
+        do {
+            let bytes = try await CatalogSync.fetch(network.readinessURL, maximum: network.readinessBytes.count,
+                                                    session: session, requiresExactURL: true)
+            guard bytes == network.readinessBytes else { throw URLError(.badServerResponse) }
+            network.recordStage("readiness verified")
+        } catch {
+            XCTFail("Fixture readiness failed before the concurrency scenario: \(error). \(network.stageSnapshot)")
+            throw error
+        }
+    }
+    private func selectionTask(_ locale: String, for item: Prompt, library: Library, session: URLSession,
+                               network: PackLibraryNetwork, label: String,
+                               gate: PackLibraryEntryGate? = nil) -> Task<Bool, Never> {
+        let task = Task {
+            network.recordStage("\(label) scheduled")
+            if let gate { await gate.wait() }
+            network.recordStage("\(label) entered; cancelled=\(Task.isCancelled)")
+            let result = await library.ensureLanguage(locale, for: item, session: session)
+            network.recordStage("\(label) completed; result=\(result)")
+            return result
+        }
+        // Registered after network teardown, so XCTest's reverse-order cleanup
+        // drains these callers before removing their session fixture or files.
+        addTeardownBlock {
+            task.cancel()
+            gate?.open()
+            _ = await task.value
+        }
+        return task
+    }
+    private func waitForRequest(_ network: PackLibraryNetwork, path: String, count: Int = 1,
+                                library: Library? = nil) async throws {
         let requested = network.expectRequest(path: path, count: count)
         guard await XCTWaiter.fulfillment(of: [requested], timeout: 10) == .completed else {
-            XCTFail("The isolated session did not request \(path)")
+            let libraryState = library.map { "syncState=\($0.syncState); isRefreshing=\($0.isRefreshing)" } ?? "not recorded"
+            XCTFail("Held-request stage did not observe \(path). Library: \(libraryState). \(network.stageSnapshot)")
             throw URLError(.timedOut)
         }
     }
@@ -332,13 +368,13 @@ import CryptoKit
         let item = try prompt(library), path = fixture.localePath(newLocale), gate = PackLibraryEntryGate()
         defer { gate.open() }
         let (remote, session) = network(fixture, holding: [path])
-        let old = Task {
-            await gate.wait()
-            return await library.ensureLanguage(oldLocale, for: item, session: session)
-        }
+        try await prepareHeldNetwork(remote, session: session)
+        let old = selectionTask(oldLocale, for: item, library: library, session: session,
+                                network: remote, label: "old", gate: gate)
         old.cancel()
-        let newest = Task { await library.ensureLanguage(newLocale, for: item, session: session) }
-        try await waitForRequest(remote, path: path)
+        let newest = selectionTask(newLocale, for: item, library: library, session: session,
+                                   network: remote, label: "newest")
+        try await waitForRequest(remote, path: path, library: library)
 
         // Deliberately ignore cancellation at this gate so the stale caller enters
         // ensureLanguage only after the new selection owns its suspended download.
@@ -361,8 +397,10 @@ import CryptoKit
         let old = try fixture(), locale = otherLocales[0], library = try makeLibrary(old)
         try library.installLanguagePacks(old.edition([preferred]))
         let item = try prompt(library), path = old.localePath(locale), (remote, session) = network(old, holding: [path])
-        let pending = Task { await library.ensureLanguage(locale, for: item, session: session) }
-        try await waitForRequest(remote, path: path)
+        try await prepareHeldNetwork(remote, session: session)
+        let pending = selectionTask(locale, for: item, library: library, session: session,
+                                    network: remote, label: "pending")
+        try await waitForRequest(remote, path: path, library: library)
         let next = try fixture(version: "edition-new-source") { value in
             var items = value["prompts"] as! [[String: Any]]; items[0]["title"] = "A revised title"; value["prompts"] = items
         }
@@ -381,8 +419,10 @@ import CryptoKit
         let old = try fixture(), library = try makeLibrary(old), locale = otherLocales[0]
         try library.installLanguagePacks(old.edition([preferred]))
         let item = try prompt(library), path = old.localePath(locale), (remote, session) = network(old, holding: [path])
-        let pending = Task { await library.ensureLanguage(locale, for: item, session: session) }
-        try await waitForRequest(remote, path: path)
+        try await prepareHeldNetwork(remote, session: session)
+        let pending = selectionTask(locale, for: item, library: library, session: session,
+                                    network: remote, label: "pending")
+        try await waitForRequest(remote, path: path, library: library)
         let next = try fixture(version: "edition-explicit-revocation") { value in
             var items = value["prompts"] as! [[String: Any]], localization = items[0]["localization"] as! [String: Any]
             var translations = localization["translations"] as! [String: Any]; translations[locale] = nil
@@ -717,6 +757,9 @@ private final class PackLibraryEntryGate: @unchecked Sendable {
 private final class PackLibraryNetwork: @unchecked Sendable {
     enum Reply { case bytes(Data), status(Int), offline }
     private let lock = NSLock()
+    private let readinessID = UUID().uuidString
+    private let startedAt = ProcessInfo.processInfo.systemUptime
+    private var stages: [String] = []
     private var responses: [String: Reply]
     private let holding: Set<String>
     private var recorded: [String] = []
@@ -724,6 +767,14 @@ private final class PackLibraryNetwork: @unchecked Sendable {
     private var pending: [(path: String, occurrence: Int, transport: PackLibraryProtocol, reply: Reply)] = []
     private var offline = false
     init(responses: [String: Reply], holding: Set<String>) { self.responses = responses; self.holding = holding }
+    var readinessURL: URL { URL(string: "https://api.prompix.dev/__pack-library-ready/\(readinessID)")! }
+    var readinessBytes: Data { Data("ready:\(readinessID)".utf8) }
+    func recordStage(_ value: String) {
+        lock.withLock { stages.append(String(format: "%.3fs %@", ProcessInfo.processInfo.systemUptime - startedAt, value)) }
+    }
+    var stageSnapshot: String {
+        lock.withLock { "Stages: \(stages.joined(separator: "; ")). Requests: \(recorded). Held: \(pending.map { $0.path })." }
+    }
     var requests: [String] { lock.withLock { recorded } }
     func set(_ reply: Reply, for path: String) { lock.withLock { responses[path] = reply } }
     func setFailureForAllRequests() { lock.withLock { offline = true } }
@@ -739,6 +790,11 @@ private final class PackLibraryNetwork: @unchecked Sendable {
     }
     func start(_ transport: PackLibraryProtocol) {
         let path = transport.request.url!.path
+        recordStage("protocol received \(path)")
+        if path == readinessURL.path {
+            transport.deliver(.bytes(readinessBytes))
+            return
+        }
         var fulfilled: [XCTestExpectation] = []
         let reply: Reply? = lock.withLock {
             recorded.append(path)
