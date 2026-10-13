@@ -279,3 +279,9 @@ The external reproducible fixture and request traces are in
 only the test MP4, withholds data after byte 2578, and is stopped after acceptance.
 This is real AVPlayer networking, not the URLProtocol image fixture. Its stalled
 startup result does not prove every mid-playback stall or an airplane-mode run.
+
+### Prepared-text save failure
+
+`PromptUseSheet` prevents interactive dismissal while a prepared variable result has failed to save. Done offers the existing native copy-and-leave, discard-and-leave and continue-editing choices; copying uses the complete in-memory result. The parent editor remains unchanged until an explicit return to editing or successful save.
+
+The three `testPreparedVariables…AfterFailedSave` / `testPreparedVariablesSurviveFailedSaveAndReturnToEditor` journeys in `GlobalDiscoveryUITests` share the guarded production-cache fixture. Set `PROMPIX_VARIABLE_ACCEPTANCE=1` and `PROMPIX_ACCEPTANCE_CONTAINER`, use a separate backed-up simulator, and restore its personal files after any interruption. The copy test attaches the expected buffer; compare host `simctl pbpaste` bytes independently. These tests must not replace the user's running acceptance build.
