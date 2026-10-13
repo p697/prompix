@@ -422,3 +422,16 @@ PR83（合并提交 `dd0483ebdea8583d26aa0badd3823d12fe49bc23`）将编辑及视
 远端manifest、base、九个语言包重新下载并全量重建，精确差异核对通过；部署检查通过校验和、大小、200/304、HEAD、视频206、私有路径404和写入405。旧v1保持455条 `edition-c60140de0b5e69a4`，latest字节与20点自然排程的留存证据一致；容量冻结标志保持true，没有pending发布。较早记录的旧v1版本只表示当时状态，不能据此推断本次改变了v1。
 
 未操作、重启或重装用户的Duo 0.4.7（20）验收现场及任何真机。此轮验证范围是后台代码与线上内容协议，不将其当作新的客户端UI验收。外置盘`Evidence/core-translation-gap-20261014/`保留`runtime-upgrade.json`、`two-semantic-review.json`、`publication-result.json`、`publication-ledger-verification.json`、`remote-publication-verification.json`与`deployment-check.log`；源文、译文和缓存只保留在仓库外。
+
+
+## 2026-10-14：十个Skill简中补齐与02点自然排程
+
+02:00:07.246至02:02:40.239 JST，自然任务`ed39bd38-a5cb-4494-b1a0-feb31d738068`正常完成，耗时152.993秒。运行副本仍为`1791907685485483000`；状态和日志的同一runID均为succeeded，launchd退出0，运行锁已释放，stderr为空。本次新增及删除均为0，线上仍是此前531条版本，没有人工补跑。X、编辑及翻译预算保护正常生效；不清除未决请求或重置账本。08点排程仍属于同一UTC预算日，下一预算日开始后的首个自然排程为14点JST，不能提前声称届时恢复已经验证。旧CLI的`translations/coverage.json`、`report.json`仍对应345条历史批次；当前覆盖应读取实际v2语言包或对应自然运行的状态。
+
+同轮从已发布的十个Skill中提取简中缺失片段，包括九个Expo Skill及Supabase Postgres实践指南。两组Codex Agent完成52段译文，由不同审读者对照完整原文独立复核；664个代码、frontmatter、路径、链接及数值保护标记原样保留。最终四处sheet术语按源文范围收敛为“面板”／“表单面板”，最终文件重新绑定审读哈希。来源内容只作为待翻译数据，没有执行Skill中的命令。审批只证明这些译文忠实于原文，不证明上游技术建议在所有项目中适用。
+
+导入使用既有`runTranslations`、语义拒绝记录与发布事务，7次本地提供器回调处理52个片段，0拒绝、0失败；没有调用管线的外部模型或X API。完整记录按v2协议组装后再通过Catalog schema校验；初次离线校验脚本误把v2 base当作完整Catalog的格式问题已修正，没有改变生产协议或校验条件。源指纹、受审译文哈希及原有记录均在发布前重新比对。
+
+02:17:40 JST发布`edition-v2-de1ace43e7c231af`：**531条、70个Skill、243个创作者身份**。英文与简中完整记录均为531条，简中从521条补齐；其余七语覆盖不变。远端manifest、base和九语包重新下载、校验并重建，差异恰好为十个新增简中完整记录；所有原文字段、既有译文、顺序及墓碑保持不变。11份付费预算／来源状态文件在发布前后哈希一致。v1继续冻结455条`edition-c60140de0b5e69a4`，没有pending发布。
+
+本轮没有修改客户端或安装／操作任何设备，不把内容协议校验当作新的UI、真机或全目录语义验收。模拟器0.4.7（20）验收现场继续保留。原文、译文及完整审读证据只在外接SSD的`Evidence/zh-skills-completion-20261014/`，关键文件为`semantic-review.json`、`staging-validation.json`、`publication-result.json`、`publication-ledger-verification.json`和`remote-publication-verification.json`；第三方内容不进入公开仓库。
