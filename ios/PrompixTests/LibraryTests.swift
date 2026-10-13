@@ -1,6 +1,7 @@
 import XCTest
 import CryptoKit
 import AVFoundation
+import AVKit
 @testable import Prompix
 
 @MainActor final class LibraryTests: XCTestCase {
@@ -233,6 +234,135 @@ import AVFoundation
         let paused = playback.player?.currentTime().seconds ?? 0
         try await Task.sleep(for: .milliseconds(400))
         XCTAssertEqual(playback.player?.currentTime().seconds ?? 0, paused, accuracy: 0.05)
+        playback.stop()
+        XCTAssertNil(playback.player)
+    }
+
+    func testRemoteVideoInterruptionPauseAndSameURLRecovery() async throws {
+        #if !targetEnvironment(simulator)
+        throw XCTSkip("Network fixture acceptance is simulator-only.")
+        #endif
+        guard let address = ProcessInfo.processInfo.environment["PROMPIX_INTERRUPTED_MEDIA_FIXTURE_URL"],
+              let base = URL(string: address), base.scheme == "https" else {
+            throw XCTSkip("Requires the isolated first-party MP4 interruption fixture; never use a production server.")
+        }
+        func control(_ path: String) async throws {
+            // Keep fixture control independent of AVFoundation's stalled media connections.
+            let session = URLSession(configuration: .ephemeral)
+            defer { session.invalidateAndCancel() }
+            var request = URLRequest(url: base.appending(path: path))
+            request.httpMethod = "POST"
+            request.httpBody = Data()
+            request.timeoutInterval = 10
+            let (data, response) = try await session.data(for: request)
+            let status = (response as? HTTPURLResponse)?.statusCode
+            let expected = Data((path == "reset" ? "stalling" : "ready").utf8)
+            XCTAssertEqual(status, 200)
+            XCTAssertEqual(data, expected)
+            guard status == 200, data == expected else { throw URLError(.badServerResponse) }
+        }
+        let playback = MoviePlayback(bufferingTimeout: .seconds(8))
+        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+            .first { $0.activationState == .foregroundActive })
+        let previousWindow = scene.keyWindow
+        let videoController = AVPlayerViewController()
+        let videoWindow = UIWindow(windowScene: scene)
+        videoWindow.rootViewController = videoController
+        videoWindow.makeKeyAndVisible()
+        var output: AVPlayerItemVideoOutput?
+        var decodedTime: Double = -1
+        var decodedFrames = 0
+        func attachRenderer() throws {
+            let item = try XCTUnwrap(playback.player?.currentItem)
+            let next = AVPlayerItemVideoOutput(pixelBufferAttributes: [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA])
+            next.suppressesPlayerRendering = false
+            item.add(next)
+            output = next; decodedTime = -1; decodedFrames = 0
+            videoController.player = playback.player
+        }
+        func sampleFrame() {
+            guard let output, let time = playback.player?.currentTime(), output.hasNewPixelBuffer(forItemTime: time) else { return }
+            var displayed = CMTime.invalid
+            guard output.copyPixelBuffer(forItemTime: time, itemTimeForDisplay: &displayed) != nil,
+                  displayed.seconds.isFinite, displayed.seconds > decodedTime else { return }
+            decodedTime = displayed.seconds; decodedFrames += 1
+        }
+        var observations: [String] = []
+        func record(_ stage: String) {
+            let player = playback.player
+            observations.append("\(stage): item=\(player?.currentItem?.status.rawValue ?? -1) transport=\(player?.timeControlStatus.rawValue ?? -1) loading=\(playback.loading) failed=\(playback.failed) time=\(player?.currentTime().seconds ?? -1) frameTime=\(decodedTime) frames=\(decodedFrames) readyForDisplay=\(videoController.isReadyForDisplay) itemError=\(String(describing: player?.currentItem?.error))")
+            observations.append("buffer: empty=\(player?.currentItem?.isPlaybackBufferEmpty ?? false) likelyToKeepUp=\(player?.currentItem?.isPlaybackLikelyToKeepUp ?? false) ranges=\(player?.currentItem?.loadedTimeRanges.map { $0.timeRangeValue.duration.seconds } ?? [])")
+        }
+        func waitUntil(_ stage: String, seconds: Int, _ condition: () -> Bool) async throws -> Bool {
+            for step in 0..<(seconds * 10) {
+                sampleFrame()
+                if step % 10 == 0 { record(stage) }
+                if condition() { record("\(stage)-observed"); return true }
+                try await Task.sleep(for: .milliseconds(100))
+            }
+            record("\(stage)-deadline")
+            return condition()
+        }
+        defer {
+            let trace = XCTAttachment(string: observations.joined(separator: "\n"))
+            trace.name = "real-avplayer-interruption-trace"; trace.lifetime = .keepAlways; add(trace)
+            playback.stop()
+            videoController.player = nil
+            videoWindow.isHidden = true
+            previousWindow?.makeKey()
+        }
+        try await control("reset")
+        let url = base.appending(path: "stall.mp4").appending(queryItems: [URLQueryItem(name: "run", value: UUID().uuidString)])
+        playback.start(url: url)
+        try attachRenderer()
+        let started = try await waitUntil("initial-playback", seconds: 15) {
+            videoController.isReadyForDisplay && decodedFrames >= 2 && decodedTime > 0.5
+        }
+        XCTAssertTrue(started, "The fixture must play before interruption; a startup timeout is not this scenario.")
+        guard started else { return }
+        let interrupted = try await waitUntil("interruption", seconds: 30) {
+            playback.loading && playback.player?.timeControlStatus == .waitingToPlayAtSpecifiedRate
+        }
+        XCTAssertTrue(interrupted)
+        guard interrupted else { return }
+        let stalledTime = playback.player?.currentTime().seconds ?? 0
+        try await Task.sleep(for: .milliseconds(400))
+        XCTAssertEqual(playback.player?.currentTime().seconds ?? 0, stalledTime, accuracy: 0.15)
+
+        // Native AVKit controls pause the player directly, including during a stall.
+        playback.player?.pause()
+        try await Task.sleep(for: .seconds(9))
+        record("paused-past-buffering-deadline")
+        XCTAssertFalse(playback.failed)
+        XCTAssertFalse(playback.loading)
+        XCTAssertEqual(playback.player?.currentTime().seconds ?? 0, stalledTime, accuracy: 0.15)
+        let resumedAt = ContinuousClock.now
+        playback.player?.play()
+        let waitingAgain = try await waitUntil("resumed-waiting", seconds: 2) {
+            playback.loading && playback.player?.timeControlStatus == .waitingToPlayAtSpecifiedRate
+        }
+        XCTAssertTrue(waitingAgain)
+        let timedOut = try await waitUntil("resumed-stall", seconds: 12) { playback.failed }
+        XCTAssertTrue(timedOut, "Resuming a stalled stream must rearm the buffering deadline.")
+        let elapsed = resumedAt.duration(to: .now)
+        observations.append("resumed-deadline-elapsed=\(elapsed)")
+        XCTAssertGreaterThanOrEqual(elapsed, .seconds(7))
+        XCTAssertLessThan(elapsed, .seconds(12))
+        XCTAssertEqual(playback.player?.currentItem?.status, .readyToPlay)
+        XCTAssertNil(playback.player?.currentItem?.error, "A transport error must not masquerade as the app's buffering deadline.")
+        XCTAssertFalse(playback.loading)
+
+        try await control("recover")
+        playback.start(url: url)
+        try attachRenderer()
+        // The fast-start MP4 fixture withholds samples from twenty seconds onwards.
+        let recoveryTarget = max(20.6, stalledTime + 0.5)
+        let recovered = try await waitUntil("same-url-retry", seconds: 30) {
+            videoController.isReadyForDisplay && decodedTime > recoveryTarget
+        }
+        XCTAssertTrue(recovered, "Retry must play beyond the withheld samples, not just replay the available opening.")
+        XCTAssertFalse(playback.failed)
+        XCTAssertFalse(playback.loading)
         playback.stop()
         XCTAssertNil(playback.player)
     }

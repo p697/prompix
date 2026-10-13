@@ -280,6 +280,26 @@ only the test MP4, withholds data after byte 2578, and is stopped after acceptan
 This is real AVPlayer networking, not the URLProtocol image fixture. Its stalled
 startup result does not prove every mid-playback stall or an airplane-mode run.
 
+`testRemoteVideoInterruptionPauseAndSameURLRecovery` is a separate opt-in test for
+an already-playing stream. Set `TEST_RUNNER_PROMPIX_INTERRUPTED_MEDIA_FIXTURE_URL`
+when invoking xcodebuild; XCTest receives `PROMPIX_INTERRUPTED_MEDIA_FIXTURE_URL`.
+The isolated HTTPS fixture must serve `/stall.mp4`, withhold bytes after complete
+interleaved audio/video samples at 20 seconds, and keep the incomplete response
+open for 60 seconds. `POST /reset` and `/recover` return HTTP 200 with the exact
+bodies `stalling` and `ready`; recovery affects subsequent requests. The fixture
+must honor byte ranges and advertise the original full requested length.
+
+The test uses a visible AVKit player and increasing decoded-frame timestamps,
+pauses for nine seconds past its eight-second deadline, resumes the stalled item,
+then retries the same URL and requires decoded frames beyond 20.6 seconds. This
+does not change the production 25-second deadline. A clock that advances without
+decoded frames, shortened Content-Range responses, and startup failures do not
+satisfy this test. It skips in CI unless explicitly configured. Use a dedicated
+simulator, preserve its personal files, and stop the isolated fixture/tunnel
+after the run. The first-party media, server, exact commands and failed/passing
+evidence are retained outside Git at
+`Prompix-Codex/Evidence/video-interleaved-20261013/` on the development SSD.
+
 ### Prepared-text save failure
 
 `PromptUseSheet` prevents interactive dismissal while a prepared variable result has failed to save. Done offers the existing native copy-and-leave, discard-and-leave and continue-editing choices; copying uses the complete in-memory result. The parent editor remains unchanged until an explicit return to editing or successful save.
