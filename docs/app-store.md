@@ -8,7 +8,7 @@
 
 随后补齐繁体中文、日语、韩语、西班牙语（西班牙）、葡萄牙语（巴西）、法语和德语；九语名称、副标题、推广文本、描述、关键词、支持与营销网址均已保存。隐私网址也已按九语保存：简繁中文指向现有简中页面，其余指向英文页面。离开页面并重新加载后，逐语言回读上述八个字段，全部与仓库原稿一致。截图与逐字段证据保存在开发机外置盘 `Prompix-Codex/Evidence/app-store-draft-20261013/nine-locale-readback.json` 和 `nine-locale-privacy-proof.jpg`。
 
-英文和中文隐私页已通过普通Chrome实际打开并读取正文，独立curl请求也均返回HTTP 200及正确语言的页面。先前单独的Python HTTP请求返回403，网页提取工具不可用；保留这些结果，不推断所有自动审核抓取均通过。隐私收集问卷、年龄分级、版权、联系人、发行地区、最终截图及构建版本仍未完成。没有填写或提交无法由项目事实证明的主体资料或问卷。
+英文和中文隐私页已通过普通Chrome实际打开并读取正文，独立curl请求也均返回HTTP 200及正确语言的页面。先前单独的Python HTTP请求返回403，网页提取工具不可用；保留这些结果，不推断所有自动审核抓取均通过。隐私收集问卷的六类数据及用途、身份关联、跟踪选项已保存为草稿并在刷新后回读；尚未点“发布”。年龄分级、版权、联系人、发行地区、最终截图及构建版本仍未完成。没有填写无法由项目事实证明的主体资料。
 
 页面已有非交易商声明提示，这是账号／新App的既有状态，本轮未修改，也未验证其法律事实；不将它当作发行地区已确认。商店记录和文案保存不等于二进制上传、TestFlight可用、正式提交审核或公开上架。
 
@@ -83,18 +83,26 @@ Content is editorially selected from allowlisted sources and published as a revi
 |---|---|---|
 | 搜索、内容与作者收藏、草稿 | 在设备上检索和存储；无上传接口 | 不列为收集；设备备份另由 iOS 设置管理 |
 | 目录与媒体请求 | Cloudflare 接收 IP、请求 URL、时间等交付元数据；内容 Worker 开启 10% 抽样运行日志 | manifest 声明 Other Usage Data、Performance Data、Other Diagnostic Data，目的仅 App Functionality |
+| IP 推断地区 | 已存日志包含非空国家、城市、地区及 IP 推断经纬度；App 无设备定位请求 | 新增 Coarse Location，目的 App Functionality；不能把 IP 估计当作设备精确定位 |
 | 身份关联 | 无 App 账号或自建用户 ID；未验证服务日志写入前匿名化 | manifest 保守声明 linked=true；不声称日志匿名 |
 | 广告与跨服务跟踪 | 没有相关功能 | tracking=false |
 | 内置网页 | 本地 WebKit、非持久数据存储，CSP 禁止联网 | 不增加服务端收集 |
-| 复制、分享、外部工具 | 仅用户主动操作；不自动传递 Prompt | 对外部工具的账号及处理方式作清楚说明 |
-| GitHub 支持 | 用户主动打开并提交公开 issue | 隐私页说明公开可见性；最终核对 Apple 可选反馈披露条件 |
-| 邮件支持 | 发件地址、正文和附件经路由进入支持收件箱 | 用于响应与调查请求；不公开发布；最终核对可选反馈披露条件 |
+| 复制、分享、外部工具 | 用户主动打开支持预填的工具时会传递准备文字；Claude Code 使用 URL 查询参数，Lovable 使用片段参数，不自动确认发送 | 不能承诺目标服务在发送前收不到文字；隐私页明确外部处理边界 |
+| GitHub 支持 | 用户主动打开并提交公开 issue，账号名与反馈公开可见 | 纳入 Customer Support，目的 App Functionality；不默认依赖可选披露豁免 |
+| 邮件支持 | 发件地址、正文和附件经路由进入支持收件箱 | 纳入 Email Address 与 Customer Support，目的 App Functionality；用于响应与调查，不公开发布 |
+
+2026-10-13 晚完成线上只读核对后，App Store Connect 草稿共六项：Email Address、Coarse Location、Customer Support、Other Usage Data、Performance Data、Other Diagnostic Data。六项均仅用于 App Functionality、关联用户身份、不用于跟踪。保存后重新加载页面，六项、六个用途和六个身份关联摘要均保留，产品页面预览未出现跟踪类别。未发布问卷、上传二进制或提交审核。
+
+源码隐私清单同步增加地区和支持三项；**已交付的 build 20 和两个签名 IPA 保持不变，仍含旧三项清单**。下一候选归档必须纳入新资源并重新核对，不能将现有 IPA 当作申报已同步的最终上架包。此次只修改声明与说明，没有增加收集行为、定位权限或 SDK。
+
+支持流程跳转到外部邮箱／GitHub，无法证明满足 Apple 可选披露要求中的全部界面条件，因此草稿主动披露支持类型；不因用户可能在自由文本里提到任意个人资料而加入所有敏感类别。依据 [Apple Optional disclosure](https://developer.apple.com/app-store/app-privacy-details/#optional-disclosure)、[清单数据类型](https://developer.apple.com/documentation/bundleresources/app-privacy-configuration/nsprivacycollecteddatatypes/nsprivacycollecteddatatype)。保存草稿与最终发布是不同步骤，见 [Apple 问卷操作](https://developer.apple.com/help/app-store-connect/manage-app-information/manage-app-privacy/)。
 
 ### 日志与保留范围
 
 - `services/content/wrangler.jsonc` 明确开启 `observability.enabled`、`head_sampling_rate: 0.1`。默认 invocation logs 包含请求、响应及执行上下文；业务代码唯一自定义错误日志是 `content_read_failed` 与对象 key，没有自行记录搜索词、草稿、收藏或请求头。
 - Cloudflare 官方 Workers Logs 文档在本次核对时列出 Free 保留 3 天、Paid 保留 7 天，最大 7 天。尚未核实本账号套餐；可以将“最多 7 天”准确限定到内容服务的标准 Workers Logs。此期限不涵盖 Cloudflare 自身网络安全数据、独立导出副本或支持邮箱。仓库未配置 Logpush、Tail Worker 或其他日志导出，但账户侧配置仍须发行时核对。[Cloudflare Workers Logs](https://developers.cloudflare.com/workers/observability/logs/workers-logs/)
 - `services/site/wrangler.jsonc` 是静态资源站点，没有启用上述 Worker 日志配置。这不等于 Cloudflare 不处理网站网络元数据。
+- 2026-10-13 线上 `prompix-content` 设置核对：日志启用且持久保存、采样0.1、invocation logs启用、traces关闭、查询参数不脱敏；没有Tail消费者、实时Tail会话、Worker Logpush，账号和本站zone的Logpush任务列表均为空。近24小时该Worker的5条已存事件验证了请求IP、URL、地区字段及CPU／墙钟耗时非空；证据只保留字段名、类型和非空标志，不保存实际访客IP、位置、请求头或日志内容。这个范围不涵盖Cloudflare自身安全处理、其他历史导出或邮箱保留。IP地区是估计值，依据 [Cloudflare说明](https://developers.cloudflare.com/network/ip-geolocation/)。证据位于外置盘 `Prompix-Codex/Evidence/privacy-draft-20261013/`，含配置、字段核验、ASC回读与草稿截图。
 - 支持邮件按处理请求及相关跟进的需要保留；用户可请求删除，仍需履行的法定义务或未解决争议除外。没有已验证的固定周期自动删除规则，不能承诺“30 天自动清空”。网站源码的保留与删除段落应与实际执行一致，部署后再核对公开页面。
 
 [Apple 隐私政策要求](https://developer.apple.com/app-store/review/guidelines/#data-collection-and-storage)涵盖收集、用途、分享与保留／删除方式。[App Privacy Details](https://developer.apple.com/app-store/app-privacy-details/)以实际离机处理为依据；没有分析 SDK 不等于 Data Not Collected。可选支持反馈只有满足 Apple 全部条件才可不披露，不能只因“用户主动发邮件”自动排除。发行前核对最终分发包、线上配置和 App Store Connect 问卷。[Privacy manifests](https://developer.apple.com/documentation/bundleresources/privacy-manifest-files)、[Required reason APIs](https://developer.apple.com/documentation/bundleresources/describing-use-of-required-reason-api)
