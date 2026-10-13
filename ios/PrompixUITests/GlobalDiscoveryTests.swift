@@ -807,12 +807,39 @@ import UIKit
                 evidence.lifetime = .keepAlways; add(evidence)
             }
         }
+        // Keep the authoritative hydrated records before startup loads only the
+        // preferred locale. A downloaded pack may legitimately refresh saved translations.
+        let hydrated = try Data(contentsOf: try acceptanceDirectory().appendingPathComponent("catalog.json"))
+        let hydratedJSON = try XCTUnwrap(JSONSerialization.jsonObject(with: hydrated) as? [String: Any])
+        let authoritative = try XCTUnwrap(hydratedJSON["prompts"] as? [[String: Any]])
         app.terminate(); launch()
         let current = try acceptanceDirectory()
         let downloaded = try readSnapshot(LanguagePackIndexSnapshot.self, from: current, file: "language-packs.json")
         XCTAssertTrue(Set(["zh-Hans", "en"]).isSubset(of: Set(downloaded.downloadedLocales.keys)))
-        for (index, name) in personalFiles.enumerated() {
+        for (index, name) in personalFiles.enumerated() where name != "favorites.json" {
             XCTAssertEqual(try? Data(contentsOf: current.appendingPathComponent(name)), before[index], name)
+        }
+        let oldFavorites = try XCTUnwrap(JSONSerialization.jsonObject(with: try XCTUnwrap(before[1])) as? [[String: Any]])
+        let savedFavorites = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: current.appendingPathComponent("favorites.json"))) as? [[String: Any]])
+        XCTAssertEqual(oldFavorites.count, savedFavorites.count)
+        for (old, saved) in zip(oldFavorites, savedFavorites) {
+            var originalFields = old, savedFields = saved
+            let oldLocalization = originalFields.removeValue(forKey: "localization") as? [String: Any] ?? [:]
+            let savedLocalization = savedFields.removeValue(forKey: "localization") as? [String: Any] ?? [:]
+            XCTAssertEqual(originalFields as NSDictionary, savedFields as NSDictionary, "Favorite identity, order and original content must remain unchanged.")
+            var oldMetadata = oldLocalization, savedMetadata = savedLocalization
+            let oldTranslations = oldMetadata.removeValue(forKey: "translations") as? [String: Any] ?? [:]
+            let newTranslations = savedMetadata.removeValue(forKey: "translations") as? [String: Any] ?? [:]
+            XCTAssertEqual(oldMetadata as NSDictionary, savedMetadata as NSDictionary)
+            XCTAssertTrue(Set(oldTranslations.keys).isSubset(of: Set(newTranslations.keys)))
+            let published = authoritative.first { $0["id"] as? String == saved["id"] as? String }
+            let expected = (published?["localization"] as? [String: Any])?["translations"] as? [String: Any] ?? [:]
+            for (locale, value) in newTranslations {
+                let newValue = try XCTUnwrap(value as? [String: Any])
+                if (oldTranslations[locale] as? [String: Any]).map({ $0 as NSDictionary }) == newValue as NSDictionary { continue }
+                XCTAssertEqual(newValue as NSDictionary, try XCTUnwrap(expected[locale] as? [String: Any]) as NSDictionary,
+                               "Only a complete translation from the verified downloaded pack may refresh a favorite.")
+            }
         }
     }
 
