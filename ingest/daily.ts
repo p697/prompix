@@ -3,7 +3,8 @@ import { prepareXAvailability, filterXAvailability, assertXAvailability } from "
 import { mkdir, readFile, writeFile, rm } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
-import { repo, contentRoot as root, base, atomic, json, lockContent, upload, moderationSchema, currentManifest, remoteCatalog, editionVersion, writeCatalog, manifestSchema } from "./publication.ts";
+import { repo, contentRoot as root, base, atomic, json, upload, moderationSchema, currentManifest, remoteCatalog, editionVersion, writeCatalog, manifestSchema } from "./publication.ts";
+import { withDailyStatus } from "./daily-status.ts";
 import { catalogSchema, type Catalog, type Prompt } from "../packages/schema/catalog.ts";
 import {
   repositories,
@@ -51,7 +52,6 @@ const mediaHosts = [
   "objects.githubusercontent.com",
 ];
 async function run() {
-  const unlock = await lockContent(root);
   const report: {
     startedAt: string;
     published: boolean;
@@ -89,7 +89,7 @@ async function run() {
     avatarErrors: [],
     counts: { candidates: null, reviewed: null, eligible: null, bundled: null, prepared: null, published: null, mediaFailed: countByKind([]) },
   };
-  try {
+  await withDailyStatus(root, report, async () => {
     const qualityHolds = await readQualityHolds(root);
     // Registry availability must be fresh even when resuming a retained target.
     const xAvailability = await prepareXAvailability(root, { enabled: publishing, bearer: process.env.X_BEARER_TOKEN });
@@ -449,18 +449,7 @@ async function run() {
       await clearMatchingPublicationHold(root, { holdToClear: publication?.holdToClear });
     }
     report.version = version;
-  } catch (error) {
-    report.error = String(error);
-    throw error;
-  } finally {
-    try {
-      await atomic(join(root, "status.json"), {
-        ...report,
-        finishedAt: new Date().toISOString(),
-      });
-      console.log(JSON.stringify(report));
-    } finally { await unlock(); }
-  }
+  });
 }
 run().catch((error) => {
   console.error(String(error));

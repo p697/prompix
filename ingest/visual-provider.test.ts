@@ -167,11 +167,20 @@ test("changed hashes, size, missing files, symlinks and non-JPEG data cannot rea
     { ...original, path: link },
     { ...original, path: invalidPath, sha256: invalidHash, byteLength: invalidJPEG.length, sourceURL: `https://api.prompix.dev/media/${invalidHash}.jpg` },
   ];
-  const before = (await readdir(tmpdir())).filter(name => name.startsWith("prompix-visual-") && !name.startsWith("prompix-visual-test-"));
-  for (const attachment of cases) await assert.rejects(codexVisualProvider(cli.executable)([{ ...item, attachments: [attachment] }]), /verification failed before provider execution/);
-  await assert.rejects(stat(cli.capture), { code: "ENOENT" });
-  const after = (await readdir(tmpdir())).filter(name => name.startsWith("prompix-visual-") && !name.startsWith("prompix-visual-test-"));
-  assert.deepEqual(after.sort(), before.sort(), "Preflight failures remove their private temporary files");
+  // Other test workers also create visual directories. Check only this worker's
+  // isolated provider scratch space, not a racy snapshot of the shared OS temp.
+  const scratch = await mkdtemp(join(root, "provider-"));
+  const previous = { TMPDIR: process.env.TMPDIR, TEMP: process.env.TEMP, TMP: process.env.TMP };
+  for (const key of Object.keys(previous)) process.env[key] = scratch;
+  try {
+    for (const attachment of cases) await assert.rejects(codexVisualProvider(cli.executable)([{ ...item, attachments: [attachment] }]), /verification failed before provider execution/);
+    await assert.rejects(stat(cli.capture), { code: "ENOENT" });
+    assert.deepEqual(await readdir(scratch), [], "Preflight failures remove their private temporary files");
+  } finally {
+    for (const [key, value] of Object.entries(previous)) {
+      if (value === undefined) delete process.env[key]; else process.env[key] = value;
+    }
+  }
 });
 
 test("the provider rejects missing, duplicate, reordered, inconsistent or unbound decisions", async t => {
