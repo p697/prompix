@@ -15,6 +15,7 @@
     "quality:hold": "tsx ingest/quality-hold.ts",
     "check:deployment": "tsx scripts/check-deployment.ts",
     "review": "tsx ingest/review.ts",
+    "review:x-excerpt": "tsx ingest/x-excerpt-cli.ts",
     "rollback": "tsx ingest/rollback.ts",
     "collect:x": "tsx ingest/x-feed-cli.ts",
     "collect:skills": "tsx ingest/skill-intake.ts"
