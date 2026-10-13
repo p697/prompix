@@ -239,6 +239,29 @@ test("language requirements use local clauses and exclude fruit and visual style
   assert.doesNotThrow(() => validateSegment("一题一题练日语 N5 汉字", "Practice JLPT N5 kanji one question at a time.", "en"));
   assert.throws(() => validateSegment("若希望中文回答，请用中文回复。", "日本語で回答してほしい場合は、日本語で返答してください。", "ja"), /language requirement/);
 });
+test("syntax documentation does not imply a French language requirement", () => {
+  for (const source of ["参考官方语法文档，检查工作流配置。", "參考官方語法文件，檢查工作流程設定。"]) {
+    assert.doesNotThrow(() => validateSegment(source, "Refer to the official syntax documentation and check the workflow configuration.", "en"));
+  }
+  assert.throws(() => validateSegment("Use French documentation.", "使用官方语法文档。", "zh-Hans"), /explicit fr language requirement/);
+  assert.doesNotThrow(() => validateSegment("Use French documentation.", "使用法文语法文档。", "zh-Hans"));
+});
+test("French instructions remain required alongside syntax documentation", () => {
+  for (const language of ["法文", "法语", "法語"]) {
+    const source = `请用${language}回答。`;
+    assert.doesNotThrow(() => validateSegment(source, "Please answer in French.", "en"));
+    assert.throws(() => validateSegment(source, "Please answer in English.", "en"), /explicit fr language requirement/);
+  }
+  for (const [source, translation] of [
+    ["请提供法文文档。", "Please provide French documentation."],
+    ["請提供法文文件。", "Please provide French documentation."],
+    ["参考官方语法文档，并用法文回答。", "Refer to the official syntax documentation and answer in French."],
+    ["參考官方語法文件，並用法文回答。", "Refer to the official syntax documentation and answer in French."],
+  ]) {
+    assert.doesNotThrow(() => validateSegment(source, translation, "en"));
+    assert.throws(() => validateSegment(source, translation.replace("French", "English"), "en"), /explicit fr language requirement/);
+  }
+});
 test("visual lettering remains exact while style quotations and prose still translate", () => {
   const text = '海报标题“上海早安”，标语“从早餐开始”。采用“爆炸图”风格。角落有“关注”按钮。';
   const visual = protectText(text, true);
