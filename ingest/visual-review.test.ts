@@ -233,7 +233,7 @@ test("malformed, missing, duplicate and mismatched provider identities fail the 
     assert.equal(first.report.status, "failed"); assert.deepEqual(first.prompts, []);
     assert.deepEqual(state.cache.decisions, {}); assert.equal(state.ledger?.attempts.at(-1)?.state, "failed");
     const calls = state.preparedIDs.length, second = await run();
-    assert.equal(second.report.status, "daily-limit"); assert.equal(second.report.requests, 0);
+    assert.equal(second.report.status, "prior-attempt-blocked"); assert.equal(second.report.requests, 0);
     assert.equal(state.preparedIDs.length, calls); assert.equal(state.events.filter(event => event === "provider").length, 1);
   }
 });
@@ -244,7 +244,7 @@ test("provider failure cannot replace a previous snapshot and does not retry the
   const failed = await run({ provider: async () => { throw new Error("Synthetic provider timeout"); } });
   assert.deepEqual(failed.prompts, []); assert.deepEqual(failed.withheldIDs, [old.id]);
   assert.equal(failed.report.previousSnapshots, 0); assert.deepEqual(old, prompt("retained"));
-  const second = await run(); assert.equal(second.report.status, "daily-limit");
+  const second = await run(); assert.equal(second.report.status, "prior-attempt-blocked");
   assert.equal(state.events.filter(event => event === "provider").length, 1);
 });
 
@@ -354,9 +354,29 @@ test("legacy failed and reserved attempts stop the day even when the configured 
     await run();
     const legacy: VisualAttempt = { ...state.ledger!.attempts[0], state: status };
     state.cache = { version: 1, decisions: {} }; state.events = []; state.preparedIDs = [];
+    const saved = JSON.stringify(state.ledger), savedLegacy = JSON.stringify(legacy);
     const result = await run({ ledger: legacy, maxRequests: 20 });
     assert.equal(result.report.requests, 0); assert.equal(result.report.dailyRequests, 1);
-    assert.equal(result.report.status, "daily-limit"); assert.deepEqual(state.events, []); assert.deepEqual(state.preparedIDs, []);
+    assert.equal(result.report.status, "prior-attempt-blocked"); assert.deepEqual(state.events, []); assert.deepEqual(state.preparedIDs, []);
+    assert.deepEqual(result.report.blockedAttempt, { ordinal: 1, state: status, reservedAt: legacy.reservedAt });
+    assert.equal(JSON.stringify(state.ledger), saved); assert.equal(JSON.stringify(legacy), savedLegacy);
+    const tomorrow = await run({ ledger: legacy, day: "2026-10-14", maxRequests: 20 });
+    assert.equal(tomorrow.report.status, "reviewed"); assert.equal(tomorrow.report.requests, 1);
+    assert.equal(tomorrow.report.dailyRequests, 1); assert.equal(tomorrow.report.blockedAttempt, undefined);
+  }
+});
+
+test("an exhausted visual budget remains a daily limit even with an unfinished final attempt", async () => {
+  for (const status of ["completed", "reserved", "failed"] as const) {
+    const { run, state } = harness([prompt(`budget-${status}`)]);
+    await run();
+    const legacy: VisualAttempt = { ...state.ledger!.attempts[0], state: status };
+    state.cache = { version: 1, decisions: {} }; state.events = []; state.preparedIDs = [];
+    const saved = JSON.stringify(legacy);
+    const result = await run({ ledger: legacy, maxRequests: 1 });
+    assert.equal(result.report.status, "daily-limit"); assert.equal(result.report.blockedAttempt, undefined);
+    assert.equal(result.report.requests, 0); assert.equal(result.report.dailyRequests, 1); assert.equal(result.report.maxRequests, 1);
+    assert.deepEqual(state.events, []); assert.deepEqual(state.preparedIDs, []); assert.equal(JSON.stringify(legacy), saved);
   }
 });
 
@@ -389,7 +409,7 @@ test("persisted interruption before a second call remains reserved and never rep
   assert.equal(state.batches.length, 1); assert.equal(Object.keys(state.cache.decisions).length, 3);
   assert.deepEqual(state.ledger?.attempts.map(attempt => attempt.state), ["completed", "reserved"]);
   const repeated = await run();
-  assert.equal(repeated.report.status, "daily-limit"); assert.equal(repeated.report.requests, 0);
+  assert.equal(repeated.report.status, "prior-attempt-blocked"); assert.equal(repeated.report.requests, 0);
   assert.equal(repeated.report.cachedApproved, 3); assert.equal(repeated.report.dailyRequests, 2);
   assert.equal(state.batches.length, 1);
 });

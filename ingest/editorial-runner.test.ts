@@ -261,10 +261,47 @@ test("legacy completed ledgers preserve their spent request and evidence when mi
 test("legacy interrupted and failed ledgers remain blocked until the next UTC day", async () => {
   for (const status of ["reserved", "failed"] as const) {
     let calls = 0;
-    const { run } = harness([candidate("legacy")], async input => { calls++; return approve(input); }, legacyAttempt(status));
+    const legacy = legacyAttempt(status);
+    const { run, state } = harness([candidate("legacy")], async input => { calls++; return approve(input); }, legacy);
+    const saved = JSON.stringify(state.ledger);
     const blocked = await run(day, undefined, 20);
-    assert.equal(blocked.report.status, "daily-limit"); assert.equal(blocked.report.dailyRequests, 1); assert.equal(calls, 0);
-    assert.equal((await run("2026-10-13", undefined, 4)).report.requests, 1); assert.equal(calls, 1);
+    assert.equal(blocked.report.status, "prior-attempt-blocked"); assert.equal(blocked.report.dailyRequests, 1);
+    assert.equal(blocked.report.requests, 0); assert.equal(calls, 0);
+    assert.deepEqual(blocked.report.blockedAttempt, { ordinal: 1, state: status, reservedAt: legacy.reservedAt });
+    assert.deepEqual(state.events, []); assert.equal(JSON.stringify(state.ledger), saved);
+    const tomorrow = await run("2026-10-13", undefined, 4);
+    assert.equal(tomorrow.report.status, "reviewed"); assert.equal(tomorrow.report.requests, 1);
+    assert.equal(tomorrow.report.dailyRequests, 1); assert.equal(tomorrow.report.blockedAttempt, undefined); assert.equal(calls, 1);
+  }
+});
+
+test("under-budget journals identify the blocking attempt without rewriting or refunding it", async () => {
+  for (const status of ["reserved", "failed"] as const) {
+    const attempts = Array.from({ length: 60 }, (_, index) => ({ ...legacyAttempt(index === 59 ? status : "completed"),
+      candidateIDs: [`past-${index}`] }));
+    const ledger: EditorialLedger = { schemaVersion: 2, day, requests: 60, attempts };
+    let calls = 0;
+    const { run, state } = harness([candidate("pending")], async input => { calls++; return approve(input); }, ledger);
+    const saved = JSON.stringify(state.ledger);
+    const result = await run(day, undefined, 64);
+    assert.equal(result.report.status, "prior-attempt-blocked");
+    assert.deepEqual(result.report.blockedAttempt, { ordinal: 60, state: status, reservedAt: attempts[59].reservedAt });
+    assert.equal(result.report.dailyRequests, 60); assert.equal(result.report.maxRequests, 64);
+    assert.equal(result.report.requests, 0); assert.equal(calls, 0); assert.deepEqual(state.events, []);
+    assert.equal(JSON.stringify(state.ledger), saved);
+  }
+});
+
+test("an exhausted editorial budget remains a daily limit even with an unfinished final attempt", async () => {
+  for (const status of ["completed", "reserved", "failed"] as const) {
+    let calls = 0;
+    const { run, state } = harness([candidate("pending")], async input => { calls++; return approve(input); }, legacyAttempt(status));
+    const saved = JSON.stringify(state.ledger);
+    const result = await run(day, undefined, 1);
+    assert.equal(result.report.status, "daily-limit"); assert.equal(result.report.blockedAttempt, undefined);
+    assert.equal(result.report.dailyRequests, 1); assert.equal(result.report.maxRequests, 1);
+    assert.equal(result.report.requests, 0); assert.equal(calls, 0); assert.deepEqual(state.events, []);
+    assert.equal(JSON.stringify(state.ledger), saved);
   }
 });
 
