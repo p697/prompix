@@ -1,4 +1,21 @@
-# 0.4.7（18）本地发行候选
+# 0.4.7 本地发行候选
+
+## 当前候选：0.4.7（20）
+
+2026-10-13，从干净的合并提交 `1fcd85e0037a6a41e514b73ab3ae1bc82aab4f4b` 归档并导出构建20。使用同一官方 Xcode 27.1 RC、iPhoneOS 27.1 SDK 和最低 iOS 17；包含构建19的辅助操作及构建20的媒体恢复修复。产物位于外置盘 `Prompix-Codex/Releases/0.4.7-20/`，旧18目录原样保留。
+
+| 产物 | 文件 | 字节数 | SHA-256 |
+|---|---|---:|---|
+| 真机开发安装包 | `development-export/Prompix.ipa` | 7,814,260 | `a6d09047f1062f892d06250154436d32b358f1bf6dbd70aa65049049fbd100f6` |
+| App Store 本地分发包 | `app-store-export/Prompix.ipa` | 8,805,486 | `8ede87f33fb0ece317db021ee58cfd00ec07919407b835df945e4c8ec6378091` |
+
+归档与两种导出均成功，独立审计分别39项、42项通过，无失败项；27份非签名资源一致，归档、IPA及dSYM的arm64 UUID为 `CF2FBF03-04FA-3073-8220-6E40590A0C2D`。开发描述文件覆盖6台登记设备，商店描述文件不含设备列表；九语资源、隐私清单和原创离线内容均经检查。`source.json`、构建／导出日志及两个`*-audit.json`保留实际证据。
+
+本轮只生成本地发行包，没有安装用户手机或上传二进制。Duo现场仍是此前交付的同版本模拟器Debug包，其逐文件身份检查见 `Evidence/media-recovery-20261013/verification-20.json`；模拟器与arm64 Release是不同二进制，不能互代性能或签名证明。App Store Connect草稿的实际进度另见[商店准备](app-store.md)。
+
+复用下方审计命令时，将目录改为`0.4.7-20`、源码提交改为上述`1fcd85e…`、预期构建号改为20；不要沿用18的哈希或报告。
+
+## 历史候选：0.4.7（18）
 
 2026-10-13，从干净的合并提交 `96c39341eda8cddf15e9d12ccb470c2041bde1bc` 生成 iOS Release 归档。使用外接 SSD 上的官方 Xcode 27.1 RC（27A9275）、iPhoneOS 27.1 SDK，最低 iOS 17，设备族 iPhone／iPad。全程没有安装用户手机、上传 App Store Connect 或提交审核。
 

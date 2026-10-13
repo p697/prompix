@@ -1,16 +1,16 @@
 {
   "schemaVersion": 1,
-  "status": "draft-not-uploaded",
+  "status": "partially-saved-app-store-draft",
   "appVersion": "0.4.7",
-  "buildNumber": "18",
+  "buildNumber": "20",
   "updatedAt": "2026-10-13",
   "notes": [
     "Original store copy for implemented features, not third-party prompt content.",
     "Nine locales checked for field lengths and feature consistency; native-speaker market review has not been performed.",
-    "Primary store locale, final category, legal copyright owner, review contact, availability and age/privacy questionnaire answers remain unset.",
+    "English (US) primary locale, Graphics & Design / Productivity categories saved in draft. Legal copyright owner, review contact, availability and age/privacy questionnaire answers remain unset.",
     "Chinese URLs currently serve Simplified Chinese; all other support/legal URLs serve English.",
     "No fixed catalog count or promise of daily new items. No generation, Skill execution or cloud sync claims.",
-    "Version binding updated for the local 0.4.7 (18) candidate; unchanged localized copy does not claim Duo certification, complete catalog translations or new native-speaker review. Final screenshots and questionnaires remain separate gates."
+    "Version binding updated for local 0.4.7 (20); English and Simplified Chinese version copy and subtitles saved to App Store Connect. Other seven locales remain local drafts. No binary upload, review submission, complete catalog translation or native-speaker review is implied."
   ],
   "suggestedCategories": {
     "primary": "GRAPHICS_AND_DESIGN",
@@ -125,5 +125,32 @@
       "privacyPolicyURL": "https://prompix.dev/privacy",
       "marketingURL": "https://prompix.dev"
     }
-  ]
+  ],
+  "appStoreConnect": {
+    "appID": "6822283489",
+    "bundleID": "com.p697.prompix",
+    "sku": "prompix-ios",
+    "version": "0.4.7",
+    "state": "PREPARE_FOR_SUBMISSION",
+    "primaryLocale": "en-US",
+    "savedLocales": [
+      "en-US",
+      "zh-Hans"
+    ],
+    "savedLocalizedFields": [
+      "name",
+      "subtitle",
+      "promotionalText",
+      "description",
+      "keywords",
+      "supportURL",
+      "marketingURL"
+    ],
+    "releaseType": "MANUAL",
+    "reviewNotesSaved": true,
+    "reviewLoginRequired": false,
+    "binaryUploaded": false,
+    "submittedForReview": false,
+    "privacyPolicyURLsSaved": false
+  }
 }

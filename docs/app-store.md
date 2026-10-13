@@ -1,6 +1,14 @@
 # 首版商店与审核准备
 
-更新：2026-10-13。当前本地签名候选为 **0.4.7（18）**，使用 iOS 27.1 RC SDK；归档、开发安装包和 App Store 分发包的核对见[当前发行记录](release-0.4.7.md)。最新用户手机阶段包仍为 **0.4.6（17）**，本轮没有重新安装。Duo 模拟器候选的实际范围与拼音跨屏限制见 [Duo 验收](iphone-duo.md)。本文和本地材料不代表用户批准上架，也不代表已上传、通过 Apple 服务端验证、提交审核或获得编辑推荐。
+更新：2026-10-13。当前本地签名候选为 **0.4.7（20）**，使用 iOS 27.1 RC SDK；归档、开发安装包和 App Store 分发包的核对见[当前发行记录](release-0.4.7.md)。最新用户手机阶段包仍为 **0.4.6（17）**，本轮没有重新安装。Duo 模拟器候选的实际范围与拼音跨屏限制见 [Duo 验收](iphone-duo.md)。本文和本地材料不代表用户批准上架，也不代表二进制已上传、通过 Apple 服务端验证、提交审核或获得编辑推荐。
+
+## App Store Connect 草稿
+
+2026-10-13已在现有开发者账号创建[Prompix商店记录](https://appstoreconnect.apple.com/apps/6822283489/distribution)，Apple ID为`6822283489`，沿用`com.p697.prompix`，SKU为`prompix-ios`。版本为0.4.7、状态为“准备提交”，主语言英语（美国），主分类图形和设计、次分类效率。已保存英文和简体中文的名称、副标题、推广文本、描述、关键词、支持与营销网址；版本采用手动发布，审核说明已保存并取消“需要登录”。
+
+保存后实际页面显示已保存；截图与字段核对保存在开发机外置盘 `Prompix-Codex/Evidence/app-store-draft-20261013/`。其余七语文案仍是本地草稿，隐私网址与问卷、年龄分级、版权、联系人、发行地区、最终截图及构建版本仍未完成。没有填写或提交无法由项目事实证明的主体资料或问卷。
+
+页面已有非交易商声明提示，这是账号／新App的既有状态，本轮未修改，也未验证其法律事实；不将它当作发行地区已确认。商店记录和文案保存不等于二进制上传、TestFlight可用、正式提交审核或公开上架。
 
 ## 九语言商店文案
 
@@ -18,9 +26,9 @@
 | Français (France) | Des prompts pour vos idées |
 | Deutsch | Prompts für deine Ideen |
 
-九份文案已校验名称与副标题不超过 30 字符、推广文本不超过 170 字符、描述不超过 4,000 字符、关键词不超过 100 UTF-8 字节。关键词按逗号分隔、无重复项，每项超过两个字符；未使用其他 App 或公司的名称。描述说明 AI 翻译、原文回退、外部工具可能收费、离线与视频范围。依据 [Apple 版本信息字段](https://developer.apple.com/help/app-store-connect/reference/app-information/platform-version-information/)。这些是可评审草稿，尚未经过各市场母语人员润色，也没有自动写入 App Store Connect。
+九份文案已校验名称与副标题不超过 30 字符、推广文本不超过 170 字符、描述不超过 4,000 字符、关键词不超过 100 UTF-8 字节。关键词按逗号分隔、无重复项，每项超过两个字符；未使用其他 App 或公司的名称。描述说明 AI 翻译、原文回退、外部工具可能收费、离线与视频范围。依据 [Apple 版本信息字段](https://developer.apple.com/help/app-store-connect/reference/app-information/platform-version-information/)。这些文案尚未经过各市场母语人员润色；英文和简体中文已保存到 App Store Connect 草稿，其余七语尚未写入。
 
-建议主分类为 Graphics & Design、次分类为 Productivity，最终分类与商店主语言仍待发行配置时确认。首个公开版本不填 “What's New”；该字段用于后续版本更新。预览视频可选，不是首发必须项。
+商店草稿已采用主分类 Graphics & Design、次分类 Productivity，主语言为英语（美国）。首个公开版本不填 “What's New”；该字段用于后续版本更新。预览视频可选，不是首发必须项。
 
 公开官网目前只有英文与简体中文。简繁中文商店草稿均链接到 `/zh`，其余语言链接英文页面；不将九语言 App 误写成九语言支持网站。
 
@@ -150,7 +158,7 @@ Content is editorially selected from allowlisted sources and published as a revi
 
 1. 用户对当前 0.4.7 产品、Duo 实际演示及已知限制的验收，以及是否正式提交审核。
 2. Apple Developer 账号中的发行主体、版权权利人及年份、可响应的审核联系人姓名／邮箱／国际电话。
-3. 最终发行地区、商店主语言与分类；EU trader 状态依据实际经营事实填写，不能因免费就自动选择 non-trader。若选择欧盟并属于 trader，按账号要求提供／验证联系方式及所需资料。[Apple EU trader 要求](https://developer.apple.com/help/app-store-connect/manage-compliance-information/manage-european-union-digital-services-act-trader-requirements/)
+3. 最终发行地区及现有商店主语言／分类是否调整；EU trader 状态依据实际经营事实填写，不能因免费就自动选择 non-trader。若选择欧盟并属于 trader，按账号要求提供／验证联系方式及所需资料。[Apple EU trader 要求](https://developer.apple.com/help/app-store-connect/manage-compliance-information/manage-european-union-digital-services-act-trader-requirements/)
 4. 账号实际提示的协议或资料缺口。没有 IAP 不意味着任意账户合规字段都可跳过，也不提前假设全部收费产品收款手续是本 App 阻断项。
 
 审核联系方式、法律主体材料、账号信息与任何密钥不进入此公开仓库。具体剩余关口和完成证据以 [交付质量](quality-release.md) 为准；用户完成最终验收后再提交审核。
