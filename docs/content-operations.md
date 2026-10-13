@@ -400,3 +400,12 @@ Duo模拟器0.4.7（18）通过设置中的实际更新从528变为527，Expo创
 编辑状态虽然显示daily-limit，实际为当日60/64请求中的第60条仍处于reserved；原请求可能已计费但未持久化结果，旧账本缺少runID／PID，不能将时间字段当成精确的逐请求启动时间。此保护只影响该UTC日，非永久停摆；保持预约消耗、不删除、不盲目重试。下一步应将“结果未决”与“预算耗尽”分开呈现，再基于明确证据决定恢复；不为解锁4次余额而假定旧请求未执行。
 
 独立复核证据位于外置盘`Evidence/scheduled-2000-20261013/`，包括`audit.json`、`run-verification.json`、`remote-verification.json`、`catalog-delta.json`、`gate-identity-verification.json`、`locale-delta.json`和`editorial-reservation-audit.json`。原始文件和第三方内容不进入公开仓库。
+
+
+### 2026-10-13：区分未决请求与额度耗尽
+
+PR83（合并提交 `dd0483ebdea8583d26aa0badd3823d12fe49bc23`）将编辑及视觉审阅的当日状态区分为真实的 `daily-limit` 与 `prior-attempt-blocked`。后者携带未决请求的序号、reserved/failed状态和原记录时间；不把记录时间解释为精确计费时间。上限判断仍优先，未决请求继续占用额度、阻止当日重试，UTC跨日逻辑不变。共享账本schema要求只有最后一条可以未完成，因此末条检查没有减弱原保护。59项定向测试、类型检查及content/iOS CI通过。
+
+用现有受锁保护的 `scripts/install-scheduler.py` 部署到运行副本 `1791893750161818000`，保留上一副本供回滚。安装前确认自然任务已终止、没有daily.lock；安装后关键源文件与合并提交逐字节一致，launchd已注册02/08/14/20点排程且未启动本轮采集。安装前后13份既有付费账本与状态文件哈希一致。
+
+额外从已安装副本执行只读诊断：读入真实2026-10-13编辑账本、使用空候选及拒绝调用/写入的桩函数，得到 `prior-attempt-blocked`、60/64、末条reserved，provider和持久化调用均为0；真实账本SHA仍为 `d89eb862957c7846e2891e5762c7c46c800b1d2118a2978601d672adc8ca0003`。这验证已部署诊断和保护，不是新一轮发布或全部候选审阅。证据在外置盘 `Prompix-Codex/Evidence/editorial-budget-status-20261013/`。

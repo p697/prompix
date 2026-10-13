@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "status": "partially-saved-app-store-draft",
+  "status": "saved-localized-app-store-draft",
   "appVersion": "0.4.7",
   "buildNumber": "20",
   "updatedAt": "2026-10-13",
@@ -10,7 +10,7 @@
     "English (US) primary locale, Graphics & Design / Productivity categories saved in draft. Legal copyright owner, review contact, availability and age/privacy questionnaire answers remain unset.",
     "Chinese URLs currently serve Simplified Chinese; all other support/legal URLs serve English.",
     "No fixed catalog count or promise of daily new items. No generation, Skill execution or cloud sync claims.",
-    "Version binding updated for local 0.4.7 (20); English and Simplified Chinese version copy and subtitles saved to App Store Connect. Other seven locales remain local drafts. No binary upload, review submission, complete catalog translation or native-speaker review is implied."
+    "Version binding is local 0.4.7 (20). All nine locales and privacy policy URLs are saved in App Store Connect and independently read back against these fields. No binary upload, review submission, completed privacy questionnaire, complete catalog translation or native-speaker review is implied."
   ],
   "suggestedCategories": {
     "primary": "GRAPHICS_AND_DESIGN",
@@ -135,7 +135,14 @@
     "primaryLocale": "en-US",
     "savedLocales": [
       "en-US",
-      "zh-Hans"
+      "zh-Hans",
+      "zh-Hant",
+      "ja",
+      "ko",
+      "es-ES",
+      "pt-BR",
+      "fr-FR",
+      "de-DE"
     ],
     "savedLocalizedFields": [
       "name",
@@ -144,13 +151,14 @@
       "description",
       "keywords",
       "supportURL",
-      "marketingURL"
+      "marketingURL",
+      "privacyPolicyURL"
     ],
     "releaseType": "MANUAL",
     "reviewNotesSaved": true,
     "reviewLoginRequired": false,
     "binaryUploaded": false,
     "submittedForReview": false,
-    "privacyPolicyURLsSaved": false
+    "privacyPolicyURLsSaved": true
   }
 }
