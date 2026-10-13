@@ -440,7 +440,7 @@ struct PromptEditor: View {
             }.paperScreen().navigationTitle(String(localized: "编辑 Prompt")).navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     if #available(iOS 27.1, *) {
-                        ToolbarItem(placement: .bottomBar) {
+                        ToolbarItem(placement: .primaryAction) {
                             Button(action: copyEdits) {
                                 Label(copied ? String(localized: "已复制修改后的 Prompt") : String(localized: "复制修改后的 Prompt"),
                                       systemImage: copied ? "checkmark" : "doc.on.doc")
@@ -454,11 +454,12 @@ struct PromptEditor: View {
                     }
                     ToolbarItem(placement: .primaryAction) {
                         Menu {
+                            ShareLink(item: text) { Label(String(localized: "分享"), systemImage: "square.and.arrow.up") }
+                                .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                             Button(language == nil ? String(localized: "恢复原始 Prompt") : String(localized: "恢复当前语言的内容"), systemImage: "arrow.counterclockwise", role: .destructive) { restorePresented = true }
                                 .disabled(text == item.content(in: language).prompt)
                         } label: { Label(String(localized: "编辑选项"), systemImage: "ellipsis.circle") }
                     }
-                    ToolbarItem(placement: .primaryAction) { ShareLink(item: text) { Label(String(localized: "分享"), systemImage: "square.and.arrow.up").frame(minWidth: 44, minHeight: 44) }.disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) }
                 }
                 .toolbar {
                     ToolbarItem(placement: .primaryAction) {
