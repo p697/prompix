@@ -100,6 +100,9 @@ struct DiscoverView: View {
     private var wordmark: some View {
         Text("Prompix").font(Typography.editorial(.title2)).foregroundStyle(Palette.ink)
             .fixedSize().accessibilityAddTraits(.isHeader)
+            .accessibilityIdentifier("discoveryHeading")
+            .accessibilityAction(named: Text(String(localized: "搜索"))) { searchPresented = true }
+            .accessibilityAction(named: Text(String(localized: "设置"))) { settingsPresented = true }
     }
     private var resultHeading: some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
