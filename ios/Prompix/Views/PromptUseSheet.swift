@@ -9,6 +9,7 @@ struct PromptUseSheet: View {
     @State private var editorPresented = false
     @State private var variablesPresented = false
     @State private var saveFailed = false
+    @State private var leavePresented = false
     var title: String? = nil
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
@@ -158,7 +159,13 @@ struct PromptUseSheet: View {
             }
             .navigationTitle(item.isSkill ? String(localized: "使用这个 Skill") : String(localized: "使用 Prompt"))
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .confirmationAction) { Button(String(localized: "完成")) { dismiss() } } }
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(String(localized: "完成")) {
+                        if saveFailed { leavePresented = true } else { dismiss() }
+                    }.accessibilityIdentifier("finishPromptUse")
+                }
+            }
             .promptActionBar {
                 if let destination {
                     Button {
@@ -182,6 +189,16 @@ struct PromptUseSheet: View {
                     }.buttonStyle(.plain).padding(20).background(Palette.paper).accessibilityIdentifier("copyInstallCommand")
                 }
             }.sensoryFeedback(.success, trigger: copied)
+        }
+        .interactiveDismissDisabled(saveFailed)
+        .alert(String(localized: "本次修改尚未保存"), isPresented: $leavePresented) {
+            Button(String(localized: "复制并退出")) {
+                UIPasteboard.general.string = text
+                dismiss()
+            }.accessibilityIdentifier("copyPreparedPromptAndLeave")
+            Button(String(localized: "放弃本次修改并退出"), role: .destructive) { dismiss() }
+                .accessibilityIdentifier("discardPreparedPromptAndLeave")
+            Button(String(localized: "继续编辑"), role: .cancel) {}
         }
     }
 }

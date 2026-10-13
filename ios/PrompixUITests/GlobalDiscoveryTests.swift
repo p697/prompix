@@ -971,6 +971,20 @@ import CryptoKit
     }
 
     func testPreparedVariablesSurviveFailedSaveAndReturnToEditor() throws {
+        try checkPreparedVariableRecovery(exit: .editor)
+    }
+
+    func testPreparedVariablesRequireExplicitDiscardAfterFailedSave() throws {
+        try checkPreparedVariableRecovery(exit: .discard)
+    }
+
+    func testPreparedVariablesCopyCompleteTextBeforeLeavingAfterFailedSave() throws {
+        try checkPreparedVariableRecovery(exit: .copy)
+    }
+
+    private enum PreparedExit { case editor, copy, discard }
+
+    private func checkPreparedVariableRecovery(exit: PreparedExit) throws {
         guard ProcessInfo.processInfo.environment["PROMPIX_VARIABLE_ACCEPTANCE"] == "1" else {
             throw XCTSkip("Requires the backed-up production simulator and explicit variable acceptance opt-in.")
         }
@@ -1010,6 +1024,40 @@ import CryptoKit
         app.buttons["applyPromptVariables"].tap()
         let failure = app.staticTexts["preparedPromptSaveError"]
         XCTAssertTrue(failure.waitForExistence(timeout: 5))
+        let finish = app.buttons["finishPromptUse"]
+        XCTAssertTrue(finish.waitForExistence(timeout: 5))
+        finish.tap()
+        let alert = app.alerts["本次修改尚未保存"]
+        XCTAssertTrue(alert.waitForExistence(timeout: 5))
+        capture("prepared-save-failure-exit-choice")
+        let copyExit = app.buttons["copyPreparedPromptAndLeave"].firstMatch
+        let discardExit = app.buttons["discardPreparedPromptAndLeave"].firstMatch
+        XCTAssertTrue(copyExit.waitForExistence(timeout: 5) && copyExit.isHittable)
+        XCTAssertTrue(discardExit.isHittable)
+        alert.buttons["继续编辑"].tap()
+        XCTAssertTrue(alert.waitForNonExistence(timeout: 5))
+        // Attempt the native sheet dismissal from its navigation bar.
+        finish.coordinate(withNormalizedOffset: CGVector(dx: 0, dy: 0))
+            .press(forDuration: 0.1, thenDragTo: finish.coordinate(withNormalizedOffset: CGVector(dx: 0, dy: 0)).withOffset(CGVector(dx: 0, dy: 380)))
+        XCTAssertTrue(finish.isHittable, "A failed save must prevent swipe dismissal.")
+        if exit != .editor {
+            finish.tap()
+            XCTAssertTrue(alert.waitForExistence(timeout: 5))
+            if exit == .copy {
+                let attachment = XCTAttachment(data: Data(expected.utf8), uniformTypeIdentifier: "public.utf8-plain-text")
+                attachment.name = "prepared-copy-exit-expected"; attachment.lifetime = .keepAlways; add(attachment)
+                copyExit.tap()
+            } else {
+                discardExit.tap()
+            }
+            XCTAssertTrue(finish.waitForNonExistence(timeout: 5))
+            XCTAssertEqual(editor.value as? String, original, "Explicit exit must leave the parent and its saved draft unchanged.")
+            try FileManager.default.removeItem(at: file)
+            try before.write(to: file, options: .atomic)
+            XCTAssertEqual(try Data(contentsOf: file), before)
+            capture("prepared-save-failure-explicit-exit")
+            return
+        }
         let edit = app.buttons["editPreparedPrompt"]
         revealHandoff(edit); edit.tap()
         XCTAssertTrue(app.buttons["handoffOpen"].waitForNonExistence(timeout: 5))
