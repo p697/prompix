@@ -405,11 +405,30 @@ import UIKit
         }
         func durableDraft() throws -> String? {
             let values = try JSONDecoder().decode([String: String].self, from: Data(contentsOf: draftFile))
-            return values["gentle-tarot"]
+            return values["gentle-tarot::zh-Hans"]
+        }
+        let useMode = ProcessInfo.processInfo.environment["PROMPIX_PREPARED_DRAFT_ACCEPTANCE"]
+        let fromUse = useMode != nil
+        func openEditor(fromDetail: Bool) throws {
+            if fromUse {
+                if useMode == "nested" && !fromDetail {
+                    app.buttons["编辑后使用"].tap()
+                    return
+                }
+                if fromDetail {
+                    if useMode == "nested" {
+                        app.buttons["编辑后使用"].tap()
+                        try require(app.buttons["useEditedPrompt"].waitForExistence(timeout: 5), "Outer editor must expose use")
+                        app.buttons["useEditedPrompt"].tap()
+                    } else { app.buttons["usePrompt"].tap() }
+                }
+                try require(app.buttons["editPreparedPrompt"].waitForExistence(timeout: 5), "Use panel must offer editing")
+                app.buttons["editPreparedPrompt"].tap()
+            } else { app.buttons["编辑后使用"].tap() }
         }
         app.buttons["kind-text"].tap()
         app.buttons["prompt-gentle-tarot"].tap()
-        app.buttons["编辑后使用"].tap()
+        try openEditor(fromDetail: true)
         let editor = app.textViews["promptEditor"]
         try require(editor.waitForExistence(timeout: 5), "Editor must open")
         editor.tap()
@@ -460,7 +479,7 @@ import UIKit
             }
             try require(app.buttons["copyDraftAndLeave"].firstMatch.waitForNonExistence(timeout: 5), "Cancelling must dismiss the native leave dialog")
             try require(editor.exists && editor.value as? String == recovered, "Cancelling leave must keep the large-text buffer")
-            for button in [app.buttons["copyEditedPrompt"], app.buttons["完成"]] {
+            for button in [app.buttons["copyEditedPrompt"], app.buttons["finishPromptEditing"]] {
                 try require(button.isHittable, "Fixed completion actions must remain reachable")
             }
             return
@@ -469,7 +488,7 @@ import UIKit
             .press(forDuration: 0.1, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.85)))
         try require(editor.exists, "Failed draft must resist interactive dismissal")
         try require(editor.value as? String == recovered, "Swipe must keep the entire buffer")
-        app.buttons["完成"].tap()
+        app.buttons["finishPromptEditing"].tap()
         try require(editor.exists && editor.value as? String == recovered, "Done must keep the failed-save buffer")
         capture("acceptance-write-failure-buffer-protected")
         app.buttons["leaveUnsavedDraft"].tap()
@@ -485,8 +504,8 @@ import UIKit
         app.buttons["retryDraftSave"].tap()
         try require(app.buttons["retryDraftSave"].waitForNonExistence(timeout: 5), "Retry must recover after storage is restored")
         try require(try durableDraft() == recovered, "Retry must save the exact current buffer")
-        app.buttons["完成"].tap()
-        app.buttons["编辑后使用"].tap()
+        app.buttons["finishPromptEditing"].tap()
+        try openEditor(fromDetail: false)
         try require(editor.waitForExistence(timeout: 5) && editor.value as? String == recovered, "Recovered draft must reopen intact")
         capture("acceptance-write-failure-recovered")
 
@@ -514,7 +533,7 @@ import UIKit
         app.launch()
         app.buttons["kind-text"].tap()
         app.buttons["prompt-gentle-tarot"].tap()
-        app.buttons["编辑后使用"].tap()
+        try openEditor(fromDetail: true)
         try require(editor.waitForExistence(timeout: 5) && editor.value as? String == recovered, "Relaunch must preserve the prior durable draft after explicit copy-only exit")
         try require(try durableDraft() == recovered, "Copy-only exit must not overwrite the prior durable draft")
         capture("acceptance-copy-only-exit-durable-draft")

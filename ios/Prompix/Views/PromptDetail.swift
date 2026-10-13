@@ -49,125 +49,7 @@ struct PromptDetail: View {
         RelatedPrompts.select(for: item, from: library.prompts)
     }
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 25) {
-                if WebsiteExamples.files[item.id] != nil {
-                    Button { webPresented = true } label: {
-                        hero.overlay(alignment: .bottomTrailing) {
-                            Label(String(localized: "打开作品"), systemImage: "safari").font(.subheadline.weight(.medium))
-                                .padding(.horizontal, 16).padding(.vertical, 12).background(.regularMaterial, in: Capsule()).padding(16)
-                        }
-                    }.buttonStyle(.plain).accessibilityLabel(String(localized: "打开网页作品")).accessibilityIdentifier("previewButton")
-                } else if item.kind == .video || item.media?.image != nil || item.media?.imageURL != nil {
-                    Button {
-                        if item.kind == .video { playerPresented = true } else { imagePresented = true }
-                    } label: {
-                        hero.overlay(alignment: .bottomTrailing) {
-                            Image(systemName: item.kind == .video ? "play.fill" : (item.media?.galleryURLs.count ?? 0) > 1 ? "square.stack" : "arrow.up.left.and.arrow.down.right")
-                                .font(.body).padding(14).background(.regularMaterial, in: Circle()).padding(16)
-                        }
-                    }.buttonStyle(.plain)
-                        .accessibilityLabel(item.kind == .video ? String(localized: "播放视频") : String(localized: "放大图片"))
-                        .accessibilityIdentifier("previewButton")
-                }
-                VStack(alignment: .leading, spacing: 24) {
-                    VStack(alignment: .leading, spacing: 12) {
-                        ViewThatFits(in: .horizontal) {
-                            HStack {
-                                Label(item.displayKind, systemImage: item.displaySymbol)
-                                Text("·").accessibilityHidden(true)
-                                Text(item.displayModel)
-                            }.fixedSize()
-                            VStack(alignment: .leading, spacing: 6) {
-                                Label(item.displayKind, systemImage: item.displaySymbol)
-                                Text(item.displayModel).fixedSize(horizontal: false, vertical: true)
-                            }
-                        }.font(.footnote).foregroundStyle(Palette.muted)
-                        Text(content.title).font(Typography.editorial(.title)).lineSpacing(3).fixedSize(horizontal: false, vertical: true).accessibilityAddTraits(.isHeader)
-                        Text(content.summary).font(.subheadline).lineSpacing(5).foregroundStyle(Palette.muted)
-                        if let creator = item.creator { CreatorByline(creator: creator) }
-                        if item.kind != .text {
-                            Text(content.previewLabel).font(.footnote).foregroundStyle(Palette.muted)
-                        }
-                    }
-                    languagePicker
-                    Divider()
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text(String(localized: "说明与示例")).font(.headline).accessibilityAddTraits(.isHeader)
-                        Text(content.example).font(.subheadline).lineSpacing(6).textSelection(.enabled)
-                    }
-                    if let skill = item.skill { SkillInformation(skill: skill) }
-                    VStack(alignment: .leading, spacing: 14) {
-                        HStack {
-                            Text(item.isSkill ? "SKILL.md" : "Prompt").font(.headline).accessibilityAddTraits(.isHeader)
-                            Spacer()
-                            Button { openEditor() } label: { Label(String(localized: "编辑"), systemImage: "square.and.pencil").frame(minWidth: 44, minHeight: 44).contentShape(Rectangle()) }.font(.subheadline)
-                                .accessibilityIdentifier("editPrompt")
-                        }
-                        Text(fullPrompt ? content.prompt : String(content.prompt.prefix(1100))).font(.system(.subheadline)).lineSpacing(6).textSelection(.enabled)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                        if content.prompt.count > 1100 {
-                            Button(fullPrompt ? String(localized: "收起正文") : String(localized: "展开完整内容")) { fullPrompt.toggle() }
-                                .font(.subheadline.weight(.medium)).frame(minHeight: 44).accessibilityIdentifier("expandPrompt")
-                        }
-                    }.padding(20).background(Palette.surface, in: RoundedRectangle(cornerRadius: 16))
-                        .overlay { RoundedRectangle(cornerRadius: 16).stroke(Palette.line, lineWidth: 0.5).allowsHitTesting(false) }
-                    if WebsiteExamples.files[item.id] != nil {
-                        Button { webPresented = true } label: { Label(String(localized: "打开原创网页示例"), systemImage: "safari").frame(minHeight: 44).contentShape(Rectangle()) }.accessibilityIdentifier("webExample")
-                    }
-                    if !item.isSkill {
-                        Button { openUseSheet() } label: {
-                            HStack {
-                                VStack(alignment: .leading, spacing: 5) {
-                                    Text(String(localized: "使用方法")).font(.subheadline.weight(.medium))
-                                    Text(PromptDestination.requiresDesktop(for: item) ? String(localized: "此工作流需要电脑上的代码工具。复制或分享内容，在电脑中继续。") : String(localized: "复制后打开工具，粘贴使用")).font(.footnote).foregroundStyle(Palette.muted)
-                                }; Spacer(); Image(systemName: "arrow.up.right")
-                            }.padding(.vertical, 5)
-                        }
-                    }
-                    if let demo = item.media?.demoURL { Link(destination: demo) { Text(String(localized: "打开网页示例")).font(.subheadline).frame(minHeight: 44).contentShape(Rectangle()) } }
-                    VStack(alignment: .leading, spacing: 8) {
-                        ViewThatFits(in: .horizontal) {
-                            HStack { sourceAuthor; Spacer(); sourceKind }
-                            VStack(alignment: .leading, spacing: 6) { sourceAuthor; sourceKind }
-                        }
-                        Text(item.source.license == "X-API-Terms" ? String(localized: "通过 X API 收录") : item.source.license).font(.footnote).foregroundStyle(Palette.muted)
-                            .accessibilityLabel(String(localized: "内容许可：\(spokenLicense)"))
-                        if let post = item.source.post {
-                            if let date = post.date {
-                                Text(date, format: .dateTime.year().month().day().hour().minute())
-                                    .font(.caption).foregroundStyle(Palette.muted)
-                            }
-                            DisclosureGroup(String(localized: "查看 X 原帖")) {
-                                Text(post.text).font(.subheadline).lineSpacing(5).textSelection(.enabled)
-                                    .frame(maxWidth: .infinity, alignment: .leading).padding(.vertical, 10)
-                            }.font(.subheadline).accessibilityIdentifier("originalXPost")
-                        }
-                        if let context = item.source.context {
-                            ForEach(context, id: \.id) { source in
-                                DisclosureGroup(source.id == item.source.mediaPostID ? String(localized: "作品原帖") : String(localized: "上下文原帖")) {
-                                    VStack(alignment: .leading, spacing: 10) {
-                                        if let date = source.date { Text(date, format: .dateTime.year().month().day().hour().minute()).foregroundStyle(Palette.muted) }
-                                        Text(source.text).textSelection(.enabled).lineSpacing(5)
-                                        if let url = URL(string: "https://x.com/i/web/status/\(source.id)") {
-                                            Link(String(localized: "在 X 查看"), destination: url).frame(minHeight: 44)
-                                        }
-                                    }.font(.subheadline).frame(maxWidth: .infinity, alignment: .leading).padding(.vertical, 10)
-                                }.font(.subheadline).accessibilityIdentifier("sourceContext-\(source.id)")
-                            }
-                        }
-                        if let repository = item.source.repository { Link(destination: repository) { Text(String(localized: "收录于 \(item.source.name)")).font(.footnote).frame(minHeight: 44).contentShape(Rectangle()) } }
-                        if let source = item.source.url { Link(destination: source) { Text(String(localized: "查看原始来源 ↗")).font(.footnote).frame(minHeight: 44).contentShape(Rectangle()) } }
-                        Link(destination: SupportLinks.url(.report, contentID: item.id)) { Text(String(localized: "反馈这条内容")).font(.footnote).frame(minHeight: 44).contentShape(Rectangle()) }.accessibilityIdentifier("reportContent")
-                    }
-                    if !related.isEmpty {
-                        Divider()
-                        HStack { Text(String(localized: "相关 Prompt")).font(.headline).accessibilityAddTraits(.isHeader); Spacer(); Image(systemName: "arrow.down.right").foregroundStyle(Palette.muted).accessibilityHidden(true) }
-                        PromptGrid(items: related)
-                    }
-                }.padding(.horizontal, 22).padding(.top, 12)
-            }.padding(.bottom, 28).frame(maxWidth: 700).frame(maxWidth: .infinity)
-        }
+        detailLayout
         .paperScreen()
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.hidden, for: .tabBar)
@@ -177,29 +59,48 @@ struct PromptDetail: View {
                     .accessibilityIdentifier("sharePrompt")
             }
             ToolbarItem(placement: .topBarTrailing) {
-                Button { library.toggle(item) } label: { Image(systemName: library.isSaved(item) ? "bookmark.fill" : "bookmark").frame(minWidth: 44, minHeight: 44) }
+                Button { library.toggle(item) } label: {
+                    Label(library.isSaved(item) ? String(localized: "取消收藏") : String(localized: "收藏 Prompt"), systemImage: library.isSaved(item) ? "bookmark.fill" : "bookmark")
+                        .frame(minWidth: 44, minHeight: 44)
+                }
                     .accessibilityLabel(library.isSaved(item) ? String(localized: "取消收藏") : String(localized: "收藏 Prompt")).accessibilityIdentifier("detailFavorite")
                     .disabled(library.isRemoved(item))
             }
+            if #available(iOS 27.1, *) {
+                ToolbarItemGroup(placement: .bottomBar) {
+                    Button(action: openEditor) { Label(String(localized: "编辑后使用"), systemImage: "square.and.pencil") }
+                        .accessibilityIdentifier("editPromptAction")
+                    Button {
+                        UIPasteboard.general.string = content.prompt; copied = true
+                    } label: { Label(copied ? String(localized: "已复制") : String(localized: "复制 Prompt"), systemImage: copied ? "checkmark" : "doc.on.doc") }
+                        .accessibilityIdentifier("copyPrompt").sensoryFeedback(.success, trigger: copied)
+                    Spacer()
+                    Button(action: openUseSheet) {
+                        Label(item.isSkill ? String(localized: "使用这个 Skill") : String(localized: "使用 Prompt"), systemImage: "arrow.up.right")
+                    }.buttonStyle(.borderedProminent).accessibilityIdentifier("usePrompt")
+                }
+            }
         }
         .safeAreaInset(edge: .bottom) {
-            HStack(spacing: 12) {
-                Button { openEditor() } label: { Image(systemName: "square.and.pencil").font(.system(size: 19)).frame(width: 50, height: 50) }
-                    .buttonStyle(.plain).background(Palette.surface, in: Circle()).accessibilityLabel(String(localized: "编辑后使用"))
-                Button {
-                    UIPasteboard.general.string = content.prompt
-                    copied = true
-                } label: {
-                    Image(systemName: copied ? "checkmark" : "doc.on.doc").font(.system(size: 19)).frame(width: 50, height: 50)
-                }.buttonStyle(.plain).background(Palette.surface, in: Circle())
-                    .accessibilityLabel(copied ? String(localized: "已复制") : String(localized: "复制 Prompt"))
-                    .accessibilityIdentifier("copyPrompt").sensoryFeedback(.success, trigger: copied)
-                Button { openUseSheet() } label: {
-                    PrimaryActionLabel(title: item.isSkill ? String(localized: "使用这个 Skill") : String(localized: "使用 Prompt"),
-                        compactTitle: String(localized: "使用"), symbol: "arrow.up.right")
-                }.buttonStyle(.plain).accessibilityIdentifier("usePrompt")
-            }.padding(.horizontal, 20).padding(.vertical, 10).frame(maxWidth: 700)
-                .frame(maxWidth: .infinity).background(Palette.paper)
+            if #unavailable(iOS 27.1) {
+                HStack(spacing: 12) {
+                    Button { openEditor() } label: { Image(systemName: "square.and.pencil").font(.system(size: 19)).frame(width: 50, height: 50) }
+                        .buttonStyle(.plain).background(Palette.surface, in: Circle()).accessibilityLabel(String(localized: "编辑后使用"))
+                    Button {
+                        UIPasteboard.general.string = content.prompt
+                        copied = true
+                    } label: {
+                        Image(systemName: copied ? "checkmark" : "doc.on.doc").font(.system(size: 19)).frame(width: 50, height: 50)
+                    }.buttonStyle(.plain).background(Palette.surface, in: Circle())
+                        .accessibilityLabel(copied ? String(localized: "已复制") : String(localized: "复制 Prompt"))
+                        .accessibilityIdentifier("copyPrompt").sensoryFeedback(.success, trigger: copied)
+                    Button { openUseSheet() } label: {
+                        PrimaryActionLabel(title: item.isSkill ? String(localized: "使用这个 Skill") : String(localized: "使用 Prompt"),
+                            compactTitle: String(localized: "使用"), symbol: "arrow.up.right")
+                    }.buttonStyle(.plain).accessibilityIdentifier("usePrompt")
+                }.padding(.horizontal, 20).padding(.vertical, 10).frame(maxWidth: 700)
+                    .frame(maxWidth: .infinity).background(Palette.paper)
+            }
         }
         .onChange(of: content) { _, _ in copied = false; fullPrompt = false }
         .onChange(of: item.preferredTranslation, initial: true) { _, preferred in
@@ -210,11 +111,11 @@ struct PromptDetail: View {
         }
         .onDisappear { if languageRequestID != nil { cancelLanguageSelection() } }
         .sheet(item: $useContext) { context in
-            PromptUseSheet(item: context.item, text: context.text, title: context.title) { prepared in
+            PromptUseSheet(item: context.item, text: context.text, title: context.title, language: context.language, onPrepared: { prepared in
                 let saved = library.saveDraft(prepared, for: context.item, language: context.language)
                 if !saved { library.dismissError() }
                 return saved
-            }
+            })
         }
         .sheet(item: $editorContext) { context in PromptEditor(item: context.item, language: context.language) }
         .fullScreenCover(isPresented: $imagePresented) { ImageViewer(name: item.media?.image ?? item.artwork, urls: item.media?.galleryURLs ?? []) }
@@ -222,6 +123,163 @@ struct PromptDetail: View {
             if let filename = WebsiteExamples.files[item.id] { WebExample(filename: filename) }
         }
         .sheet(isPresented: $playerPresented) { MovieView(filename: item.media?.video, remoteURL: item.media?.videoURL, caption: content.previewLabel) }
+    }
+    private var hasMediaPreview: Bool {
+        WebsiteExamples.files[item.id] != nil || item.kind == .video || item.media?.image != nil || item.media?.imageURL != nil
+    }
+    private var previewTitle: String {
+        WebsiteExamples.files[item.id] != nil ? String(localized: "打开网页作品") : item.kind == .video ? String(localized: "播放视频") : String(localized: "放大图片")
+    }
+    private func openPreview() {
+        if WebsiteExamples.files[item.id] != nil { webPresented = true }
+        else if item.kind == .video { playerPresented = true }
+        else { imagePresented = true }
+    }
+    @ViewBuilder private var detailLayout: some View {
+        if #available(iOS 27.1, *), hasMediaPreview {
+            ArrangementView {
+                ScrollView {
+                    readingContent.padding(.bottom, 28).frame(maxWidth: 700).frame(maxWidth: .infinity)
+                }.accessibilityIdentifier("detailReadingPane")
+            } secondary: {
+                ScrollView {
+                    largePreview.padding(.bottom, 24).frame(maxWidth: 600).frame(maxWidth: .infinity)
+                }.accessibilityIdentifier("detailMediaPane")
+            }.arrangementViewStyle(.split.axes(.horizontal))
+        } else {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 25) {
+                    largePreview
+                    readingContent
+                }.padding(.bottom, 28).frame(maxWidth: 700).frame(maxWidth: .infinity)
+            }.accessibilityIdentifier("detailReadingPane")
+        }
+    }
+    private var compactPreview: some View {
+        Button(action: openPreview) {
+            HStack(spacing: 14) {
+                Artwork(item: item).frame(width: 76, height: 86).clipped()
+                    .clipShape(RoundedRectangle(cornerRadius: 10)).accessibilityHidden(true)
+                Label(previewTitle, systemImage: item.kind == .video ? "play.circle" : WebsiteExamples.files[item.id] != nil ? "safari" : "arrow.up.left.and.arrow.down.right")
+                    .font(.subheadline.weight(.medium)).multilineTextAlignment(.leading)
+                Spacer(minLength: 0)
+            }.padding(10).background(Palette.surface, in: RoundedRectangle(cornerRadius: 14))
+                .contentShape(Rectangle())
+        }.buttonStyle(.plain).accessibilityLabel(previewTitle).accessibilityIdentifier("compactPreviewButton")
+    }
+    @ViewBuilder private var largePreview: some View {
+        if hasMediaPreview {
+            Button(action: openPreview) {
+                hero.overlay(alignment: .bottomTrailing) {
+                    if WebsiteExamples.files[item.id] != nil {
+                        Label(String(localized: "打开作品"), systemImage: "safari").font(.subheadline.weight(.medium))
+                            .padding(.horizontal, 16).padding(.vertical, 12).background(.regularMaterial, in: Capsule()).padding(16)
+                    } else {
+                        Image(systemName: item.kind == .video ? "play.fill" : (item.media?.galleryURLs.count ?? 0) > 1 ? "square.stack" : "arrow.up.left.and.arrow.down.right")
+                            .font(.body).padding(14).background(.regularMaterial, in: Circle()).padding(16)
+                    }
+                }
+            }.buttonStyle(.plain).accessibilityLabel(previewTitle).accessibilityIdentifier("previewButton")
+        }
+    }
+    private var readingContent: some View {
+        VStack(alignment: .leading, spacing: 24) {
+            VStack(alignment: .leading, spacing: 12) {
+                ViewThatFits(in: .horizontal) {
+                    HStack {
+                        Label(item.displayKind, systemImage: item.displaySymbol)
+                        Text("·").accessibilityHidden(true)
+                        Text(item.displayModel)
+                    }.fixedSize()
+                    VStack(alignment: .leading, spacing: 6) {
+                        Label(item.displayKind, systemImage: item.displaySymbol)
+                        Text(item.displayModel).fixedSize(horizontal: false, vertical: true)
+                    }
+                }.font(.footnote).foregroundStyle(Palette.muted)
+                Text(content.title).font(Typography.editorial(.title)).lineSpacing(3).fixedSize(horizontal: false, vertical: true).accessibilityAddTraits(.isHeader)
+                Text(content.summary).font(.subheadline).lineSpacing(5).foregroundStyle(Palette.muted)
+                if let creator = item.creator { CreatorByline(creator: creator) }
+                if item.kind != .text {
+                    Text(content.previewLabel).font(.footnote).foregroundStyle(Palette.muted)
+                }
+            }
+            if #available(iOS 27.1, *), hasMediaPreview { compactPreview }
+            languagePicker
+            Divider()
+            VStack(alignment: .leading, spacing: 10) {
+                Text(String(localized: "说明与示例")).font(.headline).accessibilityAddTraits(.isHeader)
+                Text(content.example).font(.subheadline).lineSpacing(6).textSelection(.enabled)
+            }
+            if let skill = item.skill { SkillInformation(skill: skill) }
+            VStack(alignment: .leading, spacing: 14) {
+                HStack {
+                    Text(item.isSkill ? "SKILL.md" : "Prompt").font(.headline).accessibilityAddTraits(.isHeader)
+                    Spacer()
+                    Button { openEditor() } label: { Label(String(localized: "编辑"), systemImage: "square.and.pencil").frame(minWidth: 44, minHeight: 44).contentShape(Rectangle()) }.font(.subheadline)
+                        .accessibilityIdentifier("editPrompt")
+                }
+                Text(fullPrompt ? content.prompt : String(content.prompt.prefix(1100))).font(.system(.subheadline)).lineSpacing(6).textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                if content.prompt.count > 1100 {
+                    Button(fullPrompt ? String(localized: "收起正文") : String(localized: "展开完整内容")) { fullPrompt.toggle() }
+                        .font(.subheadline.weight(.medium)).frame(minHeight: 44).accessibilityIdentifier("expandPrompt")
+                }
+            }.padding(20).background(Palette.surface, in: RoundedRectangle(cornerRadius: 16))
+                .overlay { RoundedRectangle(cornerRadius: 16).stroke(Palette.line, lineWidth: 0.5).allowsHitTesting(false) }
+            if WebsiteExamples.files[item.id] != nil {
+                Button { webPresented = true } label: { Label(String(localized: "打开原创网页示例"), systemImage: "safari").frame(minHeight: 44).contentShape(Rectangle()) }.accessibilityIdentifier("webExample")
+            }
+            if !item.isSkill {
+                Button { openUseSheet() } label: {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 5) {
+                            Text(String(localized: "使用方法")).font(.subheadline.weight(.medium))
+                            Text(PromptDestination.requiresDesktop(for: item) ? String(localized: "此工作流需要电脑上的代码工具。复制或分享内容，在电脑中继续。") : String(localized: "复制后打开工具，粘贴使用")).font(.footnote).foregroundStyle(Palette.muted)
+                        }; Spacer(); Image(systemName: "arrow.up.right")
+                    }.padding(.vertical, 5)
+                }
+            }
+            if let demo = item.media?.demoURL { Link(destination: demo) { Text(String(localized: "打开网页示例")).font(.subheadline).frame(minHeight: 44).contentShape(Rectangle()) } }
+            VStack(alignment: .leading, spacing: 8) {
+                ViewThatFits(in: .horizontal) {
+                    HStack { sourceAuthor; Spacer(); sourceKind }
+                    VStack(alignment: .leading, spacing: 6) { sourceAuthor; sourceKind }
+                }
+                Text(item.source.license == "X-API-Terms" ? String(localized: "通过 X API 收录") : item.source.license).font(.footnote).foregroundStyle(Palette.muted)
+                    .accessibilityLabel(String(localized: "内容许可：\(spokenLicense)"))
+                if let post = item.source.post {
+                    if let date = post.date {
+                        Text(date, format: .dateTime.year().month().day().hour().minute())
+                            .font(.caption).foregroundStyle(Palette.muted)
+                    }
+                    DisclosureGroup(String(localized: "查看 X 原帖")) {
+                        Text(post.text).font(.subheadline).lineSpacing(5).textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading).padding(.vertical, 10)
+                    }.font(.subheadline).accessibilityIdentifier("originalXPost")
+                }
+                if let context = item.source.context {
+                    ForEach(context, id: \.id) { source in
+                        DisclosureGroup(source.id == item.source.mediaPostID ? String(localized: "作品原帖") : String(localized: "上下文原帖")) {
+                            VStack(alignment: .leading, spacing: 10) {
+                                if let date = source.date { Text(date, format: .dateTime.year().month().day().hour().minute()).foregroundStyle(Palette.muted) }
+                                Text(source.text).textSelection(.enabled).lineSpacing(5)
+                                if let url = URL(string: "https://x.com/i/web/status/\(source.id)") {
+                                    Link(String(localized: "在 X 查看"), destination: url).frame(minHeight: 44)
+                                }
+                            }.font(.subheadline).frame(maxWidth: .infinity, alignment: .leading).padding(.vertical, 10)
+                        }.font(.subheadline).accessibilityIdentifier("sourceContext-\(source.id)")
+                    }
+                }
+                if let repository = item.source.repository { Link(destination: repository) { Text(String(localized: "收录于 \(item.source.name)")).font(.footnote).frame(minHeight: 44).contentShape(Rectangle()) } }
+                if let source = item.source.url { Link(destination: source) { Text(String(localized: "查看原始来源 ↗")).font(.footnote).frame(minHeight: 44).contentShape(Rectangle()) } }
+                Link(destination: SupportLinks.url(.report, contentID: item.id)) { Text(String(localized: "反馈这条内容")).font(.footnote).frame(minHeight: 44).contentShape(Rectangle()) }.accessibilityIdentifier("reportContent")
+            }
+            if !related.isEmpty {
+                Divider()
+                HStack { Text(String(localized: "相关 Prompt")).font(.headline).accessibilityAddTraits(.isHeader); Spacer(); Image(systemName: "arrow.down.right").foregroundStyle(Palette.muted).accessibilityHidden(true) }
+                PromptGrid(items: related)
+            }
+        }.padding(.horizontal, 22).padding(.top, 12)
     }
     private func openUseSheet() {
         let prepared = library.draft(for: item, language: effectiveLanguage)
@@ -332,6 +390,8 @@ struct PromptDetail: View {
 struct PromptEditor: View {
     let item: Prompt
     let language: String?
+    private let initialText: String?
+    private let onSave: ((String) -> Bool)?
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.dynamicTypeSize) private var typeSize
@@ -347,9 +407,9 @@ struct PromptEditor: View {
     @State private var leavingWithoutSaving = false
     @State private var variablesPresented = false
     @State private var headerHeight: CGFloat?
-    init(item: Prompt, language: String? = nil) {
-        self.item = item; self.language = language
-        _text = State(initialValue: item.content(in: language).prompt)
+    init(item: Prompt, language: String? = nil, initialText: String? = nil, onSave: ((String) -> Bool)? = nil) {
+        self.item = item; self.language = language; self.initialText = initialText; self.onSave = onSave
+        _text = State(initialValue: initialText ?? item.content(in: language).prompt)
     }
     var body: some View {
         NavigationStack {
@@ -367,7 +427,9 @@ struct PromptEditor: View {
                 }
             }.paperScreen().navigationTitle(String(localized: "编辑 Prompt")).navigationBarTitleDisplayMode(.inline)
                 .toolbar {
-                    ToolbarItem(placement: .cancellationAction) { Button(String(localized: "完成")) { if save() { dismiss() } } }
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button(String(localized: "完成")) { if save() { dismiss() } }.accessibilityIdentifier("finishPromptEditing")
+                    }
                     ToolbarItem(placement: .primaryAction) {
                         Menu {
                             Button(language == nil ? String(localized: "恢复原始 Prompt") : String(localized: "恢复当前语言的内容"), systemImage: "arrow.counterclockwise", role: .destructive) { restorePresented = true }
@@ -378,21 +440,31 @@ struct PromptEditor: View {
                 }
                 .toolbar {
                     ToolbarItem(placement: .primaryAction) {
-                        Button { usePresented = true } label: { Label(String(localized: "使用"), systemImage: "arrow.up.right") }
-                            .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty).accessibilityIdentifier("useEditedPrompt")
+                        if onSave == nil {
+                            Button { usePresented = true } label: { Label(String(localized: "使用"), systemImage: "arrow.up.right") }
+                                .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty).accessibilityIdentifier("useEditedPrompt")
+                        }
                     }
                 }
                 .sheet(isPresented: $usePresented) {
-                    PromptUseSheet(item: item, text: text, title: item.content(in: language).title) { prepared in
-                        text = prepared; return save()
-                    }
+                    PromptUseSheet(item: item, text: text, title: item.content(in: language).title, language: language, onEdit: { prepared in
+                        // An explicit return to editing carries unsaved variable input too.
+                        text = prepared; saved = prepared == library.draft(for: item, language: language)
+                        usePresented = false
+                    }, onPrepared: { prepared in
+                        // Keep failed child edits out of this editor's autosave buffer.
+                        let committed = library.saveDraft(prepared, for: item, language: language)
+                        if committed { text = prepared; saved = true; saveError = nil }
+                        else { library.dismissError() }
+                        return committed
+                    })
                 }
                 .sheet(isPresented: $variablesPresented) {
                     PromptVariablesSheet(template: PromptTemplate(text, enabled: !item.isSkill)) { prepared in
                         text = prepared; save()
                     }
                 }
-                .safeAreaInset(edge: .bottom) {
+                .promptActionBar {
                     Button {
                         UIPasteboard.general.string = text; copied = true
                         save()
@@ -405,7 +477,8 @@ struct PromptEditor: View {
                 }
                 .onAppear {
                     guard !initialized else { return }
-                    text = library.draft(for: item, language: language); initialized = true
+                    text = initialText ?? library.draft(for: item, language: language)
+                    saved = text == library.draft(for: item, language: language); initialized = true
                 }
                 .onChange(of: text) { _, _ in copied = false; saved = text == library.draft(for: item, language: language); saveError = nil }
                 .task(id: text) {
@@ -437,6 +510,14 @@ struct PromptEditor: View {
     }
     private var editorHeader: some View {
         VStack(alignment: .leading, spacing: 8) {
+            if let saveError {
+                ViewThatFits(in: .horizontal) {
+                    HStack { saveRecoveryActions }
+                    VStack(alignment: .leading) { saveRecoveryActions }
+                }
+                Text(saveError).font(.footnote).foregroundStyle(Palette.muted)
+                    .fixedSize(horizontal: false, vertical: true).accessibilityIdentifier("draftSaveError")
+            }
             if let language { Text(ContentLanguage.name(language)).font(.footnote.weight(.medium)).foregroundStyle(Palette.accent) }
             Text(typeSize.isAccessibilitySize ? String(localized: "原文会保留。") : String(localized: "修改会保存到此设备，原始 Prompt 会保留。"))
                 .font(.footnote).foregroundStyle(Palette.muted).fixedSize(horizontal: false, vertical: true)
@@ -452,14 +533,6 @@ struct PromptEditor: View {
                 Button(String(localized: "填写变量"), systemImage: "square.and.pencil") { variablesPresented = true }
                     .frame(minHeight: 44).accessibilityIdentifier("editPromptVariables")
             }
-            if let saveError {
-                Text(saveError).font(.footnote).foregroundStyle(Palette.muted)
-                    .fixedSize(horizontal: false, vertical: true).accessibilityIdentifier("draftSaveError")
-                ViewThatFits(in: .horizontal) {
-                    HStack { saveRecoveryActions }
-                    VStack(alignment: .leading) { saveRecoveryActions }
-                }
-            }
         }.padding(.horizontal, 20).padding(.top, 14)
             .frame(maxWidth: .infinity, alignment: .leading).fixedSize(horizontal: false, vertical: true)
     }
@@ -471,7 +544,7 @@ struct PromptEditor: View {
     }
     @discardableResult private func save() -> Bool {
         guard !leavingWithoutSaving else { return false }
-        saved = library.saveDraft(text, for: item, language: language)
+        saved = onSave?(text) ?? library.saveDraft(text, for: item, language: language)
         saveError = saved ? nil : library.error ?? String(localized: "尚未保存，可先复制保留")
         // Present draft failures here: a root alert can dismiss this editor sheet.
         if !saved { library.dismissError() }
@@ -646,12 +719,12 @@ private struct ImagePage: View {
                 } description: { Text(String(localized: "检查网络后可以重新加载。")) }
                 actions: { Button(String(localized: "重新加载")) { attempt += 1 }.buttonStyle(.bordered).accessibilityIdentifier("retryImage") }
             } else { ProgressView().tint(.white) }
-        }.overlay(alignment: .bottom) {
+        }.promptActionBar {
             if offlinePreview {
                 Button { attempt += 1 } label: {
                     Label(String(localized: "当前为离线预览 · 轻点加载清晰图片"), systemImage: "arrow.clockwise")
                         .font(.footnote).padding(12).foregroundStyle(.white).background(.black.opacity(0.7), in: Capsule())
-                }.padding(.bottom, 40).accessibilityIdentifier("loadFullImage")
+                }.padding(12).accessibilityIdentifier("loadFullImage")
             }
         }.task(id: "\(url?.absoluteString ?? name)-\(attempt)-\(active)") {
             guard active, let url else { return }

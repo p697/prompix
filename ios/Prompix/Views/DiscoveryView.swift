@@ -187,25 +187,60 @@ struct PromptGrid: View {
     var origin: PromptDetailOrigin = .catalog
     @Environment(\.dynamicTypeSize) private var typeSize
     @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
-    @Environment(\.horizontalSizeClass) private var sizeClass
-    private var columnCount: Int { sizeClass == .regular ? 3 : 2 }
+    @State private var layout = PromptGridLayout(width: 0)
     var body: some View {
         // Separate masonry columns read column-first. A linear native stack
         // preserves the editorial sequence when navigating with VoiceOver.
         if typeSize.isAccessibilitySize || voiceOverEnabled {
             LazyVStack(spacing: 24) { ForEach(items) { PromptCard(item: $0, origin: origin) } }
         } else {
-            HStack(alignment: .top, spacing: 14) {
-                ForEach(0..<columnCount, id: \.self) { column($0) }
-            }
+            HStack(alignment: .top, spacing: 0) {
+                ForEach(0..<layout.columns, id: \.self) { index in
+                    column(index).frame(width: layout.widths.isEmpty ? nil : layout.widths[index])
+                    if index < layout.columns - 1 { Color.clear.frame(width: layout.gaps[index], height: 1) }
+                }
+            }.frame(minWidth: 0, maxWidth: .infinity)
+                .onGeometryChange(for: PromptGridLayout.self) { proxy in
+                    if #available(iOS 27.1, *) {
+                        PromptGridLayout(width: proxy.size.width, division: proxy.reservedRegions(kind: .division)
+                            .map(\.frame).first { $0.height > $0.width && $0.minX > 0 && $0.maxX < proxy.size.width })
+                    } else { PromptGridLayout(width: proxy.size.width) }
+                } action: { layout = $0 }
         }
     }
     private func column(_ parity: Int) -> some View {
         LazyVStack(spacing: 14) {
-            ForEach(Array(items.enumerated()).filter { $0.offset % columnCount == parity }, id: \.element.id) { _, item in
+            ForEach(Array(items.enumerated()).filter { $0.offset % layout.columns == parity }, id: \.element.id) { _, item in
                 PromptCard(item: item, origin: origin)
             }
         }.frame(maxWidth: .infinity)
+    }
+}
+
+struct PromptGridLayout: Equatable {
+    let columns: Int
+    let widths: [CGFloat]
+    let gaps: [CGFloat]
+    init(width: CGFloat, division: CGRect? = nil) {
+        // Count depends on this grid's width, including in a narrow detail pane.
+        // Even columns keep a card from straddling a vertical division region.
+        let usableDivision = division.flatMap { region in
+            region.minX >= 148 && width - region.maxX >= 148 ? region : nil
+        }
+        let roomForFour = usableDivision.map { min($0.minX, width - $0.maxX) >= 302 } ?? true
+        let count = width >= 760 && roomForFour ? 4 : 2
+        columns = count
+        guard width > 0 else { widths = []; gaps = [14]; return }
+        let half = count / 2
+        if let division = usableDivision {
+            let leading = max(0, (division.minX - 8 - CGFloat(half - 1) * 14) / CGFloat(half))
+            let trailing = max(0, (width - division.maxX - 8 - CGFloat(half - 1) * 14) / CGFloat(half))
+            widths = Array(repeating: leading, count: half) + Array(repeating: trailing, count: half)
+            gaps = (0..<(count - 1)).map { $0 == half - 1 ? division.width + 16 : 14 }
+        } else {
+            widths = Array(repeating: max(0, (width - CGFloat(count - 1) * 14) / CGFloat(count)), count: count)
+            gaps = Array(repeating: 14, count: count - 1)
+        }
     }
 }
 

@@ -117,3 +117,14 @@ extension View {
         modifier(PromptTransition(id: id, namespace: namespace, source: false))
     }
 }
+
+// Custom sheet actions reserve space and participate in modern scroll-edge effects.
+extension View {
+    @ViewBuilder func promptActionBar<Bar: View>(@ViewBuilder content: () -> Bar) -> some View {
+        if #available(iOS 26, *) {
+            safeAreaBar(edge: .bottom, spacing: 0, content: content)
+        } else {
+            safeAreaInset(edge: .bottom, spacing: 0, content: content)
+        }
+    }
+}

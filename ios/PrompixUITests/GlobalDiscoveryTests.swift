@@ -782,7 +782,7 @@ import UIKit
         XCTAssertEqual(try readSnapshot([String: String].self, from: try acceptanceDirectory(), file: "drafts.json"), before)
         reveal(prepare); prepare.tap()
         capture("variables-01-empty-form")
-        let values = ["Kyoto & Uji", "2026-11-01", "500 USD", "Bookshops\nQuiet cafes"]
+        let values = ["Kyoto & Uji", "2026-11-01", "500 USD", "Bookshops\nQuiet cafes", "Relaxed", "Public transport"]
         for (index, value) in values.enumerated() {
             let field = input(index)
             // Form is a collection view; keep gestures above the keyboard and fixed action.
@@ -805,13 +805,30 @@ import UIKit
         capture("variables-02-filled-with-keyboard")
         apply.tap()
         XCTAssertTrue(app.buttons["handoffOpen"].waitForExistence(timeout: 5))
-        let expected = zip(["${city}", "${dates}", "${budget}", "${interests}"], values).reduce(original) {
+        var expected = zip(["${city}", "${dates}", "${budget}", "${interests}", "${pace}", "${constraints}"], values).reduce(original) {
             $0.replacingOccurrences(of: $1.0, with: $1.1)
         }
         var expectedDrafts = before; expectedDrafts[id + "::zh-Hans"] = expected
         XCTAssertEqual(try readSnapshot([String: String].self, from: try acceptanceDirectory(), file: "drafts.json"), expectedDrafts)
+        // Fully substituted content must remain editable without leaving the use flow.
+        XCTAssertTrue(app.buttons["preparePromptVariables"].waitForNonExistence(timeout: 5))
+        let editPrepared = app.buttons["editPreparedPrompt"]
+        revealHandoff(editPrepared); editPrepared.tap()
+        let preparedEditor = app.textViews["promptEditor"]
+        XCTAssertTrue(preparedEditor.waitForExistence(timeout: 5))
+        XCTAssertEqual(preparedEditor.value as? String, expected)
+        XCTAssertFalse(app.buttons["useEditedPrompt"].exists, "Do not nest another use flow inside its editor.")
+        let note = " Add a rainy-day alternative."
+        preparedEditor.tap(); preparedEditor.typeText(note)
+        let revised = try XCTUnwrap(preparedEditor.value as? String)
+        XCTAssertEqual(revised.replacingOccurrences(of: note, with: ""), expected)
+        expected = revised; expectedDrafts[id + "::zh-Hans"] = expected
+        capture("variables-03-edit-within-use")
+        app.buttons["finishPromptEditing"].tap()
+        XCTAssertTrue(app.buttons["handoffOpen"].waitForExistence(timeout: 5))
+        XCTAssertEqual(try readSnapshot([String: String].self, from: try acceptanceDirectory(), file: "drafts.json"), expectedDrafts)
         let copy = app.buttons["handoffCopy"]
-        reveal(copy); copy.tap(); XCTAssertTrue(copy.label.contains("已复制"))
+        revealHandoff(copy); copy.tap(); XCTAssertTrue(copy.label.contains("已复制"))
         capture("variables-03-ready-to-use")
         let evidence = XCTAttachment(string: expected); evidence.name = "variables-expected-clipboard"
         evidence.lifetime = .keepAlways; add(evidence)
@@ -826,6 +843,66 @@ import UIKit
         XCTAssertTrue(editor.waitForExistence(timeout: 5)); XCTAssertTrue(editor.value as? String == expected)
         capture("variables-04-restored-editor")
         XCTAssertEqual(try readSnapshot([String: String].self, from: try acceptanceDirectory(), file: "drafts.json"), expectedDrafts)
+    }
+
+    func testPreparedVariablesSurviveFailedSaveAndReturnToEditor() throws {
+        guard ProcessInfo.processInfo.environment["PROMPIX_VARIABLE_ACCEPTANCE"] == "1" else {
+            throw XCTSkip("Requires the backed-up production simulator and explicit variable acceptance opt-in.")
+        }
+        launch()
+        let id = "pc-f404f3161372c6cf4986"
+        let directory = try acceptanceDirectory()
+        let file = directory.appendingPathComponent("drafts.json")
+        let before = try Data(contentsOf: file)
+        let drafts = try JSONDecoder().decode([String: String].self, from: before)
+        XCTAssertNil(drafts[id + "::zh-Hans"])
+        let catalog = try readSnapshot(CatalogSnapshot.self, from: directory, file: "catalog.json")
+        let original = try XCTUnwrap(catalog.prompts.first { $0.id == id }?.localization?.translations["zh-Hans"]?.prompt)
+        let marker = "Kyoto recovery acceptance"
+        let expected = original.replacingOccurrences(of: "${city}", with: marker)
+        XCTAssertNotEqual(expected, original)
+        addTeardownBlock { @MainActor in
+            self.app.terminate()
+            if FileManager.default.fileExists(atPath: file.path) { try FileManager.default.removeItem(at: file) }
+            try before.write(to: file, options: .atomic)
+            XCTAssertEqual(try Data(contentsOf: file), before)
+        }
+        app.buttons["searchButton"].tap()
+        let search = app.searchFields.firstMatch
+        XCTAssertTrue(search.waitForExistence(timeout: 5)); search.tap(); search.typeText("旅行想法")
+        let card = app.scrollViews["searchResults"].buttons["prompt-\(id)"]
+        reveal(card); card.tap()
+        app.buttons["编辑后使用"].tap()
+        let editor = app.textViews["promptEditor"]
+        XCTAssertTrue(editor.waitForExistence(timeout: 5))
+        app.buttons["useEditedPrompt"].tap()
+        let prepare = app.buttons["preparePromptVariables"]
+        revealHandoff(prepare); prepare.tap()
+        let field = app.textFields["promptVariable-0"].exists ? app.textFields["promptVariable-0"] : app.textViews["promptVariable-0"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5)); field.tap(); field.typeText(marker)
+        try FileManager.default.removeItem(at: file)
+        try FileManager.default.createDirectory(at: file, withIntermediateDirectories: false)
+        app.buttons["applyPromptVariables"].tap()
+        let failure = app.staticTexts["preparedPromptSaveError"]
+        XCTAssertTrue(failure.waitForExistence(timeout: 5))
+        let edit = app.buttons["editPreparedPrompt"]
+        revealHandoff(edit); edit.tap()
+        XCTAssertTrue(app.buttons["handoffOpen"].waitForNonExistence(timeout: 5))
+        XCTAssertEqual(app.textViews.matching(identifier: "promptEditor").count, 1)
+        XCTAssertEqual(editor.value as? String, expected, "Explicitly returning to the same editor must retain the unsaved variables.")
+        let retry = app.buttons["retryDraftSave"]
+        XCTAssertTrue(retry.waitForExistence(timeout: 5))
+        capture("prepared-save-failure-retains-editor-buffer")
+        try FileManager.default.removeItem(at: file)
+        try before.write(to: file, options: .atomic)
+        retry.tap()
+        XCTAssertTrue(retry.waitForNonExistence(timeout: 5))
+        var saved = drafts; saved[id + "::zh-Hans"] = expected
+        XCTAssertEqual(try readSnapshot([String: String].self, from: directory, file: "drafts.json"), saved)
+        app.buttons["finishPromptEditing"].tap()
+        app.buttons["编辑后使用"].tap()
+        XCTAssertTrue(editor.waitForExistence(timeout: 5)); XCTAssertEqual(editor.value as? String, expected)
+        capture("prepared-save-recovery-restores-exact-draft")
     }
 
     func testPublishedTranslationCatchUp() throws {

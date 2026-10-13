@@ -51,7 +51,7 @@ struct PromptVariablesSheet: View {
                     }
                 }
             }
-            .safeAreaInset(edge: .bottom) {
+            .promptActionBar {
                 Button { onApply(prepared); dismiss() } label: {
                     PrimaryActionLabel(title: String(localized: "应用并继续"), compactTitle: String(localized: "应用"), symbol: "checkmark")
                 }.buttonStyle(.plain).padding(20).background(Palette.paper)
