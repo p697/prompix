@@ -747,6 +747,75 @@ import UIKit
     }
 
     /// Host supplies IDs from the reviewed release; third-party text stays outside Git.
+    func testPublishedTranslationCatchUp() throws {
+        let environment = ProcessInfo.processInfo.environment
+        guard let requested = environment["PROMPIX_TRANSLATION_ACCEPTANCE_IDS"],
+              let version = environment["PROMPIX_TRANSLATION_ACCEPTANCE_VERSION"] else {
+            throw XCTSkip("Requires an explicitly published translation edition on the dedicated simulator.")
+        }
+        let ids = requested.split(separator: ",").map(String.init)
+        XCTAssertFalse(ids.isEmpty)
+        let directory = try acceptanceDirectory()
+        let personalFiles = ["drafts.json", "favorites.json", "creators.json"]
+        let before = personalFiles.map { try? Data(contentsOf: directory.appendingPathComponent($0)) }
+        let drafts = try readSnapshot([String: String].self, from: directory, file: "drafts.json")
+        XCTAssertFalse(drafts.keys.contains { key in ids.contains { key == $0 || key.hasPrefix($0 + "::") } })
+        launch(online: true)
+        let refreshed = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            guard let current = try? self.acceptanceDirectory(),
+                  let catalog = try? self.readSnapshot(CatalogSnapshot.self, from: current, file: "catalog.json") else { return false }
+            return catalog.version == version
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [refreshed], timeout: 90), .completed)
+        let bytes = try Data(contentsOf: try acceptanceDirectory().appendingPathComponent("catalog.json"))
+        let catalog = try XCTUnwrap(JSONSerialization.jsonObject(with: bytes) as? [String: Any])
+        let prompts = try XCTUnwrap(catalog["prompts"] as? [[String: Any]])
+        for id in ids {
+            let item = try XCTUnwrap(prompts.first { $0["id"] as? String == id })
+            let title = try XCTUnwrap(item["title"] as? String)
+            for (locale, name) in [("zh-Hans", "简体中文"), ("en", "English")] {
+                app.terminate(); launch()
+                app.buttons["searchButton"].tap()
+                let search = app.searchFields.firstMatch
+                XCTAssertTrue(search.waitForExistence(timeout: 5))
+                search.tap(); search.typeText(title)
+                let card = app.scrollViews["searchResults"].buttons["prompt-\(id)"]
+                reveal(card); card.tap()
+                let language = app.buttons["contentLanguage"]
+                reveal(language); language.tap()
+                let choice = app.buttons["contentLanguage-\(locale)"]
+                XCTAssertTrue(choice.waitForExistence(timeout: 5)); choice.tap()
+                let ready = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+                    language.exists && language.label.contains(name)
+                }, object: nil)
+                XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 60), .completed)
+                XCTAssertFalse(app.otherElements["languageDownloadFailure"].exists)
+                let current = try readSnapshot(CatalogSnapshot.self, from: try acceptanceDirectory(), file: "catalog.json")
+                let expected = try XCTUnwrap(current.prompts.first { $0.id == id }?.localization?.translations[locale]?.prompt)
+                XCTAssertFalse(expected.isEmpty)
+                capture("translation-\(id)-\(locale)-detail")
+                reveal(app.buttons["editPrompt"]); app.buttons["editPrompt"].tap()
+                let editor = app.textViews["promptEditor"]
+                XCTAssertTrue(editor.waitForExistence(timeout: 5))
+                XCTAssertTrue(editor.value as? String == expected, "Editing must retain the complete selected-language body.")
+                capture("translation-\(id)-\(locale)-editor")
+                app.navigationBars.buttons["完成"].tap()
+                app.buttons["copyPrompt"].tap()
+                XCTAssertTrue(app.buttons["copyPrompt"].label.contains("已复制"))
+                let evidence = XCTAttachment(string: expected)
+                evidence.name = "translation-\(id)-\(locale)-expected-clipboard"
+                evidence.lifetime = .keepAlways; add(evidence)
+            }
+        }
+        app.terminate(); launch()
+        let current = try acceptanceDirectory()
+        let downloaded = try readSnapshot(LanguagePackIndexSnapshot.self, from: current, file: "language-packs.json")
+        XCTAssertTrue(Set(["zh-Hans", "en"]).isSubset(of: Set(downloaded.downloadedLocales.keys)))
+        for (index, name) in personalFiles.enumerated() {
+            XCTAssertEqual(try? Data(contentsOf: current.appendingPathComponent(name)), before[index], name)
+        }
+    }
+
     func testPublishedEditorialBatch() throws {
         guard let requested = ProcessInfo.processInfo.environment["PROMPIX_EDITORIAL_ACCEPTANCE_IDS"] else {
             throw XCTSkip("Requires a reviewed live batch on the dedicated simulator.")
