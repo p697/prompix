@@ -1,6 +1,6 @@
 # 首版商店与审核准备
 
-更新：2026-10-12。当前签名候选为 **0.3.2（9）**，原生 iPhone / iPad App，本地归档与IPA审计见[交付记录](quality-release.md)。Granola 方向的此前视觉、旧目录升级与功能检查见 [0.3.1 验收](acceptance-0.3.1.md)。用户尚未验收这次新视觉；本文和准备好的素材不代表用户批准上架，也不代表已上传、提交审核或获得编辑推荐。
+更新：2026-10-13。当前本地签名候选为 **0.4.7（18）**，使用 iOS 27.1 RC SDK；归档、开发安装包和 App Store 分发包的核对见[当前发行记录](release-0.4.7.md)。最新用户手机阶段包仍为 **0.4.6（17）**，本轮没有重新安装。Duo 模拟器候选的实际范围与拼音跨屏限制见 [Duo 验收](iphone-duo.md)。本文和本地材料不代表用户批准上架，也不代表已上传、通过 Apple 服务端验证、提交审核或获得编辑推荐。
 
 ## 九语言商店文案
 
@@ -32,7 +32,7 @@
 
 支持入口为 `support@prompix.dev`，无需 Prompix 或 GitHub 账号。该地址经 Cloudflare Email Routing 转发到项目负责人的既有已验证邮箱；路由与 DNS 已核对，实际邮件投递仍未用测试邮件验证。它不能自动代替 App Store Connect 要求的审核联系人姓名、邮箱与国际格式电话。
 
-## App Store 分发包
+## 历史 App Store 分发包（0.3.2）
 
 2026-10-12 从既有 0.3.2（9）归档成功导出 App Store Connect 分发 IPA，未重新编译或更改版本号。导出选项为 `method=app-store-connect`、`destination=export`、`manageAppVersionAndBuildNumber=false`，使用 Cloud Managed Apple Distribution 签名。该操作只生成本地包，不上传或提交审核；Apple 将这种导出与上传明确区分，见[分发导出说明](https://help.apple.com/xcode/mac/current/en.lproj/dev23ea8b877.html)。
 
@@ -55,9 +55,11 @@ Suggested review path:
 4. Choose Video and tap a preview. Playback is user-initiated.
 5. Choose Website and open an example. WebKit displays bundled first-party demonstrations; the reviewed community website example opens in the system browser.
 6. Open a creator from Discover, browse collected works, save the creator and find them in Favorites.
-7. Select Skills to read source instructions, files and usage guidance.
+7. Choose Use Prompt to edit the current text, optionally fill recognized variables, copy or share it, and open a suitable external tool. Only documented tool links prefill text; Prompix never sends it automatically. Skills show pinned source files and, where supported, an installation command for a compatible external coding assistant. Prompix does not execute that command.
 8. Switch a detail between an available AI translation and the original. Copy and edit use the selected language; each language has its own local draft.
 9. Open Settings for support and privacy, or an item's report link for content feedback.
+
+On iPhone Duo with iOS 27.1, open and close the device while browsing. Expanded media details place reading and the preview side by side. The current candidate preserves the text buffer, but uncommitted Pinyin candidates may end when switching displays; this limitation remains under investigation. Simulator records do not establish physical-device performance.
 
 Public video test stream: https://api.prompix.dev/media/de4abcd733bca4bca95cdb6e9e86c6ef8ab4153acf93b1b29bb2784b356838ef.mp4
 
@@ -140,7 +142,7 @@ Content is editorially selected from allowlisted sources and published as a revi
 
 发行阶段才集中确认以下真实信息，不从 Git 作者、设备名或域名持有人推断：
 
-1. 用户对当前 0.3.2 新视觉与产品的验收，以及是否正式提交审核。
+1. 用户对当前 0.4.7 产品、Duo 实际演示及已知限制的验收，以及是否正式提交审核。
 2. Apple Developer 账号中的发行主体、版权权利人及年份、可响应的审核联系人姓名／邮箱／国际电话。
 3. 最终发行地区、商店主语言与分类；EU trader 状态依据实际经营事实填写，不能因免费就自动选择 non-trader。若选择欧盟并属于 trader，按账号要求提供／验证联系方式及所需资料。[Apple EU trader 要求](https://developer.apple.com/help/app-store-connect/manage-compliance-information/manage-european-union-digital-services-act-trader-requirements/)
 4. 账号实际提示的协议或资料缺口。没有 IAP 不意味着任意账户合规字段都可跳过，也不提前假设全部收费产品收款手续是本 App 阻断项。
