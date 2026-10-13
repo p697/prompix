@@ -525,8 +525,6 @@ struct PromptEditor: View {
                     Button(String(localized: "放弃本次修改并退出"), role: .destructive) { leaveWithoutSaving() }
                         .accessibilityIdentifier("discardDraftAndLeave")
                     Button(String(localized: "继续编辑"), role: .cancel) {}
-                } message: {
-                    Text(String(localized: "退出后将保留上一次成功保存的草稿。你可以先复制本次修改，再离开编辑器。"))
                 }
         }
         .interactiveDismissDisabled(!saved || text != library.draft(for: item, language: language))

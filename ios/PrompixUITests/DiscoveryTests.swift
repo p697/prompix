@@ -528,8 +528,10 @@ import UIKit
                 try require(action.isHittable && visibleFrame(of: action).contains(action.frame),
                             "Both recovery choices must be visible inside the confirmation window")
             }
-            if app.buttons["继续编辑"].firstMatch.exists {
-                app.buttons["继续编辑"].firstMatch.tap()
+            let continueEditing = app.alerts["本次修改尚未保存"].buttons["继续编辑"]
+            try require(continueEditing.isHittable, "The safe Continue Editing choice must remain directly reachable")
+            if app.alerts["本次修改尚未保存"].exists {
+                app.alerts["本次修改尚未保存"].buttons["继续编辑"].tap()
             } else {
                 try dismissUnsavedDraftPopover()
             }
@@ -549,8 +551,8 @@ import UIKit
         capture("acceptance-write-failure-buffer-protected")
         app.buttons["leaveUnsavedDraft"].tap()
         capture("acceptance-write-failure-leave-dialog")
-        if app.buttons["继续编辑"].exists {
-            app.buttons["继续编辑"].tap()
+        if app.alerts["本次修改尚未保存"].exists {
+            app.alerts["本次修改尚未保存"].buttons["继续编辑"].tap()
         } else {
             // Native popover presentations omit the cancel row; tapping outside cancels.
             try dismissUnsavedDraftPopover()
