@@ -681,7 +681,7 @@ import UIKit
             throw XCTSkip("Run on the backed-up production simulator with the largest accessibility text size.")
         }
         XCTAssertEqual(UIApplication.shared.preferredContentSizeCategory, .accessibilityExtraExtraExtraLarge)
-        let personal = try performancePersonalState()
+        let personal = try handoffPersonalState()
         for locale in ["zh-Hans", "de", "ja"] {
             for skill in [false, true] {
                 try openHandoffCard(skill ? "skill-publisher-supabase-supabase" : "quiet-portfolio",
@@ -721,7 +721,7 @@ import UIKit
                 app.terminate()
             }
         }
-        XCTAssertEqual(try performancePersonalState(), personal)
+        XCTAssertEqual(try handoffPersonalState(), personal)
     }
 
     func testSkillHandoffVoiceOverTraversal() throws {
@@ -1356,6 +1356,24 @@ import UIKit
             XCTAssertNotEqual(app.buttons["copyPrompt"].label, beforeCopy)
             app.terminate()
         }
+    }
+
+    private func handoffPersonalState() throws -> [String: Data] {
+        var state = try performancePersonalState()
+        if let data = state["favorites.json"] {
+            var favorites = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [[String: Any]])
+            for index in favorites.indices {
+                if var localization = favorites[index]["localization"] as? [String: Any] {
+                    // Switching interface languages refreshes derived translations.
+                    // Preserve strict checks for order, identity, original content,
+                    // source fingerprint and every other saved field, plus draft bytes.
+                    localization.removeValue(forKey: "translations")
+                    favorites[index]["localization"] = localization
+                }
+            }
+            state["favorites.json"] = try JSONSerialization.data(withJSONObject: favorites, options: [.sortedKeys])
+        }
+        return state
     }
 
     private func performancePersonalState() throws -> [String: Data] {

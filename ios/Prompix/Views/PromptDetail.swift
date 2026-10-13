@@ -389,7 +389,7 @@ struct PromptDetail: View {
 
 private struct StablePromptEditor: View {
     @Binding var text: String
-    @FocusState private var focused: Bool
+    @FocusState.Binding var focused: Bool
 
     var body: some View {
         // Preserve the editing task while UIKit manages selection and marked input.
@@ -418,6 +418,7 @@ struct PromptEditor: View {
     @State private var leavingWithoutSaving = false
     @State private var variablesPresented = false
     @State private var headerHeight: CGFloat?
+    @FocusState private var editorFocused: Bool
     init(item: Prompt, language: String? = nil, initialText: String? = nil, onSave: ((String) -> Bool)? = nil) {
         self.item = item; self.language = language; self.initialText = initialText; self.onSave = onSave
         _text = State(initialValue: initialText ?? item.content(in: language).prompt)
@@ -433,7 +434,7 @@ struct PromptEditor: View {
                     }
                     .frame(height: min(headerHeight ?? geometry.size.height * 0.45, max(0, geometry.size.height * 0.45)))
                     .accessibilityIdentifier("draftStatusScroll")
-                    StablePromptEditor(text: $text)
+                    StablePromptEditor(text: $text, focused: $editorFocused)
                         .font(.body).scrollContentBackground(.hidden).padding(.horizontal, 16)
                         .frame(maxHeight: .infinity).accessibilityIdentifier("promptEditor")
                 }
@@ -561,7 +562,10 @@ struct PromptEditor: View {
     private var saveRecoveryActions: some View {
         Group {
             Button(String(localized: "重试保存")) { save() }.accessibilityIdentifier("retryDraftSave")
-            Button(String(localized: "退出编辑")) { leavePresented = true }.accessibilityIdentifier("leaveUnsavedDraft")
+            Button(String(localized: "退出编辑")) {
+                editorFocused = false
+                leavePresented = true
+            }.accessibilityIdentifier("leaveUnsavedDraft")
         }.buttonStyle(.bordered).controlSize(.large)
     }
     private func copyEdits() {
