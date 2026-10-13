@@ -288,3 +288,13 @@ iPhone 18 Pro 连续五屏浏览及每屏详情返回位置通过，五张截图
 Release 模拟器构建成功，独立扫描确认故障注入参数、协议类名、恢复标记均未进入 Release App；同次 Debug App 中存在这些标识。故障注入不会改变普通启动或发行构建。未安装用户手机。
 
 证据目录 `/Volumes/Lucy-SSD/Prompix-Codex/Evidence/cached-network-recovery/` 包含 `network.xcresult`（模型测试及首次流程）、`network-handoff.xcresult`（最终交接流程）、截图、剪贴板、`preservation.json` 和 `release-exclusion.json`。这是 HTTP(S) URLSession 故障下的缓存文本使用与真实生产重试证据；没有模拟 OS 飞行模式，也未覆盖 AVPlayer、外部 App、慢网、视频离线或全部语言，不能据此关闭完整离线关口。
+
+## 视频播放中断与同地址恢复（2026-10-14）
+
+独立 iPad Pro 11-inch（M5）／iOS 27.0 模拟器上的定向验收 **69.298 秒通过**，一项测试、零失败、零跳过，结果包没有运行时警告。未改播放器代码；新增显式启用的测试，正常 CI 不连接测试服务。
+
+使用原创40秒、音视频交错存储的MP4，通过临时HTTPS服务在完整样本边界停传。可见AVKit播放器实际解码至19.8667秒，播放时钟停在19.9016秒；直接暂停9秒不会触发8秒测试超时。继续播放后重新进入等待，8.1456秒后由应用期限判定失败，AVPlayerItem仍为ready且无错误。恢复服务后以**同一URL**重新开始，实际解码到20.7333秒，越过此前被扣留的内容；生产期限仍为25秒。
+
+证据保存在外置盘 `Prompix-Codex/Evidence/video-interleaved-20261013/`：`acceptance-control-fixed.xcresult`、解码轨迹、HTTP字节范围记录、原生播放器截图、个人文件校验和`REPRODUCE.md`。早先`acceptance.xcresult`在恢复控制请求上发生网络连接丢失，尚未执行播放器重试；该失败保留，不当作播放器缺陷。控制接口改为明确的200及状态正文、使用独立临时URLSession后完成本次通过。
+
+测试后草稿、内容收藏、创作者收藏与原始字节一致；临时服务及独立模拟器已关闭，用户Duo验收包和手机未动。本次证明此类渐进式MP4的播放器状态与恢复，不代表实际重试按钮手势、完整飞行模式或真机性能通过。
