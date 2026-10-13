@@ -387,6 +387,19 @@ struct PromptDetail: View {
 
 }
 
+@available(iOS 18, *)
+private struct SelectionPreservingPromptEditor: View {
+    @Binding var text: String
+    @State private var selection: TextSelection?
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        // Keep selection with the editing task when a sheet moves between displays.
+        TextEditor(text: $text, selection: $selection)
+            .focused($focused)
+    }
+}
+
 struct PromptEditor: View {
     let item: Prompt
     let language: String?
@@ -422,7 +435,13 @@ struct PromptEditor: View {
                     }
                     .frame(height: min(headerHeight ?? geometry.size.height * 0.45, max(0, geometry.size.height * 0.45)))
                     .accessibilityIdentifier("draftStatusScroll")
-                    TextEditor(text: $text).font(.body).scrollContentBackground(.hidden).padding(.horizontal, 16)
+                    Group {
+                        if #available(iOS 18, *) {
+                            SelectionPreservingPromptEditor(text: $text)
+                        } else {
+                            TextEditor(text: $text)
+                        }
+                    }.font(.body).scrollContentBackground(.hidden).padding(.horizontal, 16)
                         .frame(maxHeight: .infinity).accessibilityIdentifier("promptEditor")
                 }
             }.paperScreen().navigationTitle(String(localized: "编辑 Prompt")).navigationBarTitleDisplayMode(.inline)
