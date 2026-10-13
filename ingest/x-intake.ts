@@ -184,7 +184,10 @@ export function extractMarkedXPrompt(post: XPost, media: readonly XMedia[] = [],
   if (/https?:\/\/(?:www\.)?t\.co\//i.test(body)) return { reason: "unresolved-short-link" };
   if (body.replace(/https?:\/\/\S+/g, "").trim().length < 20) return { reason: "insufficient-instructions" };
   if (body.length > 30000) return { reason: "instructions-too-long" };
-  const modality = inferModality(label, context ? fullXText(context.post).text + "\n" + text : text, body, context?.post ?? post, context?.media ?? media);
+  // Match the media owner used by thread candidates. Root prose still supplies
+  // context, but root attachments cannot override a reply's own verified media.
+  const mediaSource = verifiedMedia(post, media).length ? { post, media } : context ?? { post, media };
+  const modality = inferModality(label, context ? fullXText(context.post).text + "\n" + text : text, body, mediaSource.post, mediaSource.media);
   return "reason" in modality ? modality : { body, ...modality };
 }
 

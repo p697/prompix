@@ -220,6 +220,8 @@ next publication integration step.
 
 `x-thread-intake.ts` replays only completed, fingerprint-checked API pagination windows. Reply IDs and bodies remain independent from root media and ordered ancestor context. Fresh lookups must include every dependency; partial checks withhold older approvals, unavailable dependencies withdraw every affected item, and source changes invalidate exact-revision editorial reviews. `PROMPIX_X_AVAILABILITY_MAX_REQUESTS` defaults to 2 and accepts 0–4 requests per UTC day; existing reservations count toward a changed cap. Every lookup contains at most 100 unique post IDs, including ancestors. No additional OpenLab collection or third-party paste crawling is introduced.
 
+When instructions and model context do not establish a modality, attachment inference follows the same owner as the candidate preview: verified reply media first, root media only when the reply has none. A mixed image/video reply stays ambiguous; unrelated or unsafe attachments do not displace verified root media. This does not change source, editorial or preview approval requirements.
+
 ### Official publisher package discovery
 
 `publisher-skills.ts` discovers public one-level packages in `expo/skills` (`plugins/expo/skills`), `supabase/agent-skills` (`skills`), and author-maintained `coreyhaines31/marketingskills` (`skills`). A pinned recursive Git tree supplies file inventory and nearest license; entry and license bytes must match their Git blobs. No source instructions or scripts execute. `publisher-skill-daily.ts` persists six-hour per-publisher attempts, candidates and evidence outside Git; failed refreshes retain prior pinned candidates. Both daily publication and `collect:skills` include these sources.
