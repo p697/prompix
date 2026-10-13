@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { catalogSchema } from "../packages/schema/catalog.ts";
-import { attachTranslations, emptyTranslationCache, inheritPreviousTranslations, localizePrompt, promptSegments, protectText, restoreText, translationFingerprint, validLocalizedText, validateSegment } from "./translation.ts";
+import { attachTranslations, emptyTranslationCache, inheritPreviousTranslations, localizePrompt, promptSegments, protectText, restoreText, translationLocales, translationFingerprint, validLocalizedText, validateSegment } from "./translation.ts";
 import { translationBatches, runTranslations } from "./translation-runner.ts";
 import { TranslationProviderError } from "./translation-provider.ts";
 
@@ -539,10 +539,60 @@ process.stdin.on("end", () => {
     assert.equal(result.report.status, "updated"); assert.equal(result.report.attempted, 36);
     assert.equal(result.report.measuredUSD, null);
     assert.equal(await readFile(callsPath, "utf8"), "called\n");
-    const repeat = await prepareDailyTranslations([item], root, environment);
+    const repeat = await prepareDailyTranslations([item], root, { ...environment, PROMPIX_TRANSLATION_LOCALES: "zh-Hans,en" });
     assert.equal(repeat.report.attempted, 36); assert.equal(await readFile(callsPath, "utf8"), "called\n");
     const saved = JSON.parse(await readFile(ledgerPath, "utf8"));
     assert.equal(saved.inputTokens, 120); assert.equal(saved.outputTokens, 60);
     assert.equal(saved.day, day);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+
+test("daily translation rejects invalid locale selections before invoking a provider", async () => {
+  const { mkdtemp, rm } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const { prepareDailyTranslations } = await import("./translation-daily.ts");
+  const root = await mkdtemp(join(tmpdir(), "prompix-translation-locales-"));
+  try {
+    for (const locales of ["", "en,en", "en,", "zh", "en,unknown"]) {
+      const result = await prepareDailyTranslations([item], root, {
+        PROMPIX_TRANSLATION_PROVIDER: "codex", PROMPIX_CODEX: "/must-not-run", PROMPIX_TRANSLATION_LOCALES: locales,
+      });
+      assert.equal(result.report.status, "failed");
+      assert.match(result.report.error!, /distinct supported locale codes/);
+      assert.deepEqual(Object.keys(result.report.coverage), [...translationLocales]);
+    }
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+
+test("daily translation sends only selected locales and keeps cached other languages", async () => {
+  const { mkdtemp, mkdir, writeFile, rm, chmod } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const { prepareDailyTranslations } = await import("./translation-daily.ts");
+  const root = await mkdtemp(join(tmpdir(), "prompix-translation-selection-"));
+  try {
+    await mkdir(join(root, "translations"));
+    await writeFile(join(root, "translations/cache.json"), JSON.stringify(fillCache("en")));
+    const executable = join(root, "provider.cjs"), calls = join(root, "calls.jsonl");
+    await writeFile(executable, `#!${process.execPath}
+const fs = require("node:fs"); let input = "";
+process.stdin.on("data", chunk => input += chunk);
+process.stdin.on("end", () => {
+  const request = JSON.parse(input.trim().split("\\n").at(-1));
+  fs.appendFileSync(${JSON.stringify(calls)}, request.locale + "\\n");
+  fs.writeFileSync(process.argv[process.argv.indexOf("--output-last-message") + 1], JSON.stringify({ translations: [] }));
+});
+`);
+    await chmod(executable, 0o700);
+    const result = await prepareDailyTranslations([item], root, {
+      PROMPIX_TRANSLATION_PROVIDER: "codex", PROMPIX_CODEX: executable,
+      PROMPIX_TRANSLATION_LOCALES: " zh-Hans ", PROMPIX_TRANSLATION_MAX_REQUESTS: "1",
+    });
+    assert.equal(result.report.status, "updated"); assert.equal(result.report.attempted, 1);
+    assert.equal(await readFile(calls, "utf8"), "zh-Hans\n");
+    assert.equal(result.report.coverage.en, 1);
   } finally { await rm(root, { recursive: true, force: true }); }
 });
