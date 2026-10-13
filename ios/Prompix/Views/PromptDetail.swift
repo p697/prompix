@@ -446,6 +446,16 @@ struct PromptEditor: View {
                 }
             }.paperScreen().navigationTitle(String(localized: "编辑 Prompt")).navigationBarTitleDisplayMode(.inline)
                 .toolbar {
+                    if #available(iOS 27.1, *) {
+                        ToolbarItem(placement: .bottomBar) {
+                            Button(action: copyEdits) {
+                                Label(copied ? String(localized: "已复制修改后的 Prompt") : String(localized: "复制修改后的 Prompt"),
+                                      systemImage: copied ? "checkmark" : "doc.on.doc")
+                            }.accessibilityIdentifier("copyEditedPrompt")
+                                .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                                .sensoryFeedback(.success, trigger: copied)
+                        }
+                    }
                     ToolbarItem(placement: .cancellationAction) {
                         Button(String(localized: "完成")) { if save() { dismiss() } }.accessibilityIdentifier("finishPromptEditing")
                     }
@@ -484,15 +494,14 @@ struct PromptEditor: View {
                     }
                 }
                 .promptActionBar {
-                    Button {
-                        UIPasteboard.general.string = text; copied = true
-                        save()
-                    } label: {
-                        PrimaryActionLabel(title: copied ? String(localized: "已复制修改后的 Prompt") : String(localized: "复制修改后的 Prompt"),
-                            compactTitle: copied ? String(localized: "已复制") : String(localized: "复制"), symbol: copied ? "checkmark" : "doc.on.doc")
-                    }.buttonStyle(.plain).accessibilityIdentifier("copyEditedPrompt")
-                        .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                        .padding().background(Palette.paper).sensoryFeedback(.success, trigger: copied)
+                    if #unavailable(iOS 27.1) {
+                        Button(action: copyEdits) {
+                            PrimaryActionLabel(title: copied ? String(localized: "已复制修改后的 Prompt") : String(localized: "复制修改后的 Prompt"),
+                                compactTitle: copied ? String(localized: "已复制") : String(localized: "复制"), symbol: copied ? "checkmark" : "doc.on.doc")
+                        }.buttonStyle(.plain).accessibilityIdentifier("copyEditedPrompt")
+                            .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                            .padding().background(Palette.paper).sensoryFeedback(.success, trigger: copied)
+                    }
                 }
                 .onAppear {
                     guard !initialized else { return }
@@ -560,6 +569,11 @@ struct PromptEditor: View {
             Button(String(localized: "重试保存")) { save() }.accessibilityIdentifier("retryDraftSave")
             Button(String(localized: "退出编辑")) { leavePresented = true }.accessibilityIdentifier("leaveUnsavedDraft")
         }.buttonStyle(.bordered).controlSize(.large)
+    }
+    private func copyEdits() {
+        UIPasteboard.general.string = text
+        copied = true
+        save()
     }
     @discardableResult private func save() -> Bool {
         guard !leavingWithoutSaving else { return false }

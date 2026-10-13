@@ -21,6 +21,11 @@ import UIKit
     private func selectTab(_ title: String) {
         app.selectPrompixTab(title)
     }
+    private func visibleFrame(of element: XCUIElement) -> CGRect {
+        let window = app.windows.containing(.any, identifier: element.identifier).firstMatch
+        let bounds = window.exists ? window.frame : app.frame
+        return element.frame.intersection(bounds).intersection(app.frame)
+    }
     // Run with a Release configuration; record simulator and device results separately.
     // These are process launches, not a claim of empty OS caches or a reboot.
     func testRepeatedLaunchPerformance() {
@@ -449,10 +454,20 @@ import UIKit
         if ProcessInfo.processInfo.environment["PROMPIX_DRAFT_LAYOUT_ONLY"] == "1" {
             capture("acceptance-write-failure-largest-text")
             let copyFrame = app.buttons["copyEditedPrompt"].frame
-            let visibleEditorHeight = max(0, min(app.frame.maxY, copyFrame.minY) - editor.frame.minY)
-            let layout = XCTAttachment(string: "Preferred body font: \(UIFont.preferredFont(forTextStyle: .body).pointSize); editor frame: \(editor.frame); copy frame: \(copyFrame); visible editor height above copy: \(visibleEditorHeight); retry frame: \(app.buttons["retryDraftSave"].frame); leave frame: \(app.buttons["leaveUnsavedDraft"].frame)")
+            let editorFrame = visibleFrame(of: editor)
+            let keyboard = app.keyboards.firstMatch
+            let keyboardFrame = keyboard.exists ? keyboard.frame.intersection(app.frame) : CGRect.null
+            let keyboardOverlap = editorFrame.intersection(keyboardFrame)
+            // Measure a contiguous, full-width text area. A native Copy action
+            // can be in a side toolbar and does not define the editor's bottom.
+            let visibleEditorHeight = editorFrame.isNull || editorFrame.isEmpty ? 0 :
+                keyboardOverlap.isNull || keyboardOverlap.isEmpty ? editorFrame.height :
+                max(keyboardOverlap.minY - editorFrame.minY, editorFrame.maxY - keyboardOverlap.maxY)
+            let lineHeight = UIFont.preferredFont(forTextStyle: .body).lineHeight
+            let layout = XCTAttachment(string: "Preferred body font: \(UIFont.preferredFont(forTextStyle: .body).pointSize); editor frame: \(editor.frame); window-clipped editor frame: \(editorFrame); keyboard frame: \(keyboardFrame); copy frame: \(copyFrame); unobscured editor height: \(visibleEditorHeight); required line height: \(lineHeight); retry frame: \(app.buttons["retryDraftSave"].frame); leave frame: \(app.buttons["leaveUnsavedDraft"].frame)")
             layout.name = "Largest-text recovery layout"; layout.lifetime = .keepAlways; add(layout)
-            try require(editor.isHittable && visibleEditorHeight >= UIFont.preferredFont(forTextStyle: .body).lineHeight, "Failure state must retain at least one full editor line above the fixed copy action")
+            try require(editor.isHittable && !editorFrame.isNull && editorFrame.width >= lineHeight && visibleEditorHeight >= lineHeight,
+                        "Failure state must retain at least one full editor line inside its window and clear of the visible keyboard")
             let header = app.scrollViews["draftStatusScroll"]
             try require(header.waitForExistence(timeout: 5), "Recovery header must scroll independently")
             func reveal(_ button: XCUIElement) throws {
@@ -567,16 +582,24 @@ import UIKit
         app.buttons["prompt-gentle-tarot"].tap()
         try auditScreen("text-detail")
         let report = app.descendants(matching: .any).matching(identifier: "reportContent").firstMatch
-        let contentBottom = app.buttons["copyPrompt"].frame.minY - 16
+        let readingPane = app.scrollViews["detailReadingPane"]
         func sourceIsVisible() -> Bool {
-            report.exists && report.isHittable && report.frame.minY > 100 && report.frame.maxY < contentBottom
+            guard report.exists, report.isHittable else { return false }
+            let viewport = readingPane.exists ? visibleFrame(of: readingPane) : app.frame
+            guard !viewport.isNull, viewport.contains(report.frame) else { return false }
+            let controls = ["copyPrompt", "usePrompt", "editPromptAction", "detailFavorite", "sharePrompt"].map { app.buttons[$0] }
+            let bars = app.navigationBars.allElementsBoundByIndex + app.toolbars.allElementsBoundByIndex
+            return !(controls + bars).contains { obstacle in
+                obstacle.exists && !obstacle.frame.isEmpty && obstacle.frame.intersects(report.frame)
+            }
         }
         for _ in 0..<30 {
             if sourceIsVisible() { break }
-            app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.7))
-                .press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.4)))
+            let viewport: XCUIElement = readingPane.exists ? readingPane : app
+            viewport.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.7))
+                .press(forDuration: 0.05, thenDragTo: viewport.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.4)))
         }
-        XCTAssertTrue(sourceIsVisible(), "Source actions must be visible above the fixed action bar before auditing")
+        XCTAssertTrue(sourceIsVisible(), "Source actions must be fully inside the reading pane and clear of native bars and actions before auditing")
         try auditScreen("text-detail-source")
         if app.buttons["detailFavorite"].label != "取消收藏" { app.buttons["detailFavorite"].tap() }
         app.buttons["编辑后使用"].tap()
