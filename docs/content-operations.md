@@ -2,12 +2,13 @@
 
 ## 本机运行
 
-- 任务：`dev.prompix.collect`，每天本机时间 08:00；当前 Mac 为 Asia/Tokyo。
+- 任务：`dev.prompix.collect`，每天本机时间 02:00／08:00／14:00／20:00；当前 Mac 为 Asia/Tokyo。
 - 安装／升级：在已校验的 checkout 运行 `python3 scripts/install-scheduler.py`。脚本先安装独立运行目录，再原子切换 runtime 链接和重新注册 launchd；只有注册成功后才执行旧运行目录的保留策略。
 - 手动执行：`launchctl kickstart gui/$(id -u)/dev.prompix.collect`。
 - 状态：`launchctl print gui/$(id -u)/dev.prompix.collect`。
 - 日志：`~/.local/share/prompix/daily.log`，超过 1 MB 保留一份 previous。
-- 结果：`~/.local/share/prompix/content/status.json`，包含逐来源成功／失败、版本、媒体失败列表。
+- 结果：`~/.local/share/prompix/content/status.json`，包含逐来源成功／失败、版本、媒体失败列表。须核对本次起止时间、launchd退出码和日志；状态写入失败会留下旧成功记录。
+- 存储：上述 content 路径现链接到外接 SSD 的 `Prompix-Codex/Data/content`；保持 SSD 挂载，base 与 runtimes 仍留在本机真实目录。
 - 本地预览：`npm run daily`；人工发布：`npm run daily -- --publish`。
 - 下架：`npm run remove -- <id> <reason>`，再发布。不得将包含第三方内容的 JSON、媒体或日志提交到仓库。
 
@@ -23,7 +24,9 @@ launchd 是用户任务，须登录该用户；关机时不会运行。内容进
 
 2026-10-11 已在付款设置完成后通过已安装的 launchd 任务验证 X：成功获取 10 条发现记录并持久化增量游标。原帖保存在内容目录的 `x-discovery/YYYY-MM-DD.json`；一次搜索成功不代表这些帖子已出现在 App。后续运行保留当天请求名额，不重复付费读取。搜索是否成功须检查 `status.json` 的 `sources.x`，不能只看任务退出码。
 
-### X 发现与原生草稿
+### 历史 X 发现与原生草稿（0.2 阶段）
+
+以下保留早期实现记录。当前多主题发现、公开回复、来源复查、原文选段及发布已上线，以[独立管线](independent-pipeline.md)及本文后续运行记录为准。
 
 X 搜索现在聚焦五位已收录创作者，并检索英文、中文、日文的 Prompt 标记；仍限每天一次请求、最多10条，不抓网页、不自动分页或重试。查询、字段集、端点、排序与数量共同形成指纹，增量游标写入 `x-state.json.cursors[指纹]`。历史无指纹游标不会套到新查询；全局 `day` 名额独立保留，切换查询不能增加当日请求。
 
@@ -39,7 +42,7 @@ X 搜索现在聚焦五位已收录创作者，并检索英文、中文、日文
 
 X 凭据从 `~/.config/prompix/x.env` 加载，文件权限 0600，只包含变量 `X_BEARER_TOKEN`。无需把 Key 发到聊天、App 或 GitHub。账号充值／付款方式由用户完成，自动充值没有启用。
 
-当前 X 发现策略最多每天 10 条返回帖子、一次请求；[官方按量价格](https://docs.x.com/x-api/getting-started/pricing)列出 Posts Read 为每条 $0.005，预计上限约 $0.05／天（不包含未来价格变化或另行启用的资源）。实际以控制台账单为准。失败尝试也占用本机当天名额，避免异常重试花费；人工重试前检查 `x-state.json` 和控制台用量。
+当前本机 X 搜索预算为每日 12 请求／600 帖，来源复查另为 2 请求／200 帖；所有定时和手动运行共用持久账本。请求前即预留，失败或结果未决不清零、不自动重试；实际费用以 X 控制台为准，不能沿用早期一次10帖的预算估算。
 
 Cloudflare 上传显式使用 `services/content/wrangler.jsonc` 中指定的项目账号，避免登录多个账号后后台任务无法选择。使用本机已授权的 Wrangler OAuth；过期后若刷新失败，重新 `wrangler login`，无需将 OAuth 凭据复制到项目。Worker 通过 R2 binding 读取，不携带发布密钥。Cloudflare 套餐按当前账号计费，不默认启用付费增值产品。
 
@@ -336,3 +339,17 @@ PR70 合并后已安装到 Mac 的版本化定时运行副本；按正常内容�
 这两次运行证明上述条目与语言流程，不代表全部465条逐句翻译审读、Skill在目标工具中的实际执行、进行中的0.4.7编辑器改动或iPhone Duo验收。未安装用户手机。原始证据保存在仓库外 `/Volumes/Lucy-SSD/Prompix-Codex/Evidence/everyday-skills-2/`，包括 `publication-acceptance.json`、`deployment.json`、`publish-result.json`、两份UI结果摘要和xcresult、两份宿主剪贴板核对及 `final-other-ledgers.json`；第三方正文、媒体、译文及个人数据不进入Git。
 
 此批次已收尾，不继续手工扩展下一批内容。日常采集与补译交给既有定时主链；研发主线转向原生发现、详情、编辑／使用和Duo的实际交互验收，内容数量增长不再代替产品交付进度。
+
+## 2026-10-13：采集存储迁移与一次手动恢复
+
+只读运行审计发现：08:00 JST 的自然运行有成功报告，14:00 的任务在 14:20 因 `ENOSPC` 写 `status.json.*.tmp` 失败；旧状态文件仍显示 10:42 的手动成功。必须结合 launchd 退出码和日志判断，不能把旧 `published=true` 当成最近排程成功。此次状态写入失败也可能遮住原异常，不猜测更早失败阶段。
+
+在确认无运行进程、内容／模型锁和打开句柄后，持有独占 runtime guard 与内容锁，仅把 `~/.local/share/prompix/content` 迁到外接 SSD 的 `Prompix-Codex/Data/content`，原路径保留链接。1,689 个文件共 514,805,084 字节逐个 SHA-256 一致；完整可回退副本保存在 `RecoverableCaches/content-before-ssd-20261013`。base、runtimes、调度时刻和凭据配置不变。SSD 须保持挂载，不创建内部空目录替代缺失的外置数据。
+
+随后通过原调度入口完成一次手动恢复（07:58:41–08:04:45 UTC，退出 0），临时清空 X bearer 和三个模型 provider，关闭作者付费查询。九份付费日账本和一份来源可用性状态文件与迁移前完全一致；编辑账本保留的一次结果未决请求不重置、不重试。
+
+恢复发布 `edition-v2-233bb1151fbd5ce9`：**528 条、71 个 Skill、242 个创作者身份**。新增来自此前已存在的审核记录：46 条 prompts.chat 文本、15 个 Expo Skill、1 个 Supabase Skill 和 1 个 ClawHub Skill。本次没有新增模型审批。旧 465 条全部保留，其中 116 条 prompts.chat 的来源 revision 与固定版本 URL 更新，其余字段不变；移除墓碑不变。旧 v1 仍按容量策略冻结在 455 条。
+
+线上 v1／v2 哈希、完整下载、条件请求、HEAD、视频 Range、九语包和全量拼装检查通过。中英文完整译文仍各为 465 条，新增 63 条沿用原文；其余七语仍为 375–377 条，不称为全库九语完成。一个未发布视频候选因下载体积上限暂缓，四个作者头像请求失败采用既有回退，未为了扩量放宽审核条件。
+
+证据位于开发机 SSD 的 `Evidence/collector-storage-20261013/`：`migration.json`、`before.json`、`recovery.json`、`all-paid-ledgers-verification.json`、`published-delta.json`、`deployment-check.log` 和原运行日志。**这是手动恢复成功，不是下一次自然排程通过**；launchd 最近自然退出仍为 1，继续等真实定时触发的结果再关闭排程验收。本轮没有执行新增内容的完整原生 UI 验收，Duo 的 465 条截图和测试保留原有范围。

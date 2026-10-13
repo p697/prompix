@@ -1,15 +1,16 @@
 {
   "schemaVersion": 1,
   "status": "draft-not-uploaded",
-  "appVersion": "0.3.1",
-  "buildNumber": "8",
-  "updatedAt": "2026-10-12",
+  "appVersion": "0.4.7",
+  "buildNumber": "18",
+  "updatedAt": "2026-10-13",
   "notes": [
     "Original store copy for implemented features, not third-party prompt content.",
     "Nine locales checked for field lengths and feature consistency; native-speaker market review has not been performed.",
     "Primary store locale, final category, legal copyright owner, review contact, availability and age/privacy questionnaire answers remain unset.",
     "Chinese URLs currently serve Simplified Chinese; all other support/legal URLs serve English.",
-    "No fixed catalog count or promise of daily new items. No generation, Skill execution or cloud sync claims."
+    "No fixed catalog count or promise of daily new items. No generation, Skill execution or cloud sync claims.",
+    "Version binding updated for the local 0.4.7 (18) candidate; unchanged localized copy does not claim Duo certification, complete catalog translations or new native-speaker review. Final screenshots and questionnaires remain separate gates."
   ],
   "suggestedCategories": {
     "primary": "GRAPHICS_AND_DESIGN",
