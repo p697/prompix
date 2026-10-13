@@ -33,8 +33,12 @@ import UIKit
         for _ in 0..<attempts {
             // Search presents a centered sheet on iPad. Whole-display gestures
             // can start on its fixed action bar instead of scrolling the content.
-            let containingScroll = app.scrollViews.containing(.any, identifier: element.identifier).firstMatch
-            let viewport: XCUIElement = containingScroll.exists ? containingScroll : app
+            var viewport: XCUIElement = app
+            // Lazy Form rows may not have an accessibility snapshot until scrolled onscreen.
+            if element.exists {
+                let containingScroll = app.scrollViews.containing(.any, identifier: element.identifier).firstMatch
+                if containingScroll.exists { viewport = containingScroll }
+            }
             // XCTest can report partially covered controls as hittable. Keep
             // their entire target above the detail screen's fixed action bar.
             let copy = app.buttons["copyPrompt"]

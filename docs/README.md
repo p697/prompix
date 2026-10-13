@@ -12,7 +12,7 @@ Prompix 是开源、免费的多模态 Prompt 集合 App。用户像逛手机淘
 
 社区Skill采集器已安装到定时运行副本，首次独立实跑取得1条Gog草稿，尚未发布；实际部署和失败来源范围见[运行记录](content-operations.md)。
 
-最新已签名候选为0.3.2（9），本地归档与IPA的严格签名和资源审计通过，见[当前交付记录](quality-release.md)。0.3.0（7）曾按用户要求安装到iPhone17Pro，本轮尚未安装用户手机。此前视觉验收与签名包见[0.3.1记录](acceptance-0.3.1.md)，设计依据见[Granola原生适配](design-granola-2026-10.md)，0.3功能证据见[验收记录](acceptance-0.3.md)。完整交付继续推进，复杂运营Agent仍后置。
+最新阶段验收包为 **0.4.6（17）**，已按用户本次明确要求安装到插线的 iPhone 17 Pro 并启动；开发 IPA 的严格签名、版本和目标设备覆盖检查通过，见[当前交付记录](quality-release.md)。这不是最终交付或 App Store 上传验收。此前视觉验收与签名包见[0.3.1记录](acceptance-0.3.1.md)，设计依据见[Granola原生适配](design-granola-2026-10.md)，0.3功能证据见[验收记录](acceptance-0.3.md)。完整交付继续推进，复杂运营Agent仍后置。
 
 ## 当前方案
 
