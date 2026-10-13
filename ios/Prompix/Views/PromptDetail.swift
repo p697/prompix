@@ -615,7 +615,8 @@ struct PromptEditor: View {
         item.publisher(for: \.status).receive(on: RunLoop.main).sink { [weak self] status in
             guard let self, self.player?.currentItem === item else { return }
             if status == .failed { self.fail() }
-            else if status == .readyToPlay { self.loading = false }
+            // Item readiness does not mean the transport has enough buffered data.
+            // The time-control observer owns the loading state and its deadline.
         }.store(in: &subscriptions)
         item.publisher(for: \.presentationSize).receive(on: RunLoop.main).sink { [weak self] size in
             guard let self, self.player?.currentItem === item, size.width > 0, size.height > 0 else { return }
@@ -625,7 +626,7 @@ struct PromptEditor: View {
             guard let self, self.player === player, !self.failed else { return }
             if status == .waitingToPlayAtSpecifiedRate { self.loading = true; self.armTimeout() }
             else if status == .playing { self.loading = false; self.timeout?.cancel() }
-            else if item.status == .readyToPlay { self.loading = false; self.timeout?.cancel() }
+            else if status == .paused { self.loading = false; self.timeout?.cancel() }
         }.store(in: &subscriptions)
         NotificationCenter.default.publisher(for: AVPlayerItem.failedToPlayToEndTimeNotification, object: item)
             .receive(on: RunLoop.main).sink { [weak self] _ in
@@ -700,7 +701,7 @@ struct ImageViewer: View {
         NavigationStack {
             TabView(selection: $selection) {
                 ForEach(0..<count, id: \.self) { index in
-                    ImagePage(name: name, url: urls.isEmpty ? nil : urls[index], active: selection == index, index: index)
+                    ImagePage(name: name, url: urls.isEmpty ? nil : urls[index], active: selection == index, index: index, showsPageIndicator: count > 1)
                         .tag(index)
                 }
             }.tabViewStyle(.page(indexDisplayMode: count > 1 ? .always : .never))
@@ -731,9 +732,11 @@ private struct ImagePage: View {
     let url: URL?
     let active: Bool
     let index: Int
+    let showsPageIndicator: Bool
     @State private var remoteImage: UIImage?
     @State private var failed = false
     @State private var offlinePreview = false
+    @State private var loadingFullImage = false
     @State private var attempt = 0
     private var bundledImage: UIImage? { index == 0 ? UIImage(named: name) : nil }
     var body: some View {
@@ -749,23 +752,30 @@ private struct ImagePage: View {
                 actions: { Button(String(localized: "重新加载")) { attempt += 1 }.buttonStyle(.bordered).accessibilityIdentifier("retryImage") }
             } else { ProgressView().tint(.white) }
         }.promptActionBar {
-            if offlinePreview {
+            if loadingFullImage, remoteImage != nil {
+                ProgressView(String(localized: "正在加载清晰图片…"))
+                    .font(.footnote).tint(.white).padding(12).foregroundStyle(.white)
+                    .background(.black.opacity(0.7), in: Capsule()).padding(12)
+                    .padding(.bottom, showsPageIndicator ? 28 : 0)
+                    .accessibilityIdentifier("loadingFullImage")
+            } else if offlinePreview {
                 Button { attempt += 1 } label: {
                     Label(String(localized: "当前为离线预览 · 轻点加载清晰图片"), systemImage: "arrow.clockwise")
                         .font(.footnote).padding(12).foregroundStyle(.white).background(.black.opacity(0.7), in: Capsule())
-                }.padding(12).accessibilityIdentifier("loadFullImage")
+                }.padding(12).padding(.bottom, showsPageIndicator ? 28 : 0).accessibilityIdentifier("loadFullImage")
             }
         }.task(id: "\(url?.absoluteString ?? name)-\(attempt)-\(active)") {
             guard active, let url else { return }
             if let bundledImage { remoteImage = bundledImage; offlinePreview = false; return }
-            failed = false
+            failed = false; loadingFullImage = true
             if remoteImage == nil { remoteImage = ImageStore.shared.offlineImage(for: url) }
             do {
                 let result = try await ImageStore.shared.image(for: url, fullResolution: true)
                 guard !Task.isCancelled else { return }
-                remoteImage = result; offlinePreview = false
+                remoteImage = result; offlinePreview = false; loadingFullImage = false
             } catch {
                 guard !Task.isCancelled else { return }
+                loadingFullImage = false
                 offlinePreview = remoteImage != nil
                 failed = remoteImage == nil
             }

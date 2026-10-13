@@ -1,6 +1,6 @@
 # Prompix for iOS
 
-Native SwiftUI app, iOS 17+. Simulator candidate **0.4.7 (19)** is available for Duo acceptance: the use panel can return to full Prompt editing after variable preparation, preserving the selected language and draft. Its revised editing and failure-recovery flows passed focused simulator checks. A reproduced cross-display Pinyin composition limitation is documented; this is not a completed store release. The prior build has a locally archived and exported **0.4.7 (18)** iOS Release candidate; build 19 adds localized accessibility actions on the discovery heading and has not been signed for physical devices; see the [package audit](../docs/release-0.4.7.md). Version **0.4.6 (17)** is the last candidate installed on the user's requested iPhone 17 Pro; see [release evidence](../docs/quality-release.md). Current work uses the dedicated simulator, with no additional user-phone installation.
+Native SwiftUI app, iOS 17+. Simulator candidate **0.4.7 (20)** is available for Duo acceptance: the use panel can return to full Prompt editing after variable preparation, preserving the selected language and draft. Its revised editing and failure-recovery flows passed focused simulator checks. A reproduced cross-display Pinyin composition limitation is documented; this is not a completed store release. The prior build has a locally archived and exported **0.4.7 (18)** iOS Release candidate; builds 19–20 add discovery accessibility actions and media recovery feedback, and have not been signed for physical devices; see the [package audit](../docs/release-0.4.7.md). Version **0.4.6 (17)** is the last candidate installed on the user's requested iPhone 17 Pro; see [release evidence](../docs/quality-release.md). Current work uses the dedicated simulator, with no additional user-phone installation.
 
 Production v2 edition `edition-v2-3f5988eec9fb6296` contains **527 items, 70 Skills and 242 creator identities**. English records cover 526 items and Simplified Chinese 514, with original-text fallback elsewhere. Source review withheld one Expo Skill whose version-check instructions included a publishing command. The Duo simulator has received the actual 528-to-527 update; one newly translated Skill was opened and its full 5,494-byte copied text matched publication. Personal files remained byte-identical. This focused update check does not extend the earlier 465-item posture/UI evidence to every new item. The last ten-Skill batch has passed publication and focused simulator checks; other seven-language coverage and test boundaries are recorded in [content operations](../docs/content-operations.md#2026-10-13十个作者-skill-发布与客户端验收收尾). Routine collection and translation now remain with the scheduler while development focuses on native browsing, editing, use and iPhone Duo adaptation. Duo posture, editing, selected accessibility checks and final normal-phone regression have run; the evidence separates passed paths from known limits. See the [Duo evidence and remaining gates](../docs/iphone-duo.md).
 
@@ -244,3 +244,38 @@ Current 0.4.5 production-workload Release evidence: 448 items, 376 cached Simpli
 Search ranks exact titles, title terms, creator identity, model/tags, then incidental body matches, preserving editorial ties and all filters. All 165 native model tests pass. The 448-item simulator workload passed six largest-text handoff panels (zh-Hans, de, ja; website and Skill), with hit-region/description audits and expanded payloads. Actual VoiceOver reached the Skill Code action, guidance, disclosure, share and copy-install action without activating external tools. See [quality evidence](../docs/quality-release.md).
 
 Run `GlobalDiscoveryUITests/testHandoffLargestTextAccessibility` with `TEST_RUNNER_PROMPIX_HANDOFF_ACCESSIBILITY=1`, the existing explicit acceptance-container variable, and simulator content size `accessibility-extra-extra-extra-large`. Restore the prior size afterward. Run `testSkillHandoffVoiceOverTraversal` separately at the normal size with the same environment; it requires the iOS 27 SDK/service and disables VoiceOver on exit. These opt-in tests use public entries and preserve drafts/favorites.
+
+
+## Media recovery acceptance (build 20)
+
+Image galleries keep the saved thumbnail visible while requesting a full-quality
+image. The native progress label replaces the retry button during that request;
+failure restores the retry action. Status controls leave room for the system
+page indicator. Cancelled thumbnail requests cannot overwrite a newer view task.
+Video loading follows AVPlayer's transport state: item readiness alone does not
+clear buffering, and pausing through native AVKit controls cancels the deadline.
+This follows Apple's [transport guidance](https://developer.apple.com/documentation/avfoundation/controlling-the-transport-behavior-of-a-player).
+
+`testRetainedImagePreviewCanRetryAndReturnToPrompt` takes a published multi-image
+item ID in `PROMPIX_IMAGE_RECOVERY_ID` plus the existing explicit simulator-container
+guard. It saves an offline thumbnail, clears only the image URL cache, then uses
+`--simulate-network-failure --simulate-slow-image-failure` to observe progress,
+retained-preview retry, an uncached page failure, return/copy and real network
+recovery. The image session explicitly installs the Debug simulator protocol;
+global URLProtocol registration alone did not intercept that custom session in
+the initial run. The optional slow fixture delays media failure by three seconds.
+The recovery marker restores real requests. Back up and restore the whole local
+Prompix data directory from the host even if an assertion aborts teardown.
+Neither fixture flag/protocol is present in Release.
+
+`testRemoteVideoBufferingDeadlineAndSameURLRecovery` requires
+`PROMPIX_MEDIA_FIXTURE_URL`, an isolated HTTPS server with a first-party fast-start
+MP4 at `/stall.mp4` and test-only `POST /reset` and `/recover` controls. The test
+uses a unique query per run, an eight-second test deadline, verifies failure,
+restarts the same URL, requires the actual AVPlayer clock to advance, then checks
+pause and release. Production retains its 25-second deadline and media allowlist.
+The external reproducible fixture and request traces are in
+`Prompix-Codex/Evidence/media-recovery-20261013/` on the development SSD; it serves
+only the test MP4, withholds data after byte 2578, and is stopped after acceptance.
+This is real AVPlayer networking, not the URLProtocol image fixture. Its stalled
+startup result does not prove every mid-playback stall or an airplane-mode run.

@@ -125,10 +125,26 @@ Debug、`--offline`、30条内置内容的五次启动测量为4.861194、4.8153
 
 复现朗读检查：保留模拟器个人数据备份，使用已下载的生产目录，按 `ios/README.md` 的 `PROMPIX_DUO_DELIVERY` 和显式容器保护配置运行上述单项测试。辅助操作人工复现：在Device Hub启用VoiceOver，定位发现页Prompix标题，在其暴露的“搜索”／“设置”辅助操作中分别执行，检查实际弹层、返回分类和个人数据；注入手势限制须独立记录。普通验收结束后关闭VoiceOver并恢复全部分类。
 
+## 构建20：媒体失败与恢复收尾
+
+0.4.7（20）保留构建19的Duo布局、编辑器、导航和内容协议，只修复三个媒体细节：图片任务取消后不再回写旧视图状态；加载清晰图片时保留离线缩略图并显示原生进度、暂时收起重试按钮；视频的缓冲与暂停由AVPlayer传输状态驱动，不再把资源ready误当成已播放。采用[Apple传输状态指南](https://developer.apple.com/documentation/avfoundation/controlling-the-transport-behavior-of-a-player)，没有为测试放宽ATS或生产媒体域名校验。
+
+本轮专用Duo／iOS27.1实测：
+
+- 真实HTTPS第一方MP4的数据停传、8秒测试超时、同一URL联网恢复、实际播放时钟推进、暂停及释放通过；另直接调用原生AVPlayer暂停，证明尚未ready时也取消缓冲期限。两项合计14.124秒，0失败／0跳过。生产期限仍为25秒。
+- `testRetainedImagePreviewCanRetryAndReturnToPrompt`在527条真实缓存中通过，61.733秒，0失败／0跳过：收藏缩略图、加载反馈、离线预览、第二张未缓存图片失败、返回复制、第一张恢复真实网络并载入清晰图片。活动外屏截图逐张检查，进度／重试提示与分页圆点有清晰间距。测试后恢复全部9个缓存与个人文件，SHA逐文件一致。
+- 普通手机首次功能路径通过73.925秒，但截图发现状态提示与分页圆点重叠；增加仅多图时的分页预留间距后，Duo截图已验证修复。普通手机最终复验通过59.983秒，活动屏逐张检查确认不再重叠，全部10个缓存与个人文件SHA恢复一致；结果为`normal-spacing-20-final.xcresult`，不把旧截图称为修复后结果。
+
+原始结果、屏幕、HTTP请求及恢复记录位于外置SSD `Prompix-Codex/Evidence/media-recovery-20261013/`。关键文件为`duo-20-final.xcresult`（两项模型通过、旧UI入口断言失败的混合结果）、`duo-image-20-final.xcresult`（最终UI通过）及`image-recovery-00-loading-full-image-display-0.png`、`image-recovery-01-retained-preview-display-0.png`。内屏display1在收起时为黑，只有实际外屏作为本次视觉证据。
+
+早期失败保留：临时HTTPS入口最初因QUIC连接失败返回530；最初全局URLProtocol注册没有覆盖自定义图片session；Duo测试起初查找普通手机的preview入口，而实际显示compactPreview入口。均修正测试环境后再实跑，不能当作App功能回归。最初怀疑的ready／waiting特定竞态未在受控短视频中复现；8秒停传恢复测试不扩写为所有播放中途卡顿或系统飞行模式均已通过。临时服务测完关闭。
+
+本轮没有重写应用，也没有重跑无改动的九语、完整视频库或整个姿态矩阵。构建18–19的输入法组合态与VoiceOver手势自动化限制继续保留；构建20是可操作的模拟器验收交付，不是商店签名或真机性能验收。
+
 ## 现场验收入口
 
-在外置 SSD 安装的 Xcode27.1RC 中打开 Device Hub，选择 **Prompix iPhone Duo** 并打开 Prompix 0.4.7（19）。当前已通过设置更新到527条，保持中文界面、普通字号和浅色；辅助测试的减少动态效果和VoiceOver已关闭，本次内容更新前后三份个人文件逐字节不变。上文姿态与交互证据保留其465条阶段范围，新增内容更新及单条复制验证见[运行记录](content-operations.md#2026-10-13新增内容审读补译与质量暂缓)。用户手机未安装本版。
+在外置 SSD 安装的 Xcode27.1RC 中打开 Device Hub，选择 **Prompix iPhone Duo** 并打开 Prompix 0.4.7（20）。当前已通过设置更新到527条，保持中文界面、普通字号和浅色；辅助测试的减少动态效果和VoiceOver已关闭，本次内容更新前后三份个人文件逐字节不变。上文姿态与交互证据保留其465条阶段范围，新增内容更新及单条复制验证见[运行记录](content-operations.md#2026-10-13新增内容审读补译与质量暂缓)。用户手机未安装本版。
 
-建议依次体验发现页宽窄网格、创作者横滑和返回、网页或图片详情的阅读／预览、使用面板、编辑、开合旋转、图库／视频返回，以及Safari左右50/50多任务。外置证据目录的 `ACCEPTANCE.md` 提供具体步骤，`current-evidence-index.json` 汇总最终与历史证据，`final-validation/installed-delivery-verification.json` 记录构建18的身份。构建19独立保存在 `Prompix-Codex/Deliveries/Prompix-0.4.7-19-Duo/`，本轮哈希与个人数据核对见 `accessible-navigation-20261013/verification-19.json`，不将18的测试自动重新标为19全量通过。
+建议依次体验发现页宽窄网格、创作者横滑和返回、网页或图片详情的阅读／预览、使用面板、编辑、开合旋转、图库／视频返回，以及Safari左右50/50多任务。外置证据目录的 `ACCEPTANCE.md` 提供具体步骤，`current-evidence-index.json` 汇总最终与历史证据，`final-validation/installed-delivery-verification.json` 记录构建18的身份。构建19保留在原交付目录；当前构建20独立保存在 `Prompix-Codex/Deliveries/Prompix-0.4.7-20-Duo/`，本轮哈希与个人数据核对见 `media-recovery-20261013/`，不将旧版测试自动重新标为20全量通过。
 
 本轮提供可操作的Duo验收候选版，明确保留上述组合输入限制；不声称完整项目上架已完成，也不承诺Apple编辑推荐。

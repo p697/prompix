@@ -1,5 +1,6 @@
 import XCTest
 import UIKit
+import CryptoKit
 
 /// These opt-in journeys use a staged, validated catalog in the simulator's
 /// Application Support directory. They never install or launch on a phone.
@@ -293,6 +294,91 @@ import UIKit
         let expected = XCTAttachment(string: edited)
         expected.name = "network-expected-clipboard"; expected.lifetime = .keepAlways; add(expected)
         XCTAssertEqual(try Data(contentsOf: try acceptanceDirectory().appendingPathComponent("favorites.json")), favorites)
+    }
+
+    func testRetainedImagePreviewCanRetryAndReturnToPrompt() throws {
+        guard let id = ProcessInfo.processInfo.environment["PROMPIX_IMAGE_RECOVERY_ID"] else {
+            throw XCTSkip("Requires a backed-up simulator with a published remote image gallery.")
+        }
+        let before = try acceptanceDirectory()
+        let favorites = try Data(contentsOf: before.appendingPathComponent("favorites.json"))
+        let drafts = try Data(contentsOf: before.appendingPathComponent("drafts.json"))
+        let catalog = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: before.appendingPathComponent("catalog.json"))) as? [String: Any])
+        let prompts = try XCTUnwrap(catalog["prompts"] as? [[String: Any]])
+        let target = try XCTUnwrap(prompts.first { $0["id"] as? String == id })
+        let title = try XCTUnwrap(target["title"] as? String)
+        let media = try XCTUnwrap(target["media"] as? [String: Any])
+        let url = try XCTUnwrap(media["imageURL"] as? String)
+        XCTAssertNil(media["image"])
+        XCTAssertGreaterThan((media["imageURLs"] as? [String])?.count ?? 0, 1)
+        func recoveryURL(_ directory: URL) -> URL {
+            directory.deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("Caches/prompix-ui-network-restored")
+        }
+        defer {
+            app.terminate()
+            do {
+                let current = try acceptanceDirectory()
+                try favorites.write(to: current.appendingPathComponent("favorites.json"), options: .atomic)
+                try? FileManager.default.removeItem(at: recoveryURL(current))
+                XCTAssertEqual(try Data(contentsOf: current.appendingPathComponent("drafts.json")), drafts)
+            } catch { XCTFail("Restore the simulator backup after this run: \(error)") }
+        }
+        func preview() -> XCUIElement {
+            let compact = app.buttons["compactPreviewButton"]
+            return compact.exists ? compact : app.buttons["previewButton"]
+        }
+        func openTarget() {
+            app.buttons["searchButton"].tap()
+            let search = app.searchFields.firstMatch
+            XCTAssertTrue(search.waitForExistence(timeout: 5)); search.tap(); search.typeText(title)
+            let card = app.scrollViews["searchResults"].buttons["prompt-\(id)"]
+            reveal(card); card.tap()
+            XCTAssertTrue(app.buttons["copyPrompt"].waitForExistence(timeout: 5))
+            XCTAssertTrue(preview().waitForExistence(timeout: 5))
+        }
+        launch()
+        openTarget()
+        let save = app.buttons["detailFavorite"]
+        XCTAssertTrue(save.exists)
+        if !save.label.contains("取消") { save.tap() }
+        let current = try acceptanceDirectory()
+        let hash = SHA256.hash(data: Data(url.utf8)).map { String(format: "%02x", $0) }.joined()
+        let thumbnail = current.appendingPathComponent("OfflineImages/\(hash).jpg")
+        let retained = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in FileManager.default.fileExists(atPath: thumbnail.path) }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [retained], timeout: 30), .completed)
+        app.terminate()
+        let cache = current.deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("Caches/PrompixImages")
+        if FileManager.default.fileExists(atPath: cache.path) { try FileManager.default.removeItem(at: cache) }
+        app.launchArguments = ["--cached-only", "--simulate-network-failure", "--simulate-slow-image-failure", "-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh-Hans"]
+        app.launch()
+        XCTAssertTrue(app.buttons["searchButton"].waitForExistence(timeout: 10))
+        openTarget()
+        preview().tap()
+        let retry = app.buttons["loadFullImage"]
+        XCTAssertTrue(app.descendants(matching: .any)["loadingFullImage"].waitForExistence(timeout: 2))
+        capture("image-recovery-00-loading-full-image")
+        XCTAssertTrue(retry.waitForExistence(timeout: 10))
+        XCTAssertTrue(app.descendants(matching: .any)["loadedImage-0"].exists)
+        capture("image-recovery-01-retained-preview")
+        app.buttons["nextImage"].tap()
+        XCTAssertTrue(app.buttons["retryImage"].waitForExistence(timeout: 10))
+        capture("image-recovery-02-uncached-page-failure")
+        app.buttons["完成"].tap()
+        app.buttons["copyPrompt"].tap()
+        XCTAssertTrue(app.buttons["copyPrompt"].label.contains("已复制"))
+        capture("image-recovery-03-prompt-still-usable")
+        preview().tap()
+        XCTAssertTrue(retry.waitForExistence(timeout: 10))
+        let restored = recoveryURL(try acceptanceDirectory())
+        try Data("restored".utf8).write(to: restored, options: .atomic)
+        retry.tap()
+        let completed = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            !retry.exists && !self.app.descendants(matching: .any)["loadingFullImage"].exists && self.app.descendants(matching: .any)["loadedImage-0"].exists
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [completed], timeout: 65), .completed)
+        capture("image-recovery-04-live-full-image")
+        app.buttons["完成"].tap()
+        XCTAssertTrue(app.buttons["copyPrompt"].isHittable)
     }
 
     private func assertSavedDraft(_ item: SavedPromptSnapshot, expected: String, evidence: String) {

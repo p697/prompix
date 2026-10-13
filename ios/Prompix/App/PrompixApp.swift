@@ -33,7 +33,8 @@ import SwiftUI
 #if DEBUG && targetEnvironment(simulator)
 /// Opt-in UI acceptance fixture. A host-side test can restore networking before
 /// pressing the real retry button; ordinary and release launches never register it.
-private final class SimulatorNetworkFailure: URLProtocol {
+final class SimulatorNetworkFailure: URLProtocol {
+    private var pendingFailure: DispatchWorkItem?
     static var recoveryURL: URL {
         FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("prompix-ui-network-restored")
@@ -43,7 +44,16 @@ private final class SimulatorNetworkFailure: URLProtocol {
             !FileManager.default.fileExists(atPath: recoveryURL.path)
     }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
-    override func startLoading() { client?.urlProtocol(self, didFailWithError: URLError(.notConnectedToInternet)) }
-    override func stopLoading() {}
+    override func startLoading() {
+        if ProcessInfo.processInfo.arguments.contains("--simulate-slow-image-failure"), request.url?.path.hasPrefix("/media/") == true {
+            let failure = DispatchWorkItem { [weak self] in
+                guard let self else { return }
+                self.client?.urlProtocol(self, didFailWithError: URLError(.notConnectedToInternet))
+            }
+            pendingFailure = failure
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3, execute: failure)
+        } else { client?.urlProtocol(self, didFailWithError: URLError(.notConnectedToInternet)) }
+    }
+    override func stopLoading() { pendingFailure?.cancel(); pendingFailure = nil }
 }
 #endif

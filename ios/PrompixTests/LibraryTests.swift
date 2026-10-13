@@ -1,5 +1,6 @@
 import XCTest
 import CryptoKit
+import AVFoundation
 @testable import Prompix
 
 @MainActor final class LibraryTests: XCTestCase {
@@ -167,6 +168,71 @@ import CryptoKit
         }
         XCTAssertTrue(playback.failed, "Unreadable media must reach retry even when AVPlayer failure delivery is delayed")
         XCTAssertFalse(playback.loading)
+        playback.stop()
+        XCTAssertNil(playback.player)
+    }
+
+    func testNativePlayerPauseBeforeReadinessCancelsBufferingDeadline() async throws {
+        let url = try XCTUnwrap(Bundle(for: LibraryTests.self).url(forResource: "playback-fixture", withExtension: "mp4"))
+        let playback = MoviePlayback(bufferingTimeout: .milliseconds(200))
+        defer { playback.stop() }
+        playback.start(url: url)
+        XCTAssertEqual(playback.player?.currentItem?.status, .unknown)
+        // AVKit's native controls operate on AVPlayer, not MoviePlayback.pause().
+        playback.player?.pause()
+        try await Task.sleep(for: .milliseconds(500))
+        XCTAssertFalse(playback.loading)
+        XCTAssertFalse(playback.failed)
+        XCTAssertEqual(playback.player?.rate, 0)
+    }
+
+    func testRemoteVideoBufferingDeadlineAndSameURLRecovery() async throws {
+        #if !targetEnvironment(simulator)
+        throw XCTSkip("Network fixture acceptance is simulator-only.")
+        #endif
+        guard let address = ProcessInfo.processInfo.environment["PROMPIX_MEDIA_FIXTURE_URL"],
+              let base = URL(string: address), base.scheme == "https" else {
+            throw XCTSkip("Requires the isolated first-party HTTPS media fixture; never use a production server.")
+        }
+        func control(_ path: String) async throws {
+            var request = URLRequest(url: base.appending(path: path))
+            request.httpMethod = "POST"
+            let (_, response) = try await URLSession.shared.data(for: request)
+            XCTAssertEqual((response as? HTTPURLResponse)?.statusCode, 204)
+        }
+        try await control("reset")
+        let playback = MoviePlayback(bufferingTimeout: .seconds(8))
+        defer { playback.stop() }
+        let url = base.appending(path: "stall.mp4").appending(queryItems: [URLQueryItem(name: "run", value: UUID().uuidString)])
+        playback.start(url: url)
+        var observations: [String] = []
+        for step in 0..<130 {
+            let item = playback.player?.currentItem
+            let transport = playback.player?.timeControlStatus
+            observations.append("\(step): item=\(item?.status.rawValue ?? -1) transport=\(transport?.rawValue ?? -1) loading=\(playback.loading) failed=\(playback.failed) time=\(playback.player?.currentTime().seconds ?? -1)")
+            if item?.status == .readyToPlay, transport == .waitingToPlayAtSpecifiedRate {
+                XCTAssertTrue(playback.loading, "Item readiness must not hide a pending transport buffer.")
+            }
+            if playback.failed { break }
+            try await Task.sleep(for: .milliseconds(100))
+        }
+        let trace = XCTAttachment(string: observations.joined(separator: "\n"))
+        trace.name = "real-avplayer-buffering-trace"; trace.lifetime = .keepAlways; add(trace)
+        XCTAssertTrue(playback.failed, "A stalled remote player must offer retry within its deadline.")
+        XCTAssertFalse(playback.loading)
+        try await control("recover")
+        playback.start(url: url)
+        for _ in 0..<150 {
+            if (playback.player?.currentTime().seconds ?? 0) > 0.5 { break }
+            try await Task.sleep(for: .milliseconds(100))
+        }
+        XCTAssertFalse(playback.failed)
+        XCTAssertFalse(playback.loading)
+        XCTAssertGreaterThan(playback.player?.currentTime().seconds ?? 0, 0.5, "Recovery requires advancing AVPlayer time, not a retained hasPlayed flag.")
+        playback.pause()
+        let paused = playback.player?.currentTime().seconds ?? 0
+        try await Task.sleep(for: .milliseconds(400))
+        XCTAssertEqual(playback.player?.currentTime().seconds ?? 0, paused, accuracy: 0.05)
         playback.stop()
         XCTAssertNil(playback.player)
     }

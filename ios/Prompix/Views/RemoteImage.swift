@@ -15,6 +15,11 @@ import Observation
         self.offlineDirectory = offlineDirectory ?? URL.applicationSupportDirectory.appending(path: "Prompix/OfflineImages", directoryHint: .isDirectory)
         memory.totalCostLimit = 40 * 1024 * 1024
         let configuration = URLSessionConfiguration.default
+        #if DEBUG && targetEnvironment(simulator)
+        if ProcessInfo.processInfo.arguments.contains("--simulate-network-failure") {
+            configuration.protocolClasses = [SimulatorNetworkFailure.self] + (configuration.protocolClasses ?? [])
+        }
+        #endif
         configuration.urlCache = URLCache(memoryCapacity: 4 * 1024 * 1024, diskCapacity: 80 * 1024 * 1024, directory: URL.cachesDirectory.appending(path: "PrompixImages"))
         configuration.requestCachePolicy = .returnCacheDataElseLoad
         configuration.httpMaximumConnectionsPerHost = 4
@@ -87,8 +92,14 @@ struct RemoteImage: View {
             } else { ProgressView().controlSize(.small) }
         }.task(id: "\(url)-\(attempt)") {
             image = nil; failed = false
-            do { image = try await ImageStore.shared.image(for: url) }
-            catch { failed = true }
+            do {
+                let loaded = try await ImageStore.shared.image(for: url)
+                guard !Task.isCancelled else { return }
+                image = loaded
+            } catch {
+                guard !Task.isCancelled else { return }
+                failed = true
+            }
         }
     }
 }
