@@ -41,7 +41,13 @@ export async function prepareDailyTranslations(items: readonly Prompt[], root: s
           await atomic(join(lock, "owner.json"), { pid: process.pid, startedAt: new Date().toISOString(), operation: "daily" });
           const day = new Date().toISOString().slice(0, 10), ledgerPath = join(directory, "daily-budgets", `${day}.json`);
           const offset = Math.floor(Date.parse(day) / 86400000) % translationLocales.length;
-          const locales = [...translationLocales.slice(offset), ...translationLocales.slice(0, offset)];
+          const requestedLocales = environment.PROMPIX_TRANSLATION_LOCALES?.split(",").map(locale => locale.trim());
+          if (requestedLocales && (!requestedLocales.length || new Set(requestedLocales).size !== requestedLocales.length ||
+            requestedLocales.some(locale => !translationLocales.some(supported => supported === locale)))) {
+            throw new Error("PROMPIX_TRANSLATION_LOCALES must contain distinct supported locale codes");
+          }
+          const locales = (requestedLocales as (typeof translationLocales)[number][] | undefined) ??
+            [...translationLocales.slice(offset), ...translationLocales.slice(0, offset)];
           const prior = await json<TranslationRunReport | undefined>(ledgerPath, undefined);
           const maxOutputTokens = 24000;
           const provider = providerName === "codex" ? codexTranslationProvider(environment.PROMPIX_CODEX ?? "codex", maxOutputTokens, model) : openAITranslationProvider(environment.OPENAI_API_KEY ?? "", maxOutputTokens);
