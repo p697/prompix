@@ -517,7 +517,7 @@ struct PromptEditor: View {
                     Button(language == nil ? String(localized: "恢复原文") : String(localized: "恢复译文"), role: .destructive) { text = item.content(in: language).prompt; save() }
                     Button(String(localized: "取消"), role: .cancel) {}
                 } message: { Text(String(localized: "这会替换你在此设备上保存的修改。")) }
-                .confirmationDialog(String(localized: "本次修改尚未保存"), isPresented: $leavePresented, titleVisibility: .visible) {
+                .alert(String(localized: "本次修改尚未保存"), isPresented: $leavePresented) {
                     Button(String(localized: "复制并退出")) {
                         UIPasteboard.general.string = text
                         leaveWithoutSaving()

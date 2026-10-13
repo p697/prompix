@@ -663,12 +663,40 @@ import UIKit
         XCTAssertTrue(viewport.exists)
         for _ in 0..<12 {
             let fixed = ["handoffOpen", "copyInstallCommand"].map { app.buttons[$0] }.first { $0.exists }
-            let top = viewport.frame.minY + 8
-            let bottom = min(viewport.frame.maxY, fixed?.frame.minY ?? viewport.frame.maxY) - 8
-            if element.exists && element.frame.minY >= top && element.frame.maxY <= bottom && element.isHittable { return }
-            let reverse = element.exists && element.frame.minY < top
-            viewport.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: reverse ? 0.25 : 0.75))
-                .press(forDuration: 0.05, thenDragTo: viewport.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: reverse ? 0.75 : 0.25)))
+            let frame = viewport.frame
+            let window = app.windows.containing(.any, identifier: fixed?.identifier ?? element.identifier).firstMatch
+            let bounds = window.exists ? frame.intersection(window.frame) : frame
+            // Forms extend under translucent navigation bars. Use the actual
+            // bar boundary rather than mistaking the Form's origin for it.
+            let navigationBottom = app.navigationBars.allElementsBoundByIndex.map(\.frame)
+                .filter { $0.intersection(bounds).width > bounds.width / 2 && $0.minY < bounds.midY }
+                .map(\.maxY).max() ?? bounds.minY
+            let top = max(bounds.minY, navigationBottom) + 8
+            let bottom = min(bounds.maxY, fixed?.frame.minY ?? bounds.maxY) - 8
+            let height = bottom - top
+            guard height > 40 else { break }
+            let step = min(CGFloat(140), height * 0.35)
+            var distance = -step // Materialize a still-lazy row by moving down.
+            if element.exists {
+                let target = element.frame
+                guard target.height <= height else { break }
+                if target.minY >= top && target.maxY <= bottom {
+                    if target.minX >= bounds.minX && target.maxX <= bounds.maxX && element.isHittable { return }
+                    break // Scrolling cannot fix a fully visible but blocked control.
+                }
+                let margin = min(CGFloat(8), (height - target.height) / 2)
+                distance = target.minY < top
+                    ? min(step, max(12, top + margin - target.minY))
+                    : -min(step, max(12, target.maxY - bottom + margin))
+            }
+            let center = (top + bottom) / 2
+            let start = viewport.coordinate(withNormalizedOffset: CGVector(
+                dx: (bounds.midX - frame.minX) / frame.width, dy: (center - distance / 2 - frame.minY) / frame.height))
+            let end = viewport.coordinate(withNormalizedOffset: CGVector(
+                dx: (bounds.midX - frame.minX) / frame.width, dy: (center + distance / 2 - frame.minY) / frame.height))
+            // A short, slow drag plus an end hold avoids inertial overshoot and
+            // the previous above/below oscillation with a half-Form swipe.
+            start.press(forDuration: 0.05, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 0.1)
         }
         capture("handoff-control-unreachable")
         let layout = XCTAttachment(string: "Viewport: \(viewport.frame); target: \(element.frame)\n\(app.debugDescription)")

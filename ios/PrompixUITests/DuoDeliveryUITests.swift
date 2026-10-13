@@ -84,11 +84,20 @@ import XCTest
             "The profile must identify the creator selected at the end of the rail.")
         XCTAssertTrue(app.links["creatorExternalProfile"].exists || app.buttons["creatorExternalProfile"].exists)
         capture("duo-creators-03-profile")
-        // CreatorDetail has only the native back action and these two explicit
-        // toolbar actions. Never activate its bookmark or share control.
-        let back = app.navigationBars.buttons.matching(NSPredicate(
-            format: "identifier != %@ AND identifier != %@", "saveCreator", "shareCreator")).firstMatch
-        XCTAssertTrue(back.exists && back.isHittable)
+        // Duo can move the system back button outside a navigation bar. Keep
+        // the traditional native-bar fallback, excluding bookmark and share.
+        let systemBack = app.buttons["BackButton"]
+        let back = systemBack.exists && systemBack.isHittable ? systemBack
+            : app.navigationBars.buttons.matching(NSPredicate(
+                format: "identifier != %@ AND identifier != %@", "saveCreator", "shareCreator")).firstMatch
+        guard back.exists && back.isHittable else {
+            let hierarchy = XCTAttachment(string: app.debugDescription)
+            hierarchy.name = "duo-creators-missing-native-back"
+            hierarchy.lifetime = .keepAlways
+            add(hierarchy)
+            XCTFail("The creator profile must expose a hittable native back button.")
+            return
+        }
         back.tap()
 
         XCTAssertTrue(app.buttons["searchButton"].waitForExistence(timeout: 5))

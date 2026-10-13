@@ -38,7 +38,8 @@ import UIKit
     private func visibleFrame(of element: XCUIElement) -> CGRect {
         let window = app.windows.containing(.any, identifier: element.identifier).firstMatch
         let bounds = window.exists ? window.frame : app.frame
-        return element.frame.intersection(bounds).intersection(app.frame)
+        // The application frame may still describe Duo's inactive outer display.
+        return element.frame.intersection(bounds)
     }
     // Run with a Release configuration; record simulator and device results separately.
     // These are process launches, not a claim of empty OS caches or a reboot.
@@ -520,7 +521,13 @@ import UIKit
             capture("acceptance-write-failure-largest-text-actions")
             leave.tap()
             try require(app.buttons["copyDraftAndLeave"].firstMatch.waitForExistence(timeout: 5), "Leave action must open its native confirmation")
+            try require(app.keyboards.firstMatch.waitForNonExistence(timeout: 5), "Explicitly leaving must dismiss the keyboard so the confirmation has its full height")
             capture("acceptance-write-failure-largest-text-dialog")
+            for identifier in ["copyDraftAndLeave", "discardDraftAndLeave"] {
+                let action = app.buttons[identifier].firstMatch
+                try require(action.isHittable && visibleFrame(of: action).contains(action.frame),
+                            "Both recovery choices must be visible inside the confirmation window")
+            }
             if app.buttons["继续编辑"].firstMatch.exists {
                 app.buttons["继续编辑"].firstMatch.tap()
             } else {
