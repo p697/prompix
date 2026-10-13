@@ -115,7 +115,10 @@ for lang in copy:
     dest.mkdir(exist_ok=True)
     (dest / 'index.html').write_text(layout(lang, '', copy[lang]['brand'], home(lang)))
     for path,(title,intro,body) in pages[lang].items():
-        content = f'<article class="article"><p class="eyebrow">{copy[lang]["updated"]}</p><h1>{title}</h1><p class="intro">{intro}</p>{body}</article>'
+        updated = copy[lang]['updated']
+        if path == 'privacy':
+            updated = '更新于 2026 年 10 月 13 日' if lang == 'zh' else 'Updated October 13, 2026'
+        content = f'<article class="article"><p class="eyebrow">{updated}</p><h1>{title}</h1><p class="intro">{intro}</p>{body}</article>'
         (dest / f'{path}.html').write_text(layout(lang, path, title, content))
 (out/'404.html').write_text(layout('en', '', 'A little off the path.', '<article class="article"><p class="eyebrow">404</p><h1>A little off the path.</h1><p class="intro">This page isn’t here. There are still good things to discover.</p><a class="button" href="/">Back to Prompix →</a></article>'))
 (out/'_headers').write_text("""/*
