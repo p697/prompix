@@ -387,15 +387,13 @@ struct PromptDetail: View {
 
 }
 
-@available(iOS 18, *)
-private struct SelectionPreservingPromptEditor: View {
+private struct StablePromptEditor: View {
     @Binding var text: String
-    @State private var selection: TextSelection?
     @FocusState private var focused: Bool
 
     var body: some View {
-        // Keep selection with the editing task when a sheet moves between displays.
-        TextEditor(text: $text, selection: $selection)
+        // Preserve the editing task while UIKit manages selection and marked input.
+        TextEditor(text: $text)
             .focused($focused)
     }
 }
@@ -435,13 +433,8 @@ struct PromptEditor: View {
                     }
                     .frame(height: min(headerHeight ?? geometry.size.height * 0.45, max(0, geometry.size.height * 0.45)))
                     .accessibilityIdentifier("draftStatusScroll")
-                    Group {
-                        if #available(iOS 18, *) {
-                            SelectionPreservingPromptEditor(text: $text)
-                        } else {
-                            TextEditor(text: $text)
-                        }
-                    }.font(.body).scrollContentBackground(.hidden).padding(.horizontal, 16)
+                    StablePromptEditor(text: $text)
+                        .font(.body).scrollContentBackground(.hidden).padding(.horizontal, 16)
                         .frame(maxHeight: .infinity).accessibilityIdentifier("promptEditor")
                 }
             }.paperScreen().navigationTitle(String(localized: "编辑 Prompt")).navigationBarTitleDisplayMode(.inline)

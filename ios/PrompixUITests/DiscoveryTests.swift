@@ -14,9 +14,23 @@ import UIKit
         app.launchArguments += ["--offline", "-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN"]
         app.launch()
     }
+    private func dismissUnsavedDraftPopover() throws {
+        let window = app.windows.containing(.button, identifier: "copyDraftAndLeave").firstMatch
+        let popover = app.popovers.containing(.button, identifier: "copyDraftAndLeave").firstMatch
+        XCTAssertTrue(window.exists && popover.exists)
+        guard window.exists && popover.exists else { throw NSError(domain: "Acceptance", code: 1) }
+        let point = CGPoint(x: (popover.frame.maxX + window.frame.maxX) / 2, y: window.frame.midY)
+        XCTAssertTrue(window.frame.contains(point) && !popover.frame.contains(point))
+        // Anchor input to the actual dialog display, not the application's outer display.
+        window.coordinate(withNormalizedOffset: .zero)
+            .withOffset(CGVector(dx: point.x - window.frame.minX, dy: point.y - window.frame.minY)).tap()
+    }
+
     func capture(_ name: String) {
-        let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-        shot.name = name; shot.lifetime = .keepAlways; add(shot)
+        for (index, screen) in XCUIScreen.screens.enumerated() {
+            let shot = XCTAttachment(screenshot: screen.screenshot())
+            shot.name = "\(name)-display-\(index)"; shot.lifetime = .keepAlways; add(shot)
+        }
     }
     private func selectTab(_ title: String) {
         app.selectPrompixTab(title)
@@ -84,10 +98,8 @@ import UIKit
             let value = normalized(value)
             return value.contains(title) && value.contains("收藏")
         }
-        func reachedNavigation() -> Bool {
-            speech.contains { normalized($0).contains("prompix") }
-                && speech.contains { $0.contains("搜索") }
-                && speech.contains { $0.contains("设置") }
+        func isHeading(_ value: String) -> Bool {
+            normalized(value).contains("prompix") && value.contains("标题")
         }
 
         // This reads VoiceOver's actual output, not the broader XCTest element tree.
@@ -107,15 +119,32 @@ import UIKit
             XCTAssertLessThan(titleIndex, bookmarkIndex, "Read the card title before its bookmark action.")
         }
 
-        // Enabling VoiceOver can restore a previous focus. Walk back from the card
-        // to verify the native header and toolbar actions without assuming a start index.
+        // Verify the heading through sequential navigation. Native side toolbars
+        // can follow the content, so their actions are explored separately below.
         let backwardDeadline = Date().addingTimeInterval(45)
         for _ in 0..<36 {
-            if reachedNavigation() { break }
+            if let current = speech.last, isHeading(current) { break }
             if Date() >= backwardDeadline { break }
             speech.append(try voiceOver.moveBackward().utterance)
         }
-        XCTAssertTrue(reachedNavigation(), "VoiceOver must expose the Prompix heading, Search, and Settings actions.")
+        XCTAssertTrue(speech.contains(where: isHeading), "VoiceOver must expose Prompix as a heading.")
+        // With the default flat VoiceOver navigation, native side-toolbar
+        // actions can follow the feed. Traverse that real order rather than
+        // assuming a top bar or requiring the optional Groups navigation style.
+        func reachedActions() -> Bool {
+            ["搜索", "设置"].allSatisfy { name in
+                speech.contains { $0.contains(name) && $0.contains("按钮") }
+            }
+        }
+        let toolbarDeadline = Date().addingTimeInterval(100)
+        var repeated = 0
+        for _ in 0..<180 {
+            if reachedActions() || Date() >= toolbarDeadline || repeated >= 3 { break }
+            let value = try voiceOver.moveForward().utterance
+            repeated = speech.last == value ? repeated + 1 : 0
+            speech.append(value)
+        }
+        XCTAssertTrue(reachedActions(), "Native VoiceOver navigation must reach Search and Settings as buttons.")
         XCTAssertFalse(speech.contains { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }, "Focused elements must produce meaningful speech.")
         for decoration in ["A LITTLE PERSPECTIVE", "今天，慢慢来。"] {
             XCTAssertFalse(speech.contains { normalized($0).contains(normalized(decoration)) }, "Decorative cover text must not become a separate VoiceOver stop: \(decoration)")
@@ -448,6 +477,11 @@ import UIKit
         try require(app.buttons["retryDraftSave"].waitForExistence(timeout: 5), "Inline failure must preserve the editor")
         try require(editor.exists, "Storage failure must not dismiss the editor")
         let recovered = try XCTUnwrap(editor.value as? String)
+        if !recovered.contains("Recovered write-failure note.") {
+            let evidence = XCTAttachment(string: "Baseline: \(baseline)\nRecovered: \(recovered)")
+            evidence.name = "Write-failure actual editor buffer"; evidence.lifetime = .keepAlways; add(evidence)
+            capture("write-failure-buffer-mismatch")
+        }
         try require(recovered.contains("Recovered write-failure note."), "The typed failure note must stay intact")
         try require(app.buttons["retryDraftSave"].waitForExistence(timeout: 5), "Write failure must expose Retry")
         try require(app.staticTexts["draftStatus"].label.contains("尚未保存"), "Failure status must remain visible")
@@ -490,7 +524,7 @@ import UIKit
             if app.buttons["继续编辑"].firstMatch.exists {
                 app.buttons["继续编辑"].firstMatch.tap()
             } else {
-                app.coordinate(withNormalizedOffset: CGVector(dx: 0.01, dy: 0.5)).tap()
+                try dismissUnsavedDraftPopover()
             }
             try require(app.buttons["copyDraftAndLeave"].firstMatch.waitForNonExistence(timeout: 5), "Cancelling must dismiss the native leave dialog")
             try require(editor.exists && editor.value as? String == recovered, "Cancelling leave must keep the large-text buffer")
@@ -512,7 +546,7 @@ import UIKit
             app.buttons["继续编辑"].tap()
         } else {
             // Native popover presentations omit the cancel row; tapping outside cancels.
-            app.coordinate(withNormalizedOffset: CGVector(dx: 0.01, dy: 0.5)).tap()
+            try dismissUnsavedDraftPopover()
         }
         try require(editor.exists && editor.value as? String == recovered, "Cancelling leave must preserve the buffer")
         try restore(baselineBytes)

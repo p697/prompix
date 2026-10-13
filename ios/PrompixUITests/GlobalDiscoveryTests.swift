@@ -23,10 +23,12 @@ import UIKit
     }
 
     private func capture(_ name: String) {
-        let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-        attachment.name = name
-        attachment.lifetime = .keepAlways
-        add(attachment)
+        for (index, screen) in XCUIScreen.screens.enumerated() {
+            let attachment = XCTAttachment(screenshot: screen.screenshot())
+            attachment.name = "\(name)-display-\(index)"
+            attachment.lifetime = .keepAlways
+            add(attachment)
+        }
     }
 
     private func reveal(_ element: XCUIElement, attempts: Int = 8) {
@@ -44,7 +46,7 @@ import UIKit
             let copy = app.buttons["copyPrompt"]
             let top = max(110, viewport.frame.minY + 12)
             let bottom = min(viewport.frame.maxY - 12, copy.exists ? copy.frame.minY - 12 : app.frame.maxY - 100)
-            if element.exists && element.isHittable && element.frame.minY >= top && element.frame.maxY <= bottom { return }
+            if element.exists && element.frame.minY >= top && element.frame.maxY <= bottom && element.isHittable { return }
             let scrollDown = element.exists && element.frame.minY < top
             let start = viewport.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: scrollDown ? 0.4 : 0.7))
             let end = viewport.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: scrollDown ? 0.7 : 0.4))
@@ -654,15 +656,24 @@ import UIKit
     }
 
     private func revealHandoff(_ element: XCUIElement) {
+        // A centered native Form does not occupy the whole expanded display.
+        // Target its own scroll area, rather than the app window behind it.
+        let form = app.collectionViews.firstMatch
+        let viewport: XCUIElement = form.exists ? form : app.scrollViews.firstMatch
+        XCTAssertTrue(viewport.exists)
         for _ in 0..<12 {
             let fixed = ["handoffOpen", "copyInstallCommand"].map { app.buttons[$0] }.first { $0.exists }
-            let bottom = fixed?.frame.minY ?? app.frame.maxY - 80
-            if element.exists && element.isHittable && element.frame.minY >= 120 && element.frame.maxY < bottom - 8 { return }
-            let reverse = element.exists && element.frame.minY < 120
-            app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: reverse ? 0.4 : 0.65))
-                .press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: reverse ? 0.65 : 0.4)))
+            let top = viewport.frame.minY + 8
+            let bottom = min(viewport.frame.maxY, fixed?.frame.minY ?? viewport.frame.maxY) - 8
+            if element.exists && element.frame.minY >= top && element.frame.maxY <= bottom && element.isHittable { return }
+            let reverse = element.exists && element.frame.minY < top
+            viewport.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: reverse ? 0.25 : 0.75))
+                .press(forDuration: 0.05, thenDragTo: viewport.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: reverse ? 0.75 : 0.25)))
         }
-        XCTFail("Handoff control must be reachable above the fixed action bar.")
+        capture("handoff-control-unreachable")
+        let layout = XCTAttachment(string: "Viewport: \(viewport.frame); target: \(element.frame)\n\(app.debugDescription)")
+        layout.name = "Handoff scroll geometry"; layout.lifetime = .keepAlways; add(layout)
+        XCTFail("Handoff control must be reachable inside its Form and clear of the action bar.")
     }
 
     func testHandoffLargestTextAccessibility() throws {
@@ -1325,8 +1336,20 @@ import UIKit
             reveal(item)
             item.tap()
             XCTAssertTrue(app.buttons["copyPrompt"].waitForExistence(timeout: 5))
-            XCTAssertTrue(app.buttons["contentLanguage"].exists)
-            XCTAssertTrue(app.buttons["contentLanguage"].label.contains(contentLanguage), "Content must follow the selected interface language.")
+            let languageMenu = app.buttons["contentLanguage"]
+            XCTAssertTrue(languageMenu.exists)
+            // Production editions download translations on demand. A cached-only
+            // launch must not pretend that all nine packs are already installed.
+            if !languageMenu.label.contains(contentLanguage) {
+                reveal(languageMenu); languageMenu.tap()
+                let choice = app.buttons["contentLanguage-\(language)"]
+                XCTAssertTrue(choice.waitForExistence(timeout: 5)); choice.tap()
+                let translated = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+                    languageMenu.exists && languageMenu.label.contains(contentLanguage)
+                }, object: nil)
+                XCTAssertEqual(XCTWaiter.wait(for: [translated], timeout: 60), .completed)
+            }
+            XCTAssertTrue(languageMenu.label.contains(contentLanguage), "Downloaded content must use the selected interface language.")
             capture("language-\(language)-detail")
             let beforeCopy = app.buttons["copyPrompt"].label
             app.buttons["copyPrompt"].tap()
