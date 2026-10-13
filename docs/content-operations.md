@@ -7,7 +7,7 @@
 - 手动执行：`launchctl kickstart gui/$(id -u)/dev.prompix.collect`。
 - 状态：`launchctl print gui/$(id -u)/dev.prompix.collect`。
 - 日志：`~/.local/share/prompix/daily.log`，超过 1 MB 保留一份 previous。
-- 结果：`~/.local/share/prompix/content/status.json`，包含逐来源成功／失败、版本、媒体失败列表。须核对本次起止时间、launchd退出码和日志；状态写入失败会留下旧成功记录。
+- 结果：`~/.local/share/prompix/content/status.json`，包含本次 `runID`、`state`、逐来源成功／失败、版本和媒体失败列表。须同时核对本次起止时间、launchd退出码和日志，不能只看 `published`。
 - 存储：上述 content 路径现链接到外接 SSD 的 `Prompix-Codex/Data/content`；保持 SSD 挂载，base 与 runtimes 仍留在本机真实目录。
 - 本地预览：`npm run daily`；人工发布：`npm run daily -- --publish`。
 - 下架：`npm run remove -- <id> <reason>`，再发布。不得将包含第三方内容的 JSON、媒体或日志提交到仓库。
@@ -19,6 +19,14 @@ launchd 是用户任务，须登录该用户；关机时不会运行。内容进
 成功升级后只保留 `runtime` 当前目录和 `runtime.previous` 指向的上一个已激活目录。清理只识别 runtimes 下数字命名、结构匹配的 Prompix 目录；未知目录、目录软链接、内容、日志及凭据均不清理。由旧启动器首次迁移时只安装锁保护、暂不删除历史目录；下一次成功升级才收敛到两个版本。安装或 launchd 注册失败时不做历史清理，恢复旧链接与启动文件，并尝试重新注册原任务；恢复失败时也不会删除仍被活动链接引用的新目录。此策略不清理内容版本、媒体和发布回滚数据。
 
 保留策略的隔离测试：`python3 -m unittest discover -s scripts -p 'test_scheduler.py' -v`。测试仅使用临时目录和模拟 npm／launchd，不安装生产任务或执行真实清理。
+
+### 状态与失败判读
+
+采集取得内容锁后先写 `state: running`，再进行来源请求、模型调用或发布恢复。开始写入失败立即停止主体，并尽力移除旧状态；竞争进程未取得锁时不修改现有状态。终态在释放内容锁前保存为 `succeeded` 或 `failed`；`succeeded` 只表示这次运行正常结束，不代表所有来源成功，也不代表已发布，仍须看各阶段、`publicationHold` 和 `published`。
+
+终态写入失败时，文件会停留在本次 `running`，日志仍输出原始错误、独立的 `statusWriteError` 和结束时间，进程非零退出。若连开始写和删除旧文件都失败，旧成功记录仍可能存在，日志会包含 `statusInvalidationError`；强制杀进程也不能保证终态。解锁失败单独记录 `unlockError`，不能覆盖原始业务异常；它发生在终态保存后，因此文件可能仍显示 `succeeded`，但日志和退出码判为失败。已经发布但状态保存失败时保留 `published: true`，不伪造回滚。故障后先核实活进程和同一 `runID` 的日志，不据一份状态文件重试或清零付费账本。
+
+故障回归 `node --import tsx --test ingest/daily-status.test.ts` 使用隔离临时目录与真实内容锁，注入开始／结束写失败、业务失败、解锁失败、只读删除失败和竞争运行；不访问来源、模型或生产数据。运行器启动前、锁创建失败等仍走已有 CLI／launchd 错误路径，不能从根状态文件推断它们已被记录。
 
 公开 GitHub 来源使用本机 Git 的 `ls-remote` 解析默认分支，再按不可变 commit 下载文件；运行环境须有 Git。这样不依赖共享出口的匿名 REST API 额度。仓库与文件名均使用显式白名单，解析或网络失败仍保留上次快照。
 
