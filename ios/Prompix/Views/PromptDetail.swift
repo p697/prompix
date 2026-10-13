@@ -25,6 +25,7 @@ struct PromptDetail: View {
         let item: Prompt
         let text: String
         let title: String
+        let language: String?
     }
     private struct EditorContext: Identifiable {
         let id = UUID()
@@ -208,7 +209,13 @@ struct PromptDetail: View {
             if removed { cancelLanguageSelection(); failedLanguage = nil }
         }
         .onDisappear { if languageRequestID != nil { cancelLanguageSelection() } }
-        .sheet(item: $useContext) { context in PromptUseSheet(item: context.item, text: context.text, title: context.title) }
+        .sheet(item: $useContext) { context in
+            PromptUseSheet(item: context.item, text: context.text, title: context.title) { prepared in
+                let saved = library.saveDraft(prepared, for: context.item, language: context.language)
+                if !saved { library.dismissError() }
+                return saved
+            }
+        }
         .sheet(item: $editorContext) { context in PromptEditor(item: context.item, language: context.language) }
         .fullScreenCover(isPresented: $imagePresented) { ImageViewer(name: item.media?.image ?? item.artwork, urls: item.media?.galleryURLs ?? []) }
         .sheet(isPresented: $webPresented) {
@@ -219,7 +226,7 @@ struct PromptDetail: View {
     private func openUseSheet() {
         let prepared = library.draft(for: item, language: effectiveLanguage)
         guard !prepared.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { openEditor(); return }
-        useContext = UseContext(item: item, text: prepared, title: content.title)
+        useContext = UseContext(item: item, text: prepared, title: content.title, language: effectiveLanguage)
     }
     private var sourceAuthor: some View {
         Text(item.source.author ?? item.source.name).font(.footnote.weight(.medium))
@@ -338,6 +345,7 @@ struct PromptEditor: View {
     @State private var usePresented = false
     @State private var leavePresented = false
     @State private var leavingWithoutSaving = false
+    @State private var variablesPresented = false
     @State private var headerHeight: CGFloat?
     init(item: Prompt, language: String? = nil) {
         self.item = item; self.language = language
@@ -374,7 +382,16 @@ struct PromptEditor: View {
                             .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty).accessibilityIdentifier("useEditedPrompt")
                     }
                 }
-                .sheet(isPresented: $usePresented) { PromptUseSheet(item: item, text: text, title: item.content(in: language).title) }
+                .sheet(isPresented: $usePresented) {
+                    PromptUseSheet(item: item, text: text, title: item.content(in: language).title) { prepared in
+                        text = prepared; return save()
+                    }
+                }
+                .sheet(isPresented: $variablesPresented) {
+                    PromptVariablesSheet(template: PromptTemplate(text, enabled: !item.isSkill)) { prepared in
+                        text = prepared; save()
+                    }
+                }
                 .safeAreaInset(edge: .bottom) {
                     Button {
                         UIPasteboard.general.string = text; copied = true
@@ -430,6 +447,10 @@ struct PromptEditor: View {
                     Spacer()
                     Text(String(localized: "\(text.count) 字符")).font(.footnote.monospacedDigit()).foregroundStyle(Palette.muted)
                 }
+            }
+            if !PromptTemplate(text, enabled: !item.isSkill).fields.isEmpty {
+                Button(String(localized: "填写变量"), systemImage: "square.and.pencil") { variablesPresented = true }
+                    .frame(minHeight: 44).accessibilityIdentifier("editPromptVariables")
             }
             if let saveError {
                 Text(saveError).font(.footnote).foregroundStyle(Palette.muted)

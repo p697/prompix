@@ -33,8 +33,12 @@ import UIKit
         for _ in 0..<attempts {
             // Search presents a centered sheet on iPad. Whole-display gestures
             // can start on its fixed action bar instead of scrolling the content.
-            let containingScroll = app.scrollViews.containing(.any, identifier: element.identifier).firstMatch
-            let viewport: XCUIElement = containingScroll.exists ? containingScroll : app
+            var viewport: XCUIElement = app
+            // Lazy Form rows may not have an accessibility snapshot until scrolled onscreen.
+            if element.exists {
+                let containingScroll = app.scrollViews.containing(.any, identifier: element.identifier).firstMatch
+                if containingScroll.exists { viewport = containingScroll }
+            }
             // XCTest can report partially covered controls as hittable. Keep
             // their entire target above the detail screen's fixed action bar.
             let copy = app.buttons["copyPrompt"]
@@ -747,6 +751,83 @@ import UIKit
     }
 
     /// Host supplies IDs from the reviewed release; third-party text stays outside Git.
+    func testPromptVariablePreparation() throws {
+        guard ProcessInfo.processInfo.environment["PROMPIX_VARIABLE_ACCEPTANCE"] == "1" else {
+            throw XCTSkip("Requires the backed-up production simulator and a travel Prompt without a personal draft.")
+        }
+        let id = "pc-f404f3161372c6cf4986"
+        let directory = try acceptanceDirectory()
+        let before = try readSnapshot([String: String].self, from: directory, file: "drafts.json")
+        XCTAssertFalse(before.keys.contains { $0 == id || $0.hasPrefix(id + "::") })
+        let catalog = try readSnapshot(CatalogSnapshot.self, from: directory, file: "catalog.json")
+        let original = try XCTUnwrap(catalog.prompts.first { $0.id == id }?.localization?.translations["zh-Hans"]?.prompt)
+        launch()
+        app.buttons["searchButton"].tap()
+        let search = app.searchFields.firstMatch
+        XCTAssertTrue(search.waitForExistence(timeout: 5)); search.tap(); search.typeText("旅行想法")
+        let card = app.scrollViews["searchResults"].buttons["prompt-\(id)"]
+        reveal(card); card.tap()
+        app.buttons["usePrompt"].tap()
+        let prepare = app.buttons["preparePromptVariables"]
+        reveal(prepare); prepare.tap()
+        let apply = app.buttons["applyPromptVariables"]
+        XCTAssertTrue(apply.waitForExistence(timeout: 5)); XCTAssertFalse(apply.isEnabled)
+        func input(_ index: Int) -> XCUIElement {
+            let id = "promptVariable-\(index)"
+            return app.textFields[id].exists ? app.textFields[id] : app.textViews[id]
+        }
+        let first = input(0)
+        XCTAssertTrue(first.waitForExistence(timeout: 5)); first.tap(); first.typeText("Discard this")
+        app.buttons["cancelPromptVariables"].tap()
+        XCTAssertEqual(try readSnapshot([String: String].self, from: try acceptanceDirectory(), file: "drafts.json"), before)
+        reveal(prepare); prepare.tap()
+        capture("variables-01-empty-form")
+        let values = ["Kyoto & Uji", "2026-11-01", "500 USD", "Bookshops\nQuiet cafes"]
+        for (index, value) in values.enumerated() {
+            let field = input(index)
+            // Form is a collection view; keep gestures above the keyboard and fixed action.
+            for _ in 0..<8 {
+                if field.exists && field.isHittable && field.frame.height > 0 && field.frame.minY > 110 && field.frame.maxY < apply.frame.minY - 20 { break }
+                let bottom = apply.frame.minY - 20
+                let top = app.buttons["cancelPromptVariables"].frame.maxY + 40
+                let origin = app.coordinate(withNormalizedOffset: .zero)
+                origin.withOffset(CGVector(dx: app.frame.midX, dy: bottom)).press(forDuration: 0.05,
+                    thenDragTo: origin.withOffset(CGVector(dx: app.frame.midX, dy: top)))
+            }
+            XCTAssertTrue(field.isHittable); field.tap(); field.typeText(value)
+            if index < values.count - 1 {
+                let done = app.buttons["dismissVariableKeyboard"]
+                XCTAssertTrue(done.waitForExistence(timeout: 5)); done.tap()
+                XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: 5))
+            }
+        }
+        XCTAssertTrue(apply.isEnabled)
+        capture("variables-02-filled-with-keyboard")
+        apply.tap()
+        XCTAssertTrue(app.buttons["handoffOpen"].waitForExistence(timeout: 5))
+        let expected = zip(["${city}", "${dates}", "${budget}", "${interests}"], values).reduce(original) {
+            $0.replacingOccurrences(of: $1.0, with: $1.1)
+        }
+        var expectedDrafts = before; expectedDrafts[id + "::zh-Hans"] = expected
+        XCTAssertEqual(try readSnapshot([String: String].self, from: try acceptanceDirectory(), file: "drafts.json"), expectedDrafts)
+        let copy = app.buttons["handoffCopy"]
+        reveal(copy); copy.tap(); XCTAssertTrue(copy.label.contains("已复制"))
+        capture("variables-03-ready-to-use")
+        let evidence = XCTAttachment(string: expected); evidence.name = "variables-expected-clipboard"
+        evidence.lifetime = .keepAlways; add(evidence)
+        app.terminate(); launch()
+        app.buttons["searchButton"].tap()
+        let restoredSearch = app.searchFields.firstMatch
+        XCTAssertTrue(restoredSearch.waitForExistence(timeout: 5)); restoredSearch.tap(); restoredSearch.typeText("旅行想法")
+        reveal(card); card.tap()
+        let edit = app.buttons["editPrompt"]
+        reveal(edit); edit.tap()
+        let editor = app.textViews["promptEditor"]
+        XCTAssertTrue(editor.waitForExistence(timeout: 5)); XCTAssertTrue(editor.value as? String == expected)
+        capture("variables-04-restored-editor")
+        XCTAssertEqual(try readSnapshot([String: String].self, from: try acceptanceDirectory(), file: "drafts.json"), expectedDrafts)
+    }
+
     func testPublishedTranslationCatchUp() throws {
         let environment = ProcessInfo.processInfo.environment
         guard let requested = environment["PROMPIX_TRANSLATION_ACCEPTANCE_IDS"],

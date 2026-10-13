@@ -10,6 +10,7 @@
 		00A3BAF655F16C8A59777842 /* DiscoveryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 243EFE6F0844D0EF888FE71F /* DiscoveryTests.swift */; };
 		01AC3F9CD912638229F52245 /* ContentLanguage.swift in Sources */ = {isa = PBXBuildFile; fileRef = B4F88881B11FF6A007FDD5EC /* ContentLanguage.swift */; };
 		08C5A86CF8E336487AB8819E /* LanguagePackLibraryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 108AED3C1FBA2407DA591066 /* LanguagePackLibraryTests.swift */; };
+		1197FF79F8578CAEB38FF85D /* PromptTemplateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7AF4C576B5F192CFE06F1270 /* PromptTemplateTests.swift */; };
 		1B3F9B49063A656FA86179F8 /* CreatorViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7FEA8CDF7268B83623B5A3C /* CreatorViews.swift */; };
 		1C982422EB6FE778B82F9273 /* TabSymbol.swift in Sources */ = {isa = PBXBuildFile; fileRef = 677CBB7564C450F9D6E919D2 /* TabSymbol.swift */; };
 		1E5EA3A9E1020B54DE41139E /* LibraryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C248C810F5017027B0C5F45C /* LibraryTests.swift */; };
@@ -32,6 +33,7 @@
 		8E1C4C628D7F6C025D8373F6 /* PromptHandoff.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A2A489905D972D04B94140B /* PromptHandoff.swift */; };
 		9E60534B1E8D0A04BA2FCF95 /* LanguagePackCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = D884CB2F241ACA13A323696C /* LanguagePackCache.swift */; };
 		9F89A427B2C42B8D1C098141 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 1E21261F4D5A685A541FD907 /* Foundation.framework */; };
+		AC9A58D8216B0E29F57CAC88 /* PromptVariablesSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFC2F66647F0F77C0C0FADB8 /* PromptVariablesSheet.swift */; };
 		ADE26CE39D84C234CC0C15C6 /* LanguagePackSyncTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A20EA5CEEF44B4D47C56403 /* LanguagePackSyncTests.swift */; };
 		B03561E28402FF05206EB45A /* WebExample.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77543AF7CF1B4AB210D15633 /* WebExample.swift */; };
 		B0D35164084C4E2B7A28784F /* CollectionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F354051DCBAB4AB6BBF74FE /* CollectionsView.swift */; };
@@ -41,6 +43,7 @@
 		CD629DA2EA58D2D347AD73FA /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = CAEF97C512C0865BA9BCB4CA /* Theme.swift */; };
 		D0B230595110AEDBD78B9E99 /* LanguagePackCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2C8EB92C5F7A296F45257D2 /* LanguagePackCatalog.swift */; };
 		D64D33021C0173DE21E8CF2F /* GlobalDiscoveryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E64E60E95FE9245A77FC6D5D /* GlobalDiscoveryTests.swift */; };
+		D768BB1B4774FD14B92F2B9E /* PromptTemplate.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD7AE0F6CA527071AD9FE149 /* PromptTemplate.swift */; };
 		E041E453BA55806DC712B2CD /* DiscoveryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 418BCEB58EAD4602BDCA4D1F /* DiscoveryView.swift */; };
 		E9D34BCD75567272674C1BDE /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 1E2C056B19ECC4C3925366AD /* Localizable.xcstrings */; };
 		F18619EACA9AF20C0522CC0A /* SkillInformation.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA363661EA255190496CC133 /* SkillInformation.swift */; };
@@ -84,6 +87,7 @@
 		73DD13F54EED35BA0C0493C3 /* RemoteImage.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = RemoteImage.swift; path = Views/RemoteImage.swift; sourceTree = "<group>"; };
 		77543AF7CF1B4AB210D15633 /* WebExample.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = WebExample.swift; path = Views/WebExample.swift; sourceTree = "<group>"; };
 		79833C437CE4BD603EC0EEF8 /* Library.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = Library.swift; path = Models/Library.swift; sourceTree = "<group>"; };
+		7AF4C576B5F192CFE06F1270 /* PromptTemplateTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PromptTemplateTests.swift; sourceTree = "<group>"; };
 		7B88D170C6ACFA7B5AC85E30 /* Assets.xcassets */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		7BA4CC255AB28BD936B20BCF /* Prompt.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = Prompt.swift; path = Models/Prompt.swift; sourceTree = "<group>"; };
 		7F3939B85D87E08D47655CC4 /* PromptDetail.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = PromptDetail.swift; path = Views/PromptDetail.swift; sourceTree = "<group>"; };
@@ -96,6 +100,7 @@
 		C248C810F5017027B0C5F45C /* LibraryTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LibraryTests.swift; sourceTree = "<group>"; };
 		C913EA7CF73EA826D476B61F /* Artwork.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = Artwork.swift; path = Views/Artwork.swift; sourceTree = "<group>"; };
 		CAEF97C512C0865BA9BCB4CA /* Theme.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = Theme.swift; path = Views/Theme.swift; sourceTree = "<group>"; };
+		CFC2F66647F0F77C0C0FADB8 /* PromptVariablesSheet.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = PromptVariablesSheet.swift; path = Views/PromptVariablesSheet.swift; sourceTree = "<group>"; };
 		D884CB2F241ACA13A323696C /* LanguagePackCache.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = LanguagePackCache.swift; path = Models/LanguagePackCache.swift; sourceTree = "<group>"; };
 		DAD3758DD77E4B43A90D10E3 /* WebExamples */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = folder; path = WebExamples; sourceTree = "<group>"; };
 		E2C8EB92C5F7A296F45257D2 /* LanguagePackCatalog.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = LanguagePackCatalog.swift; path = Models/LanguagePackCatalog.swift; sourceTree = "<group>"; };
@@ -103,6 +108,7 @@
 		F25927E3A42CA9CBF1DF125A /* playback-fixture.mp4 */ = {isa = PBXFileReference; includeInIndex = 1; path = "playback-fixture.mp4"; sourceTree = "<group>"; };
 		F6BB6DB6812418AEA087AA4C /* PromptHandoffTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PromptHandoffTests.swift; sourceTree = "<group>"; };
 		F7FEA8CDF7268B83623B5A3C /* CreatorViews.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = CreatorViews.swift; path = Views/CreatorViews.swift; sourceTree = "<group>"; };
+		FD7AE0F6CA527071AD9FE149 /* PromptTemplate.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = PromptTemplate.swift; path = Models/PromptTemplate.swift; sourceTree = "<group>"; };
 		FDED15EF12D7E7108F3D500C /* PrompixUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PrompixUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -206,6 +212,8 @@
 				D884CB2F241ACA13A323696C /* LanguagePackCache.swift */,
 				6A2A489905D972D04B94140B /* PromptHandoff.swift */,
 				3F000455453046C545687F92 /* PromptUseSheet.swift */,
+				FD7AE0F6CA527071AD9FE149 /* PromptTemplate.swift */,
+				CFC2F66647F0F77C0C0FADB8 /* PromptVariablesSheet.swift */,
 			);
 			name = Prompix;
 			path = Prompix;
@@ -243,6 +251,7 @@
 				6A20EA5CEEF44B4D47C56403 /* LanguagePackSyncTests.swift */,
 				108AED3C1FBA2407DA591066 /* LanguagePackLibraryTests.swift */,
 				F6BB6DB6812418AEA087AA4C /* PromptHandoffTests.swift */,
+				7AF4C576B5F192CFE06F1270 /* PromptTemplateTests.swift */,
 			);
 			name = PrompixTests;
 			path = PrompixTests;
@@ -407,6 +416,8 @@
 				9E60534B1E8D0A04BA2FCF95 /* LanguagePackCache.swift in Sources */,
 				8E1C4C628D7F6C025D8373F6 /* PromptHandoff.swift in Sources */,
 				7058876D14A863CAF7C45017 /* PromptUseSheet.swift in Sources */,
+				D768BB1B4774FD14B92F2B9E /* PromptTemplate.swift in Sources */,
+				AC9A58D8216B0E29F57CAC88 /* PromptVariablesSheet.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -421,6 +432,7 @@
 				ADE26CE39D84C234CC0C15C6 /* LanguagePackSyncTests.swift in Sources */,
 				08C5A86CF8E336487AB8819E /* LanguagePackLibraryTests.swift in Sources */,
 				8A1D677FF5D7B9ACDE6B2E69 /* PromptHandoffTests.swift in Sources */,
+				1197FF79F8578CAEB38FF85D /* PromptTemplateTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -480,12 +492,12 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CLANG_ENABLE_OBJC_WEAK = NO;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 16;
+				CURRENT_PROJECT_VERSION = 17;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				INFOPLIST_FILE = Prompix/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
-				MARKETING_VERSION = 0.4.5;
+				MARKETING_VERSION = 0.4.6;
 				PRODUCT_BUNDLE_IDENTIFIER = com.p697.prompix;
 				PRODUCT_NAME = Prompix;
 				SDKROOT = iphoneos;
@@ -649,12 +661,12 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CLANG_ENABLE_OBJC_WEAK = NO;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 16;
+				CURRENT_PROJECT_VERSION = 17;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				INFOPLIST_FILE = Prompix/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
-				MARKETING_VERSION = 0.4.5;
+				MARKETING_VERSION = 0.4.6;
 				PRODUCT_BUNDLE_IDENTIFIER = com.p697.prompix;
 				PRODUCT_NAME = Prompix;
 				SDKROOT = iphoneos;
