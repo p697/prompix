@@ -1,9 +1,87 @@
 import XCTest
 
 /// A production-cache journey. The host owns the device pose and stages a
-/// backed-up catalog; this test never changes hardware or accessibility settings.
+/// backed-up catalog. VoiceOver checks restore their original accessibility state.
 @MainActor final class DuoDeliveryUITests: XCTestCase {
     private let app = XCUIApplication()
+
+    func testDiscoveryVoiceOverAnnouncesHeadingActions() throws {
+        #if compiler(>=6.4) && targetEnvironment(simulator)
+        guard #available(iOS 27.0, *), ProcessInfo.processInfo.environment["PROMPIX_DUO_DELIVERY"] == "1" else {
+            throw XCTSkip("Enable only for dedicated simulator VoiceOver acceptance.")
+        }
+        continueAfterFailure = true
+        let directory = try acceptanceDirectory()
+        let catalog = try JSONDecoder().decode(CatalogSnapshot.self,
+            from: Data(contentsOf: directory.appendingPathComponent("catalog.json")))
+        XCTAssertGreaterThan(catalog.prompts.count, 100)
+        let personal = try ["drafts.json", "favorites.json", "creators.json"].map { name in
+            PersonalSnapshot(name: name, data: try readPersonalFile(name, in: directory))
+        }
+        let voiceOver = XCUIDevice.shared.voiceOverService
+        let wasVoiceOverEnabled = voiceOver.isEnabled
+        var speech: [String] = []
+        func record(_ value: String) { speech.append(value); print("VOICEOVER SHORTCUT: \(value)") }
+        func require(_ condition: Bool, _ message: String) throws {
+            guard condition else { throw NSError(domain: "VoiceOverShortcut", code: 1,
+                userInfo: [NSLocalizedDescriptionKey: message]) }
+        }
+        defer {
+            do {
+                if wasVoiceOverEnabled { try voiceOver.enable() }
+                else { try voiceOver.disable() }
+            }
+            catch { XCTFail("Could not restore VoiceOver: \(error)") }
+            let transcript = XCTAttachment(string: speech.joined(separator: "\n"))
+            transcript.name = "discovery-heading-actions-spoken-output"
+            transcript.lifetime = .keepAlways
+            add(transcript)
+            app.terminate()
+        }
+        if voiceOver.isEnabled { try voiceOver.disable() }
+        app.launchArguments = ["--cached-only", "-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh-Hans"]
+        app.launch()
+        let filter = app.buttons["kind-text"]
+        XCTAssertTrue(filter.waitForExistence(timeout: 10))
+        filter.tap()
+        XCTAssertTrue(filter.isSelected)
+
+        try voiceOver.enable()
+        let heading = app.staticTexts["discoveryHeading"]
+        try require(heading.exists && heading.isHittable, "The discovery heading must remain reachable.")
+        var utterance = try voiceOver.currentSpeech().utterance
+        record("initial: \(utterance)")
+        for _ in 0..<30 {
+            if utterance.contains("Prompix") && utterance.contains("标题") { break }
+            utterance = try voiceOver.moveBackward().utterance
+            record("toward heading: \(utterance)")
+        }
+        try require(utterance.contains("Prompix") && utterance.contains("标题"), utterance)
+        // This checks actual speech and action selection only. Sheet activation
+        // is verified separately through the simulator's exposed AX actions;
+        // injected keyboard/touch activation has not passed on the Duo runtime.
+        for action in ["搜索", "设置"] {
+            for _ in 0..<4 {
+                app.typeKey(.downArrow, modifierFlags: [.control, .option])
+                utterance = try voiceOver.currentSpeech().utterance
+                record("action: \(utterance)")
+                if utterance.trimmingCharacters(in: .whitespacesAndNewlines) == action { break }
+            }
+            try require(utterance.trimmingCharacters(in: .whitespacesAndNewlines) == action,
+                "Select the named action with VoiceOver: \(utterance)")
+        }
+        capture("heading-actions-announced")
+        try voiceOver.disable()
+        XCTAssertTrue(filter.isSelected, "Selecting an accessibility action must retain the discovery filter.")
+        let current = try acceptanceDirectory()
+        for snapshot in personal {
+            XCTAssertTrue(try readPersonalFile(snapshot.name, in: current) == snapshot.data,
+                "Navigation actions must preserve personal data: \(snapshot.name)")
+        }
+        #else
+        throw XCTSkip("Requires the iOS 27 VoiceOver test service on a simulator.")
+        #endif
+    }
 
     func testLastHomeCreatorIsVisibleAndOpens() throws {
         continueAfterFailure = false

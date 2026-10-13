@@ -68,7 +68,7 @@ Apple RC 发布说明列出的限制包括首次模拟器启动可能耗时数�
 |---|---|---|
 | 九语言界面 | `testNineInterfaceLanguages` 通过，281.445秒 | `final-validation/language-motion-summary.json` 及同目录 `language-motion-voiceover-final.log`；覆盖九语自动断言，不代表截图视觉通过 |
 | 减少动态效果 | `testReducedMotionImageZoomAndReturn` 通过，26.252秒 | 同一结果文件；附件实际记录 `UIAccessibility.isReduceMotionEnabled = true` |
-| 发现页 VoiceOver | 实际平面遍历通过，91.796秒，第139／140项分别朗读搜索／设置按钮 | `final-validation/voiceover-launch-summary.json`、`voiceover-flat-attachments/`；证明真实朗读可达，不把遍历步数当作操作效率已达标 |
+| 发现页 VoiceOver | 实际平面遍历通过，91.796秒；从标题向前108／109步到达搜索／设置 | `final-validation/voiceover-launch-summary.json`、`voiceover-flat-attachments/`；原日志139／140是含先前前进及后退的索引，标题在31；此测试使用30条离线种子，不是465／527条目录。证明真实朗读可达，不代表操作效率已达标 |
 | Skill 使用面板 VoiceOver | `testSkillHandoffVoiceOverTraversal` 通过，34.787秒 | `final-validation/languages-voiceover-run.log`；不代表已在外部工具执行 Skill |
 
 `initial-summary.json` 的九语与 VoiceOver 失败，以及 `language-motion-summary.json` 中旧 VoiceOver 路径的失败均保留；后者是两项通过、一项失败的混合结果，不能称整组通过。最终平面朗读遍历单独记录于 `voiceover-launch-summary.json`。
@@ -99,7 +99,7 @@ Debug、`--offline`、30条内置内容的五次启动测量为4.861194、4.8153
 
 只把 FocusState 恢复为叶子持有、父级显式发出收键盘请求的受控 A/B 未证明改善，已撤回，最终仍使用通过失败恢复回归的父级绑定。不引入未经验证的输入代理或监听姿态强制重建。官方27.1 RC说明未列出此现象，原因尚未确认，不能称为Apple已知bug。当前建议在切换内外屏前先选词提交；这是一项明确的候选版限制，不是完整输入法连续性已验收。
 
-最大辅助字号下德文命令预览会自动断词，存在视觉连字符歧义；实际复制使用完整源字符串。VoiceOver搜索／设置可达，但平面遍历较长。真机功耗、音频与硬件性能、外部原生App里的实际执行及商店提名仍属后续独立关口。
+最大辅助字号下德文命令预览会自动断词，存在视觉连字符歧义；实际复制使用完整源字符串。VoiceOver搜索／设置可达，但平面遍历较长；构建19提供标题辅助操作，手势自动化限制见下文。真机功耗、音频与硬件性能、外部原生App里的实际执行及商店提名仍属后续独立关口。
 
 ## 初步源码审查
 
@@ -111,10 +111,24 @@ Debug、`--offline`、30条内置内容的五次启动测量为4.861194、4.8153
 
 用户提供的 [Kyrie 分享](https://x.com/kyriecheungyep/status/2102308276654231988) 用于参考，不执行文末给 AI 的通用指令。早期 beta 的空 reservedRegions／不竖排结论须重验；[Blake Crosley 后续复测](https://blakecrosley.com/blog/xcode-27-1-beta-iphone-duo-simulator) 指出实际链接 SDK 会影响结果。[作者示例](https://github.com/artemnovichkov/iPhone-Duo-by-Examples) 和[实践手册](https://github.com/aivars/iphone-duo-playbook) 作为测试线索；不直接执行外部脚本，不硬编码示例尺寸。
 
+## 构建19：发现页辅助操作
+
+0.4.7（19）沿用上述布局、编辑器与数据协议，唯一生产行为变化是在现有Prompix标题增加本地化的搜索／设置自定义辅助操作；原生工具栏仍保留。使用Apple的 [accessibilityAction](https://developer.apple.com/documentation/swiftui/view/accessibilityaction(named:_:))，避免仅为缩短遍历而重排系统容器。构建18的签名包不包含这项变化，没有覆盖或重新标记旧包。
+
+专用Duo的实际527条缓存检查结果：
+
+- `testDiscoveryVoiceOverAnnouncesHeadingActions` 在收起状态通过，27.290秒，1通过、0失败、0跳过。实际朗读标题及“设置”“搜索”操作，保留文本分类和三份个人文件。这个测试名称及断言只覆盖朗读／选动作。
+- 展开状态通过Device Hub暴露的标题AX辅助操作依次打开真实搜索和设置弹层，设置页显示0.4.7（19）、527条。搜索使用系统取消操作关闭，设置使用原生完成按钮关闭；两次均返回文本分类182条，草稿、收藏和创作者收藏与验收前逐字节相同。
+- 自动注入的VoiceOver键盘激活与双击，在展开／收起的针对性探测中未打开弹层。失败结果保留，原因尚未确认；AX调用成功不等于VoiceOver实际双击手势已经通过。原有搜索／设置按钮仍可用，没有删除回退入口。
+
+证据为外置盘 `Prompix-Codex/Evidence/accessible-navigation-20261013/` 中的 `announcements-19.xcresult`、`verification-19.json`、`search-19-display3.png`、`settings-19-display3.png`。后两张已实际打开查看。早期 `search-ax-action.png`／`settings-ax-action.png` 抓到了非活动屏，画面全黑，不能作为视觉证据。失败探测的结果包及源码另存，不以缩小后的测试冒充原完整手势测试已通过。
+
+复现朗读检查：保留模拟器个人数据备份，使用已下载的生产目录，按 `ios/README.md` 的 `PROMPIX_DUO_DELIVERY` 和显式容器保护配置运行上述单项测试。辅助操作人工复现：在Device Hub启用VoiceOver，定位发现页Prompix标题，在其暴露的“搜索”／“设置”辅助操作中分别执行，检查实际弹层、返回分类和个人数据；注入手势限制须独立记录。普通验收结束后关闭VoiceOver并恢复全部分类。
+
 ## 现场验收入口
 
-在外置 SSD 安装的 Xcode27.1RC 中打开 Device Hub，选择 **Prompix iPhone Duo** 并打开 Prompix 0.4.7（18）。当前已通过设置更新到527条，保持中文界面、普通字号和浅色；辅助测试的减少动态效果和VoiceOver已关闭，本次内容更新前后三份个人文件逐字节不变。上文姿态与交互证据保留其465条阶段范围，新增内容更新及单条复制验证见[运行记录](content-operations.md#2026-10-13新增内容审读补译与质量暂缓)。用户手机未安装本版。
+在外置 SSD 安装的 Xcode27.1RC 中打开 Device Hub，选择 **Prompix iPhone Duo** 并打开 Prompix 0.4.7（19）。当前已通过设置更新到527条，保持中文界面、普通字号和浅色；辅助测试的减少动态效果和VoiceOver已关闭，本次内容更新前后三份个人文件逐字节不变。上文姿态与交互证据保留其465条阶段范围，新增内容更新及单条复制验证见[运行记录](content-operations.md#2026-10-13新增内容审读补译与质量暂缓)。用户手机未安装本版。
 
-建议依次体验发现页宽窄网格、创作者横滑和返回、网页或图片详情的阅读／预览、使用面板、编辑、开合旋转、图库／视频返回，以及Safari左右50/50多任务。外置证据目录的 `ACCEPTANCE.md` 提供具体步骤，`current-evidence-index.json` 汇总最终与历史证据，`final-validation/installed-delivery-verification.json` 证明已安装App与测试候选二进制一致。
+建议依次体验发现页宽窄网格、创作者横滑和返回、网页或图片详情的阅读／预览、使用面板、编辑、开合旋转、图库／视频返回，以及Safari左右50/50多任务。外置证据目录的 `ACCEPTANCE.md` 提供具体步骤，`current-evidence-index.json` 汇总最终与历史证据，`final-validation/installed-delivery-verification.json` 记录构建18的身份。构建19独立保存在 `Prompix-Codex/Deliveries/Prompix-0.4.7-19-Duo/`，本轮哈希与个人数据核对见 `accessible-navigation-20261013/verification-19.json`，不将18的测试自动重新标为19全量通过。
 
 本轮提供可操作的Duo验收候选版，明确保留上述组合输入限制；不声称完整项目上架已完成，也不承诺Apple编辑推荐。
