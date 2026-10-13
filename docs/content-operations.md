@@ -381,3 +381,10 @@ Duo模拟器0.4.7（18）通过设置中的实际更新从528变为527，Expo创
 外部证据位于 `/Volumes/Lucy-SSD/Prompix-Codex/Evidence/translations-528-20261013/`：`source-quality-review.json`、`summary.json`、`structural-review.json`、`semantic-review.json`、`corrections.json`、`reviewed-publication.json`、`publication-ledger-verification.json`、`publication-original-preservation.json`、`deployment-check.log`、`native-update-verification.json`、`native-copy-verification.json`和实际截图。目录名保留受审基线528，不表示最终公开条数。
 
 同轮PR78的状态写入修复已通过CI并安装，运行代码与合并提交 `08636e2` 逐文件一致。新的启动/终态标识不会掩盖原始异常，隔离故障与完整449项内容测试通过；CI另修复了视觉临时目录检查误读其他并发测试文件的竞争。安装记录在 `Evidence/collector-status-20261013/`。本轮没有人为触发daily；自然20点排程仍待验证。根 `status.json` 保留此前手动恢复的528条运行结果，本次527条手动发布另见上述operation记录，不能把旧运行结果误当最新线上指针或自然排程成功。
+
+
+## 2026-10-13 20点自然排程观察
+
+20:00:07 JST，已部署运行器自然启动runID `9f06bb52-d6a2-468d-8a53-8a564b91bd25`；launchd的runs为1、PID8501与采集子进程8505均存在，新的`running`状态替代旧手动成功标记。本次没有人为触发，也没有为验收追加付费请求。20:08及后续收尾观察时任务尚未结束，不能写成自然发布成功。
+
+客户端验收期间内盘再次逼近容量上限，已把一个不活跃项目的依赖目录可逆迁往SSD，释放约6.2 GiB。63401个文件逐文件SHA、权限、时间戳与94个符号链接解析一致，源码和锁文件未变；证据为SSD的`Evidence/storage-recovery-20261013/inactive-clawket-deps/migration.json`。这是开发机容量处理，不是采集代码改动；自然排程快照单独保存在同目录及媒体验收目录，不将存储迁移等同于调度验收通过。
