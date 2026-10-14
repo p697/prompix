@@ -1,6 +1,6 @@
 # Prompix 文档
 
-数据库集成候选 **0.7.0（31）** 已接入分页、全库搜索、按需详情和离线收藏，并保留旧缓存与草稿。服务端已部署，最终构建和首个自然采集验收见[升级记录](database-feed-v3.md)，日常分析、备份、恢复和清理见[运维规程](database-operations.md)。
+数据库集成验收版 **0.7.0（31）** 已接入分页、全库搜索、按需详情和离线收藏，并保留旧缓存与草稿。服务端已部署，首个自然采集成功更新至 649 条，最终原生套件 235 项通过、2 项环境限定测试跳过。签名包与模拟器入口见[交付记录](release-0.7.0.md)，技术证据见[升级记录](database-feed-v3.md)，日常分析、备份、恢复和清理见[运维规程](database-operations.md)。
 
 前一轮 UI 打磨版 **0.6.6（30）**：可实际试用的引导、简化的工具选择与内容准备面板、明确区分阅读版本和个人修改。已纳入 0.7.0；范围和验收证据见[本轮记录](experience-polish-0.6.6.md)。本轮未安装物理手机。
 
@@ -26,7 +26,7 @@ Prompix 是开源、免费的多模态 Prompt 集合 App。用户像逛手机淘
 
 ## 当前方案
 
-数据库分页升级：[v3 方案与验证证据](database-feed-v3.md)。独立 Supabase/Cloudflare 链路已迁入并核对 648 条已发布内容；v3 API 已部署，候选 App 使用分页，定时运行副本已启用 DB 主发布并保留 v1/v2 兼容导出。首个自然排程和最终二进制验证继续记录，不以安装成功代替发布验收。
+数据库分页升级：[v3 方案与验证证据](database-feed-v3.md)。独立 Supabase/Cloudflare 链路已迁入原有 648 条，首个自然排程成功发布 649 条并完成备份恢复演练；v3 API 与分页 App 可供验收，定时运行副本已启用 DB 主发布并保留 v1/v2 兼容导出。正式包尚未上传商店，用户验收与商店提交仍是独立关口。
 
 | 文档 | 内容 |
 |---|---|
@@ -34,7 +34,7 @@ Prompix 是开源、免费的多模态 Prompt 集合 App。用户像逛手机淘
 | [iphone-duo.md](iphone-duo.md) | Duo 工具链、官方依据与连续操作验收目标 |
 | [design-research-2026-10.md](design-research-2026-10.md) | Apple 官方案例、Cosmos 与原生交互实施依据 |
 | [product.md](product.md) | 产品定位、四类内容、发现体验、首版边界 |
-| [tech-plan.md](tech-plan.md) | 原生客户端、内容协议、轻量采集、静态发布 |
+| [tech-plan.md](tech-plan.md) | 原生客户端、数据库分页、轻量采集、兼容发布 |
 | [content-protocol-v2.md](content-protocol-v2.md) | 已部署的双通道协议、原生语言缓存与事务、已验收和待验收边界 |
 | [app-store.md](app-store.md) | 九语言商店文案草稿、审核路径、隐私申报依据与待办 |
 | [quality-release.md](quality-release.md) | 持续目标、完整交付的质量关口与完成证据 |
