@@ -14,7 +14,7 @@
             buildForAnalyzing = "YES">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "DD228DE55FB84ADE0BAF9592"
+               BlueprintIdentifier = "A6C3F9BD927E68E91C3FA720"
                BuildableName = "Prompix.app"
                BlueprintName = "Prompix"
                ReferencedContainer = "container:Prompix.xcodeproj">
@@ -30,7 +30,7 @@
       <MacroExpansion>
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "DD228DE55FB84ADE0BAF9592"
+            BlueprintIdentifier = "A6C3F9BD927E68E91C3FA720"
             BuildableName = "Prompix.app"
             BlueprintName = "Prompix"
             ReferencedContainer = "container:Prompix.xcodeproj">
@@ -41,7 +41,7 @@
             skipped = "NO">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "4E2E82C589F0E601EB87AC92"
+               BlueprintIdentifier = "2EED7A26704488F4A6B5C3C7"
                BuildableName = "PrompixTests.xctest"
                BlueprintName = "PrompixTests"
                ReferencedContainer = "container:Prompix.xcodeproj">
@@ -51,7 +51,7 @@
             skipped = "NO">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "F40EAB418FA7F5809C578C3F"
+               BlueprintIdentifier = "FC25602ED3C2541178F5D009"
                BuildableName = "PrompixUITests.xctest"
                BlueprintName = "PrompixUITests"
                ReferencedContainer = "container:Prompix.xcodeproj">
@@ -73,7 +73,7 @@
          runnableDebuggingMode = "0">
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "DD228DE55FB84ADE0BAF9592"
+            BlueprintIdentifier = "A6C3F9BD927E68E91C3FA720"
             BuildableName = "Prompix.app"
             BlueprintName = "Prompix"
             ReferencedContainer = "container:Prompix.xcodeproj">
@@ -90,7 +90,7 @@
          runnableDebuggingMode = "0">
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "DD228DE55FB84ADE0BAF9592"
+            BlueprintIdentifier = "A6C3F9BD927E68E91C3FA720"
             BuildableName = "Prompix.app"
             BlueprintName = "Prompix"
             ReferencedContainer = "container:Prompix.xcodeproj">

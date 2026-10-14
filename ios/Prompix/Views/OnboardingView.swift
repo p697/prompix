@@ -9,7 +9,16 @@ struct PrompixOnboarding: View {
     @State private var examples: [Prompt] = []
     @State private var writingExample: Prompt?
     @State private var capturedExamples = false
+    @State private var trial: Trial?
     @AccessibilityFocusState private var focusedPage: Int?
+
+    private struct Trial: Identifiable {
+        let id = UUID()
+        let item: Prompt
+        let language: String?
+        let content: Prompt.TranslatedContent
+        let text: String
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -29,6 +38,13 @@ struct PrompixOnboarding: View {
         .foregroundStyle(Palette.ink)
         .onAppear(perform: captureExamples)
         .onChange(of: page) { _, value in focusedPage = value }
+        .sheet(item: $trial, onDismiss: { focusedPage = 2 }) { trial in
+            PromptUseSheet(item: trial.item, text: trial.text, sourceText: trial.content.prompt, title: trial.content.title, language: trial.language, onPrepared: { prepared in
+                let saved = library.saveDraft(prepared, for: trial.item, language: trial.language)
+                if !saved { library.dismissError() }
+                return saved
+            })
+        }
     }
 
     private var navigation: some View {
@@ -69,7 +85,10 @@ struct PrompixOnboarding: View {
                     .accessibilityFocused($focusedPage, equals: index)
                     .accessibilityIdentifier("onboarding-title-\(index)")
                 Spacer(minLength: 24)
-                if !typeSize.isAccessibilitySize {
+                if index == 2 {
+                    usePreview.frame(maxWidth: 360)
+                    Spacer(minLength: 24)
+                } else if !typeSize.isAccessibilitySize {
                     illustration(for: index, viewport: viewport)
                         .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
                         .accessibilityHidden(true)
@@ -106,10 +125,8 @@ struct PrompixOnboarding: View {
         let height = min(width * 1.05, max(200, viewport.height * 0.67))
         if index == 0 {
             collage.frame(width: width, height: height)
-        } else if index == 1 {
-            collectionPreview.frame(maxWidth: width)
         } else {
-            usePreview.frame(maxWidth: min(width, 360))
+            collectionPreview.frame(maxWidth: width)
         }
     }
 
@@ -168,18 +185,22 @@ struct PrompixOnboarding: View {
     }
 
     private var usePreview: some View {
-        VStack(spacing: 18) {
+        VStack(spacing: 16) {
             VStack(alignment: .leading, spacing: 14) {
                 HStack {
                     Text("Prompt").font(.caption.weight(.medium))
                     Spacer()
-                    Image(systemName: "doc.on.doc").font(.body)
+                    Image(systemName: "text.alignleft").font(.body).accessibilityHidden(true)
                 }
                 .foregroundStyle(Palette.accent)
                 if let writingExample {
-                    Text(writingExample.displayTitle).font(.title3).lineLimit(2)
-                    Text(writingExample.displaySummary)
-                        .font(.subheadline).foregroundStyle(Palette.muted).lineLimit(3)
+                    let content = writingExample.content(in: writingExample.preferredTranslation)
+                    Text(content.title).font(.title3)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text(content.prompt)
+                        .font(.subheadline).foregroundStyle(Palette.muted).lineSpacing(4)
+                        .lineLimit(typeSize.isAccessibilitySize ? 4 : 5)
+                        .accessibilityIdentifier("onboardingTrialExcerpt")
                 } else {
                     Text(String(localized: "onboarding.use.preview", table: "Onboarding"))
                         .font(.title3)
@@ -188,21 +209,29 @@ struct PrompixOnboarding: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(24)
             .background(Palette.soft, in: RoundedRectangle(cornerRadius: 16))
-            Image(systemName: "arrow.down").font(.title3.weight(.light)).foregroundStyle(Palette.accent)
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: 8) { toolLabels }
-                VStack(spacing: 8) { toolLabels }
+            if let writingExample {
+                Button { openTrial(writingExample) } label: {
+                    HStack(spacing: 10) {
+                        Text(String(localized: "onboarding.trial.action", table: "Onboarding"))
+                            .fixedSize(horizontal: false, vertical: true)
+                        Image(systemName: "arrow.right").accessibilityHidden(true)
+                    }
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(Palette.accent)
+                    .frame(maxWidth: .infinity, minHeight: 48)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("onboardingTryPrompt")
+                .accessibilityHint(String(localized: "onboarding.trial.hint", table: "Onboarding"))
             }
         }
     }
 
-    @ViewBuilder private var toolLabels: some View {
-        ForEach(["ChatGPT", "Claude", "Gemini"], id: \.self) { name in
-            Text(name).font(.subheadline)
-                .fixedSize()
-                .padding(.horizontal, 14).padding(.vertical, 10)
-                .background(Palette.surface, in: Capsule())
-        }
+    private func openTrial(_ item: Prompt) {
+        let language = item.preferredTranslation
+        trial = Trial(item: item, language: language, content: item.content(in: language),
+                      text: library.draft(for: item, language: language))
     }
 
     @ViewBuilder private func tile(at index: Int) -> some View {
@@ -273,8 +302,16 @@ struct PrompixOnboarding: View {
         }
         let localIDs = Set(localImages.map(\.id))
         let remaining = items.filter { !localIDs.contains($0.id) }
-        examples = Array((localImages + remaining).prefix(6))
-        writingExample = items.first { $0.kind == .text && !$0.isSkill } ?? items.first
+        let writingCandidates = items.filter {
+            $0.kind == .text && !$0.isSkill && !$0.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                && $0.prompt.count <= 1_200
+        }
+        writingExample = writingCandidates.first { $0.id == "ordinary-museum" } ?? writingCandidates.first
+        // A single real prompt connects discovery, saving and trying. Its text
+        // is already in the catalog; opening the preview needs no network.
+        var seen = Set<String>()
+        let story = Array(localImages.prefix(1)) + [writingExample].compactMap { $0 } + localImages + remaining
+        examples = Array(story.filter { seen.insert($0.id).inserted }.prefix(6))
     }
 
     private func title(for index: Int) -> String {

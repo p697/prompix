@@ -69,6 +69,91 @@ extension XCUIApplication {
         capture("cosmos-05-text-channel")
     }
 
+    func testOptionalTrialReturnsToWelcomeWithoutCompleting() {
+        app.launch()
+        XCTAssertTrue(app.buttons["onboardingNext"].waitForExistence(timeout: 10))
+        app.buttons["onboardingNext"].tap()
+        app.buttons["onboardingNext"].tap()
+        let trial = app.buttons["onboardingTryPrompt"]
+        XCTAssertTrue(trial.waitForExistence(timeout: 3))
+        for _ in 0..<5 {
+            if trial.isHittable { break }
+            app.scrollViews["onboarding-page-2"].swipeUp()
+        }
+        XCTAssertTrue(trial.isHittable)
+        XCTAssertFalse(app.staticTexts["onboardingTrialExcerpt"].label.isEmpty)
+        capture("welcome-trial-preview")
+        trial.tap()
+        XCTAssertTrue(app.buttons["handoffOpen"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["finishPromptUse"].isHittable)
+        capture("welcome-trial-tools")
+
+        // Merely previewing a real prompt must neither launch a tool nor
+        // complete onboarding. Closing returns to the same third page.
+        app.buttons["finishPromptUse"].tap()
+        XCTAssertTrue(app.buttons["onboardingComplete"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["onboarding-title-2"].exists)
+        XCTAssertTrue(app.buttons["handoffOpen"].waitForNonExistence(timeout: 3))
+        capture("welcome-trial-return")
+
+        app.terminate()
+        app.launchArguments.removeAll { $0 == "--reset-onboarding" }
+        app.launch()
+        XCTAssertTrue(app.buttons["onboardingNext"].waitForExistence(timeout: 10), "Trying a prompt must not persist onboarding completion.")
+        app.buttons["onboardingSkip"].tap()
+        XCTAssertTrue(app.buttons["discoverySettings"].waitForExistence(timeout: 5))
+    }
+
+    func testTrialKeepsEditsWhenSwitchingOutgoingVersion() {
+        app.launch()
+        XCTAssertTrue(app.buttons["onboardingNext"].waitForExistence(timeout: 10))
+        app.buttons["onboardingNext"].tap()
+        app.buttons["onboardingNext"].tap()
+        let trial = app.buttons["onboardingTryPrompt"]
+        for _ in 0..<6 where !trial.isHittable { app.scrollViews["onboarding-page-2"].swipeUp() }
+        trial.tap()
+        XCTAssertTrue(app.buttons["handoffOpen"].waitForExistence(timeout: 5))
+
+        func reveal(_ element: XCUIElement) {
+            let scroll = app.scrollViews["handoffScroll"]
+            for _ in 0..<8 {
+                let bottom = app.buttons["handoffOpen"].frame.minY - 8
+                if element.exists && element.isHittable && element.frame.maxY < bottom && element.frame.minY > 130 { return }
+                if element.exists && element.frame.minY < 130 { scroll.swipeDown() }
+                else { scroll.swipeUp() }
+            }
+            XCTAssertTrue(element.isHittable)
+        }
+        // Repeated runs may have an earlier test draft. Start from the reading version.
+        let version = app.buttons["handoffVersion"]
+        if version.exists { reveal(version); version.tap(); app.buttons["阅读版本"].tap() }
+        let edit = app.buttons["editPreparedPrompt"]
+        reveal(edit); edit.tap()
+        let editor = app.textViews["promptEditor"]
+        XCTAssertTrue(editor.waitForExistence(timeout: 5))
+        let original = editor.value as? String
+        let marker = " Experience QA draft."
+        editor.tap(); editor.typeText(marker)
+        let changed = editor.value as? String
+        XCTAssertTrue(changed?.contains(marker) == true)
+        app.buttons["finishPromptEditing"].tap()
+        XCTAssertTrue(version.waitForExistence(timeout: 5))
+        reveal(version); version.tap(); app.buttons["阅读版本"].tap()
+        capture("experience-reading-version")
+        reveal(edit); edit.tap()
+        XCTAssertTrue(editor.waitForExistence(timeout: 5))
+        XCTAssertEqual(editor.value as? String, original)
+        app.buttons["finishPromptEditing"].tap()
+        XCTAssertTrue(app.buttons["finishPromptUse"].waitForExistence(timeout: 5))
+        app.buttons["finishPromptUse"].tap()
+        XCTAssertTrue(trial.waitForExistence(timeout: 5)); trial.tap()
+        XCTAssertTrue(app.buttons["handoffOpen"].waitForExistence(timeout: 5))
+        reveal(edit); edit.tap()
+        XCTAssertTrue(editor.waitForExistence(timeout: 5))
+        XCTAssertEqual(editor.value as? String, changed, "Choosing the reading version must not overwrite personal edits.")
+        capture("experience-edits-preserved")
+    }
+
     func testLocalizedWelcomeLayout() {
         for language in ["en", "de"] {
             app.launchArguments = ["--offline", "-AppleLanguages", "(\(language))", "-AppleLocale", language, "--reset-onboarding"]
