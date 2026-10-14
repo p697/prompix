@@ -109,6 +109,7 @@ import UIKit
         let details = try requests().filter { $0["operation"] as? String == "detail" }
         XCTAssertEqual(details.count, 1)
         XCTAssertEqual(details[0]["query"] as? String, "database-fixture-9999:zh-Hans")
+        XCTAssertTrue(app.otherElements["relatedFeed"].waitForExistence(timeout: 10))
         capture("database-03-search-last-item-detail")
     }
 

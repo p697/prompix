@@ -1,6 +1,8 @@
 # Prompix for iOS
 
-Current simulator candidate **0.6.5 (29)** refines discovery's feathered top chrome and edge-to-edge media previews. The user's iPhone Air remains on **0.6.4 (28)**. See the latest validation section in [the reading implementation record](../docs/immersive-reading-0.6.0.md). Earlier release records below remain historical.
+Integrated candidate **0.7.0 (31)** uses bounded v3 card pages, server search and browse metadata, revision-bound details/languages, creator pagination and bounded offline caches. Personal favorites and drafts stay local. The existing v2 cache remains an offline fallback and is no longer downloaded on ordinary launches. See [database acceptance](../docs/database-feed-v3.md) and [operations](../docs/database-operations.md). The 0.6.6 onboarding and use-panel changes are included; this task does not install on physical phones.
+
+Previous simulator candidate **0.6.5 (29)** refines discovery's feathered top chrome and edge-to-edge media previews. The user's iPhone Air remains on **0.6.4 (28)**. See the latest validation section in [the reading implementation record](../docs/immersive-reading-0.6.0.md). Earlier release records below remain historical.
 
 Native SwiftUI app, iOS 17+. Current simulator candidate **0.6.0 (23)** adds a dedicated Search destination and immersive Markdown reading. See [implementation, reference research and scoped validation](../docs/immersive-reading-0.6.0.md). The user's iPhone Air remains on the successfully installed **0.5.1 (22)**. Further Duo work is deferred while ordinary iPhone acceptance takes priority.
 
@@ -314,3 +316,9 @@ The three `testPreparedVariables…AfterFailedSave` / `testPreparedVariablesSurv
 `OnboardingTests` covers skip, forward/back, completion persistence, Settings replay and English/German layout. The Debug simulator-only `--reset-onboarding` argument removes only the welcome-completion preference; it never clears content, favorites or drafts. Existing journeys call `launchPrompix()` to begin in discovery. Use `simctl ui <dedicated-device> content_size accessibility-extra-extra-extra-large` and `appearance dark` for the stress-layout pass, then restore `large` / `light`. The welcome body scrolls independently of its actions; decorative artwork is omitted at accessibility sizes.
 
 `python3 scripts/check-localizations.py` checks every `.xcstrings` catalog by default, including the new Onboarding table. Actual evidence, scope and limitations are recorded in [the iPhone visual review](../docs/design-cosmos-iphone.md).
+
+## Database acceptance tests
+
+`DatabaseFeedUITests` uses a new UUID under the dedicated simulator app's Caches/FeedAcceptance directory. Four deterministic journeys use 10,000 first-party records; two live journeys require `TEST_RUNNER_PROMPIX_DATABASE_LIVE_UI=1` on xcodebuild. Native live API coverage similarly requires `TEST_RUNNER_PROMPIX_LIVE_FEED=1`. The prefix passes settings into the test runner; a plain host variable does not. No paid ingestion or production writes occur. Keep `-parallel-testing-enabled NO` for these serial simulator journeys.
+
+The opt-in legacy journey actually downloads v2 using retained legacy code, creates a favorite/draft, and reopens the same isolated directory using v3. It verifies exact personal-file preservation, not a physical-device binary upgrade. The copy journey saves expected UTF-8 text inside that namespace; validate the actual simulator clipboard from the host with `simctl pbpaste` because iOS may deny clipboard reads from XCTest's separate runner. Release builds exclude simulator service fixtures and isolated launch modes.
