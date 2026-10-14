@@ -698,10 +698,10 @@ import UIKit
         XCTAssertTrue(app.textViews["promptEditor"].waitForExistence(timeout: 5))
         try auditScreen("editor")
         app.buttons["完成"].tap()
-        app.navigationBars.buttons.element(boundBy: 0).tap()
+        app.goBackInPrompix()
         app.openPrompixCollections()
         try auditScreen("collections")
-        app.navigationBars.buttons.firstMatch.tap()
+        app.goBackInPrompix()
         selectTab("收藏")
         try auditScreen("favorites")
         selectTab("发现")
@@ -750,7 +750,7 @@ import UIKit
         app.buttons["copyEditedPrompt"].tap()
         XCTAssertTrue(app.buttons["copyEditedPrompt"].label.contains("已复制"))
         app.buttons["完成"].tap()
-        app.navigationBars.buttons.element(boundBy: 0).tap()
+        app.goBackInPrompix()
         app.openPrompixCollections()
         capture("23-adaptive-collections")
         app.buttons["collection-play"].tap()
@@ -758,7 +758,7 @@ import UIKit
         for _ in 0..<5 { if collectionCard.isHittable { break }; app.swipeUp() }
         XCTAssertTrue(collectionCard.isHittable)
         capture("25-collection-detail")
-        app.navigationBars.buttons.element(boundBy: 0).tap()
+        app.goBackInPrompix()
         XCUIDevice.shared.orientation = .landscapeLeft
         let landscape = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in self.app.frame.width > self.app.frame.height }, object: app)
         XCTAssertEqual(XCTWaiter.wait(for: [landscape], timeout: 5), .completed)
@@ -782,7 +782,7 @@ import UIKit
         XCTAssertTrue(app.textViews["promptEditor"].waitForExistence(timeout: 3))
         capture("03-editor")
         app.buttons["完成"].tap()
-        app.navigationBars.buttons.element(boundBy: 0).tap()
+        app.goBackInPrompix()
         selectTab("收藏")
         XCTAssertTrue(app.buttons["prompt-gentle-tarot"].waitForExistence(timeout: 5))
         capture("04-favorites")
@@ -810,7 +810,7 @@ import UIKit
             XCTAssertFalse(app.buttons["retryImage"].exists)
             capture("original-\(id)-image")
             app.buttons["完成"].tap()
-            app.navigationBars.buttons.element(boundBy: 0).tap()
+            app.goBackInPrompix()
         }
     }
 
@@ -821,7 +821,7 @@ import UIKit
         XCTAssertTrue(app.buttons["完成"].waitForExistence(timeout: 5))
         capture("06-image-viewer")
         app.buttons["完成"].tap()
-        app.navigationBars.buttons.element(boundBy: 0).tap()
+        app.goBackInPrompix()
         app.buttons["kind-web"].tap()
         app.buttons["prompt-quiet-portfolio"].tap()
         XCTAssertTrue(app.buttons["copyPrompt"].waitForExistence(timeout: 5))
@@ -836,7 +836,7 @@ import UIKit
         try waitForRenderingToSettle()
         capture("08b-web-example")
         app.buttons["完成"].tap()
-        app.navigationBars.buttons.element(boundBy: 0).tap()
+        app.goBackInPrompix()
         app.openPrompixCollections()
         capture("09-collections")
     }
@@ -910,7 +910,7 @@ import UIKit
                 XCTAssertTrue(web.descendants(matching: .any).matching(identifier: "取消收藏一只不对称的花瓶").firstMatch.waitForExistence(timeout: 3))
             }
             app.buttons["完成"].tap()
-            app.navigationBars.buttons.element(boundBy: 0).tap()
+            app.goBackInPrompix()
         }
     }
     func testEditorialTextDiscoveryAndDetail() {
@@ -942,7 +942,7 @@ import UIKit
         XCTAssertTrue(app.textViews["promptEditor"].waitForExistence(timeout: 5))
         capture("18-english-editor")
         app.buttons["Done"].tap()
-        app.navigationBars.buttons.element(boundBy: 0).tap()
+        app.goBackInPrompix()
         app.buttons["Settings"].tap()
         XCTAssertTrue(app.navigationBars["About and settings"].waitForExistence(timeout: 5))
         capture("19-english-settings")
@@ -990,7 +990,7 @@ import UIKit
         XCTAssertTrue(app.scrollViews.matching(NSPredicate(format: "label CONTAINS %@", "图片预览")).firstMatch.waitForExistence(timeout: 20))
         capture("11-live-image")
         app.buttons["完成"].tap()
-        app.navigationBars.buttons.element(boundBy: 0).tap()
+        app.goBackInPrompix()
         app.buttons["kind-video"].tap()
         let videoCard = app.buttons.containing(NSPredicate(format: "identifier BEGINSWITH %@", "prompt-youmind-seedance-")).firstMatch
         XCTAssertTrue(videoCard.waitForExistence(timeout: 10)); videoCard.tap()
@@ -1066,7 +1066,7 @@ import UIKit
             let originalY = card.frame.minY
             card.tap()
             XCTAssertTrue(app.buttons["copyPrompt"].waitForExistence(timeout: 5))
-            app.navigationBars.buttons.element(boundBy: 0).tap()
+            app.goBackInPrompix()
             try waitForRenderingToSettle()
             XCTAssertEqual(app.buttons[identifier].frame.minY, originalY, accuracy: 3, "Returning must preserve the browsing position")
             if page < 5 { app.swipeUp() }
@@ -1093,7 +1093,7 @@ import UIKit
                 capture("expanded-browse-\(page)")
                 card.tap()
                 XCTAssertTrue(app.buttons["copyPrompt"].waitForExistence(timeout: 5))
-                app.navigationBars.buttons.element(boundBy: 0).tap()
+                app.goBackInPrompix()
                 XCTAssertEqual(app.buttons[id].frame.minY, y, accuracy: 4)
             }
             if seen.count >= 100 { break }
@@ -1182,7 +1182,7 @@ import UIKit
             }
             app.buttons["完成"].tap()
             XCTAssertTrue(app.buttons["copyPrompt"].waitForExistence(timeout: 5))
-            app.navigationBars.buttons.element(boundBy: 0).tap()
+            app.goBackInPrompix()
             XCTAssertTrue(search.waitForExistence(timeout: 5), "Closing a preview must preserve its search context")
             XCTAssertEqual(search.value as? String, video.title, "Returning must preserve the search text")
         }

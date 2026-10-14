@@ -153,9 +153,26 @@ struct PromptMarkdownDocument {
     }
 
     private static func plainBlocks(_ source: String) -> [Block] {
-        // Unsupported tables stay legible as their exact source instead of losing cell boundaries.
-        source.isEmpty ? [] : [Block(id: 0, kind: .paragraph, text: AttributedString(source),
-                                    marker: nil, listDepth: 0, quoteDepth: 0)]
+        // Keep unsupported syntax literal, but do not ask Text to lay out an
+        // entire long Skill before the presentation can start. Prefer line
+        // boundaries; never trim whitespace or split a grapheme (including CRLF).
+        var chunks: [String] = []
+        var chunk = ""
+        var count = 0
+        for character in source {
+            chunk.append(character)
+            count += 1
+            if (count >= 1_024 && character.isNewline) || count >= 2_048 {
+                chunks.append(chunk)
+                chunk = ""
+                count = 0
+            }
+        }
+        if !chunk.isEmpty { chunks.append(chunk) }
+        return chunks.enumerated().map { index, text in
+            Block(id: index, kind: .paragraph, text: AttributedString(text),
+                  marker: nil, listDepth: 0, quoteDepth: 0)
+        }
     }
 }
 
@@ -181,7 +198,7 @@ private struct PromptMarkdownContent: View, Equatable {
 
     var body: some View {
         let document = PromptMarkdownDocument(source)
-        return VStack(alignment: .leading, spacing: 18) {
+        return LazyVStack(alignment: .leading, spacing: document.usedPlainTextFallback ? 0 : 18) {
             if let metadata = document.metadata {
                 DisclosureGroup {
                     codeText(AttributedString(metadata)).padding(.top, 10)

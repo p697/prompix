@@ -133,12 +133,27 @@ final class PromptMarkdownTests: XCTestCase {
         XCTAssertEqual(String(document.blocks[0].text.characters), source)
     }
 
+    func testLongLiteralFallbackPreservesWhitespaceUnicodeAndPlaceholders() {
+        let table = "| A | B |\r\n| - | - |\r\n"
+        let source = table + String(repeating: "  | [ROLE]: 👩🏽‍💻 | e\u{301} |\r\n\r\n", count: 500)
+            + String(repeating: "👨‍👩‍👧‍👦", count: 5_000) + "\t  \n"
+        let document = PromptMarkdownDocument(source)
+        XCTAssertTrue(document.usedPlainTextFallback)
+        XCTAssertGreaterThan(document.blocks.count, 1)
+        let restored = document.blocks.map { String($0.text.characters) }.joined()
+        XCTAssertEqual(Array(restored.utf8), Array(source.utf8))
+        XCTAssertTrue(document.blocks.allSatisfy { $0.text.characters.count <= 2_048 })
+        XCTAssertEqual(Set(document.blocks.map(\.id)).count, document.blocks.count)
+    }
+
     func testLargeSkillAndEmptySourceStayComplete() {
         XCTAssertTrue(PromptMarkdownDocument("").blocks.isEmpty)
         let source = String(repeating: "## Section\n\nUse [TOPIC].\n\n", count: 12_000)
         let document = PromptMarkdownDocument(source)
         XCTAssertTrue(document.usedPlainTextFallback)
-        XCTAssertEqual(String(document.blocks[0].text.characters), source)
+        XCTAssertEqual(document.blocks.map { String($0.text.characters) }.joined(), source)
+        XCTAssertTrue(document.blocks.allSatisfy { $0.text.characters.count <= 2_048 })
+        XCTAssertEqual(Set(document.blocks.map(\.id)).count, document.blocks.count)
         let skill = String(repeating: "## Section\n\nUse [TOPIC].\n\n", count: 300)
         let parsed = PromptMarkdownDocument(skill)
         XCTAssertFalse(parsed.usedPlainTextFallback)
