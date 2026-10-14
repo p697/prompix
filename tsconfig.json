@@ -1,1 +1,1 @@
-{"compilerOptions":{"target":"ES2022","module":"NodeNext","moduleResolution":"NodeNext","strict":true,"noEmit":true,"allowImportingTsExtensions":true,"skipLibCheck":true},"include":["ingest/**/*.ts","packages/**/*.ts"]}
+{"compilerOptions":{"target":"ES2022","module":"NodeNext","moduleResolution":"NodeNext","strict":true,"noEmit":true,"allowImportingTsExtensions":true,"skipLibCheck":true},"include":["ingest/**/*.ts","packages/**/*.ts","scripts/**/*.ts","services/feed/**/*.ts"],"exclude":["services/feed/worker.ts","services/feed/worker-configuration.d.ts"]}

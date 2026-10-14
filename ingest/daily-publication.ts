@@ -1,12 +1,13 @@
 import { rm } from "node:fs/promises";
 import { join } from "node:path";
 import type { Catalog } from "../packages/schema/catalog.ts";
+import { preservePublicationInput } from "../services/feed/publication.ts";
 import { verifyLanguagePackManifest } from "./language-packs.ts";
 import { atomic, base, json, moderationSchema } from "./publication.ts";
 import { recoveryPublicationHooks } from "./recovery-publication.ts";
 import {
   assertPublicationReconciled, defaultReleaseTransport, languagePackEditionVersion, loadPublicationState, publicationIdentity,
-  PendingRemovalsError, preserveCatalogText, preservedRollbackCatalog, publishRelease, readLocalRelease, readPublishedState, resumePublication, stageRelease,
+  PendingRemovalsError, preserveCatalogText, preservedRollbackCatalog, publishRelease, readLocalRelease, readPublicationTarget, readPublishedState, resumePublication, stageRelease,
   type PublicationIntent, type PublishedState, type ReleaseTransport,
 } from "./release-publication.ts";
 
@@ -16,7 +17,8 @@ export const readPublicationHold = (root: string) => json<unknown | null>(holdPa
 /** A disabled bootstrap flag must never move an initialized publisher back to v1. */
 export async function languagePackPublishingEnabled(root: string, env: NodeJS.ProcessEnv = process.env, transport = defaultReleaseTransport): Promise<boolean> {
   const state = await loadPublicationState(root);
-  if (env.PROMPIX_LANGUAGE_PACKS_ENABLED === "true" || state.v2Initialized || state.pending) return true;
+  if (env.PROMPIX_DATABASE_ENABLED === "true" || transport.database || state.databaseInitialized ||
+      env.PROMPIX_LANGUAGE_PACKS_ENABLED === "true" || state.v2Initialized || state.pending) return true;
   // Also recover the authoritative channel after a lost local state file.
   const result = await transport.read(`${base}/v2/latest.json`, 32_000);
   if (result.status === 404) return false;
@@ -54,6 +56,7 @@ async function beforeDailyActivation(root: string, intent: PublicationIntent): P
   const hold = await readPublicationHold(root);
   if (hold !== null && publicationIdentity(hold) !== intent.holdToClear) throw new Error("Publication hold changed before activation");
   const moderation = moderationSchema.parse(await json(join(root, "moderation.json"), { removedIDs: [] }));
+  // Every compatibility window carries the complete removal set, even beyond its visible rows.
   const target = await readLocalRelease(root, intent.targets.v2.version, intent.targets.v2);
   if (moderation.removedIDs.some(id => !(target.removedIDs ?? []).includes(id))) throw new PendingRemovalsError();
 }
@@ -74,26 +77,28 @@ export async function beginDailyPublication(root: string, options: { resumePubli
     // An unrelated new hold is not permission to finish an ordinary pending release.
     if (pending.operation !== "rollback" && hold !== null && publicationIdentity(hold) !== pending.holdToClear)
       return { enabled, previous, held: hold };
-    const target = await readLocalRelease(root, pending.targets.v2.version, pending.targets.v2);
+    const target = await readPublicationTarget(root, pending, transport);
+    const compatibility = await readLocalRelease(root, pending.targets.v2.version, pending.targets.v2);
     const requiredRemovedIDs = [...new Set([
-      ...moderation.removedIDs, ...(previous.v1.catalog.removedIDs ?? []),
+      ...moderation.removedIDs, ...(previous.authoritative.removedIDs ?? []), ...(previous.v1.catalog.removedIDs ?? []),
       ...(previous.v2?.catalog.removedIDs ?? []), ...(target.removedIDs ?? []),
     ])].sort();
     const hooks = {
       requiredRemovedIDs,
-      beforeActivation: pending.operation === "rollback" ? recoveryPublicationHooks(root).beforeActivation
+      beforeActivation: pending.operation === "rollback" ? recoveryPublicationHooks(root, undefined, transport).beforeActivation
         : (intent: PublicationIntent) => beforeDailyActivation(root, intent),
       afterActivation: (intent: PublicationIntent) => clearMatchingPublicationHold(root, intent),
     };
     let recovered: PublishedState;
-    if (requiredRemovedIDs.some(id => !(target.removedIDs ?? []).includes(id))) {
+    if (requiredRemovedIDs.some(id => !(target.removedIDs ?? []).includes(id) || !(compatibility.removedIDs ?? []).includes(id))) {
       // Keep every already-prepared source/translation; apply only newer tombstones.
       const prompts = target.prompts.filter(item => !requiredRemovedIDs.includes(item.id));
-      const corrected = pending.operation === "rollback" ? preservedRollbackCatalog(target, requiredRemovedIDs) : preserveCatalogText({
+      const corrected = pending.operation === "rollback" ? preservedRollbackCatalog(target, requiredRemovedIDs, undefined, !!pending.database)
+        : (pending.database ? preservePublicationInput : preserveCatalogText)({
         ...target, version: languagePackEditionVersion(prompts, requiredRemovedIDs), publishedAt: new Date().toISOString(),
         prompts, removedIDs: requiredRemovedIDs,
       });
-      const staged = await stageRelease(root, corrected, previous);
+      const staged = await stageRelease(root, corrected, previous, transport);
       recovered = await publishRelease(root, staged, previous.observed, {
         ...hooks, operation: pending.operation, holdToClear: pending.holdToClear, supersedePending: true,
       }, transport);
@@ -105,7 +110,7 @@ export async function beginDailyPublication(root: string, options: { resumePubli
     return { enabled, previous, recovered, ...(remainingHold !== null ? { held: remainingHold } : {}) };
   }
   moderation.removedIDs = [...new Set([
-    ...moderation.removedIDs, ...(previous.v1.catalog.removedIDs ?? []), ...(previous.v2?.catalog.removedIDs ?? []),
+    ...moderation.removedIDs, ...(previous.authoritative.removedIDs ?? []), ...(previous.v1.catalog.removedIDs ?? []), ...(previous.v2?.catalog.removedIDs ?? []),
   ])].sort();
   await atomic(join(root, "moderation.json"), moderation);
   return { enabled, previous, ...(hold !== null ? { holdToClear: publicationIdentity(hold) } : {}) };
@@ -118,7 +123,7 @@ export async function publishDailyCatalog(root: string, catalog: Catalog, prepar
   if (currentHold !== null && publicationIdentity(currentHold) !== preparation.holdToClear)
     throw new Error("Publication hold changed during preparation");
   const moderation = moderationSchema.parse(await json(join(root, "moderation.json"), { removedIDs: [] }));
-  const staged = await stageRelease(root, catalog, preparation.previous);
+  const staged = await stageRelease(root, catalog, preparation.previous, transport);
   return publishRelease(root, staged, preparation.previous.observed, {
     operation: preparation.holdToClear ? "resume" : "daily", holdToClear: preparation.holdToClear,
     requiredRemovedIDs: moderation.removedIDs,

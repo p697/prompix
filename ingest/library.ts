@@ -49,6 +49,7 @@ export function interleaveLibrary(
   community: readonly Prompt[],
   bundled: readonly Prompt[],
   excluded: ReadonlySet<string>,
+  limit: 1000 | 100000 = 1000,
 ): Prompt[] {
   const groups = [
     community.filter((item) => item.kind === "image"),
@@ -72,8 +73,8 @@ export function interleaveLibrary(
       seen.add(hash);
     }
   }
-  if (prompts.length > 1000) {
-    throw new Error(`Complete library has ${prompts.length} entries, exceeding the 1000-entry client protocol limit; no entries were truncated and the active edition must remain unchanged`);
+  if (prompts.length > limit) {
+    throw new Error(`Complete library has ${prompts.length} entries, exceeding the ${limit}-entry client protocol limit; no entries were truncated and the active edition must remain unchanged`);
   }
   return prompts;
 }
@@ -85,6 +86,7 @@ export type RetentionReport = { counts: KindCounts; reasons: Record<RetentionRea
 export function retainPublishedLibrary(
   prepared: readonly Prompt[], previous: readonly Prompt[], excluded: ReadonlySet<string>,
   reasonForMissing: (item: Prompt) => RetentionReason = () => "not-prepared",
+  limit: 1000 | 100000 = 1000,
 ): { prompts: Prompt[]; retainedPrevious: RetentionReport } {
   const ready = prepared.filter(item => !excluded.has(item.id));
   const readyByID = new Map(ready.map(item => [item.id, item]));
@@ -116,8 +118,8 @@ export function retainPublishedLibrary(
     if (!reservedHashes.has(hash) && !seenHashes.has(hash)) append(item);
   }
   for (const item of replacements.values()) if (!seenIDs.has(item.id)) append(item);
-  if (prompts.length > 1000) {
-    throw new Error(`Complete retained library has ${prompts.length} entries, exceeding the 1000-entry client protocol limit; no published items were discarded`);
+  if (prompts.length > limit) {
+    throw new Error(`Complete retained library has ${prompts.length} entries, exceeding the ${limit}-entry client protocol limit; no published items were discarded`);
   }
   const resultingIDs = new Set(prompts.map(item => item.id));
   if (active.some(item => !resultingIDs.has(item.id))) throw new Error("Previously published items are missing without tombstones; active edition must remain unchanged");
