@@ -44,3 +44,7 @@ reports/
 
 # Cloudflare local state
 .wrangler/
+
+# Supabase CLI machine state
+supabase/.temp/
+supabase/.branches/

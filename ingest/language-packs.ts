@@ -47,6 +47,7 @@ function validate<T>(schema: z.ZodType<T>, value: unknown): T {
   assertUnchangedShape(value, schema.parse(value));
   return value as T;
 }
+export { validate as validateArtifact, canonical as canonicalArtifact };
 function decode<T>(bytes: Uint8Array, maximum: number, schema: z.ZodType<T>): T {
   if (bytes.byteLength > maximum) throw new Error("Decoded artifact exceeds byte limit");
   return validate(schema, JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes)));

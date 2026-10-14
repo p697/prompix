@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { rm } from "node:fs/promises";
 import { join } from "node:path";
 import { atomic, lockContent } from "./publication.ts";
+import { auditDailyRun } from "./database-audit.ts";
 
 type Report = { startedAt: string; published: boolean; error?: string };
 type Dependencies = {
@@ -9,19 +10,21 @@ type Dependencies = {
   invalidate: (path: string) => Promise<void>;
   lock: typeof lockContent;
   log: (record: unknown) => void;
+  audit: (record: Record<string, unknown>) => Promise<void>;
 };
 
 /** Persist intent before any collection; a failed final write must not hide its cause. */
 export async function withDailyStatus<T extends Report>(root: string, report: T, work: () => Promise<void>, overrides: Partial<Dependencies> = {}) {
   const io: Dependencies = {
     write: atomic, invalidate: path => rm(path, { force: true }), lock: lockContent,
+    audit: record => auditDailyRun(root, record),
     log: record => console.log(JSON.stringify(record)), ...overrides,
   };
   // A competing invocation must not overwrite the active owner's status.
   const unlock = await io.lock(root);
   const path = join(root, "status.json"), runID = randomUUID();
   let failure: { reason: unknown } | undefined;
-  const diagnostics: { statusWriteError?: string; statusInvalidationError?: string; unlockError?: string } = {};
+  const diagnostics: { statusWriteError?: string; statusInvalidationError?: string; unlockError?: string; auditWriteError?: string } = {};
   const fail = (reason: unknown) => { failure ??= { reason }; };
   let started = false;
   let finishedAt: string;
@@ -40,6 +43,7 @@ export async function withDailyStatus<T extends Report>(root: string, report: T,
       catch (reason) { diagnostics.statusInvalidationError = String(reason); }
       throw error;
     }
+    await io.audit(initial);
     await work();
   } catch (error) {
     fail(error);
@@ -54,6 +58,13 @@ export async function withDailyStatus<T extends Report>(root: string, report: T,
       // A persisted start remains "running", never a fabricated completion.
       // Failed initial writes were invalidated above; do not touch another run.
     } finally {
+      try { await io.audit(snapshot()); }
+      catch (error) {
+        diagnostics.auditWriteError = String(error); fail(error);
+        // Do not leave a local success record when the durable audit could not finish.
+        try { await io.write(path, snapshot()); }
+        catch (reason) { diagnostics.statusWriteError = String(reason); }
+      }
       try { await unlock(); }
       catch (error) { diagnostics.unlockError = String(error); fail(error); }
       io.log({ ...snapshot(), started });

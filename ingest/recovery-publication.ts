@@ -2,7 +2,7 @@ import { join } from "node:path";
 import { z } from "zod";
 import type { Catalog } from "../packages/schema/catalog.ts";
 import { atomic, json, moderationSchema } from "./publication.ts";
-import { PendingRemovalsError, publicationIdentity, readLocalRelease, type PublicationHooks } from "./release-publication.ts";
+import { defaultReleaseTransport, PendingRemovalsError, publicationIdentity, readPublicationTarget, type PublicationHooks } from "./release-publication.ts";
 
 export async function verifyRecoveryMedia(catalog: Catalog) {
   const urls = new Set(catalog.prompts.flatMap(p => [p.media?.imageURL, p.media?.videoURL, ...(p.media?.imageURLs ?? [])]).filter((url): url is string => !!url));
@@ -14,11 +14,11 @@ export async function verifyRecoveryMedia(catalog: Catalog) {
 }
 
 /** Shared by explicit rollback and daily recovery of an interrupted rollback. Caller owns daily.lock. */
-export function recoveryPublicationHooks(root: string, verifyMedia: typeof verifyRecoveryMedia = verifyRecoveryMedia): PublicationHooks {
+export function recoveryPublicationHooks(root: string, verifyMedia: typeof verifyRecoveryMedia = verifyRecoveryMedia, transport = defaultReleaseTransport): PublicationHooks {
   return {
     async beforeActivation(intent) {
       if (intent.operation !== "rollback") throw new Error("Rollback hold hook requires a rollback intent");
-      const catalog = await readLocalRelease(root, intent.targets.v2.version, intent.targets.v2);
+      const catalog = await readPublicationTarget(root, intent, transport);
       // Resumption can happen long after the initial media check; verify again before activation.
       await verifyMedia(catalog);
       const moderation = moderationSchema.parse(await json(join(root, "moderation.json"), { removedIDs: [] }));

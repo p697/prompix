@@ -112,12 +112,13 @@ class SchedulerTests(unittest.TestCase):
                 runtime.run_collection(self.base, '/must-not-run')
 
     def test_launcher_resolves_runtime_under_guard_and_inherits_lock(self):
-        def child(command, *, cwd, pass_fds):
+        def child(command, *, cwd, pass_fds, env):
             self.assertEqual(cwd, self.current)
             self.assertEqual(command[-2:], ['ingest/daily.ts', '--publish'])
-            for name in ['x', 'translation', 'editorial', 'publication']:
+            for name in ['x', 'translation', 'editorial', 'publication', 'database']:
                 self.assertIn('--env-file-if-exists=' + str(Path.home() / f'.config/prompix/{name}.env'), command)
             self.assertEqual(len(pass_fds), 1)
+            self.assertEqual(env, runtime.collection_environment())
             with self.assertRaisesRegex(RuntimeError, 'running'):
                 with runtime.runtime_guard(self.base, exclusive=True):
                     self.fail('Collector must keep runtime guarded')
@@ -126,6 +127,17 @@ class SchedulerTests(unittest.TestCase):
             self.assertEqual(runtime.run_collection(self.base, '/fixture/node'), 7)
         with runtime.runtime_guard(self.base, exclusive=True):
             pass
+
+    def test_node_trust_uses_system_ca_and_preserves_explicit_configuration(self):
+        ca_file = self.home / 'system-ca.pem'
+        ca_file.write_text('test certificate bundle')
+        original = {'PATH': '/fixture/bin'}
+        self.assertEqual(runtime.collection_environment(original, ca_file),
+                         {**original, 'NODE_EXTRA_CA_CERTS': str(ca_file)})
+        self.assertNotIn('NODE_EXTRA_CA_CERTS', original)
+        custom = {**original, 'NODE_EXTRA_CA_CERTS': '/custom.pem'}
+        self.assertEqual(runtime.collection_environment(custom, ca_file), custom)
+        self.assertEqual(runtime.collection_environment(original, self.home / 'absent.pem'), original)
 
     def test_migration_defers_cleanup_then_success_keeps_rollback(self):
         self.install()

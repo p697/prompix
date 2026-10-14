@@ -1,0 +1,17 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "prompix-feed",
+  "account_id": "2af7e222bfcfd78b5df8f627971dfbca",
+  "main": "worker.ts",
+  "compatibility_date": "2026-10-14",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "preview_urls": false,
+  "routes": [{"pattern": "api.prompix.dev/v3/*", "zone_name": "prompix.dev"}],
+  "placement": {"region": "aws:ap-northeast-1"},
+  "hyperdrive": [{"binding": "DATABASE", "id": "b5be51c31aa44b15897d6a233e2f06c6"}],
+  "ratelimits": [{"name": "REQUEST_LIMITER", "namespace_id": "3101", "simple": {"limit": 120, "period": 60}}],
+  "secrets": {"required": ["CURSOR_SECRET"]},
+  "observability": {"enabled": true, "head_sampling_rate": 0.1,
+    "logs": {"enabled": true, "invocation_logs": false}}
+}

@@ -88,6 +88,14 @@ def prune_runtimes(base, previous):
     return removed
 
 
+def collection_environment(environ=None, ca_file=Path('/etc/ssl/cert.pem')):
+    """Trust the host CA bundle in Node without weakening TLS verification."""
+    environment = dict(os.environ if environ is None else environ)
+    if 'NODE_EXTRA_CA_CERTS' not in environment and ca_file.is_file():
+        environment['NODE_EXTRA_CA_CERTS'] = str(ca_file)
+    return environment
+
+
 def run_collection(base, node):
     runtime_root(base)
     with runtime_guard(base, exclusive=False) as descriptor:
@@ -100,8 +108,9 @@ def run_collection(base, node):
             '--env-file-if-exists=' + str(Path.home() / '.config/prompix/translation.env'),
             '--env-file-if-exists=' + str(Path.home() / '.config/prompix/editorial.env'),
             '--env-file-if-exists=' + str(Path.home() / '.config/prompix/publication.env'),
+            '--env-file-if-exists=' + str(Path.home() / '.config/prompix/database.env'),
             '--import', 'tsx', 'ingest/daily.ts', '--publish',
-        ], cwd=runtime, pass_fds=(descriptor,)).returncode
+        ], cwd=runtime, pass_fds=(descriptor,), env=collection_environment()).returncode
 
 
 if __name__ == '__main__':

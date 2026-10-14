@@ -36,6 +36,7 @@ import { publicationText } from "./templates.ts";
 import { countByKind, interleaveLibrary, libraryDelta, retainPublishedLibrary, selectLibrary, type KindCounts, type RetentionReport } from "./library.ts";
 import { beginDailyPublication, clearMatchingPublicationHold, prepareDailyStaging, publishDailyCatalog } from "./daily-publication.ts";
 import { languagePackEditionVersion, preserveCatalogText, stageRelease } from "./release-publication.ts";
+import { databaseLibraryLimit, preservePublicationInput } from "../services/feed/publication.ts";
 import { applyQualityHolds, assertNoQualityHolds, readQualityHolds } from "./quality-holds.ts";
 const publishing = process.argv.includes("--publish");
 const resumePublishing = process.argv.includes("--resume-publishing");
@@ -106,6 +107,7 @@ async function run() {
     report.sources.clawhub = communitySkills.report;
     // Reconcile retained publication work before any collectors or paid models run.
     const publication = publishing ? await beginDailyPublication(root, { resumePublishing }) : await prepareDailyStaging(root);
+    const libraryLimit = publication.previous?.database ? databaseLibraryLimit : 1000;
     if (publication?.recovered) {
       const recovered = publication.recovered;
       report.version = recovered.authoritative.version;
@@ -226,8 +228,8 @@ async function run() {
     let bundled = catalogSchema.parse(JSON.parse(await readFile(join(repo, "ios/Prompix/Resources/catalog.json"), "utf8")))
       .prompts.filter((item) => !excluded.has(item.id));
     report.counts.bundled = countByKind(bundled);
-    // Fail before uploading media if the complete library exceeds the current client protocol.
-    interleaveLibrary(planned, bundled, excluded);
+    // Fail before uploading media if the complete library exceeds the publisher's safety bound.
+    interleaveLibrary(planned, bundled, excluded, libraryLimit);
     const mediaMap = await json<Record<string, string>>(
       join(root, "media-map.json"),
       {},
@@ -336,13 +338,13 @@ async function run() {
       await atomic(join(root, "media-map.json"), mediaMap);
     }
     const reviewedByID = new Map(reviewed.map(item => [item.id, item]));
-    const retained = retainPublishedLibrary(interleaveLibrary(visual.prompts, bundled, excluded), previous?.prompts ?? [], excluded, item => {
+    const retained = retainPublishedLibrary(interleaveLibrary(visual.prompts, bundled, excluded, libraryLimit), previous?.prompts ?? [], excluded, item => {
       if (mediaFailedIDs.has(item.id)) return "media-failed";
       if (mediaAwaitingReview.has(item.id)) return "awaiting-media-review";
       const candidate = reviewedByID.get(item.id);
       if (!candidate) return "source-missing";
       return candidate.reviewStatus === "draft" ? "awaiting-review" : "not-prepared";
-    });
+    }, libraryLimit);
     // Retained snapshots receive the same creator enrichment and translations
     // as fresh candidates, including older editions without creator metadata.
     // A quality hold removes public discovery only, after retention can restore old snapshots.
@@ -388,7 +390,7 @@ async function run() {
       }
       throw new Error("The active library changed during preparation; refusing to overwrite it");
     }
-    const catalog = (publication.enabled ? preserveCatalogText : catalogSchema.parse)({
+    const catalog = (publication.previous?.database ? preservePublicationInput : publication.enabled ? preserveCatalogText : catalogSchema.parse)({
       schemaVersion: 1,
       version,
       publishedAt: new Date().toISOString(),

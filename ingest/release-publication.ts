@@ -9,6 +9,9 @@ import { atomic, base, digest, editionVersion, manifestSchema, upload, verifyCat
 import { readResponseBytes } from "./network.ts";
 import { applyQualityHolds, assertNoQualityHolds, readQualityHolds } from "./quality-holds.ts";
 import { assertClawHubAvailability, filterClawHubAvailability, readClawHubState } from "./clawhub-daily.ts";
+import { preservePublicationInput } from "../services/feed/publication.ts";
+import { assertDatabaseActivated, assertDatabaseReconciled, configuredDatabasePublisher, databaseIntentSchema,
+  type DatabasePointer, type DatabasePublisher } from "./database-publication.ts";
 
 const versionSchema = z.string().regex(/^[a-z0-9-]+$(?![\s\S])/);
 const hashSchema = z.string().length(64).regex(/^[a-f0-9]{64}$/);
@@ -18,16 +21,19 @@ const targetsSchema = z.object({ v1: legacyManifestSchema, v2: languagePackManif
 const intentSchema = z.object({
   operation: z.enum(["daily", "rollback", "resume"]), observed: observedSchema, targets: targetsSchema,
   freezeV1: z.boolean(), holdToClear: hashSchema.optional(),
+  database: databaseIntentSchema.optional(),
 }).strict();
-const stateSchema = z.object({ schemaVersion: z.literal(1), v2Initialized: z.boolean(), v1Frozen: z.boolean(), pending: intentSchema.optional() }).strict();
+const stateSchema = z.object({ schemaVersion: z.literal(1), v2Initialized: z.boolean(), v1Frozen: z.boolean(),
+  databaseInitialized: z.literal(true).optional(), pending: intentSchema.optional() }).strict();
 export type PublicationIntent = z.infer<typeof intentSchema>;
 export type PublicationState = z.infer<typeof stateSchema>;
 export type ObservedPointers = z.infer<typeof observedSchema>;
-export type StagedRelease = Pick<PublicationIntent, "targets" | "freezeV1">;
+export type StagedRelease = Pick<PublicationIntent, "targets" | "freezeV1" | "database">;
 export type ContentRead = { status: 200; bytes: Buffer } | { status: 404 };
 export interface ReleaseTransport {
   read(url: string, maximum: number): Promise<ContentRead>;
   upload: typeof upload;
+  database?: DatabasePublisher;
 }
 export interface PublishedState {
   state: PublicationState;
@@ -35,6 +41,7 @@ export interface PublishedState {
   v2: { manifest: LanguagePackManifest; catalog: Catalog } | null;
   authoritative: Catalog;
   observed: ObservedPointers;
+  database?: DatabasePointer;
 }
 export interface PublicationHooks {
   requiredRemovedIDs?: readonly string[];
@@ -80,11 +87,11 @@ export function preserveCatalogText(input: Catalog): Catalog {
   return schemaOrderedCatalog(input);
 }
 /** V2 rollback keeps source/translation bytes and the existing rollback identity formula. */
-export function preservedRollbackCatalog(target: Catalog, removedIDs: readonly string[], now = new Date().toISOString()): Catalog {
+export function preservedRollbackCatalog(target: Catalog, removedIDs: readonly string[], now = new Date().toISOString(), database = false): Catalog {
   const removed = [...new Set([...(target.removedIDs ?? []), ...removedIDs])].sort();
   const prompts = target.prompts.filter(item => !removed.includes(item.id));
   const version = `rollback-${digest(Buffer.from(JSON.stringify({ prompts, removedIDs: removed }))).slice(0, 16)}`;
-  return preserveCatalogText({ schemaVersion: 1, version, publishedAt: now, prompts, removedIDs: removed });
+  return (database ? preservePublicationInput : preserveCatalogText)({ schemaVersion: 1, version, publishedAt: now, prompts, removedIDs: removed });
 }
 function verifyLegacyCatalog(manifest: Manifest, bytes: Buffer): Catalog {
   return schemaOrderedCatalog(JSON.parse(bytes.toString()), verifyCatalog(manifest, bytes));
@@ -132,6 +139,11 @@ export const defaultReleaseTransport: ReleaseTransport = {
     return { status: 200, bytes: await readResponseBytes(response, maximum) };
   }, upload,
 };
+export function publicationDatabase(state: PublicationState, transport = defaultReleaseTransport): DatabasePublisher | undefined {
+  if (transport.database) return transport.database;
+  if (state.databaseInitialized || state.pending?.database || process.env.PROMPIX_DATABASE_ENABLED === "true")
+    return configuredDatabasePublisher();
+}
 async function remoteBytes(transport: ReleaseTransport, url: string, maximum: number, optional = false): Promise<Buffer | undefined> {
   const result = await transport.read(url, maximum);
   if (result.status === 404) {
@@ -167,6 +179,15 @@ export async function readPublishedState(root: string, options: { allowBootstrap
     // Return a conservative policy after full verification; staging/activation persists it.
     state = { ...state, v2Initialized: true, v1Frozen: true };
   }
+  const publisher = publicationDatabase(state, transport);
+  if (publisher) {
+    const database = await publisher.pointer(), authoritative = await publisher.read(database.release);
+    // Check the complete baseline against the same generation used for publication CAS.
+    const after = await publisher.pointer();
+    if (database.release !== after.release || database.generation !== after.generation)
+      throw new Error("Database publication changed during baseline read");
+    return { state: { ...state, databaseInitialized: true }, v1, v2, authoritative, observed: pointers.observed, database };
+  }
   return { state, v1, v2, authoritative: v2?.catalog ?? v1.catalog, observed: pointers.observed };
 }
 function artifactPath(root: string, url: string): string {
@@ -196,14 +217,47 @@ export class PendingRemovalsError extends Error {
   constructor() { super("New removals require rebuilding the retained pending target without new preparation"); this.name = "PendingRemovalsError"; }
 }
 
+/** A bounded compatibility window is never the database publisher's next baseline. */
+export function compatibilityCatalog(input: Catalog): Catalog {
+  preservePublicationInput(input);
+  const candidate = (count: number): Catalog => {
+    const prompts = input.prompts.slice(0, count), removedIDs = input.removedIDs ?? [];
+    return { ...input, version: languagePackEditionVersion(prompts, removedIDs), prompts };
+  };
+  let low = 1, high = Math.min(1000, input.prompts.length), best: Catalog | undefined;
+  // Validate one item independently; schema and single-record failures must not be hidden.
+  preserveCatalogText(candidate(1));
+  while (low <= high) {
+    const count = Math.ceil((low + high) / 2), catalog = candidate(count);
+    try { preserveCatalogText(catalog); best = catalog; low = count + 1; }
+    catch (error) {
+      // Only size failures justify a smaller window; malformed content must fail publication.
+      if (!(error instanceof z.ZodError) || !error.issues.every(issue =>
+        issue.path.at(-1) === "byteCount" || issue.message === "Base plus requested locale exceeds the decoded byte limit")) throw error;
+      high = count - 1;
+    }
+  }
+  if (!best) throw new Error("No valid legacy compatibility window");
+  return best;
+}
+
+export async function readPublicationTarget(root: string, intent: StagedRelease, transport = defaultReleaseTransport): Promise<Catalog> {
+  if (intent.database) return (publicationDatabase(await loadPublicationState(root), transport) ?? configuredDatabasePublisher()).read(intent.database.release);
+  return readLocalRelease(root, intent.targets.v2.version, intent.targets.v2);
+}
+
 /** Caller holds daily.lock. Staging never activates remote pointers or changes publication state. */
-export async function stageRelease(root: string, input: Catalog, previous: PublishedState): Promise<StagedRelease> {
-  const catalog = preserveCatalogText(input);
+export async function stageRelease(root: string, input: Catalog, previous: PublishedState, transport = defaultReleaseTransport): Promise<StagedRelease> {
+  const publisher = publicationDatabase(previous.state, transport);
+  const complete = (publisher ? preservePublicationInput : preserveCatalogText)(input);
   const qualityHolds = await readQualityHolds(root);
-  assertNoQualityHolds(catalog, qualityHolds);
-  await assertClawHubAvailability(root, catalog);
-  await assertXAvailability(root, catalog);
-  assertRemovals(catalog, [...(previous.v1.catalog.removedIDs ?? []), ...(previous.v2?.catalog.removedIDs ?? [])]);
+  assertNoQualityHolds(complete, qualityHolds);
+  await assertClawHubAvailability(root, complete);
+  await assertXAvailability(root, complete);
+  assertRemovals(complete, [...(previous.authoritative.removedIDs ?? []), ...(previous.v1.catalog.removedIDs ?? []), ...(previous.v2?.catalog.removedIDs ?? [])]);
+  if (publisher && !previous.database) throw new Error("Missing database publication baseline");
+  const database = publisher ? { release: await publisher.stage(complete), observed: previous.database! } : undefined;
+  const catalog = publisher ? compatibilityCatalog(complete) : complete;
   // Measure only after full schema validation; arbitrary failures must not freeze v1.
   const fullBytes = Buffer.from(JSON.stringify(catalog) + "\n");
   const freezeV1 = previous.state.v1Frozen || previous.state.pending?.freezeV1 === true || fullBytes.length > 10_000_000;
@@ -238,7 +292,7 @@ export async function stageRelease(root: string, input: Catalog, previous: Publi
   for (const locale of localizationLanguages) if (split.localeBytes[locale])
     await writeImmutableBytes(artifactPath(root, split.manifest.locales[locale]!.url), Buffer.from(split.localeBytes[locale]!));
   await readLocalRelease(root, catalog.version);
-  return { targets: { v1, v2: prior ?? split.manifest }, freezeV1 };
+  return { targets: { v1, v2: prior ?? split.manifest }, freezeV1, ...(database ? { database } : {}) };
 }
 
 export function assertPublicationReconciled(intent: PublicationIntent, live: ObservedPointers) {
@@ -276,7 +330,10 @@ export async function resumePublication(root: string, hooks: PublicationHooks = 
   const state = await loadPublicationState(root), intent = state.pending;
   if (!intent) return null;
   const live = await readPointers(transport); assertPublicationReconciled(intent, live.observed);
-  const catalog = await readLocalRelease(root, intent.targets.v2.version, intent.targets.v2);
+  const publisher = publicationDatabase(state, transport);
+  if (intent.database) assertDatabaseReconciled(intent.database, await publisher!.pointer());
+  else if (publisher) throw new Error("Legacy pending publication must be reconciled before enabling the database");
+  const catalog = await readPublicationTarget(root, intent, transport);
   const qualityHolds = await readQualityHolds(root);
   assertNoQualityHolds(catalog, qualityHolds);
   await assertClawHubAvailability(root, catalog);
@@ -290,11 +347,13 @@ export async function resumePublication(root: string, hooks: PublicationHooks = 
   await ensureRemoteArtifact(root, intent.targets.v1.catalog, 10_000_000, transport, bytes => {
     legacyCatalog = verifyCatalog(intent.targets.v1, bytes);
     assertNoQualityHolds(legacyCatalog, qualityHolds);
+    assertRemovals(legacyCatalog, hooks.requiredRemovedIDs);
   });
   // Reassemble every advertised remote pack before changing either pointer.
   await assertClawHubAvailability(root, legacyCatalog!);
   await assertXAvailability(root, legacyCatalog!);
-  await readV2(intent.targets.v2, async (url, maximum) => (await remoteBytes(transport, url, maximum))!);
+  const compatibility = await readV2(intent.targets.v2, async (url, maximum) => (await remoteBytes(transport, url, maximum))!);
+  assertRemovals(compatibility, hooks.requiredRemovedIDs);
   if (intent.operation === "rollback" && !hooks.beforeActivation) throw new Error("Rollback requires a durable hold callback");
   if (intent.holdToClear && !hooks.afterActivation) throw new Error("Resuming held publication requires a hold cleanup callback");
   await hooks.beforeActivation?.(intent);
@@ -306,15 +365,20 @@ export async function resumePublication(root: string, hooks: PublicationHooks = 
   await assertXAvailability(root, catalog);
   await assertClawHubAvailability(root, legacyCatalog!);
   await assertXAvailability(root, legacyCatalog!);
+  // Every channel now has verified immutable data. Persisted intent survives partial activation.
+  // Publish DB first so explicit removals immediately cover all v3 snapshots.
+  if (intent.database) await publisher!.activate(intent.database);
   await activate(root, "v2", intent, transport);
   await activate(root, "v1", intent, transport);
   const published = await readPublishedState(root, {}, transport);
   if (published.observed.v1 !== publicationIdentity(intent.targets.v1) || published.observed.v2 !== publicationIdentity(intent.targets.v2))
     throw new Error("Publication changed before final verification");
+  if (intent.database) assertDatabaseActivated(intent.database, published.database!);
   await atomic(join(root, "latest.json"), intent.targets.v1);
   await atomic(join(root, "v2-latest.json"), intent.targets.v2);
   await hooks.afterActivation?.(intent);
-  const completed: PublicationState = { schemaVersion: 1, v2Initialized: true, v1Frozen: state.v1Frozen || intent.freezeV1 };
+  const completed: PublicationState = { schemaVersion: 1, v2Initialized: true, v1Frozen: state.v1Frozen || intent.freezeV1,
+    ...(intent.database ? { databaseInitialized: true } : {}) };
   await saveState(root, completed);
   return { ...published, state: completed };
 }
@@ -327,6 +391,12 @@ export async function publishRelease(root: string, staged: StagedRelease, observ
   const live = await readPointers(transport);
   if (publicationIdentity(live.observed) !== publicationIdentity(observed)) throw new Error("Publication changed during preparation");
   const intent = intentSchema.parse({ ...staged, observed, operation: options.operation, ...(options.holdToClear ? { holdToClear: options.holdToClear } : {}) });
+  if (intent.database) {
+    const publisher = publicationDatabase(state, transport) ?? configuredDatabasePublisher();
+    const pointer = await publisher.pointer();
+    if (pointer.release !== intent.database.observed.release || pointer.generation !== intent.database.observed.generation)
+      throw new Error("Database publication changed during preparation");
+  }
   await saveState(root, { ...state, pending: intent });
   return (await resumePublication(root, options, transport))!;
 }
