@@ -83,7 +83,7 @@ struct PromptDetail: View {
         }
         .onDisappear { if languageRequestID != nil { cancelLanguageSelection() } }
         .sheet(item: $useContext) { context in
-            PromptUseSheet(item: context.item, text: context.text, title: context.title, language: context.language, onPrepared: { prepared in
+            PromptUseSheet(item: context.item, text: context.text, sourceText: context.item.content(in: context.language).prompt, title: context.title, language: context.language, onPrepared: { prepared in
                 let saved = library.saveDraft(prepared, for: context.item, language: context.language)
                 if !saved { library.dismissError() }
                 return saved
@@ -390,6 +390,8 @@ struct PromptEditor: View {
     let item: Prompt
     let language: String?
     private let initialText: String?
+    private let readingPreview: Bool
+    private var isUnchangedReadingPreview: Bool { readingPreview && text == initialText }
     private let onSave: ((String) -> Bool)?
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
@@ -407,8 +409,8 @@ struct PromptEditor: View {
     @State private var variablesPresented = false
     @State private var headerHeight: CGFloat?
     @FocusState private var editorFocused: Bool
-    init(item: Prompt, language: String? = nil, initialText: String? = nil, onSave: ((String) -> Bool)? = nil) {
-        self.item = item; self.language = language; self.initialText = initialText; self.onSave = onSave
+    init(item: Prompt, language: String? = nil, initialText: String? = nil, readingPreview: Bool = false, onSave: ((String) -> Bool)? = nil) {
+        self.item = item; self.language = language; self.initialText = initialText; self.readingPreview = readingPreview; self.onSave = onSave
         _text = State(initialValue: initialText ?? item.content(in: language).prompt)
     }
     var body: some View {
@@ -459,7 +461,7 @@ struct PromptEditor: View {
                     }
                 }
                 .sheet(isPresented: $usePresented) {
-                    PromptUseSheet(item: item, text: text, title: item.content(in: language).title, language: language, onEdit: { prepared in
+                    PromptUseSheet(item: item, text: text, sourceText: item.content(in: language).prompt, title: item.content(in: language).title, language: language, onEdit: { prepared in
                         // An explicit return to editing carries unsaved variable input too.
                         text = prepared; saved = prepared == library.draft(for: item, language: language)
                         usePresented = false
@@ -516,7 +518,7 @@ struct PromptEditor: View {
                 }
         }
         .promptSheet()
-        .interactiveDismissDisabled(!saved || text != library.draft(for: item, language: language))
+        .interactiveDismissDisabled(!isUnchangedReadingPreview && (!saved || text != library.draft(for: item, language: language)))
     }
     private var editorHeader: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -532,7 +534,7 @@ struct PromptEditor: View {
             Text(typeSize.isAccessibilitySize ? String(localized: "原文会保留。") : String(localized: "修改会保存到此设备，原始 Prompt 会保留。"))
                 .font(.footnote).foregroundStyle(Palette.muted).fixedSize(horizontal: false, vertical: true)
             HStack {
-                Label(saved ? String(localized: "已保存到此设备") : saveError != nil ? String(localized: "尚未保存，可先复制保留") : String(localized: "正在保存…"), systemImage: saved ? "checkmark.circle" : "circle.dotted")
+                Label(isUnchangedReadingPreview ? String(localized: "version.reading", table: "UsePrompt") : saved ? String(localized: "已保存到此设备") : saveError != nil ? String(localized: "尚未保存，可先复制保留") : String(localized: "正在保存…"), systemImage: saved ? "checkmark.circle" : "circle.dotted")
                     .font(.footnote).foregroundStyle(Palette.muted).fixedSize(horizontal: false, vertical: true).accessibilityIdentifier("draftStatus")
                 if !typeSize.isAccessibilitySize {
                     Spacer()
