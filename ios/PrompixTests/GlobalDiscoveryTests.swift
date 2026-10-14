@@ -36,6 +36,30 @@ import CryptoKit
         XCTAssertTrue(narrowHalf.widths.allSatisfy { $0 >= 140 })
     }
 
+    func testMasonryFillsShortColumnInsteadOfAlternatingTallCards() {
+        // Portrait, landscape, portrait, landscape, square: the reported shape
+        // distribution must not put all three tall cards in the leading column.
+        let heights: [CGFloat] = [280, 140, 300, 140, 220]
+        let columns = PromptMasonry.columns(itemCount: 5, widths: [180, 180], spacing: 14) { index, _ in heights[index] }
+        XCTAssertEqual(columns, [[0, 3, 4], [1, 2]])
+        let totals = columns.map { $0.reduce(CGFloat.zero) { $0 + heights[$1] + 14 } }
+        XCTAssertLessThan(abs(totals[0] - totals[1]), 240)
+        XCTAssertEqual(columns.flatMap { $0 }.sorted(), Array(0..<5))
+    }
+
+    func testMasonryAppendingContentKeepsExistingColumnsAndUsesEachColumnWidth() {
+        var usedWidths: [CGFloat] = []
+        let widths: [CGFloat] = [220, 220, 160, 160]
+        let first = PromptMasonry.columns(itemCount: 4, widths: widths, spacing: 14) { _, width in
+            usedWidths.append(width); return width * 1.5
+        }
+        XCTAssertEqual(usedWidths, widths)
+        let appended = PromptMasonry.columns(itemCount: 12, widths: widths, spacing: 14) { _, width in width * 1.5 }
+        for index in widths.indices { XCTAssertEqual(Array(appended[index].prefix(first[index].count)), first[index]) }
+        XCTAssertEqual(appended.flatMap { $0 }.sorted(), Array(0..<12))
+        XCTAssertEqual(PromptMasonry.columns(itemCount: 0, widths: [180, 180], spacing: 14) { _, _ in 100 }, [[], []])
+    }
+
     func testCreatorSearchAcceptsDisplayedHandlesAndMultipleIdentityTerms() {
         let author = creator(id: "github-sample", name: "Sample Artist", username: "sample_artist", platform: "github")
         XCTAssertTrue(author.matchesSearch("@SAMPLE_artist"))

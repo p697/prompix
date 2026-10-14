@@ -1770,6 +1770,35 @@ import CryptoKit
         start.press(forDuration: 0.05, thenDragTo: end)
     }
 
+    func testHeatherGreenMasonryBalance() {
+        launch()
+        app.selectPrompixTab("搜索")
+        let field = app.searchFields.firstMatch
+        XCTAssertTrue(field.waitForExistence(timeout: 5)); field.tap(); field.typeText("Heather Green\n")
+        let creator = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'creator-' AND label == 'Heather Green'")).firstMatch
+        XCTAssertTrue(creator.waitForExistence(timeout: 5)); creator.tap()
+        XCTAssertTrue(app.buttons["saveCreator"].waitForExistence(timeout: 5))
+        capture("masonry-heather-top")
+        app.swipeUp()
+        capture("masonry-heather-middle")
+        let cards = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'prompt-'"))
+        XCTAssertEqual(cards.count, 5)
+        let frames = cards.allElementsBoundByIndex.map(\.frame)
+        let left = frames.filter { $0.midX < app.frame.midX }
+        let right = frames.filter { $0.midX > app.frame.midX }
+        XCTAssertGreaterThanOrEqual(left.count, 2)
+        XCTAssertGreaterThanOrEqual(right.count, 2)
+        let leftBottom = left.map(\.maxY).max()!
+        let rightBottom = right.map(\.maxY).max()!
+        let tallest = frames.map(\.height).max()!
+        XCTAssertLessThan(abs(leftBottom - rightBottom), tallest, "The trailing gap should stay below one card, not several tall cards.")
+        XCTAssertTrue(NSPredicate(format: "count == 0").evaluate(with: app.progressIndicators)
+            || XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: NSPredicate(format: "count == 0"), object: app.progressIndicators)], timeout: 30) == .completed)
+        let loadedFrames = cards.allElementsBoundByIndex.map(\.frame)
+        XCTAssertEqual(loadedFrames, frames, "Image downloads must not move cards between columns or change their reserved sizes.")
+        capture("masonry-heather-loaded")
+    }
+
     func testPersistentTabsThroughCreatorAndDetail() {
         launch()
         let creator = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'creator-' ")).firstMatch
