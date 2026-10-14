@@ -16,6 +16,10 @@ jobs:
           cache: npm
       - run: npm ci --ignore-scripts
       - run: npm run typecheck
+      - name: Build database Feed Worker
+        run: npx wrangler deploy --dry-run --config services/feed/wrangler.jsonc
+        env:
+          WRANGLER_SEND_METRICS: 'false'
       - run: npm test
       - run: npm run validate -- ios/Prompix/Resources/catalog.json
       - name: Check scheduler retention safety

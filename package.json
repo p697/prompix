@@ -8,12 +8,16 @@
     "backfill:video": "tsx ingest/backfill.ts",
     "validate": "tsx ingest/cli.ts validate",
     "stage": "tsx ingest/cli.ts stage",
-    "test": "tsx --test ingest/*.test.ts",
-    "typecheck": "tsc --noEmit && tsc -p services/content/tsconfig.json",
+    "test": "tsx --test ingest/*.test.ts services/feed/*.test.ts",
+    "test:feed": "tsx --test services/feed/*.test.ts",
+    "typecheck": "tsc --noEmit && tsc -p services/content/tsconfig.json && tsc -p services/feed/tsconfig.json",
+    "types:feed": "wrangler types services/feed/worker-configuration.d.ts --config services/feed/wrangler.jsonc --env-interface FeedEnv --include-runtime false",
     "daily": "tsx ingest/daily.ts",
     "remove": "tsx ingest/remove.ts",
     "quality:hold": "tsx ingest/quality-hold.ts",
     "check:deployment": "tsx scripts/check-deployment.ts",
+    "check:database-publication": "tsx scripts/check-database-publication.ts",
+    "check:feed": "tsx scripts/check-feed.ts",
     "review": "tsx ingest/review.ts",
     "review:x-excerpt": "tsx ingest/x-excerpt-cli.ts",
     "rollback": "tsx ingest/rollback.ts",
@@ -22,13 +26,17 @@
   },
   "dependencies": {
     "csv-parse": "^7.0.3",
+    "pg": "8.23.1",
     "zod": "^4.1.12"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^5.20261011.1",
+    "@cloudflare/workers-types": "5.20261014.1",
+    "@electric-sql/pglite": "0.5.9",
     "@types/node": "^22.18.0",
+    "@types/pg": "8.23.1",
     "tsx": "^4.20.6",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "wrangler": "4.151.0"
   },
   "engines": {
     "node": ">=22"

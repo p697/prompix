@@ -22,6 +22,8 @@ Prompix 是开源、免费的多模态 Prompt 集合 App。用户像逛手机淘
 
 ## 当前方案
 
+数据库分页升级正在实施：[v3 方案与候选服务证据](database-feed-v3.md)。独立 Supabase/Cloudflare 候选链路已迁入并核对 648 条已发布内容；正式 App 和定时发布仍使用现有 v1/v2，尚未完成整体验收。
+
 | 文档 | 内容 |
 |---|---|
 | [next-release.md](next-release.md) | 当前验收目标、工作分工与未完成关口 |

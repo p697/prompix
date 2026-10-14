@@ -2,7 +2,7 @@ import { join } from "node:path";
 import { z } from "zod";
 import { atomic, json, base, lockContent, upload, manifestSchema, digest, remoteCatalog, currentManifest, rollbackCatalog, moderationSchema, writeCatalog } from "./publication.ts";
 import { assertPublicationReconciled, defaultReleaseTransport, loadPublicationState, preservedRollbackCatalog, publishRelease, readLocalRelease,
-  readPublishedState, resumePublication, stageRelease, type ReleaseTransport } from "./release-publication.ts";
+  publicationDatabase, readPublicationTarget, readPublishedState, resumePublication, stageRelease, type ReleaseTransport } from "./release-publication.ts";
 import { languagePackPublishingEnabled } from "./daily-publication.ts";
 import { recoveryPublicationHooks, verifyRecoveryMedia as verifyMedia } from "./recovery-publication.ts";
 import { assertNoQualityHolds, readQualityHolds } from "./quality-holds.ts";
@@ -21,19 +21,23 @@ async function recoverLanguagePackRelease(root: string, version: string, publish
   const previous = await readPublishedState(root, { allowBootstrap: true }, releaseTransport);
   const pending = previous.state.pending;
   if (pending) assertPublicationReconciled(pending, previous.observed);
-  const target = await readLocalRelease(root, version);
-  const pendingTarget = pending ? await readLocalRelease(root, pending.targets.v2.version, pending.targets.v2) : null;
+  if (previous.database && !/^feed-[a-f0-9]{64}$/.test(version))
+    throw new Error("Database rollback requires a full feed release ID; a legacy window is not a complete backup");
+  const target = previous.database ? await publicationDatabase(previous.state, releaseTransport)!.read(version) : await readLocalRelease(root, version);
+  const pendingTarget = pending ? await readPublicationTarget(root, pending, releaseTransport) : null;
   const moderation = moderationSchema.parse(await json(join(root, "moderation.json"), { removedIDs: [] }));
-  const catalog = preservedRollbackCatalog(target, [...(previous.v1.catalog.removedIDs ?? []), ...(previous.v2?.catalog.removedIDs ?? []),
-    ...(pendingTarget?.removedIDs ?? []), ...moderation.removedIDs]);
-  const sameIntent = pending?.operation === "rollback" && pending.targets.v2.version === catalog.version;
-  const staged = sameIntent ? { targets: pending.targets, freezeV1: pending.freezeV1 } : await stageRelease(root, catalog, previous);
-  const stored = await readLocalRelease(root, staged.targets.v2.version, staged.targets.v2);
+  const catalog = preservedRollbackCatalog(target, [...(previous.authoritative.removedIDs ?? []), ...(previous.v1.catalog.removedIDs ?? []), ...(previous.v2?.catalog.removedIDs ?? []),
+    ...(pendingTarget?.removedIDs ?? []), ...moderation.removedIDs], undefined, !!previous.database);
+  let staged = await stageRelease(root, catalog, previous, releaseTransport);
+  const sameIntent = pending?.operation === "rollback" && (pending.database
+    ? pending.database.release === staged.database?.release : pending.targets.v2.version === catalog.version);
+  if (sameIntent) staged = pending;
+  const stored = await readPublicationTarget(root, staged, releaseTransport);
   Object.assign(report, { from: { v1: previous.v1.manifest.version, v2: previous.v2?.manifest.version ?? null },
     version: stored.version, count: stored.prompts.length, removedIDs: stored.removedIDs, channels: { v1: staged.targets.v1.version, v2: staged.targets.v2.version } });
   if (!publishing) return;
   await transport.verifyMedia(stored);
-  const hooks = { ...recoveryPublicationHooks(root, transport.verifyMedia), requiredRemovedIDs: stored.removedIDs ?? [] };
+  const hooks = { ...recoveryPublicationHooks(root, transport.verifyMedia, releaseTransport), requiredRemovedIDs: stored.removedIDs ?? [] };
   const published = sameIntent ? await resumePublication(root, hooks, releaseTransport)
     : await publishRelease(root, staged, previous.observed, { ...hooks, operation: "rollback", supersedePending: true }, releaseTransport);
   if (!published) throw new Error("Rollback intent disappeared before activation");
@@ -43,7 +47,7 @@ async function recoverLanguagePackRelease(root: string, version: string, publish
 
 export async function recoverRelease(root: string, version: string, publishing: boolean, transport: RecoveryTransport = defaultRecoveryTransport,
   releaseTransport?: ReleaseTransport, env: NodeJS.ProcessEnv = process.env) {
-  z.string().regex(/^(edition|rollback)-[a-f0-9]{16}$/).parse(version);
+  z.string().regex(/^(?:(?:edition(?:-v2)?|rollback)-[a-f0-9]{16}|feed-[a-f0-9]{64})$/).parse(version);
   const unlock = await lockContent(root);
   const report: Record<string, unknown> = { target: version, startedAt: new Date().toISOString(), published: false };
   try {
