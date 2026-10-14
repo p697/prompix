@@ -222,7 +222,27 @@ test("10,000 items: keyset traversal has no omissions or duplicates", { timeout:
   } while (cursor);
   assert.equal(seen.size, 10000); assert.equal(pages, 200);
   assert.deepEqual([...seen], prompts.map(item => item.id));
+  await pg.exec("analyze prompix.content; analyze prompix.releases; analyze prompix.revisions; analyze prompix.release_entries");
+  let searchSQL = "", searchValues: unknown[] = [];
+  const captured: Database = { query: (sql, values) => {
+    searchSQL = sql; searchValues = values ?? []; return reader.query(sql, values);
+  } };
+  const search = await getFeed(captured, { filters: { ...filters, q: "preserve whitespace" }, limit: 50 }, secret);
+  assert.deepEqual(search.items.map(item => item.id), prompts.slice(0, 50).map(item => item.id));
+  assert.ok(search.nextCursor);
+  const plan = (await reader.query<{ "QUERY PLAN": { Plan: Record<string, unknown>; "Execution Time": number }[] }>(
+    "explain (analyze,format json) " + searchSQL, searchValues)).rows[0]["QUERY PLAN"][0];
+  let contentRowsScanned = 0;
+  const inspect = (node: Record<string, unknown>) => {
+    if (node["Relation Name"] === "content" && node["Node Type"] === "Seq Scan")
+      contentRowsScanned += Number(node["Actual Rows"]) * Number(node["Actual Loops"]);
+    for (const child of (node.Plans ?? []) as Record<string, unknown>[]) inspect(child);
+  };
+  inspect(plan.Plan);
+  // Assert work, not host-dependent elapsed time. The old plan scanned ~50 million rows.
+  assert.ok(contentRowsScanned < 100000, `Repeated content scans: ${contentRowsScanned}`);
   times.sort((a, b) => a - b);
   t.diagnostic(JSON.stringify({ engine: "PGlite PostgreSQL", items: seen.size, pages, importedMs: Math.round(importedMs),
-    pageMedianMs: Math.round(times[100]), pageP95Ms: Math.round(times[190]), pageMaxMs: Math.round(times[199]) }));
+    pageMedianMs: Math.round(times[100]), pageP95Ms: Math.round(times[190]), pageMaxMs: Math.round(times[199]),
+    broadSearchMs: Math.round(plan["Execution Time"]), contentRowsScanned }));
 });

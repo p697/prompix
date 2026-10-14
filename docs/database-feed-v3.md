@@ -22,7 +22,7 @@
 - 搜索更新部署后，正式 `api.prompix.dev/v3/` 通过 41 次完整回读：原文/简中各 648 条、多语详情、下架与非法输入均与源数据一致，最大页面 63,538 字节。本机中位 240 ms、P95 748 ms、最大 815 ms；不替代独立地域结果。
 - Supabase 安全 Advisor 当前没有告警。性能 Advisor 提示[复合外键缺少完整索引](https://supabase.com/docs/guides/database/database-linter?lint=0001_unindexed_foreign_keys)，已补迁移；单行 `state` 的活动版本外键不另建无收益索引。[新建筛选索引尚无历史使用量](https://supabase.com/docs/guides/database/database-linter?lint=0005_unused_index)，保留等待真实查询验证；[Auth 固定连接数提示](https://supabase.com/docs/guides/deployment/going-into-prod)不属于本次未启用的账户功能。
 
-迁移源及校验证据保存在采集 SSD 的 `content/database-migration/`，不提交第三方内容。待完成：客户端分页与详情缓存、输入管线/兼容导出、清理与恢复规程、模拟器完整流程、真实规模负载、多地域测量、CI/PR、自然排程和验收包。
+迁移源及校验证据保存在采集 SSD 的 `content/database-migration/`，不提交第三方内容。待完成：客户端分页与详情缓存、输入管线切换、清理与恢复规程、模拟器完整流程、并发 HTTP 验证、最终 CI/PR、自然排程和验收包。
 
 ## 范围与发布关口
 
@@ -83,3 +83,21 @@
 新加坡慢样本的 CF-Ray 显示欧洲节点，TLS 握手约 1.15–1.26 秒，SQL 22–31 毫秒；另一些同探针请求到 SIN 仅 187–441 毫秒。正式域名改善了部分样本，但仍有路由波动，不能声称已解决。没有做另一数据库区域的对照，也没有覆盖移动网络或所有国家；现有证据支持继续使用东京进行首期验收，不支持宣称东京为全球最优。后续检查真实首屏/详情体验、失败重试与长尾观测。
 
 路由范围只覆盖 v3，依据 [Cloudflare 路由优先级](https://developers.cloudflare.com/workers/configuration/routing/routes/#background)；探测方式见 [Globalping API](https://globalping.io/docs/api.globalping.io)。原始测量和迁移材料保存在外部采集目录，不进入 Git。
+
+## 一万条托管数据库实测（2026-10-15）
+
+在实际 Supabase Micro/PostgreSQL 17 上，用事务内隔离 schema 生成一万条自有合成内容、三万份译文和五百位作者；使用与服务相同的 SQL、只读角色及 RLS。所有建表、数据和临时角色授权在结束时回滚，生产发布仍为 generation 1；回查无测试 schema，管理员原有角色管理授权的继承与 SET 权限均未扩张。生成器为 `scripts/prepare-feed-benchmark.ts`，只输出仓库外 SQL，执行是独立步骤。
+
+测试找到了仅靠小数据测试未发现的问题：广泛匹配的搜索误估结果数，对 content 重复顺序扫描约五千万行，三轮耗时 9.11–9.29 秒。修复先确定搜索候选的可见性，再做相关度排序，最后只取当前页卡片和译文；普通无关键词分页保持索引过滤。没有关闭 RLS 或更改下架规则。实现依据 [PostgreSQL CTE materialization](https://www.postgresql.org/docs/17/queries-with.html#QUERIES-WITH-CTE-MATERIALIZATION)。
+
+修复后同样三轮 EXPLAIN ANALYZE 结果（毫秒，不含网络）：
+
+| 查询 | 最小 | 最大 |
+|---|---:|---:|
+| 首屏 30 条 | 4.48 | 4.62 |
+| 第 9,001 条后的游标页 | 4.45 | 4.56 |
+| 图片与标签组合 | 38.70 | 40.20 |
+| 全库广泛匹配、标题优先搜索 | 221.44 | 231.49 |
+| 作者目录 50 条 | 18.43 | 18.67 |
+
+这是新写入合成数据后的热缓冲、单连接 SQL 验证，不代表冷盘性能、持续并发容量或真实十万条数据。API 网络和限流另测。回归测试在一万条上检查搜索顺序和实际扫描行数，拒绝平方级扫描，避免把某台开发机的时间阈值当性能保证。全部 480 项服务端/采集测试、类型检查和 Worker 构建再次通过。

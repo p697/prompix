@@ -26,7 +26,7 @@ export async function getFeed(db: Database, query: { filters: FeedFilters; limit
   } else release = (await getState(db)).release;
   const patterns = filters.q.split(" ").filter(Boolean).map(term => `%${term.replace(/[\\%_]/g, "\\$&")}%`);
   const parameters: unknown[] = [release, position, filters.locale, rank, filters.q, patterns];
-  const where = ["e.release_id=$1", "c.removed_at is null", "r.published_at is not null"];
+  const where: string[] = [];
   const parameter = (value: unknown) => { parameters.push(value); return `$${parameters.length}`; };
   if (filters.kind === "skill") where.push("v.content_type='skill'");
   else if (filters.kind) where.push(`v.kind=${parameter(filters.kind)} and v.content_type<>'skill'`);
@@ -37,20 +37,28 @@ export async function getFeed(db: Database, query: { filters: FeedFilters; limit
     where.push(filters.tag === "创作灵感" ? `(v.kind<>'text' or ${tagged})` : tagged);
   }
   for (const pattern of patterns) where.push(`v.search_text like ${parameter(pattern)}`);
-  const rows = (await db.query<{ position: number; rank: number; card: FeedCard }>(`with matched as (
-    select e.position, coalesce(t.card,v.card) as card, case
+  // Broad ranked searches otherwise underestimate rows and can rescan content for every
+  // match. Resolve visibility once before ranking; ordinary keyset pages remain inlined.
+  // Fetch card/translation payloads only after the bounded page has been selected.
+  const rows = (await db.query<{ position: number; rank: number; card: FeedCard }>(`with visible_entries as ${patterns.length ? "materialized" : "not materialized"} (
+    select e.position,e.revision_id from prompix.release_entries e
+    join prompix.releases r on r.id=e.release_id
+    join prompix.content c on c.id=e.content_id
+    where e.release_id=$1 and r.published_at is not null and c.removed_at is null
+  ), matched as (
+    select e.position,e.revision_id,case
       when $5='' then 0 when $5=any(v.search_titles) then 4
       when exists(select 1 from unnest(v.search_titles) title where title like all($6::text[])) then 3
       when v.search_creator like all($6::text[]) then 2
       when v.search_metadata like all($6::text[]) then 1 else 0 end as rank
-    from prompix.release_entries e
-    join prompix.releases r on r.id=e.release_id
-    join prompix.revisions v on v.id=e.revision_id
-    join prompix.content c on c.id=e.content_id
-    left join prompix.translations t on t.revision_id=v.id and t.locale=$3
-    where ${where.join(" and ")})
-    select position,rank,card from matched where rank<$4 or (rank=$4 and position>$2)
-    order by rank desc,position limit ${parameter(limit + 1)}`, parameters)).rows;
+    from visible_entries e join prompix.revisions v on v.id=e.revision_id
+    ${where.length ? `where ${where.join(" and ")}` : ""}), page as materialized (
+      select position,revision_id,rank from matched where rank<$4 or (rank=$4 and position>$2)
+      order by rank desc,position limit ${parameter(limit + 1)}
+    ) select p.position,p.rank,coalesce(t.card,v.card) as card from page p
+    join prompix.revisions v on v.id=p.revision_id
+    left join prompix.translations t on t.revision_id=p.revision_id and t.locale=$3
+    order by p.rank desc,p.position`, parameters)).rows;
   const page = rows.slice(0, limit);
   return {
     schemaVersion: 3, release, items: page.map(row => row.card),
