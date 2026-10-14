@@ -35,6 +35,8 @@ enum CatalogSyncState: Equatable, Sendable {
     private var lastAttemptLanguage: String?
     private var languagePackIndex: LanguagePackCache.Index?
     private var languagePackBase: LanguagePackCatalog.Base?
+    private(set) var feed: FeedRepository?
+    private var databaseFeedRequested = false
     private let directory: URL
     private let installFileWriter: (Data, URL) throws -> Void
     private var storageRecoveryPending = false
@@ -46,12 +48,23 @@ enum CatalogSyncState: Equatable, Sendable {
     }
 
     init(directory: URL? = nil, catalogURL: URL? = Bundle.main.url(forResource: "catalog", withExtension: "json"),
+         feedService: (any FeedServing)? = nil,
          installFileWriter: @escaping (Data, URL) throws -> Void = { try $0.write(to: $1, options: .atomic) }) {
         self.directory = directory ?? URL.applicationSupportDirectory.appending(path: "Prompix", directoryHint: .isDirectory)
         self.installFileWriter = installFileWriter
+        databaseFeedRequested = feedService != nil
+        var checkpoint = FeedCheckpoint()
         do {
             try FileManager.default.createDirectory(at: self.directory, withIntermediateDirectories: true)
             try Self.recoverCatalogTransaction(in: self.directory)
+            let checkpointURL = self.directory.appending(path: FeedCheckpoint.fileName)
+            if FileManager.default.fileExists(atPath: checkpointURL.path) {
+                let attributes = try checkpointURL.resourceValues(forKeys: [.fileSizeKey, .isRegularFileKey, .isSymbolicLinkKey])
+                guard attributes.isRegularFile == true, attributes.isSymbolicLink != true,
+                      (attributes.fileSize ?? Int.max) <= 40_000_000 else { throw FeedError.invalidResponse }
+                checkpoint = try JSONDecoder().decode(FeedCheckpoint.self, from: Data(contentsOf: checkpointURL)).validated()
+                removedIDs = Set(checkpoint.removedIDs)
+            }
         } catch {
             storageRecoveryPending = true
             favoritesReadable = false; savedCreatorsReadable = false; draftsReadable = false
@@ -107,6 +120,14 @@ enum CatalogSyncState: Equatable, Sendable {
             let aliases = Self.creatorAliases(from: favorites, to: loadedCatalog.prompts)
             try applyCatalog(loadedCatalog, data: nil, aliases: aliases, availability: languagePackBase?.availableLanguages)
         } catch { self.error = String(localized: "灵感暂时没有加载成功。你仍然可以查看已保存的收藏。") }
+        if let feedService {
+            checkpoint.removedIDs = removedIDs.sorted()
+            feed = FeedRepository(service: feedService, cache: FeedCache(directory: self.directory.appending(path: "feed-cache")),
+                                  checkpoint: checkpoint) { [weak self] value in
+                guard let self else { throw CancellationError() }
+                try self.commitFeedRemovals(value)
+            }
+        }
     }
 
     private static func parseDate(_ value: String) -> Date? {
@@ -117,8 +138,10 @@ enum CatalogSyncState: Equatable, Sendable {
     private var savedFile: URL { directory.appending(path: "favorites.json") }
     private var draftFile: URL { directory.appending(path: "drafts.json") }
     private var creatorsFile: URL { directory.appending(path: "creators.json") }
-    func isRemoved(_ item: Prompt) -> Bool { removedIDs.contains(item.id) }
+    func isRemoved(_ item: Prompt) -> Bool { isRemoved(id: item.id) }
+    func isRemoved(id: String) -> Bool { removedIDs.contains(id) || feed?.removedIDs.contains(id) == true }
     func resolvedDetail(_ snapshot: Prompt, origin: PromptDetailOrigin) -> Prompt {
+        if let feed { return feed.resolved(snapshot) }
         switch origin {
         case .catalog: return prompts.first { $0.id == snapshot.id } ?? snapshot
         case .favorite:
@@ -129,6 +152,7 @@ enum CatalogSyncState: Equatable, Sendable {
     }
     func advertisedLanguages(for snapshot: Prompt) -> [String] {
         guard !isRemoved(snapshot) else { return [] }
+        if let feed { return feed.availableLanguages(for: snapshot) }
         if let base = languagePackBase, let current = base.catalog.prompts.first(where: { $0.id == snapshot.id }),
            LanguagePackCatalog.sourceFingerprint(current) == LanguagePackCatalog.sourceFingerprint(snapshot) {
             return base.availableLanguages[snapshot.id] ?? []
@@ -202,7 +226,7 @@ enum CatalogSyncState: Equatable, Sendable {
         drafts[draftID(for: item, language: language)] ?? item.content(in: language).prompt
     }
     @discardableResult func saveDraft(_ text: String, for item: Prompt, language: String? = nil) -> Bool {
-        guard !removedIDs.contains(item.id) else {
+        guard !isRemoved(item) else {
             error = String(localized: "这条内容已被移除，无法再保存。你仍可复制当前文字。")
             return false
         }
@@ -229,6 +253,29 @@ enum CatalogSyncState: Equatable, Sendable {
         if ProcessInfo.processInfo.arguments.contains("--cached-only") { return }
         #endif
         guard !Task.isCancelled, !isRefreshing, !ProcessInfo.processInfo.arguments.contains("--offline"), !storageRecoveryPending else { return }
+        if databaseFeedRequested {
+            guard let feed else { return }
+            let interval: TimeInterval = syncState == .failed ? 30 : 300
+            if !force, let lastAttempt, now.timeIntervalSince(lastAttempt) < interval { return }
+            isRefreshing = true; syncState = .checking; syncMessage = nil; lastAttempt = now
+            defer { isRefreshing = false }
+            do {
+                try await feed.refresh()
+                try Task.checkCancellation()
+                version = feed.state?.release ?? version
+                updatedAt = feed.state?.publishedAt.flatMap(Self.parseDate)
+                syncState = .current
+                if force {
+                    if feed.browse.value != nil || feed.browse.failure != nil { await feed.browse.load(force: true) }
+                    if feed.creators.query != nil { await feed.creators.load("", force: true) }
+                }
+            } catch is CancellationError { lastAttempt = nil; syncState = .idle }
+            catch {
+                if (error as? URLError)?.code == .cancelled { lastAttempt = nil; syncState = .idle }
+                else { syncState = .failed; syncMessage = String(localized: "内容更新未完成") }
+            }
+            return
+        }
         // A failed first refresh must not strand an upgraded installation on its
         // previous edition for fifteen minutes. Successful checks retain the
         // longer interval; explicit retry always bypasses either interval.
@@ -244,6 +291,23 @@ enum CatalogSyncState: Equatable, Sendable {
         cancelLanguageRequest()
         guard let locale else { return true }
         guard LanguagePackCatalog.supportedLocales.contains(locale), !isRemoved(snapshot), !storageRecoveryPending else { return false }
+        if let feed {
+            if feed.resolved(snapshot).availableLanguages.contains(locale) { return true }
+            do {
+                let item = try await feed.language(locale, for: snapshot)
+                try Task.checkCancellation()
+                guard !isRemoved(item) else { return false }
+                // A single detail must never treat absent page items as deletions.
+                if favoritesReadable {
+                    let updated = Self.enrichedFavorites(favorites, from: [item], availability: [item.id: feed.availableLanguages(for: item)])
+                    if updated != favorites {
+                        try commitCatalogFiles([("favorites.json", JSONEncoder().encode(updated))])
+                        favorites = updated
+                    }
+                }
+                return true
+            } catch { return false }
+        }
         let current = prompts.first { $0.id == snapshot.id }
         let matchesCurrent = current.map { LanguagePackCatalog.sourceFingerprint($0) == LanguagePackCatalog.sourceFingerprint(snapshot) } == true
         let available = advertisedLanguages(for: snapshot)
@@ -381,7 +445,7 @@ enum CatalogSyncState: Equatable, Sendable {
     private func applyCatalog(_ catalog: Catalog, data: Data?, aliases: [String: Prompt.Creator],
                               availability: [String: [String]]? = nil, additionalFiles: [(name: String, data: Data)] = []) throws {
         guard !storageRecoveryPending else { throw CocoaError(.fileWriteUnknown) }
-        let removed = Set(catalog.removedIDs ?? [])
+        let removed = removedIDs.union(catalog.removedIDs ?? [])
         let reconciled = savedCreatorsReadable ? Self.reconciledCreators(savedCreators, in: catalog.prompts, aliases: aliases) : savedCreators
         let updatedDrafts = draftsReadable ? drafts.filter { !removed.contains(String($0.key.components(separatedBy: "::")[0])) } : drafts
         let updatedFavorites = favoritesReadable ? Self.enrichedFavorites(favorites.filter { !removed.contains($0.id) }, from: catalog.prompts, availability: availability) : favorites
@@ -394,7 +458,7 @@ enum CatalogSyncState: Equatable, Sendable {
         // No observable state changes until every file and the commit point succeed.
         savedCreators = reconciled; drafts = updatedDrafts; favorites = updatedFavorites
         creatorAliases = aliases; removedIDs = removed
-        prompts = catalog.prompts; version = catalog.version
+        prompts = catalog.prompts.filter { !removed.contains($0.id) }; version = catalog.version
         updatedAt = catalog.publishedAt.flatMap(Self.parseDate)
     }
 
@@ -406,7 +470,25 @@ enum CatalogSyncState: Equatable, Sendable {
         let files: [File]
     }
     private static let transactionName = "catalog-transaction.json"
-    private static let catalogFileNames: Set<String> = ["catalog.json", "favorites.json", "drafts.json", "creators.json", LanguagePackCache.indexFileName]
+    private static let catalogFileNames: Set<String> = ["catalog.json", "favorites.json", "drafts.json", "creators.json", LanguagePackCache.indexFileName, FeedCheckpoint.fileName]
+
+    private func commitFeedRemovals(_ checkpoint: FeedCheckpoint) throws {
+        guard !storageRecoveryPending else { throw CocoaError(.fileWriteUnknown) }
+        let removed = Set(checkpoint.removedIDs)
+        guard removedIDs.isSubset(of: removed) else { throw FeedError.invalidResponse }
+        let updatedFavorites = favorites.filter { !removed.contains($0.id) }
+        let updatedDrafts = drafts.filter { !removed.contains(String($0.key.components(separatedBy: "::")[0])) }
+        // Never acknowledge a checkpoint while a personal file cannot be reconciled.
+        guard favoritesReadable, draftsReadable else { throw CocoaError(.fileReadCorruptFile) }
+        let bytes = try JSONEncoder().encode(checkpoint)
+        guard bytes.count <= 40_000_000 else { throw FeedError.invalidResponse }
+        var changes = [(FeedCheckpoint.fileName, bytes)]
+        if updatedFavorites != favorites { changes.append(("favorites.json", try JSONEncoder().encode(updatedFavorites))) }
+        if updatedDrafts != drafts { changes.append(("drafts.json", try JSONEncoder().encode(updatedDrafts))) }
+        try commitCatalogFiles(changes)
+        removedIDs = removed; favorites = updatedFavorites; drafts = updatedDrafts
+        prompts.removeAll { removed.contains($0.id) }
+    }
 
     private func commitCatalogFiles(_ changes: [(name: String, data: Data)]) throws {
         guard !changes.isEmpty else { return }
@@ -508,6 +590,7 @@ enum CatalogSyncState: Equatable, Sendable {
             // Add translations and creator details without silently changing the
             // instruction the user saved. Edited drafts are stored separately.
             guard let item = current[snapshot.id],
+                  snapshot.feedRevision == nil || snapshot.feedRevision == item.feedRevision,
                   LanguagePackCatalog.sourceFingerprint(item) == LanguagePackCatalog.sourceFingerprint(snapshot) else { return snapshot }
             var updated = item
             var translations = snapshot.localization?.translations ?? [:]
@@ -534,7 +617,7 @@ enum CatalogSyncState: Equatable, Sendable {
         } catch { self.error = String(localized: "收藏仍然无法读取，原文件与离线预览已保留。") }
     }
     @discardableResult func toggle(_ item: Prompt) -> Bool {
-        guard !removedIDs.contains(item.id) else {
+        guard !isRemoved(item) else {
             error = String(localized: "这条内容已被移除，无法再保存。你仍可复制当前文字。")
             return false
         }
@@ -553,4 +636,8 @@ enum CatalogSyncState: Equatable, Sendable {
         } catch { self.error = String(localized: "未能保存收藏，请检查设备存储空间后重试。"); return false }
     }
     func dismissError() { error = nil }
+    func reportContentFailure(_ failure: any Error) {
+        if failure as? FeedError == .removed { error = String(localized: "这条内容已被移除，无法再保存。你仍可复制当前文字。") }
+        else { error = String(localized: "内容暂时无法加载，请稍后重试。") }
+    }
 }

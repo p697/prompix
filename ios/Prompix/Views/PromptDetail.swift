@@ -192,7 +192,9 @@ struct PromptDetail: View {
                 Text(String(localized: "说明与来源")).font(.subheadline.weight(.medium)).frame(minHeight: 44)
                     .accessibilityIdentifier("promptInformation")
             }
-            if !related.isEmpty {
+            if let feed = library.feed {
+                FeedRelatedResults(item: item, repository: feed)
+            } else if !related.isEmpty {
                 Divider()
                 HStack { Text(String(localized: "相关 Prompt")).font(.headline).accessibilityAddTraits(.isHeader); Spacer(); Image(systemName: "arrow.down.right").foregroundStyle(Palette.muted).accessibilityHidden(true) }
                 PromptGrid(items: related)

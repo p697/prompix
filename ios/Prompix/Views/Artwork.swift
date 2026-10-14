@@ -1,10 +1,16 @@
 import SwiftUI
 
 struct Artwork: View {
-    let item: Prompt
+    let item: ContentPreview
     var compact = false
     // Feed previews fill their reserved frame; full-image reading remains fitted.
     var fillsFrame = false
+    init(item: Prompt, compact: Bool = false, fillsFrame: Bool = false) {
+        self.item = ContentPreview(item); self.compact = compact; self.fillsFrame = fillsFrame
+    }
+    init(preview: ContentPreview, compact: Bool = false, fillsFrame: Bool = false) {
+        item = preview; self.compact = compact; self.fillsFrame = fillsFrame
+    }
     var body: some View {
         GeometryReader { proxy in
             ZStack {
@@ -65,10 +71,10 @@ struct Artwork: View {
                     Image(systemName: "arrow.up.right").font(.system(size: 12, weight: .light))
                 }
                 Spacer(minLength: 0)
-                Text(item.displayContent.cover?.text ?? cover.text).font(.system(size: min(size.width * (compact ? 0.115 : 0.15), 32), weight: .regular, design: .default))
+                Text(cover.text).font(.system(size: min(size.width * (compact ? 0.115 : 0.15), 32), weight: .regular, design: .default))
                     .lineSpacing(4).lineLimit(compact ? 3 : 5).minimumScaleFactor(0.65)
                 Spacer(minLength: 0)
-                if !compact { Text(item.displayContent.cover?.eyebrow ?? cover.eyebrow).font(.system(size: max(9, size.width * 0.045))).lineLimit(2) }
+                if !compact { Text(cover.eyebrow).font(.system(size: max(9, size.width * 0.045))).lineLimit(2) }
             }.foregroundStyle(palette.1).padding(size.width * 0.12)
         }
     }
@@ -95,7 +101,7 @@ struct Artwork: View {
         }
     }
     private var noteExcerpt: String {
-        let text = item.isSkill ? item.displaySummary : item.displayContent.prompt
+        let text = item.excerpt
         return text.replacingOccurrences(of: "\n", with: " ").trimmingCharacters(in: .whitespacesAndNewlines)
     }
     private var noteColor: Color {

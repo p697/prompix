@@ -15,8 +15,8 @@ app.build_configurations.each do |config|
     'PRODUCT_BUNDLE_IDENTIFIER' => 'com.p697.prompix',
     'PRODUCT_NAME' => 'Prompix', 'INFOPLIST_FILE' => 'Prompix/Info.plist',
     'SWIFT_VERSION' => '6.0', 'TARGETED_DEVICE_FAMILY' => '1,2',
-    'CODE_SIGN_STYLE' => 'Automatic', 'MARKETING_VERSION' => '0.6.6',
-    'CURRENT_PROJECT_VERSION' => '30', 'ASSETCATALOG_COMPILER_APPICON_NAME' => 'AppIcon',
+    'CODE_SIGN_STYLE' => 'Automatic', 'MARKETING_VERSION' => '0.7.0',
+    'CURRENT_PROJECT_VERSION' => '31', 'ASSETCATALOG_COMPILER_APPICON_NAME' => 'AppIcon',
     'ENABLE_USER_SCRIPT_SANDBOXING' => 'YES', 'SWIFT_STRICT_CONCURRENCY' => 'complete'
   })
 end
@@ -31,6 +31,7 @@ Dir.glob(File.join(root, 'ios/Prompix/Resources/*')).sort.each do |file|
   ref.last_known_file_type = 'folder' if File.directory?(file) && !file.end_with?('.xcassets')
   app.resources_build_phase.add_file_reference(ref)
 end
+app.resources_build_phase.add_file_reference(project.main_group.new_file('../packages/schema/collections.json'))
 ['PrompixTests', 'PrompixUITests'].each do |name|
   type = name.end_with?('UITests') ? :ui_test_bundle : :unit_test_bundle
   target = project.new_target(type, name, :ios, '17.0')

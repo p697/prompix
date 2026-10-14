@@ -22,7 +22,10 @@
     "review:x-excerpt": "tsx ingest/x-excerpt-cli.ts",
     "rollback": "tsx ingest/rollback.ts",
     "collect:x": "tsx ingest/x-feed-cli.ts",
-    "collect:skills": "tsx ingest/skill-intake.ts"
+    "collect:skills": "tsx ingest/skill-intake.ts",
+    "report:database": "tsx scripts/report-database.ts",
+    "backup:database-publication": "tsx scripts/backup-database-publication.ts",
+    "check:database-backup": "tsx scripts/check-database-backup.ts"
   },
   "dependencies": {
     "csv-parse": "^7.0.3",

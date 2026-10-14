@@ -24,16 +24,21 @@ struct CatalogSync {
     static let languagePackEndpoint = URL(string: "https://api.prompix.dev/v2/latest.json")!
     static func fetch(_ url: URL, maximum: Int, session: URLSession = .shared,
                       requiresExactURL: Bool = false,
-                      progress: @escaping @Sendable (CatalogDownloadProgress) -> Void = { _ in }) async throws -> Data {
+                      timeout: TimeInterval = 60,
+                      progress: @escaping @Sendable (CatalogDownloadProgress) -> Void = { _ in },
+                      validateResponse: @escaping @Sendable (HTTPURLResponse) throws -> Void = {
+                          guard $0.statusCode == 200 else { throw SyncError.invalidResponse }
+                      }) async throws -> Data {
         try Task.checkCancellation()
         guard maximum >= 0 else { throw SyncError.tooLarge }
+        guard timeout > 0 && timeout <= 120 else { throw SyncError.invalidResponse }
         var request = URLRequest(url: url)
-        request.timeoutInterval = 60
+        request.timeoutInterval = timeout
         if requiresExactURL { request.cachePolicy = .reloadIgnoringLocalCacheData }
         // A task delegate receives bounded chunks on the session's delegate queue.
         // This avoids millions of per-byte iterations for a multilingual edition.
         let download = BoundedCatalogDownload(maximum: maximum, host: url.host,
-                                              exactURL: requiresExactURL ? url : nil, progress: progress)
+                                              exactURL: requiresExactURL ? url : nil, validateResponse: validateResponse, progress: progress)
         let bytes = try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { continuation in
                 download.start(request, session: session, continuation: continuation)
@@ -145,6 +150,7 @@ private final class BoundedCatalogDownload: NSObject, URLSessionDataDelegate, @u
     private let maximum: Int
     private let host: String?
     private let exactURL: URL?
+    private let validateResponse: @Sendable (HTTPURLResponse) throws -> Void
     private let progress: @Sendable (CatalogDownloadProgress) -> Void
     // All mutable state is protected by lock, including cancellation before start.
     private var task: URLSessionDataTask?
@@ -154,8 +160,10 @@ private final class BoundedCatalogDownload: NSObject, URLSessionDataDelegate, @u
     private var expectedBytes: Int?
     private var lastProgressAt: TimeInterval = 0
 
-    init(maximum: Int, host: String?, exactURL: URL?, progress: @escaping @Sendable (CatalogDownloadProgress) -> Void) {
+    init(maximum: Int, host: String?, exactURL: URL?, validateResponse: @escaping @Sendable (HTTPURLResponse) throws -> Void,
+         progress: @escaping @Sendable (CatalogDownloadProgress) -> Void) {
         self.maximum = maximum; self.host = host; self.exactURL = exactURL; self.progress = progress
+        self.validateResponse = validateResponse
     }
 
     func start(_ request: URLRequest, session: URLSession, continuation: CheckedContinuation<Data, any Error>) {
@@ -186,11 +194,13 @@ private final class BoundedCatalogDownload: NSObject, URLSessionDataDelegate, @u
 
     func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive response: URLResponse,
                     completionHandler: @escaping @Sendable (URLSession.ResponseDisposition) -> Void) {
-        guard let http = response as? HTTPURLResponse, http.statusCode == 200,
+        guard let http = response as? HTTPURLResponse,
               response.url?.scheme == "https", response.url?.host == host,
               exactURL == nil || response.url?.absoluteString == exactURL?.absoluteString else {
             finish(.failure(SyncError.invalidResponse)); completionHandler(.cancel); return
         }
+        do { try validateResponse(http) }
+        catch { finish(.failure(error)); completionHandler(.cancel); return }
         let encoding = http.value(forHTTPHeaderField: "Content-Encoding")?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let isEncoded = encoding.map { !$0.isEmpty && $0 != "identity" } ?? false
         guard isEncoded || response.expectedContentLength <= maximum else {

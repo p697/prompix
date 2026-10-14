@@ -81,7 +81,8 @@ Content is editorially selected from allowlisted sources and published as a revi
 
 | 数据路径 | 已确认的代码行为 | 当前申报处理 |
 |---|---|---|
-| 搜索、内容与作者收藏、草稿 | 在设备上检索和存储；无上传接口 | 不列为收集；设备备份另由 iOS 设置管理 |
+| 内容与作者收藏、草稿、最近搜索记录 | 仅存于设备，无上传接口 | 不列为收集；设备备份另由 iOS 设置管理 |
+| v3 在线搜索词与筛选 | 发送到内容 API 和 PostgreSQL 处理查询；不建立搜索历史表，Feed Worker 禁用 invocation logs 并脱敏查询参数，应用日志只记状态及耗时 | 官网及 App 说明已更新；仅即时处理不属于 Apple 定义的长期收集，发行前仍核实平台日志配置 |
 | 目录与媒体请求 | Cloudflare 接收 IP、请求 URL、时间等交付元数据；内容 Worker 开启 10% 抽样运行日志 | manifest 声明 Other Usage Data、Performance Data、Other Diagnostic Data，目的仅 App Functionality |
 | IP 推断地区 | 已存日志包含非空国家、城市、地区及 IP 推断经纬度；App 无设备定位请求 | 新增 Coarse Location，目的 App Functionality；不能把 IP 估计当作设备精确定位 |
 | 身份关联 | 无 App 账号或自建用户 ID；未验证服务日志写入前匿名化 | manifest 保守声明 linked=true；不声称日志匿名 |
@@ -106,6 +107,8 @@ Content is editorially selected from allowlisted sources and published as a revi
 - 支持邮件按处理请求及相关跟进的需要保留；用户可请求删除，仍需履行的法定义务或未解决争议除外。没有已验证的固定周期自动删除规则，不能承诺“30 天自动清空”。网站源码的保留与删除段落应与实际执行一致，部署后再核对公开页面。
 
 [Apple 隐私政策要求](https://developer.apple.com/app-store/review/guidelines/#data-collection-and-storage)涵盖收集、用途、分享与保留／删除方式。[App Privacy Details](https://developer.apple.com/app-store/app-privacy-details/)以实际离机处理为依据；没有分析 SDK 不等于 Data Not Collected。可选支持反馈只有满足 Apple 全部条件才可不披露，不能只因“用户主动发邮件”自动排除。发行前核对最终分发包、线上配置和 App Store Connect 问卷。[Privacy manifests](https://developer.apple.com/documentation/bundleresources/privacy-manifest-files)、[Required reason APIs](https://developer.apple.com/documentation/bundleresources/describing-use-of-required-reason-api)
+
+2026-10-15，v3 Feed 新增在线搜索，不能再声称所有搜索仅在设备内执行。正式 Feed Worker 已部署 `invocation_logs=false`、`redact_query_string=true`；数据库只记录 DDL，不记录普通查询时长，`log_parameter_max_length_on_error=0`，错误不附带绑定参数。网站中英文隐私页已更新并回读，App 九语说明同步更改。依据 [Apple 对即时请求处理的说明](https://developer.apple.com/app-store/app-privacy-details/#data-collection)，这个实现不新增持久 Search History 申报；这不改变既有服务元数据的六项保守申报，也不承诺 Cloudflare 网络安全处理完全不接触请求。
 
 ## 截图与演示
 
