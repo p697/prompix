@@ -555,6 +555,78 @@ import CryptoKit
         capture("legacy-catalog-creator-directory")
     }
 
+    func testHomeSectionsContinuousFeedAndSavedHeader() {
+        launch()
+        let creators = app.scrollViews["creatorRail"]
+        XCTAssertTrue(creators.waitForExistence(timeout: 5))
+        let firstCreator = creators.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'creator-' ")).firstMatch
+        let initialCreator = firstCreator.identifier
+        capture("feedback-01-home")
+        creators.swipeLeft()
+        let visibleCreators = creators.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'creator-' ")).allElementsBoundByIndex.filter {
+            $0.frame.intersects(creators.frame) && $0.isHittable
+        }
+        XCTAssertTrue(visibleCreators.contains { $0.identifier != initialCreator })
+        let originalCreator = creators.buttons[initialCreator]
+        XCTAssertTrue(!originalCreator.exists || !originalCreator.frame.intersects(creators.frame), "Creator discovery must scroll beyond the first entries.")
+        capture("feedback-02-creators-scrolled")
+        let collection = app.buttons["home-collection-portraits"]
+        let firstCard = app.buttons["prompt-gentle-tarot"]
+        XCTAssertLessThan(creators.frame.maxY, collection.frame.minY)
+        XCTAssertLessThan(collection.frame.maxY, firstCard.frame.minY)
+        XCTAssertTrue(firstCard.isHittable, "Discovery still shows real content on the first screen.")
+        for index in 0..<4 {
+            app.swipeUp()
+            XCTAssertTrue(app.buttons["kind-all"].isHittable)
+            if index > 0 {
+                let top = app.scrollViews["kindPicker"].frame.maxY + 8
+                let bottom = app.frame.maxY - 100
+                let cards = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'prompt-' ")).allElementsBoundByIndex.map(\.frame)
+                for right in [false, true] {
+                    let intervals = cards.filter { ($0.midX > app.frame.midX) == right && $0.maxY > top && $0.minY < bottom }.sorted { $0.minY < $1.minY }
+                    XCTAssertFalse(intervals.isEmpty)
+                    var end = top
+                    for frame in intervals {
+                        XCTAssertLessThan(max(0, frame.minY - end), 100, "The feed must not leave a tall blank column between cards.")
+                        end = max(end, frame.maxY)
+                    }
+                    XCTAssertGreaterThanOrEqual(end, bottom - 100)
+                }
+            }
+            capture("feedback-03-scroll-\(index)")
+        }
+        app.selectPrompixTab("收藏")
+        let settings = app.buttons["savedSettings"]
+        XCTAssertTrue(settings.waitForExistence(timeout: 5))
+        let search = app.searchFields.firstMatch
+        XCTAssertTrue(search.isHittable)
+        XCTAssertLessThan(search.frame.minY, settings.frame.maxY + 50, "Search must follow the compact header without a blank large-title region.")
+        capture("feedback-04-saved")
+        settings.tap()
+        XCTAssertTrue(app.buttons["replayOnboarding"].waitForExistence(timeout: 5))
+        app.buttons["完成"].tap()
+        XCTAssertTrue(search.waitForExistence(timeout: 5))
+    }
+
+    func testSavedHeaderAndCreatorEntryAtLargeText() throws {
+        launch()
+        let allCreators = app.buttons["allCreators"]
+        XCTAssertTrue(allCreators.isHittable)
+        capture("feedback-large-home")
+        app.selectPrompixTab("收藏")
+        let settings = app.buttons["savedSettings"]
+        let search = app.searchFields.firstMatch
+        XCTAssertTrue(settings.waitForExistence(timeout: 5))
+        XCTAssertTrue(settings.isHittable && search.isHittable)
+        XCTAssertLessThan(search.frame.minY, settings.frame.maxY + 50)
+        capture("feedback-large-saved")
+        try app.performAccessibilityAudit(for: [.hitRegion, .sufficientElementDescription])
+        settings.tap()
+        XCTAssertTrue(app.buttons["replayOnboarding"].waitForExistence(timeout: 5))
+        app.buttons["完成"].tap()
+        XCTAssertTrue(search.waitForExistence(timeout: 5))
+    }
+
     func testRefinedDiscoveryNavigationAndQuickCopy() {
         launch()
         capture("polish-01-home")

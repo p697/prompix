@@ -120,34 +120,30 @@ struct CreatorRail: View {
 
     var body: some View {
         if !entries.isEmpty && !typeSize.isAccessibilitySize && !voiceOverEnabled {
-            HStack(spacing: 16) {
-                NavigationLink { CreatorsView() } label: {
-                    HStack(spacing: 4) {
-                        Text(String(localized: "创作者"))
-                        Image(systemName: "chevron.right").font(.system(size: 9, weight: .semibold))
-                    }.font(.footnote.weight(.medium)).foregroundStyle(Palette.muted)
-                        .fixedSize().frame(minHeight: 52).contentShape(Rectangle())
-                }.buttonStyle(.plain).accessibilityIdentifier("allCreators")
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Text(String(localized: "创作者")).font(.subheadline.weight(.medium)).accessibilityAddTraits(.isHeader)
+                    Spacer()
+                    NavigationLink { CreatorsView() } label: {
+                        Text(String(localized: "查看全部")).font(.footnote).frame(minHeight: 44)
+                    }.foregroundStyle(Palette.muted).accessibilityIdentifier("allCreators")
+                }.padding(.horizontal, 16)
                 ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 18) {
-                        ForEach(Array(entries.prefix(10))) { entry in
+                    LazyHStack(alignment: .top, spacing: 12) {
+                        ForEach(entries) { entry in
                             NavigationLink { CreatorDetail(creator: entry.creator) } label: {
-                                HStack(spacing: 8) {
-                                    CreatorAvatar(creator: entry.creator, size: 34)
-                                    VStack(alignment: .leading, spacing: 3) {
-                                        Text(entry.creator.displayName).font(.caption.weight(.medium)).lineLimit(1)
-                                        Text(String(localized: "\(entry.count) 条内容"))
-                                            .font(.caption2).foregroundStyle(Palette.muted)
-                                    }.frame(width: 94, alignment: .leading)
-                                }.frame(minHeight: 52).contentShape(Rectangle())
+                                VStack(spacing: 7) {
+                                    CreatorAvatar(creator: entry.creator, size: 44)
+                                    Text(entry.creator.displayName).font(.caption).lineLimit(1)
+                                }.frame(width: 72, alignment: .top).contentShape(Rectangle())
                             }.buttonStyle(.plain).foregroundStyle(Palette.ink)
                                 .accessibilityLabel(entry.creator.displayName)
                                 .accessibilityValue(String(localized: "\(entry.count) 条内容"))
                                 .accessibilityIdentifier("creator-\(entry.id)")
                         }
-                    }.padding(.trailing, 20)
-                }
-            }.padding(.leading, 20)
+                    }.padding(.horizontal, 16).padding(.bottom, 4)
+                }.accessibilityIdentifier("creatorRail")
+            }
         } else {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(alignment: .firstTextBaseline) {

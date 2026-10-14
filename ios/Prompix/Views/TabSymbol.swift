@@ -4,7 +4,7 @@ import SwiftUI
 /// into the same optical box so iOS does not replace every icon with its fill.
 @MainActor enum TabSymbol {
     private static let images: [String: UIImage] = {
-        let names = ["rectangle.grid.1x2", "rectangle.stack", "bookmark"]
+        let names = ["safari", "square.grid.2x2", "heart"]
         return Dictionary(uniqueKeysWithValues: names.compactMap { name in
             guard let symbol = UIImage(systemName: name, withConfiguration:
                 UIImage.SymbolConfiguration(pointSize: 20, weight: .regular)) else { return nil }

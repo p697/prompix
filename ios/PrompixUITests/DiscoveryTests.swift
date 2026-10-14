@@ -371,6 +371,50 @@ import UIKit
         app.buttons["完成"].tap()
     }
 
+    func testImagePreviewDragDismissAndZoomProtection() {
+        app.buttons["kind-image"].tap()
+        app.buttons["prompt-paper-forms"].tap()
+        let preview = app.buttons["previewButton"]
+        XCTAssertTrue(preview.waitForExistence(timeout: 5))
+        let origin = preview.frame
+        preview.tap()
+        let close = app.buttons["closeImageViewer"]
+        let image = app.descendants(matching: .any)["loadedImage-0"]
+        XCTAssertTrue(close.waitForExistence(timeout: 5))
+        XCTAssertTrue(image.waitForExistence(timeout: 5))
+        capture("feedback-image-01-open")
+        let shortStart = image.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.4))
+        let shortEnd = shortStart.withOffset(CGVector(dx: 0, dy: 35))
+        shortStart.press(forDuration: 0.1, thenDragTo: shortEnd, withVelocity: .slow, thenHoldForDuration: 0.4)
+        XCTAssertTrue(close.isHittable, "A short pull must settle back into the viewer.")
+        capture("feedback-image-01b-cancelled")
+        image.doubleTap()
+        let zoomed = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            (image.value as? String)?.contains("200") == true
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [zoomed], timeout: 4), .completed)
+        image.swipeDown()
+        XCTAssertTrue(close.exists, "A pan on a zoomed image must not dismiss it.")
+        capture("feedback-image-02-zoom-pan")
+        image.doubleTap()
+        let fitted = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            (image.value as? String)?.contains("100") == true
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [fitted], timeout: 4), .completed)
+        let start = image.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.4))
+        let end = image.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.9))
+        start.press(forDuration: 0.05, thenDragTo: end)
+        XCTAssertTrue(close.waitForNonExistence(timeout: 5), "Downward drag must return to the source image.")
+        XCTAssertTrue(preview.waitForExistence(timeout: 5))
+        XCTAssertEqual(preview.frame.minY, origin.minY, accuracy: 2)
+        capture("feedback-image-03-return")
+        preview.tap()
+        XCTAssertTrue(close.waitForExistence(timeout: 5))
+        close.tap()
+        XCTAssertTrue(close.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["copyPrompt"].isHittable)
+    }
+
     func testReducedMotionImageZoomAndReturn() throws {
         guard UIAccessibility.isReduceMotionEnabled else { throw XCTSkip("Run explicitly with the simulator Reduce Motion setting enabled.") }
         let state = XCTAttachment(string: "UIAccessibility.isReduceMotionEnabled = true")
@@ -383,8 +427,10 @@ import UIKit
         image.doubleTap()
         capture("acceptance-reduced-motion-zoom")
         image.doubleTap()
-        app.buttons["完成"].tap()
+        image.swipeDown()
+        XCTAssertTrue(app.buttons["closeImageViewer"].waitForNonExistence(timeout: 5))
         XCTAssertTrue(app.buttons["copyPrompt"].waitForExistence(timeout: 5))
+        capture("feedback-reduced-motion-return")
     }
 
     func testDraftWriteFailureKeepsBufferUntilExplicitExit() throws {
@@ -909,19 +955,19 @@ import UIKit
         let card = app.buttons.containing(NSPredicate(format: "identifier BEGINSWITH %@", "prompt-youmind-nano-")).firstMatch
         XCTAssertTrue(card.waitForExistence(timeout: 35), "The requested community gallery must be loaded"); card.tap()
         app.buttons["previewButton"].tap()
-        XCTAssertTrue(app.navigationBars["1 / 4"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["1 / 4"].waitForExistence(timeout: 10))
         XCTAssertFalse(app.buttons["previousImage"].isEnabled)
         for index in 1...4 {
-            XCTAssertTrue(app.navigationBars["\(index) / 4"].waitForExistence(timeout: 5))
+            XCTAssertTrue(app.staticTexts["\(index) / 4"].waitForExistence(timeout: 5))
             XCTAssertTrue(app.descendants(matching: .any)["loadedImage-\(index - 1)"].waitForExistence(timeout: 20))
             capture("gallery-\(index)")
             if index < 4 { app.buttons["nextImage"].tap() }
         }
         XCTAssertFalse(app.buttons["nextImage"].isEnabled)
         app.buttons["previousImage"].tap()
-        XCTAssertTrue(app.navigationBars["3 / 4"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["3 / 4"].waitForExistence(timeout: 5))
         app.descendants(matching: .any)["loadedImage-2"].swipeRight()
-        XCTAssertTrue(app.navigationBars["2 / 4"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["2 / 4"].waitForExistence(timeout: 5))
         app.descendants(matching: .any)["loadedImage-1"].doubleTap()
         capture("gallery-zoom")
         app.descendants(matching: .any)["loadedImage-1"].doubleTap()

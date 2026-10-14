@@ -4,9 +4,9 @@ struct RootView: View {
     @State private var showsOnboarding = !UserDefaults.standard.bool(forKey: "hasCompletedOnboarding")
     var body: some View {
         TabView {
-            DiscoverView().tabItem { Label { Text(String(localized: "发现")) } icon: { TabSymbol.image("rectangle.grid.1x2") } }
-            CollectionsView().tabItem { Label { Text(String(localized: "专题")) } icon: { TabSymbol.image("rectangle.stack") } }
-            FavoritesView().tabItem { Label { Text(String(localized: "收藏")) } icon: { TabSymbol.image("bookmark") } }
+            DiscoverView().tabItem { Label { Text(String(localized: "发现")) } icon: { TabSymbol.image("safari") } }
+            CollectionsView().tabItem { Label { Text(String(localized: "专题")) } icon: { TabSymbol.image("square.grid.2x2") } }
+            FavoritesView().tabItem { Label { Text(String(localized: "收藏")) } icon: { TabSymbol.image("heart") } }
         }.tint(Palette.accent)
             .fullScreenCover(isPresented: $showsOnboarding) {
                 PrompixOnboarding {
@@ -19,7 +19,6 @@ struct RootView: View {
 
 struct DiscoverView: View {
     @Environment(Library.self) private var library
-    @Environment(\.dynamicTypeSize) private var typeSize
     @State private var kind: PromptKind?
     @State private var skillsOnly = false
     @State private var topic: String?
@@ -39,6 +38,10 @@ struct DiscoverView: View {
                     LazyVStack(alignment: .leading, spacing: 14, pinnedViews: [.sectionHeaders]) {
                         Section {
                             if library.isRefreshing || library.syncMessage != nil { CatalogUpdateStatus().padding(.horizontal, 20) }
+                            if !isFiltered {
+                                CreatorRail()
+                                CollectionRail().padding(.bottom, 6)
+                            }
                             discoveryContext
                             if skillsOnly {
                                 Text(String(localized: "可带到编程助手中使用的技能，包含完整说明与源文件。"))
@@ -60,10 +63,6 @@ struct DiscoverView: View {
                                 } else {
                                     ContentUnavailableView(String(localized: "暂无匹配内容"), systemImage: "sparkle", description: Text(String(localized: "试试其他分类，或清除筛选条件。")))
                                 }
-                            } else if !isFiltered {
-                                PromptGrid(items: Array(items.prefix(8))).padding(.horizontal, 12)
-                                CollectionRail().padding(.vertical, 14)
-                                PromptGrid(items: Array(items.dropFirst(8))).padding(.horizontal, 12)
                             } else {
                                 PromptGrid(items: items).padding(.horizontal, 12)
                             }
@@ -74,6 +73,7 @@ struct DiscoverView: View {
                         }
                     }.padding(.bottom, 24)
                 }
+                .plainTopEdge()
                 .paperScreen()
                 .refreshable { await library.refresh(force: true) }
                 .onChange(of: kind) { _, _ in model = nil; topic = nil; scroll.scrollTo("discovery-top", anchor: .top) }
@@ -105,34 +105,11 @@ struct DiscoverView: View {
             .accessibilityAction(named: Text(String(localized: "搜索"))) { searchPresented = true }
             .accessibilityAction(named: Text(String(localized: "设置"))) { settingsPresented = true }
     }
-    @ViewBuilder private var discoveryContext: some View {
-        let creators = Array(CreatorDirectory.entries(in: library.prompts).prefix(3))
-        if !isFiltered && !typeSize.isAccessibilitySize && !creators.isEmpty {
-            HStack(spacing: 2) {
-                NavigationLink { CreatorsView() } label: {
-                    HStack(spacing: 4) {
-                        Text(String(localized: "创作者")).font(.footnote)
-                        Image(systemName: "chevron.right").font(.system(size: 9, weight: .medium))
-                    }.frame(minHeight: 44).padding(.trailing, 4).contentShape(Rectangle())
-                }.buttonStyle(.plain).accessibilityIdentifier("allCreators")
-                ForEach(creators) { entry in
-                    NavigationLink { CreatorDetail(creator: entry.creator) } label: {
-                        CreatorAvatar(creator: entry.creator, size: 28).frame(width: 44, height: 44).contentShape(Rectangle())
-                    }.buttonStyle(.plain).accessibilityLabel(entry.creator.displayName)
-                        .accessibilityIdentifier("creator-\(entry.id)")
-                }
-                Spacer(minLength: 4)
-                Text(items.count.formatted()).font(.caption.monospacedDigit()).foregroundStyle(Palette.muted)
-                    .accessibilityLabel(String(localized: "\(items.count) 条内容"))
-                filterPicker.labelStyle(.iconOnly).frame(minWidth: 44)
-            }.foregroundStyle(Palette.muted).padding(.horizontal, 16)
-        } else {
-            if !isFiltered { CreatorRail() }
-            ViewThatFits(in: .horizontal) {
-                HStack(alignment: .firstTextBaseline) { resultHeading; Spacer(); resultActions }
-                VStack(alignment: .leading, spacing: 4) { resultHeading; resultActions }
-            }.padding(.horizontal, 20)
-        }
+    private var discoveryContext: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .firstTextBaseline) { resultHeading; Spacer(); resultActions }
+            VStack(alignment: .leading, spacing: 4) { resultHeading; resultActions }
+        }.padding(.horizontal, 16)
     }
     private var resultHeading: some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
@@ -439,6 +416,7 @@ struct FavoritesView: View {
     @State private var query = ""
     @State private var images = ImageStore.shared
     @State private var showCreators = false
+    @State private var settingsPresented = false
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -472,8 +450,16 @@ struct FavoritesView: View {
                     } else { PromptGrid(items: items, origin: .favorite).padding(.horizontal, 16) }
                     }
                 }.padding(.bottom, 24)
-            }.paperScreen().navigationTitle(String(localized: "收藏"))
-                .searchable(text: $query, prompt: String(localized: "搜索收藏"))
+            }.plainTopEdge().paperScreen()
+                .navigationTitle(String(localized: "收藏")).navigationBarTitleDisplayMode(.inline)
+                .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: String(localized: "搜索收藏"))
+                .toolbar {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button(String(localized: "设置"), systemImage: "gearshape") { settingsPresented = true }
+                            .accessibilityIdentifier("savedSettings")
+                    }
+                }
+                .sheet(isPresented: $settingsPresented) { SettingsView().promptSheet() }
         }
     }
 }
