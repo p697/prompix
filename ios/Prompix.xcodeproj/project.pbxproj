@@ -29,6 +29,7 @@
 		7449F578C62EC99C89686519 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 7B88D170C6ACFA7B5AC85E30 /* Assets.xcassets */; };
 		767341277B3CF99DF8E08093 /* CatalogSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = 971CE8E18BF3DC4B0FDB0752 /* CatalogSync.swift */; };
 		768528DEF66C2D1E7EE2E5E4 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 1E21261F4D5A685A541FD907 /* Foundation.framework */; };
+		8068AFDB3B72E65A127FCB5E /* UsePrompt.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = AEF74B1830588F1FA167A4B7 /* UsePrompt.xcstrings */; };
 		812065F9459614A00FDCE8EF /* RemoteImage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 73DD13F54EED35BA0C0493C3 /* RemoteImage.swift */; };
 		84CCD61CDE494DC0ABABFAB2 /* LanguagePackCatalogTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 181F10CC14B9CCA0F7D65F88 /* LanguagePackCatalogTests.swift */; };
 		85122144F03FBE33A13A113A /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 1E21261F4D5A685A541FD907 /* Foundation.framework */; };
@@ -114,6 +115,7 @@
 		9030BD264491C6E575F41C19 /* PromptMarkdown.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = PromptMarkdown.swift; path = Views/PromptMarkdown.swift; sourceTree = "<group>"; };
 		971CE8E18BF3DC4B0FDB0752 /* CatalogSync.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = CatalogSync.swift; path = Models/CatalogSync.swift; sourceTree = "<group>"; };
 		A2A5CD311312FFC7F5F3C7CE /* ReadingScrollTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ReadingScrollTests.swift; sourceTree = "<group>"; };
+		AEF74B1830588F1FA167A4B7 /* UsePrompt.xcstrings */ = {isa = PBXFileReference; includeInIndex = 1; path = UsePrompt.xcstrings; sourceTree = "<group>"; };
 		B00C27FA931A5EF99FBF1BCF /* PromptSearchTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PromptSearchTests.swift; sourceTree = "<group>"; };
 		B4F88881B11FF6A007FDD5EC /* ContentLanguage.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ContentLanguage.swift; path = Models/ContentLanguage.swift; sourceTree = "<group>"; };
 		B93317EDC7C67BCFC77A2F39 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
@@ -192,6 +194,7 @@
 				DAD3758DD77E4B43A90D10E3 /* WebExamples */,
 				3D483177B8C5492C1F15BA9A /* catalog.json */,
 				55760828BFD94056445B9B20 /* Onboarding.xcstrings */,
+				AEF74B1830588F1FA167A4B7 /* UsePrompt.xcstrings */,
 			);
 			name = Resources;
 			path = Resources;
@@ -396,6 +399,7 @@
 				307A71B798E2BC808FF2B820 /* WebExamples in Resources */,
 				31495E04F522B7DBE9DA9FC2 /* catalog.json in Resources */,
 				4BE0F6EA813D1A250DA53245 /* Onboarding.xcstrings in Resources */,
+				8068AFDB3B72E65A127FCB5E /* UsePrompt.xcstrings in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -536,12 +540,12 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CLANG_ENABLE_OBJC_WEAK = NO;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 29;
+				CURRENT_PROJECT_VERSION = 30;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				INFOPLIST_FILE = Prompix/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
-				MARKETING_VERSION = 0.6.5;
+				MARKETING_VERSION = 0.6.6;
 				PRODUCT_BUNDLE_IDENTIFIER = com.p697.prompix;
 				PRODUCT_NAME = Prompix;
 				SDKROOT = iphoneos;
@@ -705,12 +709,12 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CLANG_ENABLE_OBJC_WEAK = NO;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 29;
+				CURRENT_PROJECT_VERSION = 30;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				INFOPLIST_FILE = Prompix/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
-				MARKETING_VERSION = 0.6.5;
+				MARKETING_VERSION = 0.6.6;
 				PRODUCT_BUNDLE_IDENTIFIER = com.p697.prompix;
 				PRODUCT_NAME = Prompix;
 				SDKROOT = iphoneos;
