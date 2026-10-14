@@ -3,12 +3,14 @@ import SwiftUI
 struct Artwork: View {
     let item: Prompt
     var compact = false
+    // Feed previews fill their reserved frame; full-image reading remains fitted.
+    var fillsFrame = false
     var body: some View {
         GeometryReader { proxy in
             ZStack {
                 if item.kind == .text || item.isSkill { noteArtwork(size: proxy.size) }
                 else if let name = item.media?.image, UIImage(named: name) != nil { photo(name, size: proxy.size) }
-                else if let url = item.media?.imageURL { RemoteImage(url: url, contentMode: compact ? .fill : .fit).frame(width: proxy.size.width, height: proxy.size.height).clipped() }
+                else if let url = item.media?.imageURL { RemoteImage(url: url, contentMode: compact || fillsFrame ? .fill : .fit).frame(width: proxy.size.width, height: proxy.size.height).clipped() }
                 else if item.kind == .web, UIImage(named: "web-\(item.id)") != nil {
                     Image("web-\(item.id)").resizable().scaledToFill().frame(width: proxy.size.width, height: proxy.size.height, alignment: .top).clipped()
                 }

@@ -102,12 +102,15 @@ struct DiscoverView: View {
                     }.padding(.bottom, 24)
                 }
                 .plainTopEdge()
+                .scrollClipDisabled()
                 .background(Palette.paper).foregroundStyle(Palette.ink)
                 .readingChrome($chromeCollapsed)
                 .overlay(alignment: .top) {
                     GeometryReader { proxy in
-                        Palette.paper.frame(height: proxy.safeAreaInsets.top)
+                        ReadingTopFade(collapsed: chromeCollapsed)
+                            .frame(height: proxy.safeAreaInsets.top + (chromeCollapsed ? 0 : headerHeight) + 48)
                             .offset(y: -proxy.safeAreaInsets.top)
+                            .animation(reduceMotion ? nil : .smooth(duration: 0.28), value: chromeCollapsed)
                     }.allowsHitTesting(false).accessibilityHidden(true)
                 }
                 .overlay(alignment: .top) {
@@ -138,7 +141,7 @@ struct DiscoverView: View {
                     .buttonStyle(.plain).readingGlass().accessibilityLabel(String(localized: "设置")).accessibilityIdentifier("discoverySettings")
             }.font(.title3).padding(.horizontal, 20).padding(.vertical, 6)
             KindPicker(selection: $kind, skillsOnly: $skillsOnly)
-        }.foregroundStyle(Palette.ink).padding(.bottom, 4).background(Palette.paper)
+        }.foregroundStyle(Palette.ink).padding(.bottom, 4)
             .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { headerHeight = $0 }
             .accessibilityElement(children: .contain).accessibilityIdentifier("discoveryHeader")
     }
@@ -318,9 +321,11 @@ enum PromptMasonry {
 }
 
 enum PromptCardGeometry {
+    static let titleSpacing: CGFloat = 6
     static func aspectRatio(for item: Prompt) -> CGFloat {
         if item.isSkill { return 0.95 }
-        if let ratio = item.media?.aspectRatio { return max(0.65, min(1.5, ratio)) }
+        // Retain common portrait and widescreen shapes. Only extreme ratios crop.
+        if let ratio = item.media?.aspectRatio { return max(0.65, min(1.8, ratio)) }
         return switch item.kind { case .text: 0.95; case .image: item.artwork == "lake" ? 1.02 : 0.76; case .video: 0.94; case .web: WebsiteExamples.files[item.id] != nil ? 0.62 : 0.87 }
     }
     static func height(for item: Prompt, width: CGFloat, titleFont: UIFont) -> CGFloat {
@@ -330,7 +335,7 @@ enum PromptCardGeometry {
             with: CGSize(width: max(1, width - 4), height: .greatestFiniteMagnitude),
             options: [.usesLineFragmentOrigin, .usesFontLeading],
             attributes: [.font: titleFont], context: nil)
-        return preview + 8 + ceil(min(bounds.height, titleFont.lineHeight * 2))
+        return preview + titleSpacing + ceil(min(bounds.height, titleFont.lineHeight * 2))
     }
 }
 
@@ -348,7 +353,7 @@ struct PromptCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             Button { detailPresented = true } label: {
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: PromptCardGeometry.titleSpacing) {
                     if typeSize.isAccessibilitySize && (item.kind == .text || item.isSkill) {
                         VStack(alignment: .leading, spacing: 12) {
                             Text(item.displayTitle).font(.headline).foregroundStyle(.primary)
@@ -356,7 +361,8 @@ struct PromptCard: View {
                         }.fixedSize(horizontal: false, vertical: true).frame(maxWidth: .infinity, alignment: .leading)
                             .padding(20).background(Palette.soft, in: RoundedRectangle(cornerRadius: 6))
                     } else {
-                        Artwork(item: item).aspectRatio(ratio, contentMode: .fit).clipShape(RoundedRectangle(cornerRadius: 6))
+                        Artwork(item: item, fillsFrame: true).aspectRatio(ratio, contentMode: .fit)
+                            .clipShape(RoundedRectangle(cornerRadius: titleIsInArtwork ? 6 : 4, style: .continuous))
                     }
                     if !titleIsInArtwork {
                         Text(item.displayTitle).font(.footnote).foregroundStyle(Palette.ink)
