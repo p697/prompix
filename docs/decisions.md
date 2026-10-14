@@ -601,3 +601,10 @@ Duo UI 测试必须将触摸和坐标绑定到目标元素所在 Window。实际
 - 详情和创作者页不再设置 `.toolbar(.hidden, for: .tabBar)`。沿用每个 Tab 自己的 NavigationStack，保持原生 Tab Bar 连续可见；详情操作条位于其上方，不重建导航架构。依据：[Apple toolbar visibility](https://developer.apple.com/documentation/swiftui/view/toolbarvisibility(_:for:))。
 - 原生交互式 zoom 返回保留。玻璃主按钮的 tint 从 SwiftUI 页面 colorScheme 解析为固定 RGB 后交给材质，避免 UIColor 动态提供器在材质转场快照中切换强调色。保留 Liquid Glass 交互与滚动收缩；对应文字也按同一页面外观解析。依据：[Apple Liquid Glass](https://developer.apple.com/documentation/SwiftUI/Applying-Liquid-Glass-to-custom-views)。用户截图亮色与深色强调色相符，具体 UIKit 内部触发机制未声称得到系统级证明。
 - 设置页使用原生 plain List、统一纸色背景和分组留白，去掉嵌套白卡片；操作、缓存保护、来源与隐私入口保留。
+
+
+## 2026-10-14：0.6.2 按高度分配瀑布流
+
+用户在 Heather Green 创作者页发现右列大面积空白。根因是 `PromptGrid` 以索引取模轮流分列，与卡片高度无关。改用稳定的最短列优先分配，预览高度复用卡片的同一比例约束，标题按当前字号、列宽和两行限制测算，计入标题间距与卡片间距。保持 LazyVStack 惰性渲染；不依赖异步图片尺寸或在显示后反复测量重排。追加内容不改变已有卡片所属列，列宽或字号变化时重新分配。发现、专题、收藏、搜索、创作者、相关内容共用修正。VoiceOver 与辅助大字体继续使用原顺序单列。
+
+标准贪心布局保留内容先后顺序和每张图的比例，末尾允许不足一张卡片的自然高度差，不通过裁切图片或打乱既有排序强制两列等高。复用现有两/四列和不对称区域宽度计算；不扩展折叠屏范围。

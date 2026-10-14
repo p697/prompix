@@ -235,15 +235,17 @@ struct PromptGrid: View {
     @Environment(\.dynamicTypeSize) private var typeSize
     @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
     @State private var layout = PromptGridLayout(width: 0)
+    @ScaledMetric(relativeTo: .footnote) private var titleSize = 13
     var body: some View {
         // Separate masonry columns read column-first. A linear native stack
         // preserves the editorial sequence when navigating with VoiceOver.
         if typeSize.isAccessibilitySize || voiceOverEnabled {
             LazyVStack(spacing: 24) { ForEach(items) { PromptCard(item: $0, origin: origin) } }
         } else {
+            let columns = balancedColumns
             HStack(alignment: .top, spacing: 0) {
                 ForEach(0..<layout.columns, id: \.self) { index in
-                    column(index).frame(width: layout.widths.isEmpty ? nil : layout.widths[index])
+                    column(columns[index]).frame(width: layout.widths.isEmpty ? nil : layout.widths[index])
                     if index < layout.columns - 1 { Color.clear.frame(width: layout.gaps[index], height: 1) }
                 }
             }.frame(minWidth: 0, maxWidth: .infinity)
@@ -255,9 +257,16 @@ struct PromptGrid: View {
                 } action: { layout = $0 }
         }
     }
-    private func column(_ parity: Int) -> some View {
+    private var balancedColumns: [[Int]] {
+        let widths = layout.widths.isEmpty ? Array(repeating: CGFloat(180), count: layout.columns) : layout.widths
+        let font = UIFont.systemFont(ofSize: titleSize)
+        return PromptMasonry.columns(itemCount: items.count, widths: widths, spacing: 14) { index, width in
+            PromptCardGeometry.height(for: items[index], width: width, titleFont: font)
+        }
+    }
+    private func column(_ indices: [Int]) -> some View {
         LazyVStack(spacing: 14) {
-            ForEach(Array(items.enumerated()).filter { $0.offset % layout.columns == parity }, id: \.element.id) { _, item in
+            ForEach(indices.map { items[$0] }) { item in
                 PromptCard(item: item, origin: origin)
             }
         }.frame(maxWidth: .infinity)
@@ -288,6 +297,40 @@ struct PromptGridLayout: Equatable {
             widths = Array(repeating: max(0, (width - CGFloat(count - 1) * 14) / CGFloat(count)), count: count)
             gaps = Array(repeating: 14, count: count - 1)
         }
+    }
+}
+
+enum PromptMasonry {
+    /// Stable greedy placement: append each next item to the currently shortest
+    /// column. Equal-height columns retain leading-to-trailing reading order.
+    static func columns(itemCount: Int, widths: [CGFloat], spacing: CGFloat,
+                        height: (Int, CGFloat) -> CGFloat) -> [[Int]] {
+        guard !widths.isEmpty else { return [] }
+        var result = Array(repeating: [Int](), count: widths.count)
+        var bottoms = Array(repeating: CGFloat.zero, count: widths.count)
+        for index in 0..<itemCount {
+            let column = bottoms.indices.min { bottoms[$0] < bottoms[$1] }!
+            result[column].append(index)
+            bottoms[column] += height(index, widths[column]) + spacing
+        }
+        return result
+    }
+}
+
+enum PromptCardGeometry {
+    static func aspectRatio(for item: Prompt) -> CGFloat {
+        if item.isSkill { return 0.95 }
+        if let ratio = item.media?.aspectRatio { return max(0.65, min(1.5, ratio)) }
+        return switch item.kind { case .text: 0.95; case .image: item.artwork == "lake" ? 1.02 : 0.76; case .video: 0.94; case .web: WebsiteExamples.files[item.id] != nil ? 0.62 : 0.87 }
+    }
+    static func height(for item: Prompt, width: CGFloat, titleFont: UIFont) -> CGFloat {
+        let preview = width / aspectRatio(for: item)
+        guard !item.isSkill && item.kind != .text else { return preview }
+        let bounds = (item.displayTitle as NSString).boundingRect(
+            with: CGSize(width: max(1, width - 4), height: .greatestFiniteMagnitude),
+            options: [.usesLineFragmentOrigin, .usesFontLeading],
+            attributes: [.font: titleFont], context: nil)
+        return preview + 8 + ceil(min(bounds.height, titleFont.lineHeight * 2))
     }
 }
 
@@ -351,11 +394,8 @@ struct PromptCard: View {
         }
     }
     private var titleIsInArtwork: Bool { item.isSkill || item.kind == .text }
-    private var ratio: CGFloat {
-        if item.isSkill { return 0.95 }
-        if let ratio = item.media?.aspectRatio { return max(0.65, min(1.5, ratio)) }
-        return switch item.kind { case .text: 0.95; case .image: item.artwork == "lake" ? 1.02 : 0.76; case .video: 0.94; case .web: WebsiteExamples.files[item.id] != nil ? 0.62 : 0.87 }
-    }
+    private var ratio: CGFloat { PromptCardGeometry.aspectRatio(for: item) }
+
 }
 
 struct FavoritesView: View {

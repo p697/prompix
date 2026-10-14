@@ -62,3 +62,12 @@ xcodebuild test -project ios/Prompix.xcodeproj -scheme Prompix \
 外部证据：`/Volumes/Lucy-SSD/Prompix-Codex/Evidence/ui-refinement-20261014/` 下的 `acceptance.xcresult`、`dark-and-creators.xcresult`、`interaction.mov` 与截图目录。`acceptance` 使用30条离线内置内容测试；创作者旅程使用真实648条已缓存目录，两者不是线上内容数量变更。
 
 边界：本轮尚未在用户的 iOS 26.6 真机复验，手机保持0.6.0（23）。模拟器中已验证的颜色稳定性不冒充该机型系统版本的真机结论。系统材质本身仍会随背景自然变化；不以消除正常玻璃响应为目标。
+
+
+## 0.6.2（25）：瀑布流高度均衡
+
+修复奇偶索引分列使高卡片集中一侧的问题，所有 PromptGrid 使用最短列优先。保持惰性加载与图像比例，按当前列宽、标题字号及两行限制测算卡片高度，不在图片下载完成时改变分列。辅助大字体和 VoiceOver 的单列阅读不变。
+
+回归测试覆盖竖图/横图/方图混合、追加内容稳定、四列不等宽和窄窗宽度。真实648条缓存目录中的 Heather Green 五条内容已在 iPhone Air / iOS 27.0 模拟器中检查；截图及结果位于 SSD `Evidence/masonry-balance-20261014/`。本轮只修改显示分配，不改变内容数量或后端排序。手机仍保留0.6.0（23）。
+
+初次补验发现 Artwork 对无障碍隐藏，因此 progressIndicators 查询不能证明图片下载完成；该断言已移除。后续以等待后的卡片 frame 对比与截图人工检查分开验证，不把几何稳定断言当作下载成功。
