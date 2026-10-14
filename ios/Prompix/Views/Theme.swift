@@ -39,11 +39,22 @@ extension View {
             .presentationBackground(Palette.paper)
     }
 
-    func paperScreen() -> some View {
-        background(Palette.paper)
+    func paperScreen() -> some View { modifier(PaperScreen()) }
+
+    @ViewBuilder func plainTopEdge() -> some View {
+        if #available(iOS 26, *) { scrollEdgeEffectHidden(true, for: .top) }
+        else { self }
+    }
+}
+
+private struct PaperScreen: ViewModifier {
+    @Environment(\.colorScheme) private var colorScheme
+    func body(content: Content) -> some View {
+        content.background(Palette.paper)
             .foregroundStyle(Palette.ink)
             .toolbarBackground(Palette.paper, for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
+            .toolbarColorScheme(colorScheme, for: .navigationBar)
     }
 }
 

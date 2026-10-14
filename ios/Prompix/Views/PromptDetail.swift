@@ -10,6 +10,7 @@ struct PromptDetail: View {
     @State private var editorContext: EditorContext?
     @State private var useContext: UseContext?
     @State private var imagePresented = false
+    @Namespace private var imageTransition
     @State private var playerPresented = false
     @State private var copied = false
     @State private var webPresented = false
@@ -118,7 +119,10 @@ struct PromptDetail: View {
             })
         }
         .sheet(item: $editorContext) { context in PromptEditor(item: context.item, language: context.language) }
-        .fullScreenCover(isPresented: $imagePresented) { ImageViewer(name: item.media?.image ?? item.artwork, urls: item.media?.galleryURLs ?? []) }
+        .fullScreenCover(isPresented: $imagePresented) {
+            ImageViewer(name: item.media?.image ?? item.artwork, urls: item.media?.galleryURLs ?? [])
+                .promptTransitionDestination(id: "image-\(item.id)", in: imageTransition)
+        }
         .sheet(isPresented: $webPresented) {
             if let filename = WebsiteExamples.files[item.id] { WebExample(filename: filename) }
         }
@@ -382,7 +386,9 @@ struct PromptDetail: View {
     }
     private var hero: some View {
         Artwork(item: item).aspectRatio(item.media?.aspectRatio.map { max(0.65, min(1.8, $0)) } ?? (item.kind == .image ? 0.95 : 1.15), contentMode: .fit)
-            .clipShape(RoundedRectangle(cornerRadius: 6)).padding(.horizontal, 12).padding(.top, 8)
+            .clipShape(RoundedRectangle(cornerRadius: 6))
+            .promptTransitionSource(id: "image-\(item.id)", in: imageTransition)
+            .padding(.horizontal, 12).padding(.top, 8)
     }
 
 }
@@ -696,35 +702,97 @@ struct ImageViewer: View {
     let name: String
     let urls: [URL]
     @State private var selection = 0
+    @State private var zoomedPages: Set<Int> = []
+    @State private var dragOffset: CGFloat = 0
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private var count: Int { max(1, urls.count) }
+    private var isZoomed: Bool { zoomedPages.contains(selection) }
+    private var usesNativeTransition: Bool {
+        if #available(iOS 18, *) { return !reduceMotion }
+        return false
+    }
     var body: some View {
-        NavigationStack {
-            TabView(selection: $selection) {
-                ForEach(0..<count, id: \.self) { index in
-                    ImagePage(name: name, url: urls.isEmpty ? nil : urls[index], active: selection == index, index: index, showsPageIndicator: count > 1)
-                        .tag(index)
-                }
-            }.tabViewStyle(.page(indexDisplayMode: count > 1 ? .always : .never))
-                .background(.black)
-                .navigationTitle(count > 1 ? "\(selection + 1) / \(count)" : "")
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .confirmationAction) { Button(String(localized: "完成")) { dismiss() } }
+        ZStack {
+            Color.black.ignoresSafeArea()
+            pages
+                .offset(y: reduceMotion ? 0 : dragOffset)
+                .scaleEffect(reduceMotion ? 1 : 1 - min(dragOffset / 1800, 0.12))
+                .opacity(reduceMotion ? 1 - min(dragOffset / 600, 0.3) : 1)
+            VStack {
+                HStack {
                     if count > 1 {
-                        ToolbarItemGroup(placement: .bottomBar) {
-                            Button(String(localized: "上一张"), systemImage: "chevron.left") { selection -= 1 }
-                                .disabled(selection == 0).accessibilityIdentifier("previousImage")
-                            Spacer()
-                            Button(String(localized: "下一张"), systemImage: "chevron.right") { selection += 1 }
-                                .disabled(selection == count - 1).accessibilityIdentifier("nextImage")
-                        }
+                        Text("\(selection + 1) / \(count)")
+                            .font(.subheadline.monospacedDigit()).foregroundStyle(.white)
+                            .padding(.horizontal, 16).padding(.vertical, 10)
+                            .background(.black.opacity(0.45), in: Capsule())
+                            .accessibilityIdentifier("imagePageCounter")
+                    }
+                    Spacer()
+                    Button { dismiss() } label: {
+                        Image(systemName: "xmark").font(.body.weight(.semibold))
+                            .foregroundStyle(.white).frame(width: 44, height: 44)
+                            .background(.ultraThinMaterial, in: Circle())
+                    }.buttonStyle(.plain).accessibilityLabel(String(localized: "完成"))
+                        .accessibilityIdentifier("closeImageViewer")
+                }
+                Spacer()
+                if count > 1 {
+                    HStack(spacing: 28) {
+                        Button { selection -= 1 } label: {
+                            Image(systemName: "chevron.left").frame(width: 44, height: 44)
+                        }.disabled(selection == 0)
+                            .accessibilityLabel(String(localized: "上一张")).accessibilityIdentifier("previousImage")
+                        Button { selection += 1 } label: {
+                            Image(systemName: "chevron.right").frame(width: 44, height: 44)
+                        }.disabled(selection == count - 1)
+                            .accessibilityLabel(String(localized: "下一张")).accessibilityIdentifier("nextImage")
+                    }.font(.body.weight(.medium)).buttonStyle(.plain)
+                        .foregroundStyle(.white).padding(.horizontal, 8)
+                        .background(.ultraThinMaterial, in: Capsule())
+                }
+            }.padding(.horizontal, 18).padding(.vertical, 12)
+                .opacity(1 - min(dragOffset / 150, 0.8))
+        }
+        .environment(\.colorScheme, .dark)
+        .interactiveDismissDisabled(isZoomed)
+        .accessibilityAction(.escape) { dismiss() }
+        .onChange(of: selection) { _, _ in dragOffset = 0 }
+    }
+    @ViewBuilder private var pages: some View {
+        if usesNativeTransition { gallery }
+        else { gallery.simultaneousGesture(fallbackDismissGesture) }
+    }
+    private var gallery: some View {
+        TabView(selection: $selection) {
+            ForEach(0..<count, id: \.self) { index in
+                ImagePage(name: name, url: urls.isEmpty ? nil : urls[index], active: selection == index,
+                          index: index, showsPageIndicator: count > 1) { zoomed in
+                    if zoomed { zoomedPages.insert(index) }
+                    else { zoomedPages.remove(index) }
+                }.tag(index)
+            }
+        }.tabViewStyle(.page(indexDisplayMode: .never))
+    }
+    // iOS 18 supplies the interactive return to the source image. Older systems
+    // and Reduce Motion retain the same downward exit gesture without that zoom.
+    private var fallbackDismissGesture: some Gesture {
+        DragGesture(minimumDistance: 12)
+            .onChanged { value in
+                guard !isZoomed, value.translation.height > 0,
+                      value.translation.height > abs(value.translation.width) else { return }
+                dragOffset = value.translation.height
+            }
+            .onEnded { value in
+                guard !isZoomed else { dragOffset = 0; return }
+                if dragOffset > 110 || (dragOffset > 35 && value.predictedEndTranslation.height > 240) {
+                    dismiss()
+                } else {
+                    withAnimation(reduceMotion ? .easeOut(duration: 0.15) : .spring(response: 0.32, dampingFraction: 0.9)) {
+                        dragOffset = 0
                     }
                 }
-                .toolbarBackground(.visible, for: .navigationBar, .bottomBar)
-                .toolbarBackground(.black, for: .navigationBar, .bottomBar)
-                .toolbarColorScheme(.dark, for: .navigationBar, .bottomBar)
-        }.environment(\.colorScheme, .dark)
+            }
     }
 }
 
@@ -734,6 +802,7 @@ private struct ImagePage: View {
     let active: Bool
     let index: Int
     let showsPageIndicator: Bool
+    let onZoomChanged: (Bool) -> Void
     @State private var remoteImage: UIImage?
     @State private var failed = false
     @State private var offlinePreview = false
@@ -744,7 +813,7 @@ private struct ImagePage: View {
         ZStack {
             Color.black
             if url == nil || remoteImage != nil || bundledImage != nil {
-                ZoomImage(image: remoteImage ?? bundledImage)
+                ZoomImage(image: remoteImage ?? bundledImage, active: active, onZoomChanged: onZoomChanged)
                     .accessibilityIdentifier("loadedImage-\(index)")
             } else if failed {
                 ContentUnavailableView {
@@ -786,12 +855,21 @@ private struct ImagePage: View {
 
 struct ZoomImage: UIViewRepresentable {
     let image: UIImage?
+    var active = true
+    var onZoomChanged: (Bool) -> Void = { _ in }
     func makeCoordinator() -> Coordinator { Coordinator() }
     func makeUIView(context: Context) -> UIScrollView {
         let scroll = UIScrollView()
         scroll.minimumZoomScale = 1; scroll.maximumZoomScale = 5
         scroll.delegate = context.coordinator
-        scroll.backgroundColor = .black
+        scroll.backgroundColor = .clear
+        scroll.showsHorizontalScrollIndicator = false
+        scroll.showsVerticalScrollIndicator = false
+        scroll.contentInsetAdjustmentBehavior = .never
+        // At fitted size, let the native presentation/pager own one-finger drags.
+        // Pinch zoom still belongs to this scroll view.
+        scroll.panGestureRecognizer.isEnabled = false
+        context.coordinator.onZoomChanged = onZoomChanged
         let image = UIImageView(image: self.image)
         image.contentMode = .scaleAspectFit
         image.translatesAutoresizingMaskIntoConstraints = false
@@ -805,14 +883,37 @@ struct ZoomImage: UIViewRepresentable {
         let tap = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.doubleTap(_:)))
         tap.numberOfTapsRequired = 2; scroll.addGestureRecognizer(tap)
         scroll.accessibilityLabel = String(localized: "图片预览，双指缩放或双击放大")
+        scroll.accessibilityValue = 1.0.formatted(.percent)
         return scroll
     }
     func updateUIView(_ uiView: UIScrollView, context: Context) {
+        context.coordinator.onZoomChanged = onZoomChanged
         if context.coordinator.image?.image !== image { context.coordinator.image?.image = image }
+        if !active, uiView.zoomScale != uiView.minimumZoomScale {
+            uiView.setZoomScale(uiView.minimumZoomScale, animated: false)
+        }
     }
     class Coordinator: NSObject, UIScrollViewDelegate {
         weak var image: UIImageView?
+        var onZoomChanged: (Bool) -> Void = { _ in }
+        private var reportedZoom = false
         func viewForZooming(in scrollView: UIScrollView) -> UIView? { image }
+        func scrollViewWillBeginZooming(_ scrollView: UIScrollView, with view: UIView?) { reportZoom(true) }
+        func scrollViewDidZoom(_ scrollView: UIScrollView) {
+            let zoomed = scrollView.zoomScale > scrollView.minimumZoomScale + 0.01
+            scrollView.panGestureRecognizer.isEnabled = zoomed
+            scrollView.accessibilityValue = Double(scrollView.zoomScale).formatted(.percent.precision(.fractionLength(0)))
+            reportZoom(zoomed || scrollView.isZooming)
+        }
+        func scrollViewDidEndZooming(_ scrollView: UIScrollView, with view: UIView?, atScale scale: CGFloat) {
+            reportZoom(scale > scrollView.minimumZoomScale + 0.01)
+        }
+        private func reportZoom(_ zoomed: Bool) {
+            guard zoomed != reportedZoom else { return }
+            reportedZoom = zoomed
+            // Also covers zoom resets caused by SwiftUI updating an inactive page.
+            DispatchQueue.main.async { [weak self] in self?.onZoomChanged(zoomed) }
+        }
         @objc func doubleTap(_ gesture: UITapGestureRecognizer) {
             guard let scroll = gesture.view as? UIScrollView else { return }
             if scroll.zoomScale > 1 { scroll.setZoomScale(1, animated: !UIAccessibility.isReduceMotionEnabled) }
