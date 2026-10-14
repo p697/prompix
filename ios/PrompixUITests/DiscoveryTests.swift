@@ -670,6 +670,7 @@ import UIKit
         app.buttons["kind-text"].tap()
         app.buttons["prompt-gentle-tarot"].tap()
         try auditScreen("text-detail")
+        app.expandPromptInformation()
         let report = app.descendants(matching: .any).matching(identifier: "reportContent").firstMatch
         let readingPane = app.scrollViews["detailReadingPane"]
         func sourceIsVisible() -> Bool {
@@ -698,8 +699,9 @@ import UIKit
         try auditScreen("editor")
         app.buttons["完成"].tap()
         app.navigationBars.buttons.element(boundBy: 0).tap()
-        selectTab("专题")
+        app.openPrompixCollections()
         try auditScreen("collections")
+        app.navigationBars.buttons.firstMatch.tap()
         selectTab("收藏")
         try auditScreen("favorites")
         selectTab("发现")
@@ -749,7 +751,7 @@ import UIKit
         XCTAssertTrue(app.buttons["copyEditedPrompt"].label.contains("已复制"))
         app.buttons["完成"].tap()
         app.navigationBars.buttons.element(boundBy: 0).tap()
-        selectTab("专题")
+        app.openPrompixCollections()
         capture("23-adaptive-collections")
         app.buttons["collection-play"].tap()
         let collectionCard = app.buttons["prompt-gentle-tarot"]
@@ -826,6 +828,7 @@ import UIKit
         capture("08-web-detail")
         app.swipeUp()
         app.swipeUp()
+        app.expandPromptInformation()
         let webExample = app.buttons["webExample"]
         if !webExample.isHittable { app.swipeUp() }
         webExample.tap()
@@ -834,7 +837,7 @@ import UIKit
         capture("08b-web-example")
         app.buttons["完成"].tap()
         app.navigationBars.buttons.element(boundBy: 0).tap()
-        selectTab("专题")
+        app.openPrompixCollections()
         capture("09-collections")
     }
     func testFirstVideoUpdateExplainsOfflineAvailabilityAndReturnsToIdeas() throws {

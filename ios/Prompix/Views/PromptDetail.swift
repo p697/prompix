@@ -20,7 +20,11 @@ struct PromptDetail: View {
     @State private var failedLanguage: String?
     @State private var languageRequestID: UUID?
     @State private var languageTask: Task<Void, Never>?
-    @State private var fullPrompt = false
+    @State private var actionsCollapsed = false
+    @Namespace private var actionTransition
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var typeSize
+    @Environment(\.colorScheme) private var colorScheme
     private struct UseContext: Identifiable {
         let id = UUID()
         let item: Prompt
@@ -51,7 +55,9 @@ struct PromptDetail: View {
     }
     var body: some View {
         detailLayout
-        .paperScreen()
+        .background(Palette.paper).foregroundStyle(Palette.ink)
+        .toolbarBackground(.hidden, for: .navigationBar)
+        .toolbarColorScheme(colorScheme, for: .navigationBar)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.hidden, for: .tabBar)
         .toolbar {
@@ -67,43 +73,9 @@ struct PromptDetail: View {
                     .accessibilityLabel(library.isSaved(item) ? String(localized: "取消收藏") : String(localized: "收藏 Prompt")).accessibilityIdentifier("detailFavorite")
                     .disabled(library.isRemoved(item))
             }
-            if #available(iOS 27.1, *) {
-                ToolbarItemGroup(placement: .bottomBar) {
-                    Button(action: openEditor) { Label(String(localized: "编辑后使用"), systemImage: "square.and.pencil") }
-                        .accessibilityIdentifier("editPromptAction")
-                    Button {
-                        UIPasteboard.general.string = content.prompt; copied = true
-                    } label: { Label(copied ? String(localized: "已复制") : String(localized: "复制 Prompt"), systemImage: copied ? "checkmark" : "doc.on.doc") }
-                        .accessibilityIdentifier("copyPrompt").sensoryFeedback(.success, trigger: copied)
-                    Spacer()
-                    Button(action: openUseSheet) {
-                        Label(item.isSkill ? String(localized: "使用这个 Skill") : String(localized: "使用 Prompt"), systemImage: "arrow.up.right")
-                    }.buttonStyle(.borderedProminent).accessibilityIdentifier("usePrompt")
-                }
-            }
         }
-        .safeAreaInset(edge: .bottom) {
-            if #unavailable(iOS 27.1) {
-                HStack(spacing: 12) {
-                    Button { openEditor() } label: { Image(systemName: "square.and.pencil").font(.system(size: 19)).frame(width: 50, height: 50) }
-                        .buttonStyle(.plain).background(Palette.surface, in: Circle()).accessibilityLabel(String(localized: "编辑后使用"))
-                    Button {
-                        UIPasteboard.general.string = content.prompt
-                        copied = true
-                    } label: {
-                        Image(systemName: copied ? "checkmark" : "doc.on.doc").font(.system(size: 19)).frame(width: 50, height: 50)
-                    }.buttonStyle(.plain).background(Palette.surface, in: Circle())
-                        .accessibilityLabel(copied ? String(localized: "已复制") : String(localized: "复制 Prompt"))
-                        .accessibilityIdentifier("copyPrompt").sensoryFeedback(.success, trigger: copied)
-                    Button { openUseSheet() } label: {
-                        PrimaryActionLabel(title: item.isSkill ? String(localized: "使用这个 Skill") : String(localized: "使用 Prompt"),
-                            compactTitle: String(localized: "使用"), symbol: "arrow.up.right")
-                    }.buttonStyle(.plain).accessibilityIdentifier("usePrompt")
-                }.padding(.horizontal, 20).padding(.vertical, 10).frame(maxWidth: 700)
-                    .frame(maxWidth: .infinity).background(Palette.paper)
-            }
-        }
-        .onChange(of: content) { _, _ in copied = false; fullPrompt = false }
+        .promptActionBar { readingActions }
+        .onChange(of: content) { _, _ in copied = false }
         .onChange(of: item.preferredTranslation, initial: true) { _, preferred in
             if !hasChosenLanguage { language = preferred }
         }
@@ -144,7 +116,7 @@ struct PromptDetail: View {
             ArrangementView {
                 ScrollView {
                     readingContent.padding(.bottom, 28).frame(maxWidth: 700).frame(maxWidth: .infinity)
-                }.accessibilityIdentifier("detailReadingPane")
+                }.readingChrome($actionsCollapsed).accessibilityIdentifier("detailReadingPane")
             } secondary: {
                 ScrollView {
                     largePreview.padding(.bottom, 24).frame(maxWidth: 600).frame(maxWidth: .infinity)
@@ -156,7 +128,7 @@ struct PromptDetail: View {
                     largePreview
                     readingContent
                 }.padding(.bottom, 28).frame(maxWidth: 700).frame(maxWidth: .infinity)
-            }.accessibilityIdentifier("detailReadingPane")
+            }.readingChrome($actionsCollapsed).accessibilityIdentifier("detailReadingPane")
         }
     }
     private var compactPreview: some View {
@@ -188,62 +160,47 @@ struct PromptDetail: View {
     }
     private var readingContent: some View {
         VStack(alignment: .leading, spacing: 24) {
-            VStack(alignment: .leading, spacing: 12) {
-                ViewThatFits(in: .horizontal) {
-                    HStack {
-                        Label(item.displayKind, systemImage: item.displaySymbol)
-                        Text("·").accessibilityHidden(true)
-                        Text(item.displayModel)
-                    }.fixedSize()
-                    VStack(alignment: .leading, spacing: 6) {
-                        Label(item.displayKind, systemImage: item.displaySymbol)
-                        Text(item.displayModel).fixedSize(horizontal: false, vertical: true)
-                    }
-                }.font(.footnote).foregroundStyle(Palette.muted)
-                Text(content.title).font(Typography.editorial(.title)).lineSpacing(3).fixedSize(horizontal: false, vertical: true).accessibilityAddTraits(.isHeader)
-                Text(content.summary).font(.subheadline).lineSpacing(5).foregroundStyle(Palette.muted)
-                if let creator = item.creator { CreatorByline(creator: creator) }
-                if item.kind != .text {
-                    Text(content.previewLabel).font(.footnote).foregroundStyle(Palette.muted)
+            VStack(alignment: .leading, spacing: 14) {
+                Text(content.title).font(Typography.editorial(.title)).lineSpacing(3)
+                    .fixedSize(horizontal: false, vertical: true).accessibilityAddTraits(.isHeader)
+                if !content.summary.isEmpty {
+                    Text(content.summary).font(.body).lineSpacing(4).foregroundStyle(Palette.muted)
                 }
+                if let creator = item.creator { CreatorByline(creator: creator) }
             }
             if #available(iOS 27.1, *), hasMediaPreview { compactPreview }
             languagePicker
-            Divider()
-            VStack(alignment: .leading, spacing: 10) {
-                Text(String(localized: "说明与示例")).font(.headline).accessibilityAddTraits(.isHeader)
-                Text(content.example).font(.subheadline).lineSpacing(6).textSelection(.enabled)
+            PromptMarkdown(content.prompt)
+                .accessibilityIdentifier("promptBody")
+            DisclosureGroup {
+                VStack(alignment: .leading, spacing: 20) {
+                    Label("\(item.displayKind) · \(item.displayModel)", systemImage: item.displaySymbol)
+                        .font(.footnote).foregroundStyle(Palette.muted)
+                    if item.kind != .text { Text(content.previewLabel).font(.footnote).foregroundStyle(Palette.muted) }
+                    Text(content.example).font(.body).lineSpacing(5).textSelection(.enabled)
+                    if let skill = item.skill { SkillInformation(skill: skill) }
+                    if WebsiteExamples.files[item.id] != nil {
+                        Button { webPresented = true } label: {
+                            Label(String(localized: "打开原创网页示例"), systemImage: "safari").frame(minHeight: 44)
+                        }.accessibilityIdentifier("webExample")
+                    }
+                    if let demo = item.media?.demoURL {
+                        Link(String(localized: "打开网页示例"), destination: demo).frame(minHeight: 44)
+                    }
+                    sourceInformation
+                }.padding(.top, 16)
+            } label: {
+                Text(String(localized: "说明与来源")).font(.subheadline.weight(.medium)).frame(minHeight: 44)
+                    .accessibilityIdentifier("promptInformation")
             }
-            if let skill = item.skill { SkillInformation(skill: skill) }
-            VStack(alignment: .leading, spacing: 14) {
-                HStack {
-                    Text(item.isSkill ? "SKILL.md" : "Prompt").font(.headline).accessibilityAddTraits(.isHeader)
-                    Spacer()
-                    Button { openEditor() } label: { Label(String(localized: "编辑"), systemImage: "square.and.pencil").frame(minWidth: 44, minHeight: 44).contentShape(Rectangle()) }.font(.subheadline)
-                        .accessibilityIdentifier("editPrompt")
-                }
-                Text(fullPrompt ? content.prompt : String(content.prompt.prefix(1100))).font(.system(.subheadline)).lineSpacing(6).textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                if content.prompt.count > 1100 {
-                    Button(fullPrompt ? String(localized: "收起正文") : String(localized: "展开完整内容")) { fullPrompt.toggle() }
-                        .font(.subheadline.weight(.medium)).frame(minHeight: 44).accessibilityIdentifier("expandPrompt")
-                }
-            }.padding(20).background(Palette.surface, in: RoundedRectangle(cornerRadius: 16))
-                .overlay { RoundedRectangle(cornerRadius: 16).stroke(Palette.line, lineWidth: 0.5).allowsHitTesting(false) }
-            if WebsiteExamples.files[item.id] != nil {
-                Button { webPresented = true } label: { Label(String(localized: "打开原创网页示例"), systemImage: "safari").frame(minHeight: 44).contentShape(Rectangle()) }.accessibilityIdentifier("webExample")
+            if !related.isEmpty {
+                Divider()
+                HStack { Text(String(localized: "相关 Prompt")).font(.headline).accessibilityAddTraits(.isHeader); Spacer(); Image(systemName: "arrow.down.right").foregroundStyle(Palette.muted).accessibilityHidden(true) }
+                PromptGrid(items: related)
             }
-            if !item.isSkill {
-                Button { openUseSheet() } label: {
-                    HStack {
-                        VStack(alignment: .leading, spacing: 5) {
-                            Text(String(localized: "使用方法")).font(.subheadline.weight(.medium))
-                            Text(PromptDestination.requiresDesktop(for: item) ? String(localized: "此工作流需要电脑上的代码工具。复制或分享内容，在电脑中继续。") : String(localized: "复制后打开工具，粘贴使用")).font(.footnote).foregroundStyle(Palette.muted)
-                        }; Spacer(); Image(systemName: "arrow.up.right")
-                    }.padding(.vertical, 5)
-                }
-            }
-            if let demo = item.media?.demoURL { Link(destination: demo) { Text(String(localized: "打开网页示例")).font(.subheadline).frame(minHeight: 44).contentShape(Rectangle()) } }
+        }.padding(.horizontal, 22).padding(.top, 12)
+    }
+    private var sourceInformation: some View {
             VStack(alignment: .leading, spacing: 8) {
                 ViewThatFits(in: .horizontal) {
                     HStack { sourceAuthor; Spacer(); sourceKind }
@@ -278,12 +235,44 @@ struct PromptDetail: View {
                 if let source = item.source.url { Link(destination: source) { Text(String(localized: "查看原始来源 ↗")).font(.footnote).frame(minHeight: 44).contentShape(Rectangle()) } }
                 Link(destination: SupportLinks.url(.report, contentID: item.id)) { Text(String(localized: "反馈这条内容")).font(.footnote).frame(minHeight: 44).contentShape(Rectangle()) }.accessibilityIdentifier("reportContent")
             }
-            if !related.isEmpty {
-                Divider()
-                HStack { Text(String(localized: "相关 Prompt")).font(.headline).accessibilityAddTraits(.isHeader); Spacer(); Image(systemName: "arrow.down.right").foregroundStyle(Palette.muted).accessibilityHidden(true) }
-                PromptGrid(items: related)
-            }
-        }.padding(.horizontal, 22).padding(.top, 12)
+    }
+    private var readingActions: some View {
+        Group {
+            if #available(iOS 26, *) {
+                GlassEffectContainer(spacing: 12) { actionButtons }
+            } else { actionButtons }
+        }
+        .padding(.horizontal, 20).padding(.vertical, 8)
+        .frame(maxWidth: 600).frame(maxWidth: .infinity)
+        .animation(reduceMotion ? nil : .spring(response: 0.38, dampingFraction: 0.86), value: actionsCollapsed)
+        .accessibilityElement(children: .contain).accessibilityIdentifier(actionsCollapsed ? "readingActionsCompact" : "readingActionsExpanded")
+    }
+    private var actionButtons: some View {
+        HStack(spacing: 10) {
+            Button(action: openEditor) {
+                Image(systemName: "square.and.pencil").font(.body).frame(width: 50, height: 50)
+            }.buttonStyle(.plain).readingGlass().actionGlassIdentity("edit", in: actionTransition)
+                .accessibilityLabel(String(localized: "编辑后使用")).accessibilityIdentifier("editPromptAction")
+            Button {
+                UIPasteboard.general.string = content.prompt; copied = true
+            } label: {
+                Image(systemName: copied ? "checkmark" : "doc.on.doc").font(.body).frame(width: 50, height: 50)
+            }.buttonStyle(.plain).readingGlass().actionGlassIdentity("copy", in: actionTransition)
+                .accessibilityLabel(copied ? String(localized: "已复制") : String(localized: "复制 Prompt"))
+                .accessibilityIdentifier("copyPrompt").sensoryFeedback(.success, trigger: copied)
+            Button(action: openUseSheet) {
+                HStack(spacing: 8) {
+                    Image(systemName: "arrow.up.right")
+                    if !actionsCollapsed {
+                        Text(typeSize.isAccessibilitySize ? String(localized: "使用") : item.isSkill ? String(localized: "使用这个 Skill") : String(localized: "使用 Prompt"))
+                            .lineLimit(1).minimumScaleFactor(0.8)
+                    }
+                }.font(.body.weight(.semibold)).frame(minWidth: 50, maxWidth: actionsCollapsed ? 50 : .infinity, minHeight: 50)
+                    .foregroundStyle(Palette.paper)
+            }.buttonStyle(.plain).readingGlass(prominent: true).actionGlassIdentity("use", in: actionTransition)
+                .accessibilityLabel(item.isSkill ? String(localized: "使用这个 Skill") : String(localized: "使用 Prompt"))
+                .accessibilityIdentifier("usePrompt")
+        }.dynamicTypeSize(...DynamicTypeSize.xxxLarge)
     }
     private func openUseSheet() {
         let prepared = library.draft(for: item, language: effectiveLanguage)
@@ -327,14 +316,8 @@ struct PromptDetail: View {
         }
     }
     private var languageSummary: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(displaysOriginalContent ? String(localized: "当前显示原文") : String(localized: "AI 译文"))
-                .font(.footnote.weight(.medium))
-            if !displaysOriginalContent {
-                Text(String(localized: "可随时切回原文，复制和编辑使用当前语言。"))
-                    .font(.caption).foregroundStyle(Palette.muted).fixedSize(horizontal: false, vertical: true)
-            }
-        }
+        Text(displaysOriginalContent ? String(localized: "当前显示原文") : String(localized: "AI 译文"))
+            .font(.caption).foregroundStyle(Palette.muted)
     }
     @ViewBuilder private var languageMenu: some View {
             if !library.isRemoved(item), !library.advertisedLanguages(for: item).isEmpty {

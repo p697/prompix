@@ -48,4 +48,4 @@ xcodebuild -project ios/Prompix.xcodeproj -scheme Prompix \
 
 源码 `27f476a` 已完成 Release 归档和开发 IPA 导出，独立签名／资源／版本审计 39 项通过。IPA 为 7,894,917 字节，SHA-256 `f2914c7277cf23f169146b48784cd2a93cd1eb72fb960c0b0637fb586629b880`。产物在本机外置盘 `Prompix-Codex/Releases/0.5.1-22/`，包含归档、开发包、审计报告与日志。未上传 App Store。
 
-模拟器已恢复普通字号、浅色与正常动态效果，保留新版验收现场。安装前检查未检测到 USB iPhone；先前验收用的 iPhone Air 也无法建立无线连接，因此本轮尚未覆盖安装用户手机，用户已收到连接提示。不能把签名成功写成真机安装完成。
+用户回复连接后，已在插线的 iPhone Air（“p697 轻薄版”）覆盖安装并启动 0.5.1（22）；通过设备应用清单回读版本并保留启动截图。安装前后唯一收藏记录字节一致，均没有草稿或作者收藏文件；目录为 531 条。发行目录的 `source.json` 已记录 installed-and-launched。后续 0.6.0 改版仅使用模拟器，没有再次覆盖这台手机。
