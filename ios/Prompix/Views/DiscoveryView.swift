@@ -58,6 +58,11 @@ struct DiscoverView: View {
     @State private var settingsPresented = false
     private let topics = ["好玩一点", "创作灵感", "日常有用"]
     private var items: [Prompt] { library.prompts.filter { PromptQuery(kind: kind, topic: topic, model: model, skillsOnly: skillsOnly).matches($0) } }
+    private var feedQuery: FeedQuery { FeedQuery(kind: skillsOnly ? "skill" : kind?.rawValue, tag: topic, model: model) }
+    private var models: [String] {
+        if let feed = library.feed { return feed.browse.value?.models.map(\.name) ?? [] }
+        return Array(Set(library.prompts.filter { PromptQuery(kind: kind, skillsOnly: skillsOnly).matches($0) }.map(\.model))).sorted()
+    }
     private var isFiltered: Bool { kind != nil || skillsOnly || topic != nil || model != nil }
     private var needsFirstVideoUpdate: Bool {
         kind == .video && library.version.hasPrefix("studio-") && !library.prompts.contains { $0.kind == .video }
@@ -79,7 +84,9 @@ struct DiscoverView: View {
                                 Text(String(localized: "可带到编程助手中使用的技能，包含完整说明与源文件。"))
                                     .font(.subheadline).foregroundStyle(Palette.muted).padding(.horizontal, 20)
                             }
-                            if items.isEmpty {
+                            if let feed = library.feed {
+                                FeedResults(store: feed.discovery, query: feedQuery, fallback: items)
+                            } else if items.isEmpty {
                                 if needsFirstVideoUpdate {
                                     ContentUnavailableView {
                                         Label(String(localized: "视频内容需要联网更新"), systemImage: "play.rectangle")
@@ -121,7 +128,10 @@ struct DiscoverView: View {
                         .accessibilityHidden(chromeCollapsed)
                         .animation(reduceMotion ? nil : .smooth(duration: 0.28), value: chromeCollapsed)
                 }
-                .refreshable { await library.refresh(force: true) }
+                .refreshable {
+                    await library.refresh(force: true)
+                    if let feed = library.feed { await feed.discovery.load(feedQuery, force: true) }
+                }
                 .onChange(of: kind) { _, _ in model = nil; topic = nil; chromeCollapsed = false; scroll.scrollTo("discovery-top", anchor: .top) }
                 .onChange(of: skillsOnly) { _, _ in model = nil; topic = nil; chromeCollapsed = false; scroll.scrollTo("discovery-top", anchor: .top) }
                 .onChange(of: topic) { _, _ in chromeCollapsed = false; scroll.scrollTo("discovery-top", anchor: .top) }
@@ -155,7 +165,11 @@ struct DiscoverView: View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             Text(skillsOnly ? String(localized: "Agent Skills") : isFiltered ? String(localized: "筛选结果") : String(localized: "全部内容"))
                 .font(.subheadline.weight(.medium))
-            Text(items.count.formatted()).font(.caption.monospacedDigit()).foregroundStyle(Palette.muted)
+            if library.feed == nil {
+                Text(items.count.formatted()).font(.caption.monospacedDigit()).foregroundStyle(Palette.muted)
+            } else if !isFiltered, let count = library.feed?.state?.count {
+                Text(count.formatted()).font(.caption.monospacedDigit()).foregroundStyle(Palette.muted)
+            }
         }
     }
     private var resultActions: some View {
@@ -178,9 +192,9 @@ struct DiscoverView: View {
                     }
                 }
             }
-            Menu(String(localized: "模型")) {
+            Menu(library.feed?.browse.value.map { $0.modelCount > $0.models.count } == true ? String(localized: "常用模型") : String(localized: "模型")) {
                 Button(String(localized: "全部模型")) { model = nil }
-                ForEach(Array(Set(library.prompts.filter { PromptQuery(kind: kind, skillsOnly: skillsOnly).matches($0) }.map(\.model))).sorted(), id: \.self) { value in
+                ForEach(models, id: \.self) { value in
                     Button { model = value } label: {
                         if model == value { Label(Prompt.localizedModel(value), systemImage: "checkmark") } else { Text(Prompt.localizedModel(value)) }
                     }
@@ -235,6 +249,15 @@ struct CatalogUpdateStatus: View {
 struct PromptGrid: View {
     let items: [Prompt]
     var origin: PromptDetailOrigin = .catalog
+    var body: some View {
+        PreviewMasonryGrid(items: items, preview: ContentPreview.init) { PromptCard(item: $0, origin: origin) }
+    }
+}
+
+struct PreviewMasonryGrid<Item: Identifiable, Cell: View>: View {
+    let items: [Item]
+    let preview: (Item) -> ContentPreview
+    @ViewBuilder let cell: (Item) -> Cell
     @Environment(\.dynamicTypeSize) private var typeSize
     @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
     @State private var layout = PromptGridLayout(width: 0)
@@ -243,7 +266,7 @@ struct PromptGrid: View {
         // Separate masonry columns read column-first. A linear native stack
         // preserves the editorial sequence when navigating with VoiceOver.
         if typeSize.isAccessibilitySize || voiceOverEnabled {
-            LazyVStack(spacing: 24) { ForEach(items) { PromptCard(item: $0, origin: origin) } }
+            LazyVStack(spacing: 24) { ForEach(items) { cell($0) } }
         } else {
             let columns = balancedColumns
             HStack(alignment: .top, spacing: 0) {
@@ -264,13 +287,13 @@ struct PromptGrid: View {
         let widths = layout.widths.isEmpty ? Array(repeating: CGFloat(180), count: layout.columns) : layout.widths
         let font = UIFont.systemFont(ofSize: titleSize)
         return PromptMasonry.columns(itemCount: items.count, widths: widths, spacing: 14) { index, width in
-            PromptCardGeometry.height(for: items[index], width: width, titleFont: font)
+            PromptCardGeometry.height(for: preview(items[index]), width: width, titleFont: font)
         }
     }
     private func column(_ indices: [Int]) -> some View {
         LazyVStack(spacing: 14) {
             ForEach(indices.map { items[$0] }) { item in
-                PromptCard(item: item, origin: origin)
+                cell(item)
             }
         }.frame(maxWidth: .infinity)
     }
@@ -322,13 +345,17 @@ enum PromptMasonry {
 
 enum PromptCardGeometry {
     static let titleSpacing: CGFloat = 6
-    static func aspectRatio(for item: Prompt) -> CGFloat {
+    static func aspectRatio(for item: Prompt) -> CGFloat { aspectRatio(for: ContentPreview(item)) }
+    static func aspectRatio(for item: ContentPreview) -> CGFloat {
         if item.isSkill { return 0.95 }
         // Retain common portrait and widescreen shapes. Only extreme ratios crop.
         if let ratio = item.media?.aspectRatio { return max(0.65, min(1.8, ratio)) }
         return switch item.kind { case .text: 0.95; case .image: item.artwork == "lake" ? 1.02 : 0.76; case .video: 0.94; case .web: WebsiteExamples.files[item.id] != nil ? 0.62 : 0.87 }
     }
     static func height(for item: Prompt, width: CGFloat, titleFont: UIFont) -> CGFloat {
+        height(for: ContentPreview(item), width: width, titleFont: titleFont)
+    }
+    static func height(for item: ContentPreview, width: CGFloat, titleFont: UIFont) -> CGFloat {
         let preview = width / aspectRatio(for: item)
         guard !item.isSkill && item.kind != .text else { return preview }
         let bounds = (item.displayTitle as NSString).boundingRect(
@@ -353,22 +380,7 @@ struct PromptCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             Button { detailPresented = true } label: {
-                VStack(alignment: .leading, spacing: PromptCardGeometry.titleSpacing) {
-                    if typeSize.isAccessibilitySize && (item.kind == .text || item.isSkill) {
-                        VStack(alignment: .leading, spacing: 12) {
-                            Text(item.displayTitle).font(.headline).foregroundStyle(.primary)
-                            Text(item.displaySummary).font(.subheadline).foregroundStyle(Palette.muted)
-                        }.fixedSize(horizontal: false, vertical: true).frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(20).background(Palette.soft, in: RoundedRectangle(cornerRadius: 6))
-                    } else {
-                        Artwork(item: item, fillsFrame: true).aspectRatio(ratio, contentMode: .fit)
-                            .clipShape(RoundedRectangle(cornerRadius: titleIsInArtwork ? 6 : 4, style: .continuous))
-                    }
-                    if !titleIsInArtwork {
-                        Text(item.displayTitle).font(.footnote).foregroundStyle(Palette.ink)
-                            .lineLimit(typeSize.isAccessibilitySize ? nil : 2).multilineTextAlignment(.leading).padding(.horizontal, 2)
-                    }
-                }.contentShape(Rectangle()).promptTransitionSource(id: item.id, in: transition)
+                PromptCardFace(preview: ContentPreview(item)).promptTransitionSource(id: item.id, in: transition)
             }.buttonStyle(.plain).accessibilityLabel(item.displayTitle).accessibilityIdentifier("prompt-\(item.id)")
                 .contextMenu {
                     Button {

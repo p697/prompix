@@ -12,6 +12,6 @@
   "hyperdrive": [{"binding": "DATABASE", "id": "b5be51c31aa44b15897d6a233e2f06c6"}],
   "ratelimits": [{"name": "REQUEST_LIMITER", "namespace_id": "3101", "simple": {"limit": 120, "period": 60}}],
   "secrets": {"required": ["CURSOR_SECRET"]},
-  "observability": {"enabled": true, "head_sampling_rate": 0.1,
+  "observability": {"enabled": true, "head_sampling_rate": 0.1, "redact_query_string": true,
     "logs": {"enabled": true, "invocation_logs": false}}
 }

@@ -6889,64 +6889,6 @@
         }
       }
     },
-    "收藏和草稿保存在本机，不上传编辑内容或搜索词，也没有广告与分析 SDK。下载内容仍需要网络请求。删除 App 会清除其本地数据。": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Saved items and drafts stay on your device. Edits and searches are not uploaded, and there are no ads or analytics SDKs. Downloading content still requires network requests. Deleting the app removes its local data."
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "收藏與草稿儲存在本機，不上傳編輯內容或搜尋詞，也沒有廣告與分析 SDK。下載內容仍需網路請求。刪除 App 會清除其本機資料。"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "保存済みの項目と下書きはデバイス内に保存されます。編集内容や検索語はアップロードされず、広告や分析 SDK もありません。コンテンツのダウンロードにはネットワーク通信が必要です。アプリを削除するとローカルデータも削除されます。"
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "저장 항목과 초안은 기기에 보관됩니다. 편집 내용이나 검색어는 업로드하지 않으며 광고나 분석 SDK도 없습니다. 콘텐츠 다운로드에는 네트워크 요청이 필요합니다. 앱을 삭제하면 로컬 데이터도 삭제됩니다."
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Los elementos guardados y los borradores se quedan en tu dispositivo. Las ediciones y búsquedas no se suben, y no hay anuncios ni SDK de análisis. Descargar contenido requiere solicitudes de red. Al eliminar la app se borran sus datos locales."
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Os itens salvos e rascunhos ficam no seu dispositivo. Edições e buscas não são enviadas, e não há anúncios nem SDKs de análise. Baixar conteúdo ainda exige solicitações de rede. Excluir o app remove seus dados locais."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Les favoris et les brouillons restent sur votre appareil. Les modifications et recherches ne sont pas envoyées, et il n’y a ni publicités ni SDK d’analyse. Le téléchargement du contenu nécessite des requêtes réseau. Supprimer l’app efface ses données locales."
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Gespeicherte Inhalte und Entwürfe bleiben auf deinem Gerät. Änderungen und Suchbegriffe werden nicht hochgeladen. Es gibt keine Werbung oder Analyse-SDKs. Das Herunterladen von Inhalten erfordert Netzwerkanfragen. Beim Löschen der App werden ihre lokalen Daten entfernt."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "收藏和草稿保存在本机，不上传编辑内容或搜索词，也没有广告与分析 SDK。下载内容仍需要网络请求。删除 App 会清除其本地数据。"
-          }
-        }
-      }
-    },
     "收藏暂时无法读取": {
       "extractionState": "manual",
       "localizations": {
@@ -15154,6 +15096,537 @@
           "stringUnit": {
             "state": "translated",
             "value": "Voltar à lista"
+          }
+        }
+      }
+    },
+    "正在加载内容…": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在加载内容…"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Loading content…"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在載入內容…"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "コンテンツを読み込み中…"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "콘텐츠 불러오는 중…"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cargando contenido…"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Carregando conteúdo…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chargement du contenu…"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inhalte werden geladen…"
+          }
+        }
+      }
+    },
+    "加载更多": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "加载更多"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Load more"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "載入更多"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "さらに読み込む"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "더 불러오기"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cargar más"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Carregar mais"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Charger plus"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mehr laden"
+          }
+        }
+      }
+    },
+    "内容已被移除": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "内容已被移除"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Content removed"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "內容已被移除"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "コンテンツは削除されました"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "콘텐츠가 삭제되었습니다"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Contenido eliminado"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Conteúdo removido"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Contenu supprimé"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inhalt entfernt"
+          }
+        }
+      }
+    },
+    "内容暂时无法加载": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "内容暂时无法加载"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Content is temporarily unavailable"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "內容暫時無法載入"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "現在コンテンツを読み込めません"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "지금은 콘텐츠를 불러올 수 없습니다"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El contenido no está disponible por el momento"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Conteúdo indisponível no momento"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le contenu est temporairement indisponible"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inhalt vorübergehend nicht verfügbar"
+          }
+        }
+      }
+    },
+    "搜索创作者": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "搜索创作者"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Search creators"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "搜尋創作者"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "クリエイターを検索"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "크리에이터 검색"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Buscar creadores"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Buscar criadores"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rechercher des créateurs"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ersteller suchen"
+          }
+        }
+      }
+    },
+    "内容暂时无法加载，请稍后重试。": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "内容暂时无法加载，请稍后重试。"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Content is temporarily unavailable. Try again shortly."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "內容暫時無法載入，請稍後重試。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "現在コンテンツを読み込めません。しばらくしてからもう一度お試しください。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "지금은 콘텐츠를 불러올 수 없습니다. 잠시 후 다시 시도해 주세요."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El contenido no está disponible. Inténtalo de nuevo en un momento."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Conteúdo indisponível. Tente novamente em instantes."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le contenu est temporairement indisponible. Réessayez dans un instant."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inhalt vorübergehend nicht verfügbar. Versuche es in Kürze erneut."
+          }
+        }
+      }
+    },
+    "常用模型": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "常用模型"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Popular models"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "常用模型"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "よく使われるモデル"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "자주 쓰는 모델"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modelos populares"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modelos populares"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modèles populaires"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Beliebte Modelle"
+          }
+        }
+      }
+    },
+    "收藏和草稿保存在本机，不上传编辑内容。搜索词会发送到内容服务以查询结果，不用于广告或用户画像。没有广告与分析 SDK。删除 App 会清除本地数据。": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "收藏和草稿保存在本机，不上传编辑内容。搜索词会发送到内容服务以查询结果，不用于广告或用户画像。没有广告与分析 SDK。删除 App 会清除本地数据。"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Favorites and drafts stay on this device; edited content is not uploaded. Search terms are sent to the content service to find results, not for advertising or profiling. There are no ads or analytics SDKs. Deleting the app removes local data."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "收藏和草稿儲存在本機，不上傳編輯內容。搜尋詞會傳送到內容服務以查詢結果，不用於廣告或使用者畫像。沒有廣告與分析 SDK。刪除 App 會清除本機資料。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "お気に入りと下書きは端末内に保存され、編集内容はアップロードされません。検索語は結果を取得するためにコンテンツサービスへ送信され、広告やプロファイリングには使用されません。広告や分析 SDK はありません。アプリを削除するとローカルデータも消去されます。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "즐겨찾기와 초안은 기기에 저장되며 편집한 내용은 업로드되지 않습니다. 검색어는 결과를 찾기 위해 콘텐츠 서비스로 전송되며 광고나 사용자 프로파일링에 사용되지 않습니다. 광고와 분석 SDK는 없습니다. 앱을 삭제하면 기기의 앱 데이터가 삭제됩니다."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Los favoritos y borradores se guardan en este dispositivo; el contenido editado no se sube. Los términos de búsqueda se envían al servicio de contenido para obtener resultados, no para publicidad ni perfiles. No hay anuncios ni SDK de análisis. Al eliminar la app se borran los datos locales."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Favoritos e rascunhos ficam neste dispositivo; o conteúdo editado não é enviado. Os termos de busca são enviados ao serviço de conteúdo para obter resultados, não para publicidade ou criação de perfis. Não há anúncios nem SDKs de análise. Excluir o app remove os dados locais."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Les favoris et brouillons restent sur cet appareil ; le contenu modifié n’est pas envoyé. Les termes de recherche sont transmis au service de contenu pour obtenir des résultats, sans publicité ni profilage. Il n’y a ni publicité ni SDK d’analyse. Supprimer l’app efface les données locales."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Favoriten und Entwürfe bleiben auf diesem Gerät; bearbeitete Inhalte werden nicht hochgeladen. Suchbegriffe werden für die Ergebnissuche an den Inhaltsdienst gesendet, nicht für Werbung oder Profilbildung. Es gibt weder Werbung noch Analyse-SDKs. Beim Löschen der App werden lokale Daten entfernt."
+          }
+        }
+      }
+    },
+    "离线可用的内容": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "离线可用的内容"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Available offline"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "離線可用的內容"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "オフラインで利用できるコンテンツ"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "오프라인에서 이용 가능한 콘텐츠"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Contenido disponible sin conexión"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Conteúdo disponível offline"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Contenu disponible hors ligne"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Offline verfügbare Inhalte"
           }
         }
       }

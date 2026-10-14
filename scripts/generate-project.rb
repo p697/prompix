@@ -31,6 +31,7 @@ Dir.glob(File.join(root, 'ios/Prompix/Resources/*')).sort.each do |file|
   ref.last_known_file_type = 'folder' if File.directory?(file) && !file.end_with?('.xcassets')
   app.resources_build_phase.add_file_reference(ref)
 end
+app.resources_build_phase.add_file_reference(project.main_group.new_file('../packages/schema/collections.json'))
 ['PrompixTests', 'PrompixUITests'].each do |name|
   type = name.end_with?('UITests') ? :ui_test_bundle : :unit_test_bundle
   target = project.new_target(type, name, :ios, '17.0')

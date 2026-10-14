@@ -1,4 +1,7 @@
 import { z } from "zod";
+import collectionDefinitions from "./collections.json" with { type: "json" };
+export { collectionDefinitions };
+export const collectionIDs = Object.keys(collectionDefinitions) as [keyof typeof collectionDefinitions, ...(keyof typeof collectionDefinitions)[]];
 import { creatorSchema, localizationLanguages, promptSchema } from "./catalog.ts";
 
 export const feedPageLimit = 50;
@@ -14,6 +17,7 @@ export const normalizeFeedSearch = (value: string) => value.normalize("NFKD").re
 export const feedFiltersSchema = z.object({
   locale: feedLocale.default("original"),
   kind: z.enum(["text", "image", "video", "web", "skill"]).optional(),
+  collection: z.enum(collectionIDs).optional(),
   creator: z.string().min(1).max(200).optional(),
   tag: z.string().min(1).max(100).optional(),
   model: z.string().min(1).max(200).optional(),
@@ -47,7 +51,7 @@ export const feedDetailSchema = z.object({
 }).strict();
 
 export function parseFeedQuery(url: URL): { filters: FeedFilters; limit: number; cursor?: string } {
-  const allowed = new Set(["locale", "kind", "creator", "tag", "model", "q", "limit", "cursor"]);
+  const allowed = new Set(["locale", "kind", "collection", "creator", "tag", "model", "q", "limit", "cursor"]);
   const values: Record<string, string> = {};
   for (const [key, value] of url.searchParams) {
     if (!allowed.has(key) || Object.hasOwn(values, key)) throw new Error("Invalid query parameters");

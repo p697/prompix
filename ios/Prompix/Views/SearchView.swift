@@ -47,7 +47,10 @@ struct SearchView: View {
             .searchable(text: $query, isPresented: $focused, prompt: String(localized: "搜索 Prompt、Skills 或创作者"))
             .autocorrectionDisabled().textInputAutocapitalization(.never)
             .onSubmit(of: .search) { rememberQuery() }
-            .refreshable { await library.refresh(force: true) }
+             .refreshable {
+                await library.refresh(force: true)
+                await library.feed?.search.load(FeedQuery(kind: skillsOnly ? "skill" : kind?.rawValue, q: query), force: true)
+            }
             .task { await library.refresh() }
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -101,6 +104,12 @@ struct SearchView: View {
     }
 
     @ViewBuilder private var searchResults: some View {
+        if let feed = library.feed {
+            if kind == nil && !skillsOnly && !normalizedQuery.isEmpty { FeedCreatorSearch(repository: feed, query: normalizedQuery) }
+            FeedResults(store: feed.search, query: FeedQuery(kind: skillsOnly ? "skill" : kind?.rawValue, q: query), debounce: true, fallback: results)
+        } else { legacyResults }
+    }
+    @ViewBuilder private var legacyResults: some View {
         let matchedCreators = creators
         let matchedPrompts = results
         if !matchedCreators.isEmpty {

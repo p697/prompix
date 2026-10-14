@@ -116,9 +116,13 @@ struct CreatorRail: View {
     @Environment(Library.self) private var library
     @Environment(\.dynamicTypeSize) private var typeSize
     @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
-    private var entries: [CreatorEntry] { CreatorDirectory.entries(in: library.prompts) }
+    private var entries: [CreatorEntry] {
+        if let feed = library.feed { return feed.creators.items.map { CreatorEntry(creator: $0.creator, count: $0.count) } }
+        return CreatorDirectory.entries(in: library.prompts)
+    }
 
-    var body: some View {
+    var body: some View { content.task { await library.feed?.creators.load("") } }
+    @ViewBuilder private var content: some View {
         if !entries.isEmpty && !typeSize.isAccessibilitySize && !voiceOverEnabled {
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
@@ -174,14 +178,17 @@ struct CreatorRail: View {
 
 struct CreatorsView: View {
     @Environment(Library.self) private var library
-    @State private var query = ""
+    @State private var query: String
+    init(query: String = "") { _query = State(initialValue: query) }
     private var entries: [CreatorEntry] {
         CreatorDirectory.entries(in: library.prompts).filter { $0.creator.matchesSearch(query) }
     }
 
     var body: some View {
         ScrollView {
-            if entries.isEmpty {
+            if let feed = library.feed {
+                FeedCreatorResults(repository: feed, query: query)
+            } else if entries.isEmpty {
                 if !query.isEmpty {
                     ContentUnavailableView.search(text: query)
                 } else {
@@ -219,7 +226,10 @@ private struct CreatorUpdateButton: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Button(library.isRefreshing ? String(localized: "正在更新…") : String(localized: "检查内容更新")) {
-                Task { await library.refresh(force: true) }
+                Task {
+                    await library.refresh(force: true)
+                    await library.feed?.creators.load("", force: true)
+                }
             }
             .buttonStyle(.bordered).controlSize(.regular)
             .disabled(library.isRefreshing).accessibilityIdentifier(identifier)
@@ -231,7 +241,7 @@ private struct CreatorUpdateButton: View {
     }
 }
 
-private struct CreatorRow: View {
+struct CreatorRow: View {
     let entry: CreatorEntry
     @Environment(\.dynamicTypeSize) private var typeSize
 
@@ -244,7 +254,7 @@ private struct CreatorRow: View {
                         .fixedSize(horizontal: false, vertical: true)
                     Text(CreatorIdentity.subtitle(entry.creator)).font(.caption).foregroundStyle(Palette.muted)
                         .fixedSize(horizontal: false, vertical: true)
-                    Text(String(localized: "\(entry.count) 条内容")).font(.caption).foregroundStyle(Palette.muted)
+                    if entry.count >= 0 { Text(String(localized: "\(entry.count) 条内容")).font(.caption).foregroundStyle(Palette.muted) }
                 }
             } else { standardRow }
         }.frame(maxWidth: .infinity, minHeight: 64, alignment: .leading).contentShape(Rectangle())
@@ -259,7 +269,7 @@ private struct CreatorRow: View {
                     .fixedSize(horizontal: false, vertical: true)
                 Text(CreatorIdentity.subtitle(entry.creator)).font(.footnote).foregroundStyle(Palette.muted)
                     .lineLimit(typeSize.isAccessibilitySize ? nil : 1)
-                Text(String(localized: "\(entry.count) 条内容")).font(.footnote).foregroundStyle(Palette.muted)
+                if entry.count >= 0 { Text(String(localized: "\(entry.count) 条内容")).font(.footnote).foregroundStyle(Palette.muted) }
             }
             Spacer(minLength: 0)
             Image(systemName: "chevron.right").font(.caption).foregroundStyle(Palette.muted)
@@ -299,19 +309,19 @@ struct CreatorDetail: View {
     private var allItems: [Prompt] { library.items(for: creator) }
     private var items: [Prompt] { allItems.filter(filter.includes) }
     private var availableFilters: [CreatorContentFilter] {
-        CreatorContentFilter.allCases.filter { $0 == .all || allItems.contains(where: $0.includes) }
+        library.feed == nil ? CreatorContentFilter.allCases.filter { $0 == .all || allItems.contains(where: $0.includes) } : CreatorContentFilter.allCases
     }
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 28) {
+            LazyVStack(alignment: .leading, spacing: 28) {
                 VStack(alignment: .leading, spacing: 20) {
                     ViewThatFits(in: .horizontal) {
                         HStack(alignment: .center, spacing: 16) {
                             CreatorAvatar(creator: creator, size: 64)
                             identity
                         }
-                        VStack(alignment: .leading, spacing: 14) {
+                        LazyVStack(alignment: .leading, spacing: 14) {
                             CreatorAvatar(creator: creator, size: 64)
                             identity
                         }
@@ -340,7 +350,9 @@ struct CreatorDetail: View {
                         HStack { contentHeading; Spacer(); filterPicker }
                         VStack(alignment: .leading, spacing: 8) { contentHeading; filterPicker }
                     }.padding(.horizontal, 20)
-                    if items.isEmpty {
+                    if let feed = library.feed {
+                        OwnedFeedResults(repository: feed, query: FeedQuery(kind: filter == .all ? nil : filter.rawValue, creator: creator.id), fallback: items)
+                    } else if items.isEmpty {
                         ContentUnavailableView(String(localized: "暂无匹配内容"), systemImage: "square.grid.2x2",
                             description: Text(String(localized: "试试其他分类，或清除筛选条件。")))
                     } else {
@@ -377,7 +389,11 @@ struct CreatorDetail: View {
             Text(creator.displayName).font(Typography.editorial(.title)).fixedSize(horizontal: false, vertical: true)
             Text(CreatorIdentity.subtitle(creator)).font(.subheadline).foregroundStyle(Palette.muted)
                 .fixedSize(horizontal: false, vertical: true)
-            Text(String(localized: "\(allItems.count) 条内容")).font(.footnote).foregroundStyle(Palette.muted)
+            if let feed = library.feed {
+                if let count = feed.creators.items.first(where: { $0.id == creator.id })?.count {
+                    Text(String(localized: "\(count) 条内容")).font(.footnote).foregroundStyle(Palette.muted)
+                }
+            } else { Text(String(localized: "\(allItems.count) 条内容")).font(.footnote).foregroundStyle(Palette.muted) }
         }
     }
 
@@ -385,7 +401,7 @@ struct CreatorDetail: View {
         VStack(alignment: .leading, spacing: 4) {
             Text(filter == .all ? String(localized: "全部内容") : filter.title)
                 .font(Typography.editorial(.title3)).accessibilityAddTraits(.isHeader)
-            if filter != .all {
+            if filter != .all && library.feed == nil {
                 Text(String(localized: "\(items.count) 条内容")).font(.footnote).foregroundStyle(Palette.muted)
             }
         }
@@ -422,7 +438,7 @@ struct SavedCreators: View {
             LazyVStack(spacing: 20) {
                 ForEach(creators) { creator in
                     NavigationLink { CreatorDetail(creator: creator) } label: {
-                        CreatorRow(entry: CreatorEntry(creator: creator, count: library.items(for: creator).count))
+                        CreatorRow(entry: CreatorEntry(creator: creator, count: library.feed.map { $0.creators.items.first { $0.id == creator.id }?.count ?? -1 } ?? library.items(for: creator).count))
                     }.buttonStyle(.plain).accessibilityIdentifier("saved-creator-\(creator.id)")
                 }
             }.padding(.horizontal, 20)

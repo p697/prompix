@@ -121,7 +121,7 @@ UI translations live in `Prompix/Resources/Localizable.xcstrings`. Keep identifi
 
 ## Privacy and submission
 
-`Resources/PrivacyInfo.xcprivacy` is bundled with the app. It declares no tracking and describes operational request data retained by the content service; it does not claim that local drafts or searches are uploaded. Required-reason API declarations must reflect actual code use. Store metadata, review instructions and the final submission checklist are in [App Store preparation](../docs/app-store.md).
+`Resources/PrivacyInfo.xcprivacy` is bundled with the app. It declares no tracking and describes operational request data retained by the content service; drafts and saved history remain local; v3 search terms are sent to the content service to process the current query. The Feed Worker redacts query strings and does not persist search history. Required-reason API declarations must reflect actual code use. Store metadata, review instructions and the final submission checklist are in [App Store preparation](../docs/app-store.md).
 
 Performance checks are explicitly selected UI tests: `testRepeatedLaunchPerformance`
 and `testScrollingResourcePerformance`. Run with `-configuration Release

@@ -1,4 +1,4 @@
-import { contentID, feedLocale, revisionID, type FeedCard, type FeedFilters, type FeedLocale, type FeedPage } from "../../packages/schema/feed.ts";
+import { collectionDefinitions, contentID, feedLocale, revisionID, type FeedCard, type FeedFilters, type FeedLocale, type FeedPage } from "../../packages/schema/feed.ts";
 import type { Prompt } from "../../packages/schema/catalog.ts";
 import { cursorLifetimeSeconds, decodeCursor, encodeCursor, decodeCreatorCursor, encodeCreatorCursor } from "./cursor.ts";
 import { FeedError, type Database } from "./database.ts";
@@ -30,6 +30,11 @@ export async function getFeed(db: Database, query: { filters: FeedFilters; limit
   const parameter = (value: unknown) => { parameters.push(value); return `$${parameters.length}`; };
   if (filters.kind === "skill") where.push("v.content_type='skill'");
   else if (filters.kind) where.push(`v.kind=${parameter(filters.kind)} and v.content_type<>'skill'`);
+  if (filters.collection) {
+    const collection = collectionDefinitions[filters.collection];
+    if (collection.kind) where.push(`v.kind=${parameter(collection.kind)}`);
+    if (collection.tags.length) where.push(`v.tags && ${parameter(collection.tags)}::text[]`);
+  }
   if (filters.creator) where.push(`v.creator_id=${parameter(filters.creator)}`);
   if (filters.model) where.push(`v.model=${parameter(filters.model)}`);
   if (filters.tag) {
@@ -127,4 +132,47 @@ export async function getCreators(db: Database, query: { q: string; limit: numbe
   return { schemaVersion: 3 as const, release, items: page.map(({ creator, count }) => ({ creator, count })),
     nextCursor: rows.length > query.limit && last ? encodeCreatorCursor({ v: 1, scope: "creators", release,
       count: last.item_count, after: last.creator_id, q: query.q, expires }, secret) : null };
+}
+
+/** Global facets are computed over visible metadata, then only cover cards are loaded. */
+export async function getBrowse(db: Database, locale: FeedLocale) {
+  feedLocale.parse(locale);
+  const release = (await getState(db)).release;
+  const definitions = Object.entries(collectionDefinitions).map(([id, value]) => ({ id, ...value }));
+  const result = (await db.query<{ collections: { id: string; count: number; covers: FeedCard[] }[];
+    models: { name: string; count: number }[]; modelCount: number }>(`
+    with visible_entries as materialized (
+      select e.position,e.revision_id from prompix.release_entries e
+      join prompix.releases r on r.id=e.release_id
+      join prompix.content c on c.id=e.content_id
+      where e.release_id=$1 and r.published_at is not null and c.removed_at is null
+    ), metadata as materialized (
+      select e.position,e.revision_id,v.kind,v.content_type,v.tags,v.model
+      from visible_entries e join prompix.revisions v on v.id=e.revision_id
+    ), definitions as (
+      select * from jsonb_to_recordset($2::jsonb) as d(id text,kind text,tags text[])
+    ), matches as materialized (
+      select d.id,m.revision_id,
+        row_number() over(partition by d.id order by (m.kind<>'text' and m.content_type<>'skill') desc,m.position) as ordinal,
+        count(*) over(partition by d.id)::integer as count
+      from definitions d join metadata m on (d.kind is null or d.kind=m.kind)
+        and (cardinality(d.tags)=0 or d.tags && m.tags)
+    ), covers as materialized (
+      select id,revision_id,ordinal,count from matches where ordinal<=2
+    ), model_counts as materialized (
+      select model as name,count(*)::integer as count from metadata group by model
+    ) select
+      coalesce((select jsonb_agg(summary order by summary->>'id') from (
+        select jsonb_build_object('id',d.id,'count',coalesce(max(p.count),0),
+          'covers',coalesce(jsonb_agg(coalesce(t.card,v.card) order by p.ordinal) filter(where p.revision_id is not null),'[]'::jsonb)) as summary
+        from definitions d left join covers p on p.id=d.id
+        left join prompix.revisions v on v.id=p.revision_id
+        left join prompix.translations t on t.revision_id=p.revision_id and t.locale=$3
+        group by d.id) summaries),'[]'::jsonb) as collections,
+      coalesce((select jsonb_agg(row_to_json(top_models)) from (
+        select name,count from model_counts order by count desc,name limit 50
+      ) top_models),'[]'::jsonb) as models,
+      (select count(*)::integer from model_counts) as "modelCount"`, [release, JSON.stringify(definitions), locale])).rows[0];
+  if (!result) throw new FeedError("unavailable", 503);
+  return { schemaVersion: 3 as const, release, ...result };
 }

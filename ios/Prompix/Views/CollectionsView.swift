@@ -4,20 +4,31 @@ struct Collection: Identifiable {
     let id: String
     let title: String
     let subtitle: String
-    let tags: Set<String>
-    var kind: PromptKind? = nil
+    var tags: Set<String> { Set(FeedCollections.definitions[id]?.tags ?? []) }
+    var kind: PromptKind? { FeedCollections.definitions[id]?.kind.flatMap(PromptKind.init(rawValue:)) }
     static let all: [Collection] = [
-        .init(id: "play", title: String(localized: "趣味聊天"), subtitle: String(localized: "猜谜、角色扮演与趣味互动"), tags: ["好玩一点", "趣味互动"], kind: .text),
-        .init(id: "portraits", title: String(localized: "人像与角色"), subtitle: String(localized: "摄影布光、人物造型与原创角色"), tags: ["人物肖像", "人像摄影", "肖像", "人像", "写真", "角色创作", "角色设计"]),
-        .init(id: "products", title: String(localized: "产品与商业摄影"), subtitle: String(localized: "商品静物、场景布置与品牌画面"), tags: ["产品摄影", "产品设计", "商品摄影", "商业摄影", "产品海报", "品牌视觉"]),
-        .init(id: "graphics", title: String(localized: "海报与信息图"), subtitle: String(localized: "文字排版、视觉层次与信息表达"), tags: ["海报设计", "信息图", "信息图表", "排版", "平面设计", "字体设计"]),
-        .init(id: "illustration", title: String(localized: "插画与概念设计"), subtitle: String(localized: "不同画风、场景设定与视觉实验"), tags: ["插画", "插画设计", "概念设计", "绘本", "像素艺术"]),
-        .init(id: "writing", title: String(localized: "写作与故事"), subtitle: String(localized: "短篇、文案、诗歌与文字修改"), tags: ["写作表达", "故事创作", "品牌文案", "写作", "故事", "文案"]),
-        .init(id: "learning", title: String(localized: "学习与思考"), subtitle: String(localized: "语言练习、知识解释与思路梳理"), tags: ["学习方法", "英文学习", "思考训练", "学习", "知识解释"]),
-        .init(id: "daily", title: String(localized: "工作与生活"), subtitle: String(localized: "邮件、面试、旅行与日常安排"), tags: ["工作效率", "求职面试", "旅行生活", "生活记录", "创作策划", "效率", "工作", "生活", "沟通"]),
-        .init(id: "video", title: String(localized: "视频创作"), subtitle: String(localized: "运镜、转场与动态场景的实际案例"), tags: [], kind: .video),
-        .init(id: "web", title: String(localized: "网页与小工具"), subtitle: String(localized: "作品集、网站与可以操作的工具"), tags: [], kind: .web)
+        .init(id: "play", title: String(localized: "趣味聊天"), subtitle: String(localized: "猜谜、角色扮演与趣味互动")),
+        .init(id: "portraits", title: String(localized: "人像与角色"), subtitle: String(localized: "摄影布光、人物造型与原创角色")),
+        .init(id: "products", title: String(localized: "产品与商业摄影"), subtitle: String(localized: "商品静物、场景布置与品牌画面")),
+        .init(id: "graphics", title: String(localized: "海报与信息图"), subtitle: String(localized: "文字排版、视觉层次与信息表达")),
+        .init(id: "illustration", title: String(localized: "插画与概念设计"), subtitle: String(localized: "不同画风、场景设定与视觉实验")),
+        .init(id: "writing", title: String(localized: "写作与故事"), subtitle: String(localized: "短篇、文案、诗歌与文字修改")),
+        .init(id: "learning", title: String(localized: "学习与思考"), subtitle: String(localized: "语言练习、知识解释与思路梳理")),
+        .init(id: "daily", title: String(localized: "工作与生活"), subtitle: String(localized: "邮件、面试、旅行与日常安排")),
+        .init(id: "video", title: String(localized: "视频创作"), subtitle: String(localized: "运镜、转场与动态场景的实际案例")),
+        .init(id: "web", title: String(localized: "网页与小工具"), subtitle: String(localized: "作品集、网站与可以操作的工具"))
     ]
+    @MainActor func count(in library: Library) -> Int {
+        if let feed = library.feed { return feed.browse.value?.collections.first { $0.id == id }?.count ?? 0 }
+        return items(in: library).count
+    }
+    @MainActor func previews(in library: Library) -> [ContentPreview] {
+        if let feed = library.feed {
+            return (feed.browse.value?.collections.first { $0.id == id }?.covers ?? [])
+                .filter { !library.isRemoved(id: $0.id) }.map(ContentPreview.init)
+        }
+        return covers(from: items(in: library)).map(ContentPreview.init)
+    }
     func includes(_ prompt: Prompt) -> Bool {
         if let kind, prompt.kind != kind { return false }
         return tags.isEmpty || !tags.isDisjoint(with: prompt.tags)
@@ -45,13 +56,13 @@ struct CollectionsDirectory: View {
     var body: some View {
         ScrollView {
             LazyVGrid(columns: columns, alignment: .leading, spacing: 24) {
-                ForEach(Collection.all.filter { !($0.items(in: library)).isEmpty }) { collection in
-                    let items = collection.items(in: library)
+                ForEach(Collection.all.filter { $0.count(in: library) > 0 }) { collection in
+                    let count = collection.count(in: library)
                     NavigationLink { CollectionDetail(collection: collection) } label: {
                         VStack(alignment: .leading, spacing: 12) {
                             HStack(spacing: 4) {
-                                ForEach(collection.covers(from: items).prefix(2)) { item in
-                                    Artwork(item: item, compact: true).frame(maxWidth: .infinity).clipped()
+                                ForEach(collection.previews(in: library).prefix(2)) { item in
+                                    Artwork(preview: item, compact: true).frame(maxWidth: .infinity).clipped()
                                 }
                             }.aspectRatio(1, contentMode: .fit)
                                 .background(Palette.soft).clipShape(RoundedRectangle(cornerRadius: 16)).accessibilityHidden(true)
@@ -64,16 +75,18 @@ struct CollectionsDirectory: View {
                                     Text(collection.subtitle).font(.subheadline).foregroundStyle(Palette.muted)
                                         .fixedSize(horizontal: false, vertical: true)
                                 }
-                                Text(String(localized: "\(items.count) 个 Prompt")).font(.caption).foregroundStyle(Palette.muted)
+                                Text(String(localized: "\(count) 个 Prompt")).font(.caption).foregroundStyle(Palette.muted)
                             }.padding(.horizontal, 2)
                         }.foregroundStyle(Palette.ink).multilineTextAlignment(.leading)
                             .contentShape(Rectangle())
                     }.buttonStyle(.plain)
-                        .accessibilityLabel("\(collection.title) \(collection.subtitle) \(String(localized: "\(items.count) 个 Prompt"))")
+                        .accessibilityLabel("\(collection.title) \(collection.subtitle) \(String(localized: "\(count) 个 Prompt"))")
                         .accessibilityIdentifier("collection-\(collection.id)")
                 }
             }.padding(.horizontal, 16).padding(.top, 12).padding(.bottom, 28)
         }.background(Palette.paper).navigationTitle(String(localized: "专题"))
+            .task { await library.feed?.browse.load() }
+            .refreshable { await library.feed?.browse.load(force: true) }
     }
 }
 struct CollectionRail: View {
@@ -82,7 +95,7 @@ struct CollectionRail: View {
     @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
     private var collections: [Collection] {
         ["portraits", "play", "graphics", "web", "video"].compactMap { id in Collection.all.first { $0.id == id } }
-            .filter { !$0.items(in: library).isEmpty }
+            .filter { $0.count(in: library) > 0 }
     }
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
@@ -111,18 +124,18 @@ struct CollectionRail: View {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 12) {
                         ForEach(collections) { collection in
-                            let items = collection.items(in: library)
+                            let count = collection.count(in: library)
                             NavigationLink { CollectionDetail(collection: collection) } label: {
                                 VStack(alignment: .leading, spacing: 10) {
                                     HStack(spacing: 2) {
-                                        ForEach(collection.covers(from: items).prefix(2)) { cover in
-                                            Artwork(item: cover, compact: true).frame(maxWidth: .infinity).clipped()
+                                        ForEach(collection.previews(in: library).prefix(2)) { cover in
+                                            Artwork(preview: cover, compact: true).frame(maxWidth: .infinity).clipped()
                                         }
                                     }.frame(height: 140).clipShape(RoundedRectangle(cornerRadius: 14)).accessibilityHidden(true)
                                     VStack(alignment: .leading, spacing: 5) {
                                         Text(collection.title).font(.subheadline.weight(.medium)).lineLimit(2)
                                             .fixedSize(horizontal: false, vertical: true)
-                                        Text(String(localized: "\(items.count) 条内容")).font(.caption).foregroundStyle(Palette.muted)
+                                        Text(String(localized: "\(count) 条内容")).font(.caption).foregroundStyle(Palette.muted)
                                     }.frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 2)
                                 }.frame(width: 246)
                                     .foregroundStyle(Palette.ink).multilineTextAlignment(.leading)
@@ -132,7 +145,7 @@ struct CollectionRail: View {
                     }.padding(.horizontal, 20)
                 }
             }
-        }
+        }.task { await library.feed?.browse.load() }
     }
 }
 struct CollectionDetail: View {
@@ -140,11 +153,13 @@ struct CollectionDetail: View {
     @Environment(Library.self) private var library
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
+            LazyVStack(alignment: .leading, spacing: 20) {
                 Text(collection.title).font(Typography.editorial(.largeTitle)).foregroundStyle(Palette.ink).fixedSize(horizontal: false, vertical: true)
                 Text(collection.subtitle).font(.subheadline).foregroundStyle(Palette.muted).fixedSize(horizontal: false, vertical: true)
                 let items = collection.items(in: library)
-                if items.isEmpty {
+                if let feed = library.feed {
+                    OwnedFeedResults(repository: feed, query: FeedQuery(collection: collection.id), fallback: items)
+                } else if items.isEmpty {
                     ContentUnavailableView(String(localized: "暂无匹配内容"), systemImage: "sparkle", description: Text(String(localized: "试试其他分类，或清除筛选条件。")))
                 } else { PromptGrid(items: items) }
             }.padding(20)
@@ -164,7 +179,7 @@ struct SettingsView: View {
                         .foregroundStyle(Palette.ink).padding(.top, 12).padding(.bottom, 20)
                         .listRowSeparator(.hidden)
                     LabeledContent(String(localized: "版本")) { Text("\(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—") (\(Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "—"))").foregroundStyle(Palette.muted) }
-                    LabeledContent(String(localized: "内容数量")) { Text(String(library.prompts.count)).foregroundStyle(Palette.muted) }
+                    LabeledContent(String(localized: "内容数量")) { Text(library.feed.map { $0.state.map { String($0.count) } ?? "—" } ?? String(library.prompts.count)).foregroundStyle(Palette.muted) }
                     Link(String(localized: "App 语言与系统设置"), destination: URL(string: UIApplication.openSettingsURLString)!)
                     Button(String(localized: "onboarding.replay", table: "Onboarding")) { showOnboarding = true }
                         .accessibilityIdentifier("replayOnboarding")
@@ -176,7 +191,7 @@ struct SettingsView: View {
                 Section {
                     Button(cleared ? String(localized: "图片缓存已清理") : String(localized: "清理图片缓存")) { ImageStore.shared.clear(); cleared = true }
                     Text(String(localized: "清理浏览缓存，保留收藏缩略图、Prompt 文字和编辑草稿。")).font(.footnote).foregroundStyle(Palette.muted).listRowSeparator(.hidden)
-                    Text(String(localized: "收藏和草稿保存在本机，不上传编辑内容或搜索词，也没有广告与分析 SDK。下载内容仍需要网络请求。删除 App 会清除其本地数据。"))
+                    Text(String(localized: "收藏和草稿保存在本机，不上传编辑内容。搜索词会发送到内容服务以查询结果，不用于广告或用户画像。没有广告与分析 SDK。删除 App 会清除本地数据。"))
                         .font(.footnote).foregroundStyle(Palette.muted).listRowSeparator(.hidden)
                     Text(String(localized: "视频仅在你点开时播放，离开播放器或切到后台后暂停。内置内容可离线浏览；外部工具需要网络。"))
                         .font(.footnote).foregroundStyle(Palette.muted).listRowSeparator(.hidden)

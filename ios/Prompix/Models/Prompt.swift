@@ -31,6 +31,10 @@ struct Prompt: Codable, Identifiable, Hashable {
     var skill: Skill? = nil
     var localization: Localization? = nil
     var publishedAt: String? = nil
+    // Local snapshot metadata; never sent to the content service or included in
+    // source fingerprints. It keeps saved and open details on their own revision.
+    var feedRevision: String? = nil
+    var feedLanguages: [String]? = nil
     var isSkill: Bool { contentType == "skill" && skill != nil }
     var displayKind: String { isSkill ? "Skill" : kind.title }
     var displaySymbol: String { isSkill ? "square.stack.3d.up" : kind.symbol }
@@ -200,17 +204,13 @@ struct Catalog: Codable {
         guard schemaVersion == 1 else { throw CatalogError.unsupportedVersion }
         guard !prompts.isEmpty, prompts.count <= 1000, Set(prompts.map(\.id)).count == prompts.count else { throw CatalogError.invalidItems }
         for item in prompts {
+            guard item.feedRevision == nil || FeedValidation.revision(item.feedRevision!),
+                  item.feedLanguages == nil || FeedValidation.languages(item.feedLanguages!) else { throw CatalogError.invalidItems }
             guard !item.id.isEmpty, !item.title.isEmpty, !item.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                   !item.source.name.isEmpty, !item.source.license.isEmpty else { throw CatalogError.invalidItems }
             guard !(removedIDs ?? []).contains(item.id) else { throw CatalogError.invalidItems }
             guard (item.contentType == "skill") == (item.skill != nil) else { throw CatalogError.invalidItems }
-            if let creator = item.creator {
-                guard !creator.id.isEmpty, !creator.displayName.isEmpty,
-                      ["x", "github", "web"].contains(creator.platform), creator.profileURL.scheme == "https" else { throw CatalogError.invalidItems }
-                if let avatar = creator.avatarURL {
-                    guard avatar.scheme == "https", avatar.host == "api.prompix.dev", avatar.path.hasPrefix("/media/") else { throw CatalogError.invalidItems }
-                }
-            }
+            try ContentValidation.creator(item.creator)
             if let skill = item.skill {
                 guard skill.format == "agent-skills", skill.entrypoint == "SKILL.md", !skill.name.isEmpty,
                       skill.repository.scheme == "https", skill.installURL.scheme == "https" else { throw CatalogError.invalidItems }
@@ -224,11 +224,7 @@ struct Catalog: Codable {
                           value.prompt.count <= 50_000 else { throw CatalogError.invalidItems }
                 }
             }
-            if let ratio = item.media?.aspectRatio, !(0.1...10).contains(ratio) { throw CatalogError.invalidItems }
-            guard (item.media?.imageURLs?.count ?? 0) <= 8 else { throw CatalogError.invalidItems }
-            if let gallery = item.media?.imageURLs, gallery.isEmpty || gallery.first != item.media?.imageURL { throw CatalogError.invalidItems }
-            let mediaURLs = [item.media?.imageURL, item.media?.videoURL].compactMap { $0 } + (item.media?.imageURLs ?? [])
-            guard mediaURLs.allSatisfy({ $0.scheme == "https" && $0.host == "api.prompix.dev" && $0.path.hasPrefix("/media/") }) else { throw CatalogError.invalidItems }
+            try ContentValidation.media(item.media)
             let urls = [item.toolURL, item.source.url, item.media?.demoURL, item.source.repository].compactMap { $0 }
             guard urls.allSatisfy({ $0.scheme == "https" }) else { throw CatalogError.invalidItems }
         }

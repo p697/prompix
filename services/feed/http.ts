@@ -1,7 +1,7 @@
 import { ZodError } from "zod";
 import { detailResponseByteLimit, feedLocale, feedResponseByteLimit, parseFeedQuery } from "../../packages/schema/feed.ts";
 import { FeedError, type Database } from "./database.ts";
-import { getCreators, getDetail, getFeed, getRemovals, getState } from "./queries.ts";
+import { getBrowse, getCreators, getDetail, getFeed, getRemovals, getState } from "./queries.ts";
 
 export async function serveFeed(request: Request, db: Database, secret: string): Promise<Response> {
   const headers = new Headers({ "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store",
@@ -21,6 +21,11 @@ export async function serveFeed(request: Request, db: Database, secret: string):
     if (url.pathname === "/v3/state" || url.pathname === "/v3/health") {
       if (url.search) throw new FeedError("invalid_request", 400);
       return respond(await getState(db));
+    }
+    if (url.pathname === "/v3/browse") {
+      const keys = [...url.searchParams.keys()];
+      if (keys.length > 1 || keys.some(key => key !== "locale")) throw new FeedError("invalid_request", 400);
+      return respond(await getBrowse(db, feedLocale.parse(url.searchParams.get("locale") ?? "original")));
     }
     if (url.pathname === "/v3/feed") {
       let query: ReturnType<typeof parseFeedQuery>;
