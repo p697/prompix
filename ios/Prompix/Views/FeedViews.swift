@@ -215,6 +215,35 @@ struct OwnedFeedResults: View {
     var body: some View { FeedResults(store: store, query: query, fallback: fallback) }
 }
 
+/// Recommendations fetch one small page from the full catalog. They never drain
+/// the feed or depend on whichever cards discovery happened to load first.
+struct FeedRelatedResults: View {
+    let item: Prompt
+    @State private var store: FeedStore
+    @Environment(Library.self) private var library
+    init(item: Prompt, repository: FeedRepository) {
+        self.item = item; _store = State(initialValue: repository.makeStore())
+    }
+    private var query: FeedQuery {
+        let broad: Set<String> = ["好玩一点", "创作灵感", "日常有用", "文本", "图片", "视频", "网页"]
+        return FeedQuery(kind: item.isSkill ? "skill" : item.kind.rawValue, tag: item.tags.first { !broad.contains($0) })
+    }
+    var body: some View {
+        let cards = Array(store.items.filter { $0.id != item.id && !library.isRemoved(id: $0.id) }.prefix(4))
+        Group {
+            if !cards.isEmpty {
+                Divider()
+                HStack {
+                    Text(String(localized: "相关 Prompt")).font(.headline).accessibilityAddTraits(.isHeader)
+                    Spacer(); Image(systemName: "arrow.down.right").foregroundStyle(Palette.muted).accessibilityHidden(true)
+                }
+                PreviewMasonryGrid(items: cards, preview: ContentPreview.init) { FeedPromptCard(card: $0) }
+                    .accessibilityIdentifier("relatedFeed")
+            }
+        }.task(id: query) { await store.load(query) }.onDisappear { store.cancel() }
+    }
+}
+
 
 /// Keep one stable footer while a page is loading. Binding a task to each new
 /// cursor can repeatedly execute before lazy layout moves the footer offscreen.
