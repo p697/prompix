@@ -37,24 +37,26 @@ struct PromptUseSheet: View {
         NavigationStack {
             Form {
                 Section {
-                    Text(title ?? item.displayTitle).font(Typography.editorial(.title3)).fixedSize(horizontal: false, vertical: true)
-                    if item.isSkill {
-                        Text(command == nil ? String(localized: "在电脑上的编程助手中安装。安装时会询问目标工具；完整文件夹会一并获取。") : String(localized: "复制安装命令到编程助手，或在手机上的 Claude Code 中继续。完整文件夹会一并获取。"))
-                            .font(.subheadline).foregroundStyle(Palette.muted)
-                    } else if PromptDestination.requiresDesktop(for: item) {
-                        Text(String(localized: "此工作流需要电脑上的代码工具。复制或分享内容，在电脑中继续。"))
-                            .font(.subheadline).foregroundStyle(Palette.muted).accessibilityIdentifier("desktopWorkflowGuidance")
-                    } else if prepared?.includesPrompt == true {
-                        Text(String(localized: "内容将填入目标工具，由你确认发送。参考图片和文件需另行添加。"))
-                            .font(.subheadline).foregroundStyle(Palette.muted).accessibilityIdentifier("prefillGuidance")
-                    } else if destination?.supportsPrefill == true && !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                        Text(String(localized: "内容较长，将复制全文；打开工具后粘贴即可。"))
-                            .font(.subheadline).foregroundStyle(Palette.muted).accessibilityIdentifier("prefillFallbackGuidance")
-                    } else {
-                        Text(String(localized: "选择工具，复制后即可粘贴使用。发送前请确认内容，参考图片和文件需在目标工具中添加。"))
-                            .font(.subheadline).foregroundStyle(Palette.muted)
-                    }
-                }.listRowBackground(Palette.surface)
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text(title ?? item.displayTitle).font(Typography.editorial(.title2)).fixedSize(horizontal: false, vertical: true)
+                        if item.isSkill {
+                            Text(command == nil ? String(localized: "在电脑上的编程助手中安装。安装时会询问目标工具；完整文件夹会一并获取。") : String(localized: "复制安装命令到编程助手，或在手机上的 Claude Code 中继续。完整文件夹会一并获取。"))
+                                .font(.subheadline).foregroundStyle(Palette.muted)
+                        } else if PromptDestination.requiresDesktop(for: item) {
+                            Text(String(localized: "此工作流需要电脑上的代码工具。复制或分享内容，在电脑中继续。"))
+                                .font(.subheadline).foregroundStyle(Palette.muted).accessibilityIdentifier("desktopWorkflowGuidance")
+                        } else if prepared?.includesPrompt == true {
+                            Text(String(localized: "内容将填入目标工具，由你确认发送。参考图片和文件需另行添加。"))
+                                .font(.subheadline).foregroundStyle(Palette.muted).accessibilityIdentifier("prefillGuidance")
+                        } else if destination?.supportsPrefill == true && !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            Text(String(localized: "内容较长，将复制全文；打开工具后粘贴即可。"))
+                                .font(.subheadline).foregroundStyle(Palette.muted).accessibilityIdentifier("prefillFallbackGuidance")
+                        } else {
+                            Text(String(localized: "选择工具，复制后即可粘贴使用。发送前请确认内容，参考图片和文件需在目标工具中添加。"))
+                                .font(.subheadline).foregroundStyle(Palette.muted)
+                        }
+                    }.padding(.vertical, 4)
+                }.listRowBackground(Color.clear).listRowSeparator(.hidden)
                 if !item.isSkill {
                     Section {
                         Button {
@@ -190,6 +192,7 @@ struct PromptUseSheet: View {
                 }
             }.sensoryFeedback(.success, trigger: copied)
         }
+        .promptSheet()
         .interactiveDismissDisabled(saveFailed)
         .alert(String(localized: "本次修改尚未保存"), isPresented: $leavePresented) {
             Button(String(localized: "复制并退出")) {

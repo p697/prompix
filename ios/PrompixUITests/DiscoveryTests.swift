@@ -12,7 +12,7 @@ import UIKit
         #endif
         app = XCUIApplication()
         app.launchArguments += ["--offline", "-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN"]
-        app.launch()
+        app.launchPrompix()
     }
     private func dismissUnsavedDraftPopover() throws {
         let window = app.windows.containing(.button, identifier: "copyDraftAndLeave").firstMatch
@@ -48,7 +48,7 @@ import UIKit
         options.iterationCount = 5
         measure(metrics: [XCTApplicationLaunchMetric(waitUntilResponsive: true)], options: options) {
             app.terminate()
-            app.launch()
+            app.launchPrompix()
             XCTAssertTrue(app.buttons["kind-text"].waitForExistence(timeout: 10))
         }
     }
@@ -588,7 +588,7 @@ import UIKit
         add(clipboardExpectation)
         try restore(recoveredBytes)
         app.terminate()
-        app.launch()
+        app.launchPrompix()
         app.buttons["kind-text"].tap()
         app.buttons["prompt-gentle-tarot"].tap()
         try openEditor(fromDetail: true)
@@ -631,7 +631,9 @@ import UIKit
             let viewport = readingPane.exists ? visibleFrame(of: readingPane) : app.frame
             guard !viewport.isNull, viewport.contains(report.frame) else { return false }
             let controls = ["copyPrompt", "usePrompt", "editPromptAction", "detailFavorite", "sharePrompt"].map { app.buttons[$0] }
-            let bars = app.navigationBars.allElementsBoundByIndex + app.toolbars.allElementsBoundByIndex
+            // A native toolbar accessibility container can span the whole window.
+            // Its button frames describe the actual obstructing controls.
+            let bars = app.navigationBars.allElementsBoundByIndex + app.toolbars.buttons.allElementsBoundByIndex
             return !(controls + bars).contains { obstacle in
                 obstacle.exists && !obstacle.frame.isEmpty && obstacle.frame.intersects(report.frame)
             }
@@ -736,7 +738,7 @@ import UIKit
         selectTab("收藏")
         XCTAssertTrue(app.buttons["prompt-gentle-tarot"].waitForExistence(timeout: 5))
         capture("04-favorites")
-        app.terminate(); app.launch()
+        app.terminate(); app.launchPrompix()
         selectTab("收藏")
         XCTAssertTrue(app.buttons["prompt-gentle-tarot"].waitForExistence(timeout: 5))
         selectTab("发现")
@@ -810,7 +812,7 @@ import UIKit
         editor.tap()
         editor.typeText(" My personal intention.")
         app.buttons["完成"].tap()
-        app.terminate(); app.launch()
+        app.terminate(); app.launchPrompix()
         app.buttons["kind-text"].tap()
         app.buttons["prompt-gentle-tarot"].tap()
         app.buttons["编辑后使用"].tap()
@@ -878,7 +880,7 @@ import UIKit
     func testEnglishInterfacePreservesPromptContent() {
         app.terminate()
         app.launchArguments = ["--offline", "-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
-        app.launch()
+        app.launchPrompix()
         XCTAssertTrue(app.tabBars.buttons["Discover"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.tabBars.buttons["Collections"].exists)
         XCTAssertTrue(app.tabBars.buttons["Saved"].exists)
@@ -899,7 +901,7 @@ import UIKit
     func testLiveImageGallery() throws {
         app.terminate()
         app.launchArguments.removeAll { $0 == "--offline" }
-        app.launch()
+        app.launchPrompix()
         app.buttons["searchButton"].tap()
         let search = app.searchFields.firstMatch
         XCTAssertTrue(search.waitForExistence(timeout: 3))
@@ -930,7 +932,7 @@ import UIKit
     func testLiveCommunityEditionAndRemotePreviews() throws {
         app.terminate()
         app.launchArguments.removeAll { $0 == "--offline" }
-        app.launch()
+        app.launchPrompix()
         let imageCard = app.buttons.containing(NSPredicate(format: "identifier BEGINSWITH %@", "prompt-youmind-nano-")).firstMatch
         XCTAssertTrue(imageCard.waitForExistence(timeout: 35), "A published community image must be loaded")
         capture("10-live-discovery")
@@ -1000,7 +1002,7 @@ import UIKit
     func testLiveFiveScreenBrowsingPreservesReturnPosition() throws {
         app.terminate()
         app.launchArguments.removeAll { $0 == "--offline" }
-        app.launch()
+        app.launchPrompix()
         let communityCard = app.buttons.containing(NSPredicate(format: "identifier BEGINSWITH %@", "prompt-youmind-nano-")).firstMatch
         XCTAssertTrue(communityCard.waitForExistence(timeout: 35), "The published community catalog must be loaded before browsing")
         for page in 1...5 {
@@ -1025,7 +1027,7 @@ import UIKit
     func testExpandedLibraryBrowsingAndSearch() throws {
         app.terminate()
         app.launchArguments.removeAll { $0 == "--offline" }
-        app.launch()
+        app.launchPrompix()
         let community = app.buttons.containing(NSPredicate(format: "identifier BEGINSWITH %@", "prompt-youmind-")).firstMatch
         XCTAssertTrue(community.waitForExistence(timeout: 35))
         XCTAssertFalse(app.staticTexts["DAILY FINDS"].exists)
@@ -1093,7 +1095,7 @@ import UIKit
         }
         app.terminate()
         app.launchArguments.removeAll { $0 == "--offline" }
-        app.launch()
+        app.launchPrompix()
         app.buttons["searchButton"].tap()
         let search = app.searchFields.firstMatch
         XCTAssertTrue(search.waitForExistence(timeout: 5))

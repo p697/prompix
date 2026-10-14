@@ -1,12 +1,19 @@
 import SwiftUI
 
 struct RootView: View {
+    @State private var showsOnboarding = !UserDefaults.standard.bool(forKey: "hasCompletedOnboarding")
     var body: some View {
         TabView {
             DiscoverView().tabItem { Label { Text(String(localized: "发现")) } icon: { TabSymbol.image("rectangle.grid.1x2") } }
             CollectionsView().tabItem { Label { Text(String(localized: "专题")) } icon: { TabSymbol.image("rectangle.stack") } }
             FavoritesView().tabItem { Label { Text(String(localized: "收藏")) } icon: { TabSymbol.image("bookmark") } }
         }.tint(Palette.accent)
+            .fullScreenCover(isPresented: $showsOnboarding) {
+                PrompixOnboarding {
+                    UserDefaults.standard.set(true, forKey: "hasCompletedOnboarding")
+                    showsOnboarding = false
+                }.interactiveDismissDisabled()
+            }
     }
 }
 
@@ -32,13 +39,7 @@ struct DiscoverView: View {
                     LazyVStack(alignment: .leading, spacing: 14, pinnedViews: [.sectionHeaders]) {
                         Section {
                             if library.isRefreshing || library.syncMessage != nil { CatalogUpdateStatus().padding(.horizontal, 20) }
-                            if !isFiltered {
-                                CreatorRail()
-                            }
-                            ViewThatFits(in: .horizontal) {
-                                HStack(alignment: .firstTextBaseline) { resultHeading; Spacer(); resultActions }
-                                VStack(alignment: .leading, spacing: 4) { resultHeading; resultActions }
-                            }.padding(.horizontal, 20)
+                            discoveryContext
                             if skillsOnly {
                                 Text(String(localized: "可带到编程助手中使用的技能，包含完整说明与源文件。"))
                                     .font(.subheadline).foregroundStyle(Palette.muted).padding(.horizontal, 20)
@@ -60,15 +61,15 @@ struct DiscoverView: View {
                                     ContentUnavailableView(String(localized: "暂无匹配内容"), systemImage: "sparkle", description: Text(String(localized: "试试其他分类，或清除筛选条件。")))
                                 }
                             } else if !isFiltered {
-                                PromptGrid(items: Array(items.prefix(6))).padding(.horizontal, 16)
-                                CollectionRail().padding(.vertical, 8)
-                                PromptGrid(items: Array(items.dropFirst(6))).padding(.horizontal, 16)
+                                PromptGrid(items: Array(items.prefix(8))).padding(.horizontal, 12)
+                                CollectionRail().padding(.vertical, 14)
+                                PromptGrid(items: Array(items.dropFirst(8))).padding(.horizontal, 12)
                             } else {
-                                PromptGrid(items: items).padding(.horizontal, 16)
+                                PromptGrid(items: items).padding(.horizontal, 12)
                             }
                         } header: {
                             KindPicker(selection: $kind, skillsOnly: $skillsOnly)
-                                .padding(.vertical, 4).background(Palette.paper)
+                                .background(Palette.paper)
                                 .id("discovery-top")
                         }
                     }.padding(.bottom, 24)
@@ -86,8 +87,8 @@ struct DiscoverView: View {
                 ToolbarItem(placement: .topBarTrailing) { Button(String(localized: "搜索"), systemImage: "magnifyingglass") { searchPresented = true }.accessibilityIdentifier("searchButton") }
                 ToolbarItem(placement: .topBarTrailing) { Button(String(localized: "设置"), systemImage: "gearshape") { settingsPresented = true } }
             }
-            .sheet(isPresented: $searchPresented) { SearchView() }
-            .sheet(isPresented: $settingsPresented) { SettingsView() }
+            .sheet(isPresented: $searchPresented) { SearchView().promptSheet() }
+            .sheet(isPresented: $settingsPresented) { SettingsView().promptSheet() }
         }
     }
     @ToolbarContentBuilder private var brandTitle: some ToolbarContent {
@@ -98,11 +99,40 @@ struct DiscoverView: View {
         }
     }
     private var wordmark: some View {
-        Text("Prompix").font(Typography.editorial(.title2)).foregroundStyle(Palette.ink)
+        Text("Prompix").font(.title2.weight(.semibold)).tracking(-0.8).foregroundStyle(Palette.ink)
             .fixedSize().accessibilityAddTraits(.isHeader)
             .accessibilityIdentifier("discoveryHeading")
             .accessibilityAction(named: Text(String(localized: "搜索"))) { searchPresented = true }
             .accessibilityAction(named: Text(String(localized: "设置"))) { settingsPresented = true }
+    }
+    @ViewBuilder private var discoveryContext: some View {
+        let creators = Array(CreatorDirectory.entries(in: library.prompts).prefix(3))
+        if !isFiltered && !typeSize.isAccessibilitySize && !creators.isEmpty {
+            HStack(spacing: 2) {
+                NavigationLink { CreatorsView() } label: {
+                    HStack(spacing: 4) {
+                        Text(String(localized: "创作者")).font(.footnote)
+                        Image(systemName: "chevron.right").font(.system(size: 9, weight: .medium))
+                    }.frame(minHeight: 44).padding(.trailing, 4).contentShape(Rectangle())
+                }.buttonStyle(.plain).accessibilityIdentifier("allCreators")
+                ForEach(creators) { entry in
+                    NavigationLink { CreatorDetail(creator: entry.creator) } label: {
+                        CreatorAvatar(creator: entry.creator, size: 28).frame(width: 44, height: 44).contentShape(Rectangle())
+                    }.buttonStyle(.plain).accessibilityLabel(entry.creator.displayName)
+                        .accessibilityIdentifier("creator-\(entry.id)")
+                }
+                Spacer(minLength: 4)
+                Text(items.count.formatted()).font(.caption.monospacedDigit()).foregroundStyle(Palette.muted)
+                    .accessibilityLabel(String(localized: "\(items.count) 条内容"))
+                filterPicker.labelStyle(.iconOnly).frame(minWidth: 44)
+            }.foregroundStyle(Palette.muted).padding(.horizontal, 16)
+        } else {
+            if !isFiltered { CreatorRail() }
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .firstTextBaseline) { resultHeading; Spacer(); resultActions }
+                VStack(alignment: .leading, spacing: 4) { resultHeading; resultActions }
+            }.padding(.horizontal, 20)
+        }
     }
     private var resultHeading: some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
@@ -255,6 +285,7 @@ struct PromptCard: View {
     @State private var copiedFeedback = false
     @Namespace private var transition
     @Environment(\.dynamicTypeSize) private var typeSize
+    @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             NavigationLink { PromptDetail(item: item, origin: origin).promptTransitionDestination(id: item.id, in: transition) } label: {
@@ -264,13 +295,13 @@ struct PromptCard: View {
                             Text(item.displayTitle).font(.headline).foregroundStyle(.primary)
                             Text(item.displaySummary).font(.subheadline).foregroundStyle(Palette.muted)
                         }.fixedSize(horizontal: false, vertical: true).frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(20).background(Palette.soft, in: RoundedRectangle(cornerRadius: 16))
+                            .padding(20).background(Palette.soft, in: RoundedRectangle(cornerRadius: 6))
                     } else {
-                        Artwork(item: item).aspectRatio(ratio, contentMode: .fit).clipShape(RoundedRectangle(cornerRadius: 12))
+                        Artwork(item: item).aspectRatio(ratio, contentMode: .fit).clipShape(RoundedRectangle(cornerRadius: 6))
                     }
                     if !titleIsInArtwork {
-                        Text(item.displayTitle).font(.subheadline).foregroundStyle(Palette.ink)
-                            .lineSpacing(2).lineLimit(typeSize.isAccessibilitySize ? nil : 2).multilineTextAlignment(.leading).padding(.horizontal, 2)
+                        Text(item.displayTitle).font(.footnote).foregroundStyle(Palette.ink)
+                            .lineLimit(typeSize.isAccessibilitySize ? nil : 2).multilineTextAlignment(.leading).padding(.horizontal, 2)
                     }
                 }.contentShape(Rectangle()).promptTransitionSource(id: item.id, in: transition)
             }.buttonStyle(.plain).accessibilityLabel(item.displayTitle).accessibilityIdentifier("prompt-\(item.id)")
@@ -284,7 +315,8 @@ struct PromptCard: View {
                     } label: { Label(library.isSaved(item) ? String(localized: "取消收藏") : String(localized: "收藏 Prompt"), systemImage: library.isSaved(item) ? "bookmark.slash" : "bookmark") }
                 }
                 .sensoryFeedback(.success, trigger: copiedFeedback)
-            HStack(spacing: 4) {
+            if typeSize.isAccessibilitySize || voiceOverEnabled {
+                HStack(spacing: 4) {
                 if let creator = item.creator {
                     NavigationLink { CreatorDetail(creator: creator) } label: {
                         HStack(spacing: 5) {
@@ -298,17 +330,25 @@ struct PromptCard: View {
                     Image(systemName: item.displaySymbol).font(.system(size: 10)).accessibilityHidden(true)
                     Text(item.displayKind).font(.footnote)
                 }
-                Spacer(minLength: 0)
-                Button {
-                    if library.toggle(item) { savedFeedback.toggle() }
-                } label: {
-                    Image(systemName: library.isSaved(item) ? "bookmark.fill" : "bookmark")
-                        .font(.system(size: 13)).foregroundStyle(library.isSaved(item) ? Palette.accent : Palette.muted)
-                        .frame(width: 44, height: 44).contentShape(Rectangle())
-                }.buttonStyle(.plain).accessibilityLabel(library.isSaved(item) ? String(localized: "取消收藏：\(item.displayTitle)") : String(localized: "收藏：\(item.displayTitle)"))
-                    .sensoryFeedback(.selection, trigger: savedFeedback)
-            }.foregroundStyle(Palette.muted).padding(.leading, 2)
+                    Spacer(minLength: 0)
+                    saveButton
+                }.foregroundStyle(Palette.muted).padding(.leading, 2)
+            }
         }
+        .overlay(alignment: .topTrailing) { if !typeSize.isAccessibilitySize && !voiceOverEnabled { saveButton.padding(2) } }
+    }
+    private var saveButton: some View {
+        Button {
+            if library.toggle(item) { savedFeedback.toggle() }
+        } label: {
+            Image(systemName: library.isSaved(item) ? "bookmark.fill" : "bookmark")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(library.isSaved(item) ? Palette.accent : Palette.ink)
+                .frame(width: 28, height: 28).background(.regularMaterial, in: Circle())
+                .frame(width: 44, height: 44).contentShape(Rectangle())
+        }.buttonStyle(.plain)
+            .accessibilityLabel(library.isSaved(item) ? String(localized: "取消收藏：\(item.displayTitle)") : String(localized: "收藏：\(item.displayTitle)"))
+            .sensoryFeedback(.selection, trigger: savedFeedback)
     }
     private var titleIsInArtwork: Bool { item.isSkill || item.kind == .text }
     private var ratio: CGFloat {

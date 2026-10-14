@@ -337,11 +337,8 @@ struct CreatorDetail: View {
                             .font(.subheadline).frame(minHeight: 28)
                     }.buttonStyle(.bordered).controlSize(.regular)
                         .accessibilityIdentifier("creatorExternalProfile")
-                }.padding(20)
+                }.padding(.horizontal, 20).padding(.vertical, 12)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Palette.surface, in: RoundedRectangle(cornerRadius: 16))
-                    .overlay(RoundedRectangle(cornerRadius: 16).stroke(Palette.line, lineWidth: 0.5).allowsHitTesting(false))
-                    .padding(.horizontal, 16)
                 VStack(alignment: .leading, spacing: 14) {
                     ViewThatFits(in: .horizontal) {
                         HStack { contentHeading; Spacer(); filterPicker }

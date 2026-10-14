@@ -381,8 +381,8 @@ struct PromptDetail: View {
         }
     }
     private var hero: some View {
-        Artwork(item: item).aspectRatio(item.media?.aspectRatio.map { max(0.9, min(1.8, $0)) } ?? (item.kind == .image ? 0.95 : 1.15), contentMode: .fit)
-            .clipShape(RoundedRectangle(cornerRadius: 18)).padding(.horizontal, 20).padding(.top, 8)
+        Artwork(item: item).aspectRatio(item.media?.aspectRatio.map { max(0.65, min(1.8, $0)) } ?? (item.kind == .image ? 0.95 : 1.15), contentMode: .fit)
+            .clipShape(RoundedRectangle(cornerRadius: 6)).padding(.horizontal, 12).padding(.top, 8)
     }
 
 }
@@ -527,6 +527,7 @@ struct PromptEditor: View {
                     Button(String(localized: "继续编辑"), role: .cancel) {}
                 }
         }
+        .promptSheet()
         .interactiveDismissDisabled(!saved || text != library.draft(for: item, language: language))
     }
     private var editorHeader: some View {

@@ -40,7 +40,7 @@ import XCTest
         }
         if voiceOver.isEnabled { try voiceOver.disable() }
         app.launchArguments = ["--cached-only", "-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh-Hans"]
-        app.launch()
+        app.launchPrompix()
         let filter = app.buttons["kind-text"]
         XCTAssertTrue(filter.waitForExistence(timeout: 10))
         filter.tap()
@@ -121,7 +121,7 @@ import XCTest
         }
 
         app.launchArguments = ["--cached-only", "-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh-Hans"]
-        app.launch()
+        app.launchPrompix()
         XCTAssertTrue(app.buttons["searchButton"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.buttons["allCreators"].waitForExistence(timeout: 5))
 

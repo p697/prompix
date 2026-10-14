@@ -10,7 +10,7 @@ enum Palette {
         })
     }
 
-    static let paper = adaptive(0xF5F4EE, 0x1E221C)
+    static let paper = adaptive(0xFCFCF9, 0x1A1E18)
     static let surface = adaptive(0xFFFFFF, 0x292E25)
     static let soft = adaptive(0xECEEE4, 0x30362B)
     static let ink = adaptive(0x252A22, 0xF1F2E9)
@@ -26,11 +26,19 @@ enum Palette {
 
 enum Typography {
     static func editorial(_ style: Font.TextStyle) -> Font {
-        .system(style, design: .serif, weight: .regular)
+        .system(style, design: .default, weight: .regular)
     }
 }
 
 extension View {
+    // Reading and editing sheets use the system's full-height presentation.
+    // Native corners, dismissal gestures and keyboard avoidance stay in charge.
+    func promptSheet() -> some View {
+        presentationDetents([.large])
+            .presentationDragIndicator(.visible)
+            .presentationBackground(Palette.paper)
+    }
+
     func paperScreen() -> some View {
         background(Palette.paper)
             .foregroundStyle(Palette.ink)
@@ -48,14 +56,14 @@ struct KindPicker: View {
     }
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 4) {
+            HStack(spacing: 18) {
                 choice(nil, title: String(localized: "全部"))
                 ForEach(PromptKind.allCases) { choice($0, title: $0.title) }
                 Button { selection = nil; skillsOnly = true } label: {
                     choiceLabel("Skills", selected: skillsOnly)
                 }.buttonStyle(.plain).accessibilityAddTraits(skillsOnly ? .isSelected : [])
                     .accessibilityIdentifier("kind-skill")
-            }.padding(.horizontal, 20)
+            }.padding(.horizontal, 16)
         }
         .accessibilityIdentifier("kindPicker")
     }
@@ -68,11 +76,12 @@ struct KindPicker: View {
             .accessibilityIdentifier("kind-\(kind?.rawValue ?? "all")")
     }
     private func choiceLabel(_ title: String, selected: Bool) -> some View {
-        Text(title).font(.subheadline.weight(selected ? .medium : .regular))
-            .foregroundStyle(selected ? Palette.highlightInk : Palette.muted)
-            .padding(.horizontal, 13).padding(.vertical, 8)
-            .background(selected ? Palette.highlight : .clear, in: Capsule())
-            .frame(minHeight: 44).contentShape(Rectangle())
+        Text(title).font(.subheadline.weight(selected ? .semibold : .regular))
+            .foregroundStyle(selected ? Palette.accent : Palette.muted)
+            .padding(.horizontal, 2).frame(minWidth: 44, minHeight: 48)
+            .overlay(alignment: .bottom) {
+                Capsule().fill(selected ? Palette.accent : .clear).frame(height: 2)
+            }.contentShape(Rectangle())
     }
 }
 
@@ -87,8 +96,8 @@ struct PrimaryActionLabel: View {
             .font(.subheadline.weight(.semibold)).multilineTextAlignment(.center)
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, minHeight: 24).padding(.horizontal, 14).padding(.vertical, 13)
-            .foregroundStyle(Palette.highlightInk)
-            .background(Palette.highlight, in: Capsule())
+            .foregroundStyle(Palette.paper)
+            .background(Palette.accent, in: Capsule())
             .opacity(isEnabled ? 1 : 0.45)
             .accessibilityLabel(title)
     }

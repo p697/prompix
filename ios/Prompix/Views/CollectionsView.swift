@@ -45,10 +45,9 @@ struct CollectionsView: View {
 struct CollectionsDirectory: View {
     @Environment(Library.self) private var library
     @Environment(\.dynamicTypeSize) private var typeSize
-    @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
     private var columns: [GridItem] {
-        Array(repeating: GridItem(.flexible(), spacing: 24), count: sizeClass == .regular && !typeSize.isAccessibilitySize && !voiceOverEnabled ? 2 : 1)
+        Array(repeating: GridItem(.flexible(), spacing: 16), count: typeSize.isAccessibilitySize || voiceOverEnabled ? 1 : 2)
     }
     var body: some View {
         ScrollView {
@@ -56,35 +55,31 @@ struct CollectionsDirectory: View {
                 ForEach(Collection.all.filter { !($0.items(in: library)).isEmpty }) { collection in
                     let items = collection.items(in: library)
                     NavigationLink { CollectionDetail(collection: collection) } label: {
-                        VStack(alignment: .leading, spacing: 0) {
+                        VStack(alignment: .leading, spacing: 12) {
                             HStack(spacing: 4) {
                                 ForEach(collection.covers(from: items).prefix(2)) { item in
                                     Artwork(item: item, compact: true).frame(maxWidth: .infinity).clipped()
                                 }
-                            }.frame(height: typeSize.isAccessibilitySize ? 130 : 184)
-                                .background(Palette.soft).accessibilityHidden(true)
-                            VStack(alignment: .leading, spacing: 10) {
+                            }.aspectRatio(1, contentMode: .fit)
+                                .background(Palette.soft).clipShape(RoundedRectangle(cornerRadius: 16)).accessibilityHidden(true)
+                            VStack(alignment: .leading, spacing: 5) {
                                 HStack(alignment: .firstTextBaseline, spacing: 12) {
-                                    Text(collection.title).font(Typography.editorial(.title2))
+                                    Text(collection.title).font(.subheadline.weight(.medium))
                                         .fixedSize(horizontal: false, vertical: true)
-                                    Spacer(minLength: 0)
-                                    Image(systemName: "chevron.right").font(.caption)
-                                        .foregroundStyle(Palette.muted).accessibilityHidden(true)
                                 }
-                                Text(collection.subtitle).font(.subheadline).foregroundStyle(Palette.muted)
-                                    .fixedSize(horizontal: false, vertical: true)
+                                if typeSize.isAccessibilitySize {
+                                    Text(collection.subtitle).font(.subheadline).foregroundStyle(Palette.muted)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
                                 Text(String(localized: "\(items.count) 个 Prompt")).font(.caption).foregroundStyle(Palette.muted)
-                            }.padding(18)
+                            }.padding(.horizontal, 2)
                         }.foregroundStyle(Palette.ink).multilineTextAlignment(.leading)
-                            .background(Palette.surface, in: RoundedRectangle(cornerRadius: 16))
-                            .clipShape(RoundedRectangle(cornerRadius: 16))
-                            .overlay(RoundedRectangle(cornerRadius: 16).stroke(Palette.line, lineWidth: 0.5).allowsHitTesting(false))
-                            .contentShape(RoundedRectangle(cornerRadius: 16))
+                            .contentShape(Rectangle())
                     }.buttonStyle(.plain)
                         .accessibilityLabel("\(collection.title) \(collection.subtitle) \(String(localized: "\(items.count) 个 Prompt"))")
                         .accessibilityIdentifier("collection-\(collection.id)")
                 }
-            }.padding(.horizontal, 20).padding(.top, 12).padding(.bottom, 28)
+            }.padding(.horizontal, 16).padding(.top, 12).padding(.bottom, 28)
         }.background(Palette.paper).navigationTitle(String(localized: "专题"))
     }
 }
@@ -125,20 +120,20 @@ struct CollectionRail: View {
                         ForEach(collections) { collection in
                             let items = collection.items(in: library)
                             NavigationLink { CollectionDetail(collection: collection) } label: {
-                                HStack(spacing: 12) {
-                                    if let cover = collection.covers(from: items).first {
-                                        Artwork(item: cover, compact: true).frame(width: 42, height: 48)
-                                            .clipped().clipShape(RoundedRectangle(cornerRadius: 8)).accessibilityHidden(true)
-                                    }
+                                VStack(alignment: .leading, spacing: 10) {
+                                    HStack(spacing: 2) {
+                                        ForEach(collection.covers(from: items).prefix(2)) { cover in
+                                            Artwork(item: cover, compact: true).frame(maxWidth: .infinity).clipped()
+                                        }
+                                    }.frame(height: 140).clipShape(RoundedRectangle(cornerRadius: 14)).accessibilityHidden(true)
                                     VStack(alignment: .leading, spacing: 5) {
-                                        Text(collection.title).font(.subheadline).lineLimit(2)
+                                        Text(collection.title).font(.subheadline.weight(.medium)).lineLimit(2)
                                             .fixedSize(horizontal: false, vertical: true)
                                         Text(String(localized: "\(items.count) 条内容")).font(.caption).foregroundStyle(Palette.muted)
-                                    }.frame(maxWidth: .infinity, alignment: .leading)
-                                }.frame(width: 180).padding(.horizontal, 10).padding(.vertical, 8)
+                                    }.frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 2)
+                                }.frame(width: 246)
                                     .foregroundStyle(Palette.ink).multilineTextAlignment(.leading)
-                                    .background(Palette.soft, in: RoundedRectangle(cornerRadius: 14))
-                                    .contentShape(RoundedRectangle(cornerRadius: 14))
+                                    .contentShape(Rectangle())
                             }.buttonStyle(.plain).accessibilityIdentifier("home-collection-\(collection.id)")
                         }
                     }.padding(.horizontal, 20)
@@ -167,6 +162,7 @@ struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(Library.self) private var library
     @State private var cleared = false
+    @State private var showOnboarding = false
     var body: some View {
         NavigationStack {
             List {
@@ -177,6 +173,8 @@ struct SettingsView: View {
                     LabeledContent(String(localized: "版本")) { Text("\(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—") (\(Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "—"))").foregroundStyle(Palette.muted) }
                     LabeledContent(String(localized: "内容数量")) { Text(String(library.prompts.count)).foregroundStyle(Palette.muted) }
                     Link(String(localized: "App 语言与系统设置"), destination: URL(string: UIApplication.openSettingsURLString)!)
+                    Button(String(localized: "onboarding.replay", table: "Onboarding")) { showOnboarding = true }
+                        .accessibilityIdentifier("replayOnboarding")
                     Text(String(localized: "内容优先显示 App 语言的译文，可在详情中切回原文。作者名、代码和模型参数保持不变。")).font(.footnote).foregroundStyle(Palette.muted)
                     if let updated = library.updatedAt { LabeledContent(String(localized: "最近更新")) { Text(updated, style: .date).foregroundStyle(Palette.muted) } }
                     Button(library.isRefreshing ? String(localized: "正在更新…") : String(localized: "检查内容更新")) { Task { await library.refresh(force: true) } }.disabled(library.isRefreshing)
@@ -204,6 +202,6 @@ struct SettingsView: View {
             }.scrollContentBackground(.hidden).background(Palette.paper)
                 .navigationTitle(String(localized: "关于与设置")).navigationBarTitleDisplayMode(.inline)
                 .toolbar { ToolbarItem(placement: .confirmationAction) { Button(String(localized: "完成")) { dismiss() } } }
-        }
+        }.fullScreenCover(isPresented: $showOnboarding) { PrompixOnboarding { showOnboarding = false } }
     }
 }
