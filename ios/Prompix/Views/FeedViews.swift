@@ -230,7 +230,8 @@ struct FeedRelatedResults: View {
     }
     var body: some View {
         let cards = Array(store.items.filter { $0.id != item.id && !library.isRemoved(id: $0.id) }.prefix(4))
-        Group {
+        VStack(alignment: .leading, spacing: 24) {
+            if store.query == nil || store.isLoading { ProgressView().frame(maxWidth: .infinity) }
             if !cards.isEmpty {
                 Divider()
                 HStack {
