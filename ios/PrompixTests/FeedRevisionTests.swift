@@ -2,6 +2,22 @@ import XCTest
 @testable import Prompix
 
 @MainActor final class FeedRevisionTests: XCTestCase {
+    func testSynchronousDetailReuseRequiresMatchingRevisionAndDownloadedLocale() async throws {
+        let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let service = RevisionTestService(), library = Library(directory: directory, feedService: service)
+        let repository = try XCTUnwrap(library.feed), card = FeedFixture.card()
+        XCTAssertNil(repository.cachedDetail(for: card, locale: "en"))
+        _ = try await repository.detail(for: card, locale: "en")
+        XCTAssertNotNil(repository.cachedDetail(for: card, locale: "en"))
+        XCTAssertNil(repository.cachedDetail(for: card, locale: "ja"), "A different language must still download its body")
+        _ = try await repository.detail(for: card, locale: "en")
+        let requests = await service.requests
+        XCTAssertEqual(requests.count, 1)
+        _ = try await repository.loadDetail(id: card.id, revision: String(repeating: "b", count: 64), locale: "en")
+        XCTAssertNil(repository.cachedDetail(for: card, locale: "en"), "A new revision cannot replace an old card's body")
+    }
+
     func testLanguageDownloadsStayPinnedAcrossTranslationOnlyReleasesAndPersistFavorites() async throws {
         let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }

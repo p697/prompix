@@ -83,6 +83,7 @@ import XCTest
         catch { }
         await server.setUnavailable(false); await server.setRemoval(true)
         await library.refresh(force: true)
+        XCTAssertNil(repository.cachedDetail(for: FeedFixture.card(), locale: "original"))
         do { _ = try await repository.detail(for: FeedFixture.card(), locale: "original"); XCTFail("Removed cached detail") }
         catch let error as FeedError { XCTAssertEqual(error, .removed) }
     }

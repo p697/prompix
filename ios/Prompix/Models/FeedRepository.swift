@@ -52,11 +52,24 @@ struct FeedCheckpoint: Codable {
         try Task.checkCancellation()
         self.state = state
     }
+    /// Only a complete matching revision/locale can skip the progressive state.
+    func cachedDetail(for card: FeedCard, locale: String = ContentLanguage.preferred) -> Prompt? {
+        cachedDetail(id: card.id, revision: card.revision, locale: locale)
+    }
+    private func cachedDetail(id: String, revision: String?, locale: String) -> Prompt? {
+        guard !removedIDs.contains(id), let revision, let value = details[id], value.revision == revision,
+              locale == "original" || !value.availableLanguages.contains(locale) || value.item.localization?.translations[locale] != nil else { return nil }
+        return value.item
+    }
     func detail(for card: FeedCard, locale: String = ContentLanguage.preferred) async throws -> Prompt {
         try await loadDetail(id: card.id, revision: card.revision, locale: locale).item
     }
     func loadDetail(id: String, revision: String?, locale: String) async throws -> FeedDetail {
         guard !removedIDs.contains(id) else { throw FeedError.removed }
+        if let item = cachedDetail(id: id, revision: revision, locale: locale), let revision {
+            try Task.checkCancellation()
+            return FeedDetail(schemaVersion: 3, revision: revision, item: item, availableLanguages: item.feedLanguages ?? [])
+        }
         if let revision, let cached = try? await cache.detail(id: id, revision: revision, locale: locale) {
             try Task.checkCancellation()
             guard !removedIDs.contains(id) else { throw FeedError.removed }

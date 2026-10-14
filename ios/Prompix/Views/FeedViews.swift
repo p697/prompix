@@ -149,26 +149,22 @@ struct FeedReadingPresentation: View {
     @State private var failure: (any Error)?
     @State private var retryAt: Date?
     @State private var retry = 0
+    @State private var position = DetailReadingPosition()
+    private var resolvedItem: Prompt? { item ?? library.feed?.cachedDetail(for: card) }
     private var removed: Bool { failure as? FeedError == .removed || library.isRemoved(id: card.id) }
     var body: some View {
         NavigationStack {
             Group {
-                if let item { PromptDetail(item: item, origin: .catalog) }
-                else if failure != nil || removed {
-                    ContentUnavailableView {
-                        Label(removed ? String(localized: "内容已被移除") : String(localized: "内容暂时无法加载"), systemImage: "doc.text.magnifyingglass")
-                    } description: {
-                        if !removed { Text(String(localized: "已下载内容仍可浏览，轻点重试。")) }
-                    } actions: {
-                        if !removed { FeedRetryButton(retryAt: retryAt) { retry += 1 } }
-                    }.accessibilityIdentifier("feedDetailFailure")
-                } else {
-                    LazyVStack(spacing: 20) {
-                        Text(card.title).font(.title2).multilineTextAlignment(.center)
-                        ProgressView(String(localized: "正在加载内容…"))
-                    }.padding(24).accessibilityIdentifier("feedDetailLoading")
+                if removed {
+                    ContentUnavailableView(String(localized: "内容已被移除"), systemImage: "doc.text.magnifyingglass")
+                        .accessibilityIdentifier("feedDetailFailure")
+                } else if let item = resolvedItem { PromptDetail(item: item, origin: .catalog, readingPosition: position) }
+                else {
+                    PendingPromptDetail(card: card, failure: failure, retryAt: retryAt, position: position) { retry += 1 }
                 }
             }.paperScreen()
+                .toolbarBackground(.hidden, for: .navigationBar)
+                .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .topBarLeading) {
                         Button { dismiss() } label: { Image(systemName: "chevron.left").frame(minWidth: 44, minHeight: 44) }

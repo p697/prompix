@@ -10,9 +10,10 @@ actor SimulatorFeedService: FeedServing {
     private let directory: URL
     private let offline: Bool
     private let removed: Bool
+    private let progressive: Bool
     private var failed = Set<String>()
-    init(directory: URL, offline: Bool, removed: Bool) {
-        self.directory = directory; self.offline = offline; self.removed = removed
+    init(directory: URL, offline: Bool, removed: Bool, progressive: Bool = false) {
+        self.directory = directory; self.offline = offline; self.removed = removed; self.progressive = progressive
     }
     private func record(_ operation: String, query: String = "", cursor: String? = nil) throws {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -35,13 +36,13 @@ actor SimulatorFeedService: FeedServing {
                tags: ["好玩一点", "肖像", "写作"], model: "Model \(index % 4)", toolURL: nil,
                artwork: "text-editorial", previewLabel: "Synthetic preview",
                source: .init(name: "Prompix", url: nil, license: "Original", method: "Acceptance fixture"),
-               media: nil, creator: creator(index % 75))
+               media: progressive && index % 4 != 0 ? .init(image: "lake", video: nil, demoURL: nil, aspectRatio: 0.95) : nil, creator: creator(index % 75))
     }
     private func card(_ index: Int) -> FeedCard {
         let item = prompt(index)
         return FeedCard(id: item.id, revision: Self.revision, kind: item.kind, contentType: "prompt",
             title: item.title, summary: item.summary, tags: item.tags, model: item.model, artwork: item.artwork,
-            previewLabel: item.previewLabel, creator: item.creator, media: nil, cover: nil, language: "original", availableLanguages: ["en", "ja"])
+            previewLabel: item.previewLabel, creator: item.creator, media: item.media, cover: nil, language: "original", availableLanguages: ["en", "ja"])
     }
     func page(query: FeedQuery, cursor: String?, release: String?) async throws -> FeedPage {
         try record("page", query: query.q, cursor: cursor)
@@ -71,6 +72,16 @@ actor SimulatorFeedService: FeedServing {
         try record("detail", query: id + ":" + locale)
         guard let index = Int(id.split(separator: "-").last ?? ""), (0..<Self.count).contains(index) else { throw FeedError.notFound }
         if removed && index == 0 { throw FeedError.removed }
+        if progressive {
+            // Tests control completion after inspecting the genuine pending UI.
+            let deadline = Date().addingTimeInterval(60)
+            while !FileManager.default.fileExists(atPath: directory.appending(path: "release-detail").path) {
+                try Task.checkCancellation()
+                guard Date() < deadline else { throw FeedError.unavailable(0) }
+                try await Task.sleep(for: .milliseconds(100))
+            }
+            if FileManager.default.fileExists(atPath: directory.appending(path: "fail-detail").path) { throw FeedError.unavailable(0) }
+        }
         var item = prompt(index)
         item.localization = .init(sourceLanguage: "en", sourceFingerprint: LanguagePackCatalog.sourceFingerprint(item),
             translations: ["en", "ja"].contains(locale) ? [locale: .init(title: item.title, summary: item.summary,
