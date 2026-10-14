@@ -71,3 +71,8 @@ xcodebuild test -project ios/Prompix.xcodeproj -scheme Prompix \
 回归测试覆盖竖图/横图/方图混合、追加内容稳定、四列不等宽和窄窗宽度。真实648条缓存目录中的 Heather Green 五条内容已在 iPhone Air / iOS 27.0 模拟器中检查；截图及结果位于 SSD `Evidence/masonry-balance-20261014/`。本轮只修改显示分配，不改变内容数量或后端排序。手机仍保留0.6.0（23）。
 
 初次补验发现 Artwork 对无障碍隐藏，因此 progressIndicators 查询不能证明图片下载完成；该断言已移除。后续以等待后的卡片 frame 对比与截图人工检查分开验证，不把几何稳定断言当作下载成功。
+
+
+## 0.6.3（26）：详情隐藏 Tab Bar
+
+用户在0.6.2真机验收中澄清：详情应隐藏 Tab Bar，原先担心的是返回后 Tab 消失。0.6.1把详情也改成常显属于理解偏差。本轮仅恢复详情的原生隐藏声明，保留其他优化；列表与创作者作品列表继续显示 Tab，返回由系统导航状态恢复。模拟器验收记录在 `Evidence/detail-tabs-20261014/`。0.6.2（25）已安装用户 iPhone Air，并核对收藏保留；本轮安装以外部发行记录为准。

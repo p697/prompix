@@ -108,13 +108,13 @@ import UIKit
         let card = app.buttons["prompt-tiny-island"]
         XCTAssertTrue(card.waitForExistence(timeout: 5)); card.tap()
         XCTAssertTrue(app.buttons["usePrompt"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.tabBars.buttons["收藏"].isHittable)
+        XCTAssertFalse(app.tabBars.buttons["收藏"].isHittable)
         capture("refinement-detail")
         // A short edge drag cancels the native interactive return.
         app.coordinate(withNormalizedOffset: CGVector(dx: 0.005, dy: 0.48))
             .press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.15, dy: 0.48)), withVelocity: .slow, thenHoldForDuration: 2)
         XCTAssertTrue(app.buttons["usePrompt"].waitForExistence(timeout: 3))
-        XCTAssertTrue(app.tabBars.buttons["收藏"].isHittable)
+        XCTAssertFalse(app.tabBars.buttons["收藏"].isHittable)
         capture("refinement-cancelled-return")
         app.coordinate(withNormalizedOffset: CGVector(dx: 0.005, dy: 0.48))
             .press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.85, dy: 0.48)), withVelocity: .slow, thenHoldForDuration: 2)
