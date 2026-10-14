@@ -338,6 +338,7 @@ struct PromptCard: View {
     let item: Prompt
     var origin: PromptDetailOrigin = .catalog
     @Environment(Library.self) private var library
+    @Environment(\.colorScheme) private var colorScheme
     @State private var detailPresented = false
     @State private var savedFeedback = false
     @State private var copiedFeedback = false
@@ -395,6 +396,8 @@ struct PromptCard: View {
         }
         .fullScreenCover(isPresented: $detailPresented) {
             PromptReadingPresentation(item: item, origin: origin)
+                // Pin the presenting appearance through UIKit's zoom snapshots.
+                .preferredColorScheme(colorScheme)
                 .promptTransitionDestination(id: item.id, in: transition)
         }
     }
