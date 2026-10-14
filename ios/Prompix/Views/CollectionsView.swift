@@ -24,9 +24,11 @@ struct Collection: Identifiable {
     }
     @MainActor func items(in library: Library) -> [Prompt] { library.prompts.filter(includes) }
     func covers(from items: [Prompt]) -> [Prompt] {
+        var seen = Set<String>()
         let visual = items.filter {
             $0.kind != .text && !$0.isSkill &&
-                ($0.media?.image != nil || $0.media?.imageURL != nil || WebsiteExamples.files[$0.id] != nil)
+                ($0.media?.image != nil || $0.media?.imageURL != nil || WebsiteExamples.files[$0.id] != nil) &&
+                seen.insert($0.id).inserted
         }
         // Visual topics use full-bleed previews. Text-only topics keep one
         // readable typographic cover instead of squeezing two narrow columns.
