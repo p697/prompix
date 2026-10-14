@@ -5,7 +5,12 @@ import Observation
 
 @MainActor @Observable final class ImageStore {
     static let shared = ImageStore()
-    private let memory = NSCache<NSURL, UIImage>()
+    private final class CachedImage {
+        let image: UIImage
+        let previewOnly: Bool
+        init(_ image: UIImage, previewOnly: Bool = false) { self.image = image; self.previewOnly = previewOnly }
+    }
+    private let memory = NSCache<NSURL, CachedImage>()
     private let session: URLSession
     private var pending: [URL: Task<UIImage, Error>] = [:]
     private let offlineDirectory: URL
@@ -25,7 +30,7 @@ import Observation
         configuration.httpMaximumConnectionsPerHost = 4
         self.session = session ?? URLSession(configuration: configuration)
     }
-    func cachedImage(for url: URL) -> UIImage? { memory.object(forKey: url as NSURL) }
+    func cachedImage(for url: URL) -> UIImage? { memory.object(forKey: url as NSURL)?.image }
     func clear() { memory.removeAllObjects(); session.configuration.urlCache?.removeAllCachedResponses() }
     private func offlineFile(for url: URL) -> URL {
         let key = SHA256.hash(data: Data(url.absoluteString.utf8)).map { String(format: "%02x", $0) }.joined()
@@ -62,9 +67,9 @@ import Observation
     }
     func offlineImage(for url: URL) -> UIImage? { UIImage(contentsOfFile: offlineFile(for: url).path) }
     func image(for url: URL, fullResolution: Bool = false) async throws -> UIImage {
-        if let image = memory.object(forKey: url as NSURL) { return image }
+        if let cached = memory.object(forKey: url as NSURL), !fullResolution || !cached.previewOnly { return cached.image }
         if !fullResolution, let image = offlineImage(for: url) {
-            memory.setObject(image, forKey: url as NSURL, cost: Int(image.size.width * image.size.height * 4))
+            memory.setObject(CachedImage(image, previewOnly: true), forKey: url as NSURL, cost: Int(image.size.width * image.size.height * 4))
             return image
         }
         if let existing = pending[url] { return try await existing.value }
@@ -77,7 +82,7 @@ import Observation
         pending[url] = task
         defer { pending[url] = nil }
         let image = try await task.value
-        memory.setObject(image, forKey: url as NSURL, cost: Int(image.size.width * image.size.height * 4))
+        memory.setObject(CachedImage(image), forKey: url as NSURL, cost: Int(image.size.width * image.size.height * 4))
         return image
     }
 }
