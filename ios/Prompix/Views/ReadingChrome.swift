@@ -45,14 +45,8 @@ private struct ReadingChrome: ViewModifier {
 
 extension View {
     func readingChrome(_ collapsed: Binding<Bool>) -> some View { modifier(ReadingChrome(collapsed: collapsed)) }
-    @ViewBuilder func readingGlass(prominent: Bool = false) -> some View {
-        if #available(iOS 26, *) {
-            glassEffect(prominent ? .regular.tint(Palette.accent).interactive() : .regular.interactive(), in: Capsule())
-        } else if prominent {
-            background(Palette.accent, in: Capsule())
-        } else {
-            background(.regularMaterial, in: Capsule())
-        }
+    func readingGlass(prominent: Bool = false) -> some View {
+        modifier(ReadingGlass(prominent: prominent))
     }
 }
 
@@ -67,5 +61,25 @@ private struct ActionGlassIdentity: ViewModifier {
 extension View {
     func actionGlassIdentity(_ id: String, in namespace: Namespace.ID) -> some View {
         modifier(ActionGlassIdentity(id: id, namespace: namespace))
+    }
+}
+
+private struct ReadingGlass: ViewModifier {
+    let prominent: Bool
+    @Environment(\.colorScheme) private var colorScheme
+    // Material snapshots can supply temporary UIKit traits during interactive zoom.
+    // Resolve the tint from the page appearance before handing it to Liquid Glass.
+    private var tint: Color {
+        colorScheme == .dark ? Color(red: 209 / 255, green: 225 / 255, blue: 144 / 255)
+            : Color(red: 67 / 255, green: 83 / 255, blue: 50 / 255)
+    }
+    @ViewBuilder func body(content: Content) -> some View {
+        if #available(iOS 26, *) {
+            content.glassEffect(prominent ? .regular.tint(tint).interactive() : .regular.interactive(), in: Capsule())
+        } else if prominent {
+            content.background(tint, in: Capsule())
+        } else {
+            content.background(.regularMaterial, in: Capsule())
+        }
     }
 }

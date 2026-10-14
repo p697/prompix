@@ -19,7 +19,7 @@ struct RootView: View {
     @ViewBuilder private var tabs: some View {
         if #available(iOS 18, *) {
             TabView(selection: $tab) {
-                Tab(value: MainTab.discover) { DiscoverView(openSearch: { tab = .search }) } label: {
+                Tab(value: MainTab.discover) { DiscoverView() } label: {
                     Label { Text(String(localized: "发现")) } icon: { TabSymbol.image("safari") }
                 }
                 Tab(value: MainTab.saved) { FavoritesView() } label: {
@@ -35,7 +35,7 @@ struct RootView: View {
             .autocorrectionDisabled().textInputAutocapitalization(.never)
         } else {
             TabView(selection: $tab) {
-                DiscoverView(openSearch: { tab = .search }).tag(MainTab.discover)
+                DiscoverView().tag(MainTab.discover)
                     .tabItem { Label { Text(String(localized: "发现")) } icon: { TabSymbol.image("safari") } }
                 FavoritesView().tag(MainTab.saved)
                     .tabItem { Label { Text(String(localized: "收藏")) } icon: { TabSymbol.image("heart") } }
@@ -52,7 +52,6 @@ struct DiscoverView: View {
     @State private var skillsOnly = false
     @State private var topic: String?
     @State private var model: String?
-    var openSearch: () -> Void = {}
     @State private var chromeCollapsed = false
     @State private var headerHeight: CGFloat = 112
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -135,11 +134,8 @@ struct DiscoverView: View {
                 Text("Prompix").font(.title2.weight(.semibold)).tracking(-0.8)
                     .accessibilityAddTraits(.isHeader).accessibilityIdentifier("discoveryHeading")
                 Spacer()
-                Button(action: openSearch) { Image(systemName: "magnifyingglass").frame(width: 44, height: 44) }
-                    .buttonStyle(.plain).readingGlass().accessibilityLabel(String(localized: "搜索"))
-                    .accessibilityIdentifier("searchButton")
                 Button { settingsPresented = true } label: { Image(systemName: "gearshape").frame(width: 44, height: 44) }
-                    .buttonStyle(.plain).readingGlass().accessibilityLabel(String(localized: "设置"))
+                    .buttonStyle(.plain).readingGlass().accessibilityLabel(String(localized: "设置")).accessibilityIdentifier("discoverySettings")
             }.font(.title3).padding(.horizontal, 20).padding(.vertical, 6)
             KindPicker(selection: $kind, skillsOnly: $skillsOnly)
         }.foregroundStyle(Palette.ink).padding(.bottom, 4).background(Palette.paper)
@@ -333,6 +329,7 @@ struct PromptCard: View {
                     } label: { Label(library.isSaved(item) ? String(localized: "取消收藏") : String(localized: "收藏 Prompt"), systemImage: library.isSaved(item) ? "bookmark.slash" : "bookmark") }
                 }
                 .sensoryFeedback(.success, trigger: copiedFeedback)
+                .sensoryFeedback(.selection, trigger: savedFeedback)
             if typeSize.isAccessibilitySize || voiceOverEnabled {
                 HStack(spacing: 4) {
                 if let creator = item.creator {
@@ -349,24 +346,9 @@ struct PromptCard: View {
                     Text(item.displayKind).font(.footnote)
                 }
                     Spacer(minLength: 0)
-                    saveButton
                 }.foregroundStyle(Palette.muted).padding(.leading, 2)
             }
         }
-        .overlay(alignment: .topTrailing) { if !typeSize.isAccessibilitySize && !voiceOverEnabled { saveButton.padding(2) } }
-    }
-    private var saveButton: some View {
-        Button {
-            if library.toggle(item) { savedFeedback.toggle() }
-        } label: {
-            Image(systemName: library.isSaved(item) ? "bookmark.fill" : "bookmark")
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(library.isSaved(item) ? Palette.accent : Palette.ink)
-                .frame(width: 28, height: 28).background(.regularMaterial, in: Circle())
-                .frame(width: 44, height: 44).contentShape(Rectangle())
-        }.buttonStyle(.plain)
-            .accessibilityLabel(library.isSaved(item) ? String(localized: "取消收藏：\(item.displayTitle)") : String(localized: "收藏：\(item.displayTitle)"))
-            .sensoryFeedback(.selection, trigger: savedFeedback)
     }
     private var titleIsInArtwork: Bool { item.isSkill || item.kind == .text }
     private var ratio: CGFloat {
@@ -412,7 +394,7 @@ struct FavoritesView: View {
                         else if !library.favorites.isEmpty {
                             ContentUnavailableView(String(localized: "暂无匹配内容"), systemImage: "bookmark", description: Text(String(localized: "试试其他分类，或清除筛选条件。")))
                         } else {
-                            ContentUnavailableView(String(localized: "暂无收藏"), systemImage: "bookmark", description: Text(String(localized: "轻点卡片上的书签。\n文字保存在本机，缩略图会下载以供离线查看。")))
+                            ContentUnavailableView(String(localized: "暂无收藏"), systemImage: "bookmark", description: Text(String(localized: "在详情页收藏喜欢的内容，也可以长按卡片收藏。")))
                         }
                     } else { PromptGrid(items: items, origin: .favorite).padding(.horizontal, 16) }
                     }

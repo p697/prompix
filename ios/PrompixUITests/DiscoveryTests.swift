@@ -200,7 +200,7 @@ import UIKit
         // without claiming coverage of downloaded creator names or profiles.
         // VoiceOver can restore an earlier card focus when enabled. Anchor at
         // the toolbar before moving forward to the creator section.
-        app.buttons["searchButton"].tap()
+        app.selectPrompixTab("搜索")
         let initialSpeech = try voiceOver.currentSpeech().utterance
         speech.append("initial toolbar focus (targeted exploration): \(initialSpeech)")
         try require(initialSpeech.contains("搜索") && initialSpeech.contains("按钮"), "Initial spoken focus must be the Search toolbar action")
@@ -710,7 +710,7 @@ import UIKit
         app.swipeUp()
         try auditScreen("settings-support")
         app.buttons["完成"].tap()
-        app.buttons["searchButton"].tap()
+        app.selectPrompixTab("搜索")
         try auditScreen("search")
     }
 
@@ -790,7 +790,7 @@ import UIKit
         selectTab("收藏")
         XCTAssertTrue(app.buttons["prompt-gentle-tarot"].waitForExistence(timeout: 5))
         selectTab("发现")
-        app.buttons["searchButton"].tap()
+        app.selectPrompixTab("搜索")
         let search = app.searchFields.firstMatch
         XCTAssertTrue(search.waitForExistence(timeout: 3))
         search.tap(); search.typeText("塔罗")
@@ -951,7 +951,7 @@ import UIKit
         app.terminate()
         app.launchArguments.removeAll { $0 == "--offline" }
         app.launchPrompix()
-        app.buttons["searchButton"].tap()
+        app.selectPrompixTab("搜索")
         let search = app.searchFields.firstMatch
         XCTAssertTrue(search.waitForExistence(timeout: 3))
         search.tap(); search.typeText("发明")
@@ -1104,7 +1104,7 @@ import UIKit
         evidence.lifetime = .keepAlways
         add(evidence)
         XCTAssertGreaterThanOrEqual(seen.count, 100, "The library must support browsing beyond the old 68-item edition")
-        app.buttons["searchButton"].tap()
+        app.selectPrompixTab("搜索")
         let search = app.searchFields.firstMatch
         XCTAssertTrue(search.waitForExistence(timeout: 5))
         search.tap(); search.typeText("十五个问题")
@@ -1145,7 +1145,7 @@ import UIKit
         app.terminate()
         app.launchArguments.removeAll { $0 == "--offline" }
         app.launchPrompix()
-        app.buttons["searchButton"].tap()
+        app.selectPrompixTab("搜索")
         let search = app.searchFields.firstMatch
         XCTAssertTrue(search.waitForExistence(timeout: 5))
         for (index, video) in videos.enumerated() {

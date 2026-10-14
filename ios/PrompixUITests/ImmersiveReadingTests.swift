@@ -17,14 +17,14 @@ import UIKit
             .press(forDuration: 0.01, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: to)))
     }
     func testDiscoverChromeAndCollectionsNavigation() {
-        XCTAssertTrue(app.buttons["searchButton"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["discoverySettings"].waitForExistence(timeout: 10))
         XCTAssertFalse(app.tabBars.buttons["专题"].exists)
         capture("immersive-01-home")
         drag(from: 0.78, to: 0.30)
-        XCTAssertTrue(NSPredicate(format: "hittable == false").evaluate(with: app.buttons["searchButton"]))
+        XCTAssertTrue(NSPredicate(format: "hittable == false").evaluate(with: app.buttons["discoverySettings"]))
         capture("immersive-02-header-hidden")
         drag(from: 0.42, to: 0.60)
-        XCTAssertTrue(app.buttons["searchButton"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["discoverySettings"].waitForExistence(timeout: 3))
         capture("immersive-03-header-return")
         app.swipeDown(); app.swipeDown()
         let all = app.buttons["allCollections"]
@@ -34,7 +34,7 @@ import UIKit
         XCTAssertTrue(app.navigationBars.buttons.firstMatch.isHittable)
     }
     func testSearchAndReadingActions() {
-        app.buttons["searchButton"].tap()
+        app.selectPrompixTab("搜索")
         let field = app.searchFields["搜索 Prompt、Skills 或创作者"]
         XCTAssertTrue(field.waitForExistence(timeout: 5))
         capture("immersive-05-search")
@@ -93,6 +93,40 @@ import UIKit
         XCTAssertTrue(app.buttons["handoffOpen"].waitForExistence(timeout: 3))
         capture("immersive-11-use-sheet")
     }
+    func testRefinedChromeAndInteractiveReturn() {
+        XCTAssertTrue(app.buttons["discoverySettings"].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.buttons["searchButton"].exists)
+        XCTAssertEqual(app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "收藏：")).count, 0)
+        capture("refinement-home")
+        app.buttons["discoverySettings"].tap()
+        XCTAssertTrue(app.buttons["replayOnboarding"].waitForExistence(timeout: 3))
+        capture("refinement-settings")
+        app.buttons["完成"].tap()
+        app.selectPrompixTab("搜索")
+        let field = app.searchFields["搜索 Prompt、Skills 或创作者"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5)); field.tap(); field.typeText("小岛\n")
+        let card = app.buttons["prompt-tiny-island"]
+        XCTAssertTrue(card.waitForExistence(timeout: 5)); card.tap()
+        XCTAssertTrue(app.buttons["usePrompt"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.tabBars.buttons["收藏"].isHittable)
+        capture("refinement-detail")
+        // A short edge drag cancels the native interactive return.
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.005, dy: 0.48))
+            .press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.15, dy: 0.48)), withVelocity: .slow, thenHoldForDuration: 2)
+        XCTAssertTrue(app.buttons["usePrompt"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.tabBars.buttons["收藏"].isHittable)
+        capture("refinement-cancelled-return")
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.005, dy: 0.48))
+            .press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.85, dy: 0.48)), withVelocity: .slow, thenHoldForDuration: 2)
+        XCTAssertTrue(card.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.tabBars.buttons["收藏"].isHittable)
+        capture("refinement-return")
+        app.selectPrompixTab("收藏")
+        XCTAssertTrue(app.buttons["savedSettings"].waitForExistence(timeout: 3))
+        app.selectPrompixTab("发现")
+        XCTAssertTrue(app.buttons["discoverySettings"].waitForExistence(timeout: 3))
+    }
+
     func testAccessibleReadingActions() throws {
         guard ProcessInfo.processInfo.environment["PROMPIX_READING_ACCESSIBILITY"] == "1" else {
             throw XCTSkip("Enable largest Dynamic Type, dark appearance and Reduce Motion on the dedicated simulator.")

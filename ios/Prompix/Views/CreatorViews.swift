@@ -351,7 +351,6 @@ struct CreatorDetail: View {
         }
         .background(Palette.paper)
         .navigationTitle(creator.displayName).navigationBarTitleDisplayMode(.inline)
-        .toolbar(.hidden, for: .tabBar)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
