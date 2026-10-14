@@ -78,6 +78,12 @@ extension XCUIApplication {
                 let action = app.buttons[page == 2 ? "onboardingComplete" : "onboardingNext"]
                 XCTAssertTrue(action.isHittable)
                 XCTAssertTrue(app.buttons["onboardingSkip"].isHittable)
+                let body = app.staticTexts["onboarding-body-\(page)"]
+                for _ in 0..<5 {
+                    if body.isHittable { break }
+                    app.scrollViews["onboarding-page-\(page)"].swipeUp()
+                }
+                XCTAssertTrue(body.isHittable)
                 capture("cosmos-\(language)-welcome-\(page)")
                 action.tap()
             }

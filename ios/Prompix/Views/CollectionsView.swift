@@ -24,19 +24,13 @@ struct Collection: Identifiable {
     }
     @MainActor func items(in library: Library) -> [Prompt] { library.prompts.filter(includes) }
     func covers(from items: [Prompt]) -> [Prompt] {
-        let previewable = items.filter {
-            $0.kind == .text || $0.media?.image != nil || $0.media?.imageURL != nil || WebsiteExamples.files[$0.id] != nil
+        let visual = items.filter {
+            $0.kind != .text && !$0.isSkill &&
+                ($0.media?.image != nil || $0.media?.imageURL != nil || WebsiteExamples.files[$0.id] != nil)
         }
-        var result: [Prompt] = []
-        for item in previewable where !result.contains(where: { $0.kind == item.kind }) {
-            result.append(item)
-            if result.count == 3 { return result }
-        }
-        for item in previewable where !result.contains(where: { $0.id == item.id }) {
-            result.append(item)
-            if result.count == 3 { return result }
-        }
-        return result
+        // Visual topics use full-bleed previews. Text-only topics keep one
+        // readable typographic cover instead of squeezing two narrow columns.
+        return visual.isEmpty ? Array(items.prefix(1)) : Array(visual.prefix(2))
     }
 }
 struct CollectionsView: View {
