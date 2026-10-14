@@ -888,7 +888,7 @@ import CryptoKit
             kind.tap()
             card = app.buttons["prompt-\(id)"]
         } else {
-            app.selectPrompixTab("搜索")
+            app.selectPrompixTab(["de": "Suchen", "ja": "検索"][locale] ?? "搜索")
             let search = app.searchFields.firstMatch
             XCTAssertTrue(search.waitForExistence(timeout: 5))
             search.tap(); search.typeText(query + "\n")

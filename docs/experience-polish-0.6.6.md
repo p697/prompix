@@ -30,7 +30,31 @@
 
 ## 验证
 
-验证设备与完整结果在完成后补充。证据目录为开发SSD的 `Evidence/experience-polish-20261015/`。所有构建与结果留在SSD；本轮没有安装到物理手机。
+使用 Xcode 27.1 RC / iOS 27.1 SDK 构建，在 **Prompix iPhone 18 Pro / iOS 27.0**（`C0DB1FE2-71F3-4EF6-AEFF-8FECEA472A92`）实际运行。首次测试曾使用本轮新建的 Air 副本；因内置盘不足，已回收该副本，备份现有18 Pro应用数据后继续验收。没有重置其他任务的设备，也未安装物理手机。
+
+证据根目录：`/Volumes/Lucy-SSD/Prompix-Codex/Evidence/experience-polish-20261015/`。截图、结果包和第三方内容仅保存在开发SSD，没有提交到仓库。
+
+- 原生交接模型11项通过（`handoff-fixed.xcresult`中的`PromptHandoffTests`，不把该包里的早期UI定位失败算作通过）。
+- 引导5项通过（`source-and-welcome.xcresult`）：跳过、完成、重播、英德正常字号、试用关闭与未完成状态重启；编辑→切换阅读版本→仅查看编辑器→重新打开后个人修改仍保留。
+- 深色/最大辅助字号的引导2项通过（`dark-largest.xcresult`），其中另一个旧交接测试定位失败单独记录，不宣称整个包通过。
+- 本地化脚本检查全部九语资源完整；新增8条文案均有九语值。并非专业母语审校。
+- GitHub PR104的内容与原生模型CI通过：201项原生测试中199项通过、2项按条件跳过、0失败。完整结果链接由PR保留。最终收尾结果见下方验收状态。
+
+实际正常字号截图在`verified-light/`，含`cosmos-01-welcome.png`、`welcome-trial-preview.png`、`welcome-trial-tools.png`和`experience-reading-version.png`。这些是模拟器截图，不是设计稿。
+
+### 复现方法
+
+在上述专用模拟器中打开Prompix，可从设置“重新查看引导”进入三页引导；第三页点击“试试这个 Prompt”，关闭仍留在第三页。编辑内容后返回使用面板，在版本菜单切换“阅读版本/我的修改”，确认改动未被覆盖。
+
+自动验收使用`xcodebuild -project ios/Prompix.xcodeproj -scheme Prompix -destination 'platform=iOS Simulator,id=C0DB1FE2-71F3-4EF6-AEFF-8FECEA472A92' -derivedDataPath /Volumes/Lucy-SSD/Prompix-Codex/DerivedData-Experience -parallel-testing-enabled NO -collect-test-diagnostics never test CODE_SIGNING_ALLOWED=NO`，用`-only-testing:PrompixUITests/OnboardingTests`选择引导测试。交接验收使用当前生产目录副本，需按测试中的要求设置`TEST_RUNNER_PROMPIX_ACCEPTANCE_CONTAINER`与对应开关，不能对物理手机或未备份的用户数据直接运行。
+
+### 验收状态
+
+- `handoff-three-locales.xcresult`：1个矩阵测试通过，覆盖简中/德语/日语 × 网页Prompt/Skill共6条路径。深色、最大辅助字号，实际选择Claude Code、展开完整内容、执行触控区域和元素描述的可访问性审计，并确认草稿/收藏/创作者收藏文件不变。
+- 旧UI测试先后暴露了Form改ScrollView后的定位、德语长页滚动次数、搜索Tab语言选择问题；均修正测试后复跑。早期失败结果保留，没有作为通过证据。
+- `save-recovery.xcresult`：3项通过，模拟写入失败后分别验证复制退出、明确放弃、回到编辑器保留变量并重试保存。额外通过`simctl pbpaste`对比完整预期文本，确认复制退出没有截断内容。
+- 已将模拟器恢复为浅色、正常字号、简中；原有`drafts.json`、`favorites.json`、`creators.json`与测试前备份逐字节一致，648条目录保留。校验在`personal-state-restored.json`，没有遗留测试草稿标记。
+- 验收App仍为0.6.6（30）；从引导第三页可开始真实试用。外部工具实际发送、真机性能与完整VoiceOver遍历不在本轮新增验收范围。
 
 ## 边界
 
