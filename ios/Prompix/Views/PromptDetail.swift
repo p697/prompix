@@ -5,6 +5,7 @@ import Observation
 
 struct PromptDetail: View {
     private let snapshot: Prompt
+    private let readingPosition: DetailReadingPosition?
     private let origin: PromptDetailOrigin
     @Environment(Library.self) private var library
     @State private var editorContext: EditorContext?
@@ -45,9 +46,10 @@ struct PromptDetail: View {
         // Give the common abbreviation a pronounceable name for VoiceOver.
         item.source.license == "CC0-1.0" ? "Creative Commons Zero" : item.source.license
     }
-    init(item: Prompt, origin: PromptDetailOrigin = .catalog) {
+    init(item: Prompt, origin: PromptDetailOrigin = .catalog, readingPosition: DetailReadingPosition? = nil) {
         snapshot = item
         self.origin = origin
+        self.readingPosition = readingPosition
         _language = State(initialValue: item.preferredTranslation)
     }
     private var related: [Prompt] {
@@ -115,11 +117,11 @@ struct PromptDetail: View {
             ArrangementView {
                 ScrollView {
                     readingContent.padding(.bottom, 28).frame(maxWidth: 700).frame(maxWidth: .infinity)
-                }.readingChrome($actionsCollapsed).accessibilityIdentifier("detailReadingPane")
+                }.preservingReadingPosition(readingPosition).readingChrome($actionsCollapsed).accessibilityIdentifier("detailReadingPane")
             } secondary: {
                 ScrollView {
                     largePreview.padding(.bottom, 24).frame(maxWidth: 600).frame(maxWidth: .infinity)
-                }.accessibilityIdentifier("detailMediaPane")
+                }.preservingReadingPosition(readingPosition, media: true).accessibilityIdentifier("detailMediaPane")
             }.arrangementViewStyle(.split.axes(.horizontal))
         } else {
             ScrollView {
@@ -127,7 +129,7 @@ struct PromptDetail: View {
                     largePreview
                     readingContent
                 }.padding(.bottom, 28).frame(maxWidth: 700).frame(maxWidth: .infinity)
-            }.readingChrome($actionsCollapsed).accessibilityIdentifier("detailReadingPane")
+            }.preservingReadingPosition(readingPosition).readingChrome($actionsCollapsed).accessibilityIdentifier("detailReadingPane")
         }
     }
     private var compactPreview: some View {
@@ -159,14 +161,7 @@ struct PromptDetail: View {
     }
     private var readingContent: some View {
         VStack(alignment: .leading, spacing: 24) {
-            VStack(alignment: .leading, spacing: 14) {
-                Text(content.title).font(Typography.editorial(.title)).lineSpacing(3)
-                    .fixedSize(horizontal: false, vertical: true).accessibilityAddTraits(.isHeader)
-                if !content.summary.isEmpty {
-                    Text(content.summary).font(.body).lineSpacing(4).foregroundStyle(Palette.muted)
-                }
-                if let creator = item.creator { CreatorByline(creator: creator) }
-            }
+            PromptDetailHeading(title: content.title, summary: content.summary, creator: item.creator)
             if #available(iOS 27.1, *), hasMediaPreview { compactPreview }
             languagePicker
             PromptMarkdown(content.prompt)
@@ -369,8 +364,7 @@ struct PromptDetail: View {
         }
     }
     private var hero: some View {
-        Artwork(item: item).aspectRatio(item.media?.aspectRatio.map { max(0.65, min(1.8, $0)) } ?? (item.kind == .image ? 0.95 : 1.15), contentMode: .fit)
-            .clipShape(RoundedRectangle(cornerRadius: 6))
+        PromptDetailArtwork(preview: ContentPreview(item))
             .promptTransitionSource(id: "image-\(item.id)", in: imageTransition)
             .padding(.horizontal, 12).padding(.top, 8)
     }

@@ -98,15 +98,20 @@ import AVKit
         config.protocolClasses = [ThumbnailProtocol.self]
         let url = URL(string: "https://api.prompix.dev/media/test.jpg")!
         let store = ImageStore(offlineDirectory: directory, session: URLSession(configuration: config))
+        XCTAssertNil(store.cachedImage(for: url))
+        let warmed = try await store.image(for: url)
+        XCTAssertTrue(store.cachedImage(for: url) === warmed, "The detail must be able to draw the list image synchronously")
         await store.keepOffline([url])
         XCTAssertTrue(store.offlineFailures.isEmpty)
         XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: directory.path).count, 1)
         store.clear()
+        XCTAssertNil(store.cachedImage(for: url))
         let offline = URLSessionConfiguration.ephemeral
         offline.protocolClasses = [OfflineProtocol.self]
         let reopened = ImageStore(offlineDirectory: directory, session: URLSession(configuration: offline))
         let image = try await reopened.image(for: url)
         XCTAssertGreaterThan(image.size.width, 0)
+        XCTAssertTrue(reopened.cachedImage(for: url) === image)
         await reopened.keepOffline([])
         reopened.clear()
         XCTAssertTrue(try FileManager.default.contentsOfDirectory(atPath: directory.path).isEmpty)

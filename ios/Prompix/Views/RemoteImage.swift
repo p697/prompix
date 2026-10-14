@@ -25,6 +25,7 @@ import Observation
         configuration.httpMaximumConnectionsPerHost = 4
         self.session = session ?? URLSession(configuration: configuration)
     }
+    func cachedImage(for url: URL) -> UIImage? { memory.object(forKey: url as NSURL) }
     func clear() { memory.removeAllObjects(); session.configuration.urlCache?.removeAllCachedResponses() }
     private func offlineFile(for url: URL) -> URL {
         let key = SHA256.hash(data: Data(url.absoluteString.utf8)).map { String(format: "%02x", $0) }.joined()
@@ -62,7 +63,10 @@ import Observation
     func offlineImage(for url: URL) -> UIImage? { UIImage(contentsOfFile: offlineFile(for: url).path) }
     func image(for url: URL, fullResolution: Bool = false) async throws -> UIImage {
         if let image = memory.object(forKey: url as NSURL) { return image }
-        if !fullResolution, let image = offlineImage(for: url) { return image }
+        if !fullResolution, let image = offlineImage(for: url) {
+            memory.setObject(image, forKey: url as NSURL, cost: Int(image.size.width * image.size.height * 4))
+            return image
+        }
         if let existing = pending[url] { return try await existing.value }
         let task = Task { @MainActor in
             let data = try await CatalogSync.fetch(url, maximum: 8_000_000, session: session)
@@ -81,22 +85,24 @@ struct RemoteImage: View {
     let url: URL
     var contentMode: ContentMode = .fit
     @State private var image: UIImage?
+    @State private var loadedURL: URL?
     @State private var failed = false
     @State private var attempt = 0
     var body: some View {
         ZStack {
             Palette.soft
-            if let image { Image(uiImage: image).resizable().aspectRatio(contentMode: contentMode) }
+            if let image = (loadedURL == url ? image : nil) ?? ImageStore.shared.cachedImage(for: url) { Image(uiImage: image).resizable().aspectRatio(contentMode: contentMode) }
             else if failed {
                 Button { attempt += 1 } label: { Image(systemName: "arrow.clockwise").font(.title3.weight(.light)).foregroundStyle(Palette.muted).frame(width: 44, height: 44) }
                     .accessibilityLabel(String(localized: "重新加载图片"))
-            } else { ProgressView().controlSize(.small) }
+            }
         }.task(id: "\(url)-\(attempt)") {
-            image = nil; failed = false
+            if loadedURL != url { image = nil }
+            failed = false
             do {
                 let loaded = try await ImageStore.shared.image(for: url)
                 guard !Task.isCancelled else { return }
-                image = loaded
+                image = loaded; loadedURL = url
             } catch {
                 guard !Task.isCancelled else { return }
                 failed = true

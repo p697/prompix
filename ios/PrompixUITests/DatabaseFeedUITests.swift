@@ -50,6 +50,108 @@ import UIKit
         XCTAssertTrue(app.buttons["copyPrompt"].waitForExistence(timeout: 10))
     }
 
+    func testProgressiveImageDetailRetainsPreviewAndPositionThenReusesCompleteCache() throws {
+        launch(["--feed-detail-preview-test"])
+        search("preview")
+        let card = app.buttons["prompt-database-fixture-1"]
+        XCTAssertTrue(card.waitForExistence(timeout: 10)); card.tap()
+        let title = app.staticTexts["detailTitle"]
+        XCTAssertTrue(title.waitForExistence(timeout: 3))
+        XCTAssertEqual(title.label, "Database item 0001")
+        XCTAssertTrue(app.otherElements["promptBodySkeleton"].exists)
+        XCTAssertFalse(app.progressIndicators.firstMatch.exists)
+        XCTAssertFalse(app.buttons["copyPrompt"].exists)
+        capture("progressive-01-image-before-response")
+        let pane = app.scrollViews["detailReadingPane"]
+        pane.swipeUp(velocity: .slow)
+        let pendingY = title.frame.minY
+        capture("progressive-02-scrolled-before-response")
+        try Data().write(to: directory().appending(path: "release-detail"))
+        XCTAssertTrue(app.buttons["copyPrompt"].waitForExistence(timeout: 8))
+        XCTAssertFalse(app.otherElements["promptBodySkeleton"].exists)
+        XCTAssertEqual(title.frame.minY, pendingY, accuracy: 5, "Completing the body must preserve reading position")
+        capture("progressive-03-complete-same-position")
+        app.buttons["closePromptDetail"].tap()
+        XCTAssertTrue(card.waitForExistence(timeout: 5)); card.tap()
+        XCTAssertTrue(app.buttons["copyPrompt"].waitForExistence(timeout: 3))
+        XCTAssertFalse(app.otherElements["promptBodySkeleton"].exists)
+        XCTAssertEqual(try requests().filter { $0["operation"] as? String == "detail" }.count, 1)
+        capture("progressive-04-memory-cache")
+    }
+
+    func testProgressiveVideoAndWebPreviewDoNotWaitForBodyOrStartPlayback() throws {
+        launch(["--feed-detail-preview-test"])
+        search("preview")
+        for index in [2, 3] {
+            let card = app.buttons["prompt-database-fixture-\(index)"]
+            XCTAssertTrue(card.waitForExistence(timeout: 10))
+            if !card.isHittable { app.swipeUp() }
+            card.tap()
+            XCTAssertTrue(app.staticTexts["detailTitle"].waitForExistence(timeout: 3))
+            XCTAssertEqual(app.staticTexts["detailTitle"].label, String(format: "Database item %04d", index))
+            XCTAssertTrue(app.otherElements["promptBodySkeleton"].exists)
+            XCTAssertFalse(app.progressIndicators.firstMatch.exists)
+            XCTAssertFalse(app.buttons["copyPrompt"].exists)
+            capture("progressive-08-preview-type-\(index)")
+            try Data().write(to: directory().appending(path: "release-detail"))
+            XCTAssertTrue(app.buttons["copyPrompt"].waitForExistence(timeout: 8))
+            XCTAssertTrue(app.buttons["previewButton"].exists)
+            capture("progressive-09-ready-type-\(index)")
+            app.buttons["closePromptDetail"].tap()
+            try FileManager.default.removeItem(at: directory().appending(path: "release-detail"))
+        }
+    }
+
+    func testProgressiveTextFailureRetriesInlineAndCanCloseWhilePending() throws {
+        launch(["--feed-detail-preview-test"])
+        search("preview")
+        let card = app.buttons["prompt-database-fixture-0"]
+        XCTAssertTrue(card.waitForExistence(timeout: 10)); card.tap()
+        XCTAssertTrue(app.otherElements["promptBodySkeleton"].waitForExistence(timeout: 3))
+        XCTAssertFalse(app.progressIndicators.firstMatch.exists)
+        capture("progressive-05-text-before-response")
+        app.buttons["closePromptDetail"].tap()
+        XCTAssertTrue(card.waitForExistence(timeout: 5)); card.tap()
+        XCTAssertTrue(app.otherElements["promptBodySkeleton"].waitForExistence(timeout: 3))
+        try Data().write(to: directory().appending(path: "fail-detail"))
+        try Data().write(to: directory().appending(path: "release-detail"))
+        XCTAssertTrue(app.buttons["retryDetail"].waitForExistence(timeout: 8))
+        XCTAssertEqual(app.staticTexts["detailTitle"].label, "Database item 0000")
+        XCTAssertFalse(app.buttons["copyPrompt"].exists)
+        XCTAssertFalse(app.progressIndicators.firstMatch.exists)
+        capture("progressive-06-inline-error")
+        try FileManager.default.removeItem(at: directory().appending(path: "fail-detail"))
+        app.buttons["retryDetail"].tap()
+        XCTAssertTrue(app.buttons["copyPrompt"].waitForExistence(timeout: 8))
+        XCTAssertEqual(app.staticTexts["detailTitle"].label, "Database item 0000")
+        capture("progressive-07-recovered")
+    }
+
+    func testLiveImageAndLongVideoDetailReuseSearchPreviews() throws {
+        guard ProcessInfo.processInfo.environment["PROMPIX_DATABASE_LIVE_UI"] == "1" else { throw XCTSkip("Explicit live acceptance only") }
+        app.launchArguments = ["--feed-live-test", fixtureID, "-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh-Hans"]
+        app.launchPrompix()
+        XCTAssertTrue(app.buttons["discoverySettings"].waitForExistence(timeout: 15))
+        for (query, id) in [("给想逃离", "tiny-island"), ("把品牌网站变成", "x-post-2109576638136795289")] {
+            search(query)
+            let card = app.buttons["prompt-\(id)"]
+            XCTAssertTrue(card.waitForExistence(timeout: 20))
+            let label = card.label, before = card.frame
+            card.tap()
+            XCTAssertTrue(app.staticTexts["detailTitle"].waitForExistence(timeout: 3))
+            XCTAssertEqual(app.staticTexts["detailTitle"].label, label)
+            XCTAssertTrue(app.buttons["copyPrompt"].waitForExistence(timeout: 20))
+            capture("progressive-live-\(id)")
+            app.buttons["closePromptDetail"].tap()
+            XCTAssertTrue(card.waitForExistence(timeout: 5))
+            XCTAssertEqual(card.frame.minY, before.minY, accuracy: 5)
+            card.tap()
+            XCTAssertTrue(app.buttons["copyPrompt"].waitForExistence(timeout: 3))
+            XCTAssertFalse(app.otherElements["promptBodySkeleton"].exists)
+            app.buttons["closePromptDetail"].tap()
+        }
+    }
+
     func testLiveDatabaseSearchDetailCopyAndOfflineFavorite() async throws {
         guard ProcessInfo.processInfo.environment["PROMPIX_DATABASE_LIVE_UI"] == "1" else { throw XCTSkip("Explicit live acceptance only") }
         func openLive(offline: Bool = false) {
