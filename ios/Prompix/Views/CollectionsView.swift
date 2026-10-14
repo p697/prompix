@@ -35,9 +35,6 @@ struct Collection: Identifiable {
         return visual.isEmpty ? Array(items.prefix(1)) : Array(visual.prefix(2))
     }
 }
-struct CollectionsView: View {
-    var body: some View { NavigationStack { CollectionsDirectory() } }
-}
 struct CollectionsDirectory: View {
     @Environment(Library.self) private var library
     @Environment(\.dynamicTypeSize) private var typeSize
@@ -95,7 +92,7 @@ struct CollectionRail: View {
                 Spacer(minLength: 12)
                 NavigationLink { CollectionsDirectory() } label: {
                     Text(String(localized: "查看全部")).font(.footnote).foregroundStyle(Palette.muted).frame(minHeight: 44)
-                }
+                }.accessibilityIdentifier("allCollections")
             }.padding(.horizontal, 20)
             if typeSize.isAccessibilitySize || voiceOverEnabled {
                 VStack(spacing: 12) { ForEach(collections.prefix(1)) { collection in

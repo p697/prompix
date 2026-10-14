@@ -1,19 +1,48 @@
 import SwiftUI
 
+private enum MainTab: Hashable { case discover, saved, search }
+
 struct RootView: View {
     @State private var showsOnboarding = !UserDefaults.standard.bool(forKey: "hasCompletedOnboarding")
+    @State private var tab = MainTab.discover
+    @State private var query = ""
+    @State private var searchFocused = false
     var body: some View {
-        TabView {
-            DiscoverView().tabItem { Label { Text(String(localized: "发现")) } icon: { TabSymbol.image("safari") } }
-            CollectionsView().tabItem { Label { Text(String(localized: "专题")) } icon: { TabSymbol.image("square.grid.2x2") } }
-            FavoritesView().tabItem { Label { Text(String(localized: "收藏")) } icon: { TabSymbol.image("heart") } }
-        }.tint(Palette.accent)
+        tabs.tint(Palette.accent)
             .fullScreenCover(isPresented: $showsOnboarding) {
                 PrompixOnboarding {
                     UserDefaults.standard.set(true, forKey: "hasCompletedOnboarding")
                     showsOnboarding = false
                 }.interactiveDismissDisabled()
             }
+    }
+    @ViewBuilder private var tabs: some View {
+        if #available(iOS 18, *) {
+            TabView(selection: $tab) {
+                Tab(value: MainTab.discover) { DiscoverView(openSearch: { tab = .search }) } label: {
+                    Label { Text(String(localized: "发现")) } icon: { TabSymbol.image("safari") }
+                }
+                Tab(value: MainTab.saved) { FavoritesView() } label: {
+                    Label { Text(String(localized: "收藏")) } icon: { TabSymbol.image("heart") }
+                }
+                if #available(iOS 27, *) {
+                    Tab(String(localized: "搜索"), systemImage: "magnifyingglass", value: MainTab.search, role: .prominent) { SearchView(query: $query, focused: $searchFocused) }
+                } else {
+                    Tab(value: MainTab.search, role: .search) { SearchView(query: $query, focused: $searchFocused) }
+                }
+            }
+            .onChange(of: tab) { _, value in if value == .search { searchFocused = true } }
+            .autocorrectionDisabled().textInputAutocapitalization(.never)
+        } else {
+            TabView(selection: $tab) {
+                DiscoverView(openSearch: { tab = .search }).tag(MainTab.discover)
+                    .tabItem { Label { Text(String(localized: "发现")) } icon: { TabSymbol.image("safari") } }
+                FavoritesView().tag(MainTab.saved)
+                    .tabItem { Label { Text(String(localized: "收藏")) } icon: { TabSymbol.image("heart") } }
+                SearchView(query: $query, focused: $searchFocused).tag(MainTab.search)
+                    .tabItem { Label(String(localized: "搜索"), systemImage: "magnifyingglass") }
+            }
+        }
     }
 }
 
@@ -23,7 +52,10 @@ struct DiscoverView: View {
     @State private var skillsOnly = false
     @State private var topic: String?
     @State private var model: String?
-    @State private var searchPresented = false
+    var openSearch: () -> Void = {}
+    @State private var chromeCollapsed = false
+    @State private var headerHeight: CGFloat = 112
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var settingsPresented = false
     private let topics = ["好玩一点", "创作灵感", "日常有用"]
     private var items: [Prompt] { library.prompts.filter { PromptQuery(kind: kind, topic: topic, model: model, skillsOnly: skillsOnly).matches($0) } }
@@ -35,8 +67,9 @@ struct DiscoverView: View {
         NavigationStack {
             ScrollViewReader { scroll in
                 ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 14, pinnedViews: [.sectionHeaders]) {
-                        Section {
+                    LazyVStack(alignment: .leading, spacing: 14) {
+                        Color.clear.frame(height: headerHeight).id("discovery-top")
+                        Group {
                             if library.isRefreshing || library.syncMessage != nil { CatalogUpdateStatus().padding(.horizontal, 20) }
                             if !isFiltered {
                                 CreatorRail()
@@ -66,44 +99,52 @@ struct DiscoverView: View {
                             } else {
                                 PromptGrid(items: items).padding(.horizontal, 12)
                             }
-                        } header: {
-                            KindPicker(selection: $kind, skillsOnly: $skillsOnly)
-                                .background(Palette.paper)
-                                .id("discovery-top")
                         }
                     }.padding(.bottom, 24)
                 }
                 .plainTopEdge()
-                .paperScreen()
+                .background(Palette.paper).foregroundStyle(Palette.ink)
+                .readingChrome($chromeCollapsed)
+                .overlay(alignment: .top) {
+                    GeometryReader { proxy in
+                        Palette.paper.frame(height: proxy.safeAreaInsets.top)
+                            .offset(y: -proxy.safeAreaInsets.top)
+                    }.allowsHitTesting(false).accessibilityHidden(true)
+                }
+                .overlay(alignment: .top) {
+                    discoveryHeader
+                        .offset(y: chromeCollapsed ? -headerHeight - 12 : 0)
+                        .opacity(chromeCollapsed ? 0 : 1)
+                        .allowsHitTesting(!chromeCollapsed)
+                        .accessibilityHidden(chromeCollapsed)
+                        .animation(reduceMotion ? nil : .smooth(duration: 0.28), value: chromeCollapsed)
+                }
                 .refreshable { await library.refresh(force: true) }
-                .onChange(of: kind) { _, _ in model = nil; topic = nil; scroll.scrollTo("discovery-top", anchor: .top) }
-                .onChange(of: skillsOnly) { _, _ in model = nil; topic = nil; scroll.scrollTo("discovery-top", anchor: .top) }
-                .onChange(of: topic) { _, _ in scroll.scrollTo("discovery-top", anchor: .top) }
-                .onChange(of: model) { _, _ in scroll.scrollTo("discovery-top", anchor: .top) }
+                .onChange(of: kind) { _, _ in model = nil; topic = nil; chromeCollapsed = false; scroll.scrollTo("discovery-top", anchor: .top) }
+                .onChange(of: skillsOnly) { _, _ in model = nil; topic = nil; chromeCollapsed = false; scroll.scrollTo("discovery-top", anchor: .top) }
+                .onChange(of: topic) { _, _ in chromeCollapsed = false; scroll.scrollTo("discovery-top", anchor: .top) }
+                .onChange(of: model) { _, _ in chromeCollapsed = false; scroll.scrollTo("discovery-top", anchor: .top) }
             }
-            .navigationTitle("").navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                brandTitle
-                ToolbarItem(placement: .topBarTrailing) { Button(String(localized: "搜索"), systemImage: "magnifyingglass") { searchPresented = true }.accessibilityIdentifier("searchButton") }
-                ToolbarItem(placement: .topBarTrailing) { Button(String(localized: "设置"), systemImage: "gearshape") { settingsPresented = true } }
-            }
-            .sheet(isPresented: $searchPresented) { SearchView().promptSheet() }
+            .toolbar(.hidden, for: .navigationBar)
             .sheet(isPresented: $settingsPresented) { SettingsView().promptSheet() }
         }
     }
-    @ToolbarContentBuilder private var brandTitle: some ToolbarContent {
-        if #available(iOS 26, *) {
-            ToolbarItem(placement: .topBarLeading) { wordmark }.sharedBackgroundVisibility(.hidden)
-        } else {
-            ToolbarItem(placement: .topBarLeading) { wordmark }
-        }
-    }
-    private var wordmark: some View {
-        Text("Prompix").font(.title2.weight(.semibold)).tracking(-0.8).foregroundStyle(Palette.ink)
-            .fixedSize().accessibilityAddTraits(.isHeader)
-            .accessibilityIdentifier("discoveryHeading")
-            .accessibilityAction(named: Text(String(localized: "搜索"))) { searchPresented = true }
-            .accessibilityAction(named: Text(String(localized: "设置"))) { settingsPresented = true }
+    private var discoveryHeader: some View {
+        VStack(spacing: 4) {
+            HStack {
+                Text("Prompix").font(.title2.weight(.semibold)).tracking(-0.8)
+                    .accessibilityAddTraits(.isHeader).accessibilityIdentifier("discoveryHeading")
+                Spacer()
+                Button(action: openSearch) { Image(systemName: "magnifyingglass").frame(width: 44, height: 44) }
+                    .buttonStyle(.plain).readingGlass().accessibilityLabel(String(localized: "搜索"))
+                    .accessibilityIdentifier("searchButton")
+                Button { settingsPresented = true } label: { Image(systemName: "gearshape").frame(width: 44, height: 44) }
+                    .buttonStyle(.plain).readingGlass().accessibilityLabel(String(localized: "设置"))
+            }.font(.title3).padding(.horizontal, 20).padding(.vertical, 6)
+            KindPicker(selection: $kind, skillsOnly: $skillsOnly)
+        }.foregroundStyle(Palette.ink).padding(.bottom, 4).background(Palette.paper)
+            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { headerHeight = $0 }
+            .accessibilityElement(children: .contain).accessibilityIdentifier("discoveryHeader")
     }
     private var discoveryContext: some View {
         ViewThatFits(in: .horizontal) {
@@ -332,80 +373,6 @@ struct PromptCard: View {
         if item.isSkill { return 0.95 }
         if let ratio = item.media?.aspectRatio { return max(0.65, min(1.5, ratio)) }
         return switch item.kind { case .text: 0.95; case .image: item.artwork == "lake" ? 1.02 : 0.76; case .video: 0.94; case .web: WebsiteExamples.files[item.id] != nil ? 0.62 : 0.87 }
-    }
-}
-
-struct SearchView: View {
-    @Environment(Library.self) private var library
-    @Environment(\.dismiss) private var dismiss
-    @State private var query = ""
-    @State private var kind: PromptKind?
-    @State private var skillsOnly = false
-    @State private var recent = UserDefaults.standard.stringArray(forKey: "recentSearches") ?? []
-    private var results: [Prompt] { PromptQuery(text: query, kind: kind, skillsOnly: skillsOnly).results(in: library.prompts) }
-    private var creators: [CreatorEntry] {
-        guard !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return [] }
-        return CreatorDirectory.entries(in: library.prompts).filter {
-            $0.creator.matchesSearch(query)
-        }
-    }
-    var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
-                    KindPicker(selection: $kind, skillsOnly: $skillsOnly)
-                    if query.isEmpty && kind == nil && !skillsOnly {
-                        VStack(alignment: .leading, spacing: 16) {
-                            if !recent.isEmpty {
-                                HStack {
-                                    Text(String(localized: "最近搜索")).font(.headline)
-                                    Spacer()
-                                    Button(String(localized: "清除")) { recent = []; UserDefaults.standard.removeObject(forKey: "recentSearches") }
-                                        .font(.footnote).frame(minHeight: 44)
-                                }
-                                ForEach(recent, id: \.self) { term in
-                                    Button { query = term } label: {
-                                        HStack { Image(systemName: "clock"); Text(term); Spacer(); Image(systemName: "arrow.up.left") }
-                                            .foregroundStyle(Palette.muted).frame(minHeight: 44)
-                                    }.buttonStyle(.plain)
-                                }
-                            }
-                            Text(String(localized: "试试这些用途")).font(.headline)
-                            ForEach(["塔罗", "网站", "电影"], id: \.self) { term in
-                                let translated = NSLocalizedString(term, comment: "Suggested search")
-                                Button { query = translated } label: {
-                                    HStack { Text(translated); Spacer(); Image(systemName: "arrow.up.left") }
-                                        .frame(minHeight: 44).contentShape(Rectangle())
-                                }.buttonStyle(.plain)
-                            }
-                        }.padding(.horizontal, 20)
-                        CreatorRail()
-                    } else {
-                        if !creators.isEmpty && kind == nil && !skillsOnly {
-                            VStack(alignment: .leading, spacing: 12) {
-                                Text(String(localized: "创作者")).font(.headline)
-                                ForEach(creators.prefix(3)) { entry in CreatorByline(creator: entry.creator) }
-                            }.padding(.horizontal, 20)
-                        }
-                        if results.isEmpty { ContentUnavailableView.search(text: query) }
-                        else {
-                            Text(String(localized: "\(results.count) 条内容")).font(.footnote).foregroundStyle(Palette.muted).padding(.horizontal, 20)
-                            PromptGrid(items: results).padding(.horizontal, 16)
-                        }
-                    }
-                }.padding(.bottom, 24)
-            }.accessibilityIdentifier("searchResults").paperScreen().navigationTitle(String(localized: "搜索 Prompt")).navigationBarTitleDisplayMode(.inline)
-                .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: String(localized: "搜索标题、用途或模型"))
-                .autocorrectionDisabled().textInputAutocapitalization(.never)
-                .onSubmit(of: .search) {
-                    let term = query.trimmingCharacters(in: .whitespacesAndNewlines)
-                    if !term.isEmpty {
-                        recent = Array(([term] + recent.filter { $0 != term }).prefix(6))
-                        UserDefaults.standard.set(recent, forKey: "recentSearches")
-                    }
-                }
-                .toolbar { ToolbarItem(placement: .confirmationAction) { Button(String(localized: "完成")) { dismiss() } } }
-        }
     }
 }
 

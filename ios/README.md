@@ -1,6 +1,6 @@
 # Prompix for iOS
 
-Native SwiftUI app, iOS 17+. Current iPhone candidate **0.5.1 (22)** addresses the user's home-layout, image-dismissal and Saved-header feedback. See the [implementation and scoped validation](../docs/iphone-feedback-0.5.1.md). The previous **0.5.0 (21)** was installed on the connected iPhone Air; see its [delivery record](../docs/release-0.5.0.md). Further Duo work remains deferred while ordinary iPhone acceptance takes priority.
+Native SwiftUI app, iOS 17+. Current simulator candidate **0.6.0 (23)** adds a dedicated Search destination and immersive Markdown reading. See [implementation, reference research and scoped validation](../docs/immersive-reading-0.6.0.md). The user's iPhone Air remains on the successfully installed **0.5.1 (22)**. Further Duo work is deferred while ordinary iPhone acceptance takes priority.
 
 Production v2 edition `edition-v2-3f5988eec9fb6296` contains **527 items, 70 Skills and 242 creator identities**. English records cover 526 items and Simplified Chinese 514, with original-text fallback elsewhere. Source review withheld one Expo Skill whose version-check instructions included a publishing command. The Duo simulator has received the actual 528-to-527 update; one newly translated Skill was opened and its full 5,494-byte copied text matched publication. Personal files remained byte-identical. This focused update check does not extend the earlier 465-item posture/UI evidence to every new item. The last ten-Skill batch has passed publication and focused simulator checks; other seven-language coverage and test boundaries are recorded in [content operations](../docs/content-operations.md#2026-10-13十个作者-skill-发布与客户端验收收尾). Routine collection and translation now remain with the scheduler while development focuses on native browsing, editing, use and iPhone Duo adaptation. Duo posture, editing, selected accessibility checks and final normal-phone regression have run; the evidence separates passed paths from known limits. See the [Duo evidence and remaining gates](../docs/iphone-duo.md).
 
@@ -149,7 +149,7 @@ retained separately from a completed inventory. `testShareCancellationKeepsDetai
 return; opening Safari is not proof of tool login, prompt prefill or generation.
 Native tab selection supports both the iPhone bottom bar and iPad floating tabs.
 
-On iPad, search detail navigation remains inside a centered native sheet. The
+Search now owns a NavigationStack inside its dedicated tab on iPhone and iPad. The
 global journey helper scopes reveal gestures to the scroll view containing the
 target, so drags do not start on the fixed action bar or outside the sheet.
 `testPublisherSkillPackages` uses `PROMPIX_PUBLISHER_ACCEPTANCE=1` and the explicit

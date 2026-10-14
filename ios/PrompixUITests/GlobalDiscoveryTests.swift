@@ -34,6 +34,7 @@ import CryptoKit
 
     private func reveal(_ element: XCUIElement, attempts: Int = 8) {
         for _ in 0..<attempts {
+            if ["copyPrompt", "editPromptAction", "usePrompt"].contains(element.identifier), element.isHittable { return }
             // Search presents a centered sheet on iPad. Whole-display gestures
             // can start on its fixed action bar instead of scrolling the content.
             var viewport: XCUIElement = app
@@ -94,6 +95,54 @@ import CryptoKit
         let downloadedLocales: [String: String]
     }
 
+    func testImmersiveLiveSkillAndCreatorSearch() throws {
+        guard ProcessInfo.processInfo.environment["PROMPIX_IMMERSIVE_ACCEPTANCE"] == "1" else {
+            throw XCTSkip("Use a backed-up dedicated simulator with the published catalog.")
+        }
+        let directory = try acceptanceDirectory()
+        let data = try Data(contentsOf: directory.appendingPathComponent("catalog.json"))
+        let catalog = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let items = try XCTUnwrap(catalog["prompts"] as? [[String: Any]])
+        XCTAssertGreaterThan(items.count, 100)
+        let item = try XCTUnwrap(items.first { $0["id"] as? String == "skill-anthropic-webapp-testing" })
+        let title = try XCTUnwrap(item["title"] as? String)
+        let localization = item["localization"] as? [String: Any]
+        let translations = localization?["translations"] as? [String: [String: Any]]
+        let expected = try XCTUnwrap(translations?["zh-Hans"]?["prompt"] as? String ?? item["prompt"] as? String)
+        XCTAssertGreaterThan(expected.count, 1100)
+        launch(online: true)
+        XCTAssertTrue(app.otherElements["catalogUpdateStatus"].waitForNonExistence(timeout: 30))
+        capture("immersive-live-home")
+        app.selectPrompixTab("搜索")
+        let field = app.searchFields.firstMatch
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        field.tap(); field.typeText("Anthropic\n")
+        let creator = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'creator-' AND label == 'Anthropic'")).firstMatch
+        XCTAssertTrue(creator.waitForExistence(timeout: 5)); creator.tap()
+        capture("immersive-live-creator")
+        app.navigationBars.buttons.firstMatch.tap()
+        XCTAssertEqual(field.value as? String, "Anthropic")
+        field.tap(); field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 9) + title + "\n")
+        let card = app.buttons["prompt-skill-anthropic-webapp-testing"]
+        XCTAssertTrue(card.waitForExistence(timeout: 5)); card.tap()
+        XCTAssertTrue(app.buttons["copyPrompt"].waitForExistence(timeout: 3))
+        capture("immersive-live-skill-heading")
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.75))
+            .press(forDuration: 0.01, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.35)))
+        capture("immersive-live-markdown")
+        app.buttons["copyPrompt"].tap()
+        XCTAssertEqual(app.buttons["copyPrompt"].label, "已复制")
+        app.buttons["editPromptAction"].tap()
+        XCTAssertTrue(app.textViews["promptEditor"].waitForExistence(timeout: 3))
+        XCTAssertEqual(app.textViews["promptEditor"].value as? String, expected)
+        app.buttons["完成"].tap()
+        app.expandPromptInformation()
+        XCTAssertTrue(app.buttons["skillFiles"].waitForExistence(timeout: 3))
+        capture("immersive-live-skill-information")
+        let body = XCTAttachment(string: expected)
+        body.name = "immersive-expected-clipboard"; body.lifetime = .keepAlways; add(body)
+    }
+
     func testProductionLanguageDownloadAndCachedRelaunch() throws {
         guard ProcessInfo.processInfo.environment["PROMPIX_LANGUAGE_PACK_ACCEPTANCE"] == "1" else {
             throw XCTSkip("Stage a production v2 edition containing only Simplified Chinese in the backed-up simulator.")
@@ -138,8 +187,8 @@ import CryptoKit
         capture("language-pack-01-japanese-downloaded")
         app.buttons["copyPrompt"].tap()
         XCTAssertTrue(app.buttons["copyPrompt"].label.contains("已复制"))
-        reveal(app.buttons["editPrompt"])
-        app.buttons["editPrompt"].tap()
+        reveal(app.buttons["editPromptAction"])
+        app.buttons["editPromptAction"].tap()
         let editor = app.textViews["promptEditor"]
         XCTAssertTrue(editor.waitForExistence(timeout: 5))
         XCTAssertTrue(editor.value as? String == expectedEditor, "The editor must use the selected language's existing draft, or its full translation when no draft exists.")
@@ -394,8 +443,8 @@ import CryptoKit
             language.tap()
             app.buttons["原文"].tap()
         }
-        reveal(app.buttons["editPrompt"])
-        app.buttons["editPrompt"].tap()
+        reveal(app.buttons["editPromptAction"])
+        app.buttons["editPromptAction"].tap()
         let editor = app.textViews["promptEditor"]
         XCTAssertTrue(editor.waitForExistence(timeout: 5))
         XCTAssertTrue(editor.value as? String == expected, "The original-language saved draft must remain unchanged.")
@@ -639,7 +688,8 @@ import CryptoKit
 
         app.swipeUp(); app.swipeUp()
         let textChannel = app.buttons["kind-text"]
-        XCTAssertTrue(textChannel.isHittable, "Content channels stay available while browsing.")
+        app.swipeDown()
+        XCTAssertTrue(textChannel.isHittable, "Content channels return when browsing upward.")
         capture("polish-03-pinned-channels")
         textChannel.tap()
         XCTAssertTrue(textChannel.isSelected)
@@ -663,8 +713,9 @@ import CryptoKit
         app.buttons["完成"].tap()
         app.navigationBars.buttons.element(boundBy: 0).tap()
         XCTAssertTrue(app.buttons["kind-text"].isSelected)
-        app.selectPrompixTab("专题")
+        app.openPrompixCollections()
         capture("polish-08-collections")
+        app.navigationBars.buttons.firstMatch.tap()
         app.selectPrompixTab("收藏")
         capture("polish-09-saved")
         app.selectPrompixTab("发现")
@@ -685,8 +736,8 @@ import CryptoKit
             let oldLabel = app.buttons["copyPrompt"].label
             app.buttons["copyPrompt"].tap()
             XCTAssertNotEqual(app.buttons["copyPrompt"].label, oldLabel)
-            reveal(app.buttons["editPrompt"])
-            app.buttons["editPrompt"].tap()
+            reveal(app.buttons["editPromptAction"])
+            app.buttons["editPromptAction"].tap()
             XCTAssertTrue(app.textViews["promptEditor"].waitForExistence(timeout: 5))
             capture("editorial-\(language)-editor")
             app.terminate()
@@ -1034,7 +1085,7 @@ import CryptoKit
         let restoredSearch = app.searchFields.firstMatch
         XCTAssertTrue(restoredSearch.waitForExistence(timeout: 5)); restoredSearch.tap(); restoredSearch.typeText("旅行想法")
         reveal(card); card.tap()
-        let edit = app.buttons["editPrompt"]
+        let edit = app.buttons["editPromptAction"]
         reveal(edit); edit.tap()
         let editor = app.textViews["promptEditor"]
         XCTAssertTrue(editor.waitForExistence(timeout: 5)); XCTAssertTrue(editor.value as? String == expected)
@@ -1197,7 +1248,7 @@ import CryptoKit
                 let expected = try XCTUnwrap(current.prompts.first { $0.id == id }?.localization?.translations[locale]?.prompt)
                 XCTAssertFalse(expected.isEmpty)
                 capture("translation-\(id)-\(locale)-detail")
-                reveal(app.buttons["editPrompt"]); app.buttons["editPrompt"].tap()
+                reveal(app.buttons["editPromptAction"]); app.buttons["editPromptAction"].tap()
                 let editor = app.textViews["promptEditor"]
                 XCTAssertTrue(editor.waitForExistence(timeout: 5))
                 XCTAssertTrue(editor.value as? String == expected, "Editing must retain the complete selected-language body.")
@@ -1284,6 +1335,7 @@ import CryptoKit
                 let skill = try XCTUnwrap(item["skill"] as? [String: Any])
                 let files = try XCTUnwrap(skill["files"] as? [String])
                 XCTAssertTrue(files.contains("SKILL.md"))
+                app.expandPromptInformation()
                 let inventory = app.buttons["skillFiles"]
                 reveal(inventory); inventory.tap()
                 reveal(app.staticTexts[try XCTUnwrap(files.last)])
@@ -1340,6 +1392,7 @@ import CryptoKit
             reveal(card); card.tap()
             XCTAssertTrue(app.buttons["usePrompt"].waitForExistence(timeout: 5))
             capture("publisher-\(id)-detail")
+            app.expandPromptInformation()
             let inventory = app.buttons["skillFiles"]
             reveal(inventory); inventory.tap()
             reveal(app.staticTexts[try XCTUnwrap(files.last)])
@@ -1749,7 +1802,7 @@ import CryptoKit
         capture("07-english-content-selection")
         app.buttons["copyPrompt"].tap()
         XCTAssertTrue(app.buttons["copyPrompt"].label.contains("已复制"))
-        let edit = app.buttons["editPrompt"]
+        let edit = app.buttons["editPromptAction"]
         reveal(edit)
         edit.tap()
         let editor = app.textViews["promptEditor"]
@@ -1789,6 +1842,27 @@ import CryptoKit
 }
 
 extension XCUIApplication {
+    @MainActor func openPrompixCollections() {
+        selectPrompixTab("发现")
+        for _ in 0..<5 {
+            if buttons["kind-all"].isHittable { break }
+            swipeDown()
+        }
+        if buttons["kind-all"].isHittable { buttons["kind-all"].tap() }
+        let all = buttons["allCollections"]
+        for _ in 0..<5 { if all.isHittable { break }; swipeDown() }
+        XCTAssertTrue(all.isHittable); all.tap()
+    }
+    @MainActor func expandPromptInformation() {
+        let information = buttons["promptInformation"]
+        for _ in 0..<40 {
+            if information.isHittable { break }
+            coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.72))
+                .press(forDuration: 0.01, thenDragTo: coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.32)))
+        }
+        XCTAssertTrue(information.isHittable); information.tap()
+    }
+
     @MainActor func selectPrompixTab(_ title: String) {
         // iPadOS exposes floating native tabs as ordinary buttons.
         let tab = tabBars.buttons[title]

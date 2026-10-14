@@ -44,9 +44,19 @@ struct Prompt: Codable, Identifiable, Hashable {
         default: value
         }
     }
+    /// Search originals and the translations already available in the active
+    /// catalog. A locale change must not make those original terms disappear.
+    var searchableTitles: [String] {
+        [title] + (localization?.translations.values.map(\.title) ?? [])
+    }
     var searchableText: String {
-        ([title, summary, prompt, model, displayModel, displayTitle, displaySummary, displayContent.prompt, displayContent.example, displayKind,
-          source.name, source.author ?? "", creator?.searchableIdentity ?? ""] + tags).joined(separator: " ")
+        let originals = [title, summary, prompt, example, previewLabel]
+        let translations = localization?.translations.values.flatMap {
+            [$0.title, $0.summary, $0.prompt, $0.example, $0.previewLabel]
+        } ?? []
+        let identity = [model, displayModel, displayKind, kind.rawValue, isSkill ? "skill skills agent-skills" : "prompt prompts",
+                        source.name, source.author ?? "", creator?.searchableIdentity ?? "", skill?.name ?? "", skill?.description ?? ""]
+        return (originals + translations + identity + tags).joined(separator: " ")
     }
 
     struct Creator: Codable, Hashable, Identifiable {
@@ -63,7 +73,8 @@ struct Prompt: Codable, Identifiable, Hashable {
             [displayName, username ?? "", username.map { "@" + $0.trimmingCharacters(in: CharacterSet(charactersIn: "@")) } ?? "", platformName].joined(separator: " ")
         }
         func matchesSearch(_ query: String) -> Bool {
-            query.split(whereSeparator: { $0.isWhitespace }).allSatisfy { searchableIdentity.localizedStandardContains(String($0)) }
+            let identity = searchableIdentity
+            return query.split(whereSeparator: { $0.isWhitespace }).allSatisfy { identity.containsSearchTerm(String($0)) }
         }
 
         var platformIdentity: String? {
@@ -239,11 +250,11 @@ struct PromptQuery {
         let query = text.trimmingCharacters(in: .whitespacesAndNewlines)
         let terms = query.split(whereSeparator: { $0.isWhitespace }).map(String.init)
         func containsTerms(_ value: String) -> Bool {
-            terms.allSatisfy { value.localizedStandardContains($0) }
+            terms.allSatisfy { value.containsSearchTerm($0) }
         }
         func relevance(_ item: Prompt) -> Int {
             guard !terms.isEmpty else { return 0 }
-            let titles = [item.title, item.displayTitle]
+            let titles = item.searchableTitles
             if titles.contains(where: { $0.compare(query, options: [.caseInsensitive, .diacriticInsensitive, .widthInsensitive], locale: .current) == .orderedSame }) { return 4 }
             if titles.contains(where: containsTerms) { return 3 }
             if containsTerms(item.creator?.searchableIdentity ?? item.source.author ?? "") { return 2 }
@@ -265,7 +276,15 @@ struct PromptQuery {
         if let topic, !prompt.fits(topic: topic) { return false }
         if let model, prompt.model != model { return false }
         let terms = text.split(whereSeparator: { $0.isWhitespace })
-        return terms.allSatisfy { prompt.searchableText.localizedStandardContains(String($0)) }
+        guard !terms.isEmpty else { return true }
+        let searchable = prompt.searchableText
+        return terms.allSatisfy { searchable.containsSearchTerm(String($0)) }
+    }
+}
+
+private extension String {
+    func containsSearchTerm(_ term: String) -> Bool {
+        range(of: term, options: [.caseInsensitive, .diacriticInsensitive, .widthInsensitive], locale: .current) != nil
     }
 }
 
