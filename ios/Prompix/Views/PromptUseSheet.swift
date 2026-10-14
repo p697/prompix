@@ -206,15 +206,18 @@ struct PromptUseSheet: View {
                 Text(item.isSkill && command != nil ? String(localized: "安装命令") : String(localized: "准备好的内容"))
                     .font(.subheadline).foregroundStyle(Palette.muted)
             }
-            Text(String(transferText.prefix(360)))
-                .font(item.isSkill ? .subheadline.monospaced() : .body)
-                .foregroundStyle(Palette.ink).lineSpacing(5).lineLimit(4)
-                .accessibilityIdentifier("handoffExcerpt")
+            if !previewExpanded {
+                Text(String(transferText.prefix(360)))
+                    .font(item.isSkill ? .subheadline.monospaced() : .body)
+                    .foregroundStyle(Palette.ink).lineSpacing(5).lineLimit(4)
+                    .accessibilityIdentifier("handoffExcerpt")
+            }
             Button {
                 withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) { previewExpanded.toggle() }
             } label: {
                 HStack {
                     Text(previewExpanded ? String(localized: "收起正文") : String(localized: "查看完整内容"))
+                        .contentTransition(.identity)
                     Spacer()
                     Image(systemName: "chevron.right").rotationEffect(.degrees(previewExpanded ? 90 : 0)).accessibilityHidden(true)
                 }.frame(minHeight: 44).contentShape(Rectangle())

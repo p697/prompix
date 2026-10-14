@@ -998,6 +998,7 @@ import CryptoKit
                 }
                 XCTAssertNotNil(body)
                 XCTAssertFalse(try XCTUnwrap(body).label.isEmpty)
+                XCTAssertFalse(app.staticTexts["handoffExcerpt"].exists, "Expanded reading should not repeat the excerpt above the full text.")
                 capture("handoff-largest-\(locale)-\(skill ? "skill" : "website")-expanded")
                 app.terminate()
             }
