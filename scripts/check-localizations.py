@@ -62,7 +62,8 @@ def check(path: Path) -> int:
         if not entry.get('shouldTranslate', True):
             excluded += 1
             continue
-        expected = placeholders(key)
+        source = entry.get('localizations', {}).get(catalog['sourceLanguage'], {}).get('stringUnit', {}).get('value', key)
+        expected = placeholders(source)
         english = {unit.get('value') for _, unit in units(entry.get('localizations', {}).get('en', {}))}
         for locale in LOCALES:
             localization = entry.get('localizations', {}).get(locale)
@@ -110,9 +111,14 @@ def check(path: Path) -> int:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('catalog', nargs='?', type=Path, default=Path(__file__).resolve().parents[1] / 'ios/Prompix/Resources/Localizable.xcstrings')
+    parser.add_argument('catalog', nargs='?', type=Path)
     args = parser.parse_args()
-    return check(args.catalog)
+    catalogs = [args.catalog] if args.catalog else sorted((Path(__file__).resolve().parents[1] / 'ios/Prompix/Resources').glob('*.xcstrings'))
+    results = []
+    for path in catalogs:
+        print(path.name)
+        results.append(check(path))
+    return max(results, default=1)
 
 
 if __name__ == '__main__':

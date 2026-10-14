@@ -25,8 +25,12 @@ import AVKit
         XCTAssertFalse(play.items(in: library).contains { $0.id == "simple-explanation" })
         XCTAssertFalse(play.items(in: library).contains { $0.id == "color-memory" })
         let covers = play.covers(from: Array(repeating: library.prompts, count: 30).flatMap { $0 })
-        XCTAssertEqual(covers.count, 3)
-        XCTAssertEqual(Set(covers.map(\.id)).count, 3)
+        XCTAssertEqual(covers.count, 2)
+        XCTAssertEqual(Set(covers.map(\.id)).count, 2)
+        XCTAssertTrue(covers.allSatisfy { $0.kind != .text && !$0.isSkill })
+        XCTAssertEqual(play.covers(from: play.items(in: library)).count, 1)
+        XCTAssertEqual(play.covers(from: covers.flatMap { [$0, $0] }).map(\.id), covers.map(\.id))
+        XCTAssertTrue(play.covers(from: []).isEmpty)
     }
 
     func testGalleryPreservesCoverOrderAndRejectsUntrustedMedia() throws {

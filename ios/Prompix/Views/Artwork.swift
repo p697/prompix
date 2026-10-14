@@ -8,7 +8,7 @@ struct Artwork: View {
             ZStack {
                 if item.kind == .text || item.isSkill { noteArtwork(size: proxy.size) }
                 else if let name = item.media?.image, UIImage(named: name) != nil { photo(name, size: proxy.size) }
-                else if let url = item.media?.imageURL { RemoteImage(url: url).frame(width: proxy.size.width, height: proxy.size.height).clipped() }
+                else if let url = item.media?.imageURL { RemoteImage(url: url, contentMode: compact ? .fill : .fit).frame(width: proxy.size.width, height: proxy.size.height).clipped() }
                 else if item.kind == .web, UIImage(named: "web-\(item.id)") != nil {
                     Image("web-\(item.id)").resizable().scaledToFill().frame(width: proxy.size.width, height: proxy.size.height, alignment: .top).clipped()
                 }
@@ -38,7 +38,7 @@ struct Artwork: View {
             Color(red: 0.92, green: 0.91, blue: 0.85)
             VStack(alignment: .leading, spacing: 16) {
                 Image(systemName: item.kind == .web ? "curlybraces" : "quote.opening").font(.system(size: 28, weight: .ultraLight))
-                Text(item.displayTitle).font(.system(size: min(size.width * 0.12, 28), weight: .regular, design: .serif)).lineLimit(5).minimumScaleFactor(0.75)
+                Text(item.displayTitle).font(.system(size: min(size.width * 0.12, 28), weight: .regular, design: .default)).lineLimit(5).minimumScaleFactor(0.75)
                 Spacer(minLength: 0)
                 Text(item.displayKind).font(.system(size: 11, weight: .medium))
             }.foregroundStyle(Color(red: 0.28, green: 0.32, blue: 0.23)).padding(size.width * 0.12)
@@ -63,7 +63,7 @@ struct Artwork: View {
                     Image(systemName: "arrow.up.right").font(.system(size: 12, weight: .light))
                 }
                 Spacer(minLength: 0)
-                Text(item.displayContent.cover?.text ?? cover.text).font(.system(size: min(size.width * (compact ? 0.115 : 0.15), 32), weight: .regular, design: .serif))
+                Text(item.displayContent.cover?.text ?? cover.text).font(.system(size: min(size.width * (compact ? 0.115 : 0.15), 32), weight: .regular, design: .default))
                     .lineSpacing(4).lineLimit(compact ? 3 : 5).minimumScaleFactor(0.65)
                 Spacer(minLength: 0)
                 if !compact { Text(item.displayContent.cover?.eyebrow ?? cover.eyebrow).font(.system(size: max(9, size.width * 0.045))).lineLimit(2) }
@@ -81,7 +81,7 @@ struct Artwork: View {
                 }.font(.system(size: compact ? 12 : 10, weight: .medium))
                     .foregroundStyle(Palette.muted)
                 Text(item.displayTitle)
-                    .font(.system(size: min(size.width * (compact ? 0.14 : 0.108), 23), weight: .regular, design: .serif))
+                    .font(.system(size: min(size.width * (compact ? 0.14 : 0.108), 23), weight: .regular, design: .default))
                     .lineSpacing(3).lineLimit(4).fixedSize(horizontal: false, vertical: true).layoutPriority(1)
                 if !compact {
                     Text(noteExcerpt).font(.system(size: max(11, min(size.width * 0.068, 13))))

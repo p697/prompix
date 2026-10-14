@@ -79,13 +79,14 @@ import Observation
 }
 struct RemoteImage: View {
     let url: URL
+    var contentMode: ContentMode = .fit
     @State private var image: UIImage?
     @State private var failed = false
     @State private var attempt = 0
     var body: some View {
         ZStack {
             Palette.soft
-            if let image { Image(uiImage: image).resizable().scaledToFit() }
+            if let image { Image(uiImage: image).resizable().aspectRatio(contentMode: contentMode) }
             else if failed {
                 Button { attempt += 1 } label: { Image(systemName: "arrow.clockwise").font(.title3.weight(.light)).foregroundStyle(Palette.muted).frame(width: 44, height: 44) }
                     .accessibilityLabel(String(localized: "重新加载图片"))

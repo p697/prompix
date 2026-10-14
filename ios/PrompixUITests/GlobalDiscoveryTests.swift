@@ -19,7 +19,7 @@ import CryptoKit
     private func launch(_ language: String = "zh-Hans", online: Bool = false) {
         app.launchArguments = ["-AppleLanguages", "(\(language))", "-AppleLocale", language]
         if !online { app.launchArguments.insert("--cached-only", at: 0) }
-        app.launch()
+        app.launchPrompix()
         XCTAssertTrue(app.buttons["searchButton"].waitForExistence(timeout: 10))
     }
 
@@ -226,7 +226,7 @@ import CryptoKit
         }
         func launchWithFailure() {
             app.launchArguments = ["--simulate-network-failure", "-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh-Hans"]
-            app.launch()
+            app.launchPrompix()
             XCTAssertTrue(app.buttons["retryCatalogUpdate"].waitForExistence(timeout: 15))
             XCTAssertTrue(app.buttons["allCreators"].exists)
         }
@@ -350,7 +350,7 @@ import CryptoKit
         let cache = current.deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("Caches/PrompixImages")
         if FileManager.default.fileExists(atPath: cache.path) { try FileManager.default.removeItem(at: cache) }
         app.launchArguments = ["--cached-only", "--simulate-network-failure", "--simulate-slow-image-failure", "-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh-Hans"]
-        app.launch()
+        app.launchPrompix()
         XCTAssertTrue(app.buttons["searchButton"].waitForExistence(timeout: 10))
         openTarget()
         preview().tap()

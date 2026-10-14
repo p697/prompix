@@ -305,3 +305,10 @@ evidence are retained outside Git at
 `PromptUseSheet` prevents interactive dismissal while a prepared variable result has failed to save. Done offers the existing native copy-and-leave, discard-and-leave and continue-editing choices; copying uses the complete in-memory result. The parent editor remains unchanged until an explicit return to editing or successful save.
 
 The three `testPreparedVariables…AfterFailedSave` / `testPreparedVariablesSurviveFailedSaveAndReturnToEditor` journeys in `GlobalDiscoveryUITests` share the guarded production-cache fixture. Set `PROMPIX_VARIABLE_ACCEPTANCE=1` and `PROMPIX_ACCEPTANCE_CONTAINER`, use a separate backed-up simulator, and restore its personal files after any interruption. The copy test attaches the expected buffer; compare host `simctl pbpaste` bytes independently. These tests must not replace the user's running acceptance build.
+
+
+### iPhone welcome and Cosmos visual acceptance (0.5.0)
+
+`OnboardingTests` covers skip, forward/back, completion persistence, Settings replay and English/German layout. The Debug simulator-only `--reset-onboarding` argument removes only the welcome-completion preference; it never clears content, favorites or drafts. Existing journeys call `launchPrompix()` to begin in discovery. Use `simctl ui <dedicated-device> content_size accessibility-extra-extra-extra-large` and `appearance dark` for the stress-layout pass, then restore `large` / `light`. The welcome body scrolls independently of its actions; decorative artwork is omitted at accessibility sizes.
+
+`python3 scripts/check-localizations.py` checks every `.xcstrings` catalog by default, including the new Onboarding table. Actual evidence, scope and limitations are recorded in [the iPhone visual review](../docs/design-cosmos-iphone.md).

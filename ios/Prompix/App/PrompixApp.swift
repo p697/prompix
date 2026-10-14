@@ -5,15 +5,15 @@ import SwiftUI
     @State private var library = Library()
     init() {
         #if DEBUG && targetEnvironment(simulator)
+        if ProcessInfo.processInfo.arguments.contains("--reset-onboarding") {
+            // Reset only the welcome preference for first-run UI acceptance.
+            UserDefaults.standard.removeObject(forKey: "hasCompletedOnboarding")
+        }
         if ProcessInfo.processInfo.arguments.contains("--simulate-network-failure") {
             try? FileManager.default.removeItem(at: SimulatorNetworkFailure.recoveryURL)
             URLProtocol.registerClass(SimulatorNetworkFailure.self)
         }
         #endif
-        let title = UIFont.preferredFont(forTextStyle: .largeTitle)
-        if let descriptor = title.fontDescriptor.withDesign(.serif) {
-            UINavigationBar.appearance().largeTitleTextAttributes = [.font: UIFont(descriptor: descriptor, size: 0)]
-        }
     }
     var body: some Scene {
         WindowGroup {

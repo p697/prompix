@@ -58,6 +58,6 @@ struct PromptVariablesSheet: View {
                     .disabled(prepared == template.source).opacity(prepared == template.source ? 0.45 : 1)
                     .accessibilityIdentifier("applyPromptVariables")
             }
-        }
+        }.promptSheet()
     }
 }
