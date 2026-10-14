@@ -1803,7 +1803,7 @@ import CryptoKit
         capture("masonry-heather-loaded")
     }
 
-    func testPersistentTabsThroughCreatorAndDetail() {
+    func testTabsHideInDetailAndRestoreThroughCreator() {
         launch()
         let creator = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'creator-' ")).firstMatch
         XCTAssertTrue(creator.waitForExistence(timeout: 5)); creator.tap()
@@ -1813,7 +1813,7 @@ import CryptoKit
         let item = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'prompt-' ")).firstMatch
         reveal(item); item.tap()
         XCTAssertTrue(app.buttons["copyPrompt"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.tabBars.buttons["收藏"].isHittable)
+        XCTAssertFalse(app.tabBars.buttons["收藏"].isHittable)
         app.navigationBars.buttons.firstMatch.tap()
         XCTAssertTrue(app.buttons["saveCreator"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.tabBars.buttons["收藏"].isHittable)
