@@ -120,7 +120,7 @@ import CryptoKit
         let creator = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'creator-' AND label == 'Anthropic'")).firstMatch
         XCTAssertTrue(creator.waitForExistence(timeout: 5)); creator.tap()
         capture("immersive-live-creator")
-        app.navigationBars.buttons.firstMatch.tap()
+        app.goBackInPrompix()
         XCTAssertEqual(field.value as? String, "Anthropic")
         field.tap(); field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 9) + title + "\n")
         let card = app.buttons["prompt-skill-anthropic-webapp-testing"]
@@ -314,7 +314,7 @@ import CryptoKit
         XCTAssertTrue(app.buttons["copyEditedPrompt"].label.contains("已复制"))
         capture("network-03-reopened-edited-draft")
         app.navigationBars.buttons["完成"].tap()
-        app.navigationBars.buttons.element(boundBy: 0).tap()
+        app.goBackInPrompix()
         let retry = app.buttons["retryCatalogUpdate"]
         XCTAssertTrue(retry.waitForExistence(timeout: 5))
         let current = try acceptanceDirectory()
@@ -567,7 +567,7 @@ import CryptoKit
         capture("production-upgrade-05-real-creator-profile")
         // Creator detail intentionally hides the tab bar. Return through the
         // native back action before switching to the saved collection.
-        app.navigationBars.buttons.element(boundBy: 0).tap()
+        app.goBackInPrompix()
         XCTAssertTrue(app.buttons["allCreators"].waitForExistence(timeout: 5))
         assertSavedDraft(seed, expected: expectedDraft, evidence: "production-upgrade-06-draft-after-update")
         try assertSavedStorage(in: directory, favorites: favorites, drafts: drafts)
@@ -684,7 +684,7 @@ import CryptoKit
         creator.tap()
         XCTAssertTrue(app.buttons["saveCreator"].waitForExistence(timeout: 5))
         capture("polish-02-creator")
-        app.navigationBars.buttons.element(boundBy: 0).tap()
+        app.goBackInPrompix()
 
         app.swipeUp(); app.swipeUp()
         let textChannel = app.buttons["kind-text"]
@@ -711,11 +711,11 @@ import CryptoKit
         XCTAssertTrue(app.textViews["promptEditor"].waitForExistence(timeout: 5))
         capture("polish-07-editor")
         app.buttons["完成"].tap()
-        app.navigationBars.buttons.element(boundBy: 0).tap()
+        app.goBackInPrompix()
         XCTAssertTrue(app.buttons["kind-text"].isSelected)
         app.openPrompixCollections()
         capture("polish-08-collections")
-        app.navigationBars.buttons.firstMatch.tap()
+        app.goBackInPrompix()
         app.selectPrompixTab("收藏")
         capture("polish-09-saved")
         app.selectPrompixTab("发现")
@@ -1454,7 +1454,7 @@ import CryptoKit
             XCTAssertTrue(app.buttons["saveCreator"].waitForExistence(timeout: 5))
             XCTAssertTrue(app.links["creatorExternalProfile"].exists || app.buttons["creatorExternalProfile"].exists)
             capture("native-x-\(kind)-creator-profile")
-            app.navigationBars.buttons.element(boundBy: 0).tap()
+            app.goBackInPrompix()
             let original = app.buttons["originalXPost"]
             reveal(original); original.tap()
             capture("native-x-\(kind)-original-post")
@@ -1545,7 +1545,7 @@ import CryptoKit
         XCTAssertFalse(app.staticTexts["handoffOpenError"].exists)
         capture("handoff-02-return-after-opening-tool")
         app.navigationBars.buttons["完成"].tap()
-        app.navigationBars.buttons.element(boundBy: 0).tap()
+        app.goBackInPrompix()
         selectSkill()
         let skill = app.buttons["prompt-skill-openai-pdf"]
         reveal(skill); skill.tap()
@@ -1803,6 +1803,72 @@ import CryptoKit
         capture("masonry-heather-loaded")
     }
 
+    func testLongVideoSkillOpeningAndCompleteEditor() {
+        verifyRepeatedOpening(query: "AI 视频制作与生成工作流", id: "skill-publisher-corey-haines-video",
+                              minimumCharacters: 10_000, label: "long-video-skill")
+    }
+
+    func testReportedBrandVideoOpeningAndCompleteEditor() {
+        verifyRepeatedOpening(query: "把品牌网站变成一支动画短片", id: "x-post-2109576638136795289",
+                              minimumCharacters: 5_000, label: "reported-brand-video")
+    }
+
+    private func verifyRepeatedOpening(query: String, id: String, minimumCharacters: Int, label: String) {
+        launch()
+        app.selectPrompixTab("搜索")
+        let field = app.searchFields.firstMatch
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        field.tap(); field.typeText(query + "\n")
+        let card = app.buttons["prompt-" + id]
+        XCTAssertTrue(card.waitForExistence(timeout: 5))
+        var intervals: [Double] = []
+        for attempt in 0..<3 {
+            let start = Date()
+            card.tap()
+            XCTAssertTrue(app.buttons["copyPrompt"].waitForExistence(timeout: 8))
+            XCTAssertTrue(app.buttons["copyPrompt"].isHittable)
+            intervals.append(Date().timeIntervalSince(start))
+            XCTAssertFalse(app.tabBars.buttons["收藏"].isHittable)
+            capture("\(label)-\(attempt)")
+            app.buttons["closePromptDetail"].tap()
+            XCTAssertTrue(card.isHittable)
+            XCTAssertTrue(app.tabBars.buttons["收藏"].isHittable)
+        }
+        let timing = XCTAttachment(string: "XCTest tap-to-hittable intervals (includes automation/idle waits, not first-pixel latency): \(intervals)")
+        timing.name = "\(label)-open-intervals"; timing.lifetime = .keepAlways; add(timing)
+        card.tap()
+        app.buttons["editPromptAction"].tap()
+        let editor = app.textViews["promptEditor"]
+        XCTAssertTrue(editor.waitForExistence(timeout: 5))
+        XCTAssertGreaterThan((editor.value as? String ?? "").count, minimumCharacters)
+    }
+
+    func testNestedReadingPresentationKeepsItsParent() {
+        launch()
+        let creator = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'creator-' ")).firstMatch
+        creator.tap()
+        let card = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'prompt-' ")).firstMatch
+        reveal(card); card.tap()
+        XCTAssertTrue(app.buttons["copyPrompt"].waitForExistence(timeout: 5))
+        let byline = app.buttons["creatorByline"]
+        reveal(byline); byline.tap()
+        XCTAssertTrue(app.buttons["saveCreator"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons.matching(identifier: "saveCreator").allElementsBoundByIndex.contains { $0.isHittable })
+        XCTAssertFalse(app.tabBars.buttons["收藏"].isHittable)
+        let nestedCard = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'prompt-' ")).allElementsBoundByIndex.first { $0.isHittable }!
+        reveal(nestedCard); nestedCard.tap()
+        XCTAssertTrue(app.buttons["copyPrompt"].waitForExistence(timeout: 5))
+        app.goBackInPrompix()
+        XCTAssertTrue(app.buttons.matching(identifier: "saveCreator").allElementsBoundByIndex.contains { $0.isHittable })
+        XCTAssertFalse(app.tabBars.buttons["收藏"].isHittable)
+        app.goBackInPrompix()
+        XCTAssertTrue(app.buttons["copyPrompt"].isHittable)
+        app.goBackInPrompix()
+        XCTAssertTrue(app.buttons.matching(identifier: "saveCreator").allElementsBoundByIndex.contains { $0.isHittable })
+        XCTAssertTrue(app.tabBars.buttons["收藏"].isHittable)
+        capture("nested-reader-return-to-original-creator")
+    }
+
     func testTabsHideInDetailAndRestoreThroughCreator() {
         launch()
         let creator = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'creator-' ")).firstMatch
@@ -1814,10 +1880,10 @@ import CryptoKit
         reveal(item); item.tap()
         XCTAssertTrue(app.buttons["copyPrompt"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.tabBars.buttons["收藏"].isHittable)
-        app.navigationBars.buttons.firstMatch.tap()
+        app.buttons["closePromptDetail"].tap()
         XCTAssertTrue(app.buttons["saveCreator"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.tabBars.buttons["收藏"].isHittable)
-        app.navigationBars.buttons.firstMatch.tap()
+        app.goBackInPrompix()
         XCTAssertTrue(app.buttons["discoverySettings"].waitForExistence(timeout: 5))
         app.buttons["discoverySettings"].tap()
         XCTAssertTrue(app.buttons["replayOnboarding"].waitForExistence(timeout: 5))
@@ -1833,7 +1899,7 @@ import CryptoKit
             reveal(creator)
             creator.tap()
             XCTAssertTrue(app.buttons["saveCreator"].waitForExistence(timeout: 5))
-            app.navigationBars.buttons.element(boundBy: 0).tap()
+            app.goBackInPrompix()
             let kind = iteration.isMultiple(of: 2) ? "kind-text" : "kind-image"
             app.buttons[kind].tap()
             XCTAssertFalse(app.buttons["allCreators"].exists)
@@ -1898,6 +1964,13 @@ import CryptoKit
 }
 
 extension XCUIApplication {
+    @MainActor func goBackInPrompix() {
+        // A reading presentation has an explicit close control; its toolbar's
+        // first accessibility element can be Share, not the back chevron.
+        if let close = buttons.matching(identifier: "closePromptDetail").allElementsBoundByIndex.first(where: { $0.isHittable }) { close.tap() }
+        else { navigationBars.buttons.firstMatch.tap() }
+    }
+
     @MainActor func openPrompixCollections() {
         selectPrompixTab("发现")
         for _ in 0..<5 {

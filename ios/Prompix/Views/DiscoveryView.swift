@@ -338,6 +338,8 @@ struct PromptCard: View {
     let item: Prompt
     var origin: PromptDetailOrigin = .catalog
     @Environment(Library.self) private var library
+    @Environment(\.colorScheme) private var colorScheme
+    @State private var detailPresented = false
     @State private var savedFeedback = false
     @State private var copiedFeedback = false
     @Namespace private var transition
@@ -345,7 +347,7 @@ struct PromptCard: View {
     @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            NavigationLink { PromptDetail(item: item, origin: origin).promptTransitionDestination(id: item.id, in: transition) } label: {
+            Button { detailPresented = true } label: {
                 VStack(alignment: .leading, spacing: 8) {
                     if typeSize.isAccessibilitySize && (item.kind == .text || item.isSkill) {
                         VStack(alignment: .leading, spacing: 12) {
@@ -392,10 +394,38 @@ struct PromptCard: View {
                 }.foregroundStyle(Palette.muted).padding(.leading, 2)
             }
         }
+        .fullScreenCover(isPresented: $detailPresented) {
+            PromptReadingPresentation(item: item, origin: origin)
+                // Pin the presenting appearance through UIKit's zoom snapshots.
+                .preferredColorScheme(colorScheme)
+                .promptTransitionDestination(id: item.id, in: transition)
+        }
     }
     private var titleIsInArtwork: Bool { item.isSkill || item.kind == .text }
     private var ratio: CGFloat { PromptCardGeometry.aspectRatio(for: item) }
 
+}
+
+/// Reading covers the tab hierarchy without changing its visibility. The
+/// original tab bar is already in place beneath an interactive dismissal.
+private struct PromptReadingPresentation: View {
+    let item: Prompt
+    let origin: PromptDetailOrigin
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            PromptDetail(item: item, origin: origin)
+                .toolbar {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button { dismiss() } label: {
+                            Image(systemName: "chevron.left").frame(minWidth: 44, minHeight: 44)
+                        }.accessibilityLabel(String(localized: "返回列表"))
+                            .accessibilityIdentifier("closePromptDetail")
+                    }
+                }
+        }.tint(Palette.accent)
+    }
 }
 
 struct FavoritesView: View {

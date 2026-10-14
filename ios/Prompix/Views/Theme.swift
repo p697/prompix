@@ -115,7 +115,7 @@ struct PrimaryActionLabel: View {
 }
 
 // Native zoom keeps the card connected to its detail and supplies the system's
-// interactive dismissal. Older systems and Reduce Motion use the normal push.
+// interactive dismissal. Older systems and Reduce Motion use the normal presentation.
 private struct PromptTransition: ViewModifier {
     let id: String
     let namespace: Namespace.ID

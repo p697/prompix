@@ -59,7 +59,6 @@ struct PromptDetail: View {
         .toolbarBackground(.hidden, for: .navigationBar)
         .toolbarColorScheme(colorScheme, for: .navigationBar)
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar(.hidden, for: .tabBar)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 ShareLink(item: "\(content.title)\n\n\(content.prompt)\n\n\(String(localized: "来自")) \(item.source.author ?? item.source.name) · \(item.source.license)\n\(item.source.url?.absoluteString ?? "https://prompix.dev")") { Label(String(localized: "分享"), systemImage: "square.and.arrow.up").frame(minWidth: 44, minHeight: 44) }
