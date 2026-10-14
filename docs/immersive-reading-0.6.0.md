@@ -70,4 +70,4 @@ xcodebuild test -project ios/Prompix.xcodeproj -scheme Prompix \
 
 回归测试覆盖竖图/横图/方图混合、追加内容稳定、四列不等宽和窄窗宽度。真实648条缓存目录中的 Heather Green 五条内容已在 iPhone Air / iOS 27.0 模拟器中检查；截图及结果位于 SSD `Evidence/masonry-balance-20261014/`。本轮只修改显示分配，不改变内容数量或后端排序。手机仍保留0.6.0（23）。
 
-图片加载稳定性补验通过：五张作品全部下载完成后，卡片 frame 与加载中逐项相同，未发生跳列或尺寸变化；`loaded.xcresult` 与 `loaded-screens/masonry-heather-loaded.png` 保存实际结果。
+初次补验发现 Artwork 对无障碍隐藏，因此 progressIndicators 查询不能证明图片下载完成；该断言已移除。后续以等待后的卡片 frame 对比与截图人工检查分开验证，不把几何稳定断言当作下载成功。

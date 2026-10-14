@@ -1792,10 +1792,14 @@ import CryptoKit
         let rightBottom = right.map(\.maxY).max()!
         let tallest = frames.map(\.height).max()!
         XCTAssertLessThan(abs(leftBottom - rightBottom), tallest, "The trailing gap should stay below one card, not several tall cards.")
-        XCTAssertTrue(NSPredicate(format: "count == 0").evaluate(with: app.progressIndicators)
-            || XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: NSPredicate(format: "count == 0"), object: app.progressIndicators)], timeout: 30) == .completed)
+        // Artwork is deliberately hidden from accessibility. A progress-indicator
+        // query cannot prove download completion; allow settling, then review the
+        // attached pixels alongside the independent geometry assertion.
+        let settled = expectation(description: "Allow remote artwork to settle")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 12) { settled.fulfill() }
+        wait(for: [settled], timeout: 15)
         let loadedFrames = cards.allElementsBoundByIndex.map(\.frame)
-        XCTAssertEqual(loadedFrames, frames, "Image downloads must not move cards between columns or change their reserved sizes.")
+        XCTAssertEqual(loadedFrames, frames, "Card placement and reserved sizes must stay stable while artwork loads.")
         capture("masonry-heather-loaded")
     }
 
