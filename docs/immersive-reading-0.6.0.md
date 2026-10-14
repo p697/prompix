@@ -40,6 +40,7 @@ xcodebuild test -project ios/Prompix.xcodeproj -scheme Prompix \
 - `acceptance.xcresult`：发现顶栏收放／专题入口、图片详情操作收放／复制／编辑、文本阅读／使用面板通过。来源标识的问题在这轮暴露并修复，不能把该整个结果包标为成功。
 - `source-controls.xcresult`：修复后两项通过，覆盖搜索→收藏→返回搜索保留输入、最近搜索、来源披露，以及真实创作者→Skill→完整编辑→文件入口。最终 Skill 再验见 `final-markdown.xcresult`。
 - `iteration-4.xcresult`：原有图片下拉关闭、缩放保护及重新打开通过。
+- `final-accessibility.xcresult`：系统深色、最大辅助字号及 Reduce Motion 实际开启；操作命中范围与元素描述审计、向下收起、复制和编辑均通过。对比截图确认按钮图标不再重叠；正文保持最大字号。
 - 九语资源检查通过：主表 253 个可译键，引导表 15 个；这不代表九语逐页视觉验收。
 - 实际联网刷新从原 531 条缓存更新为 648 条。真实 Skill 的当前简中正文 3,824 UTF-8 字节与宿主读取的复制结果一致；不声称本轮逐条审读全部新增内容。
 

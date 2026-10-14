@@ -125,6 +125,7 @@ import CryptoKit
         field.tap(); field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 9) + title + "\n")
         let card = app.buttons["prompt-skill-anthropic-webapp-testing"]
         XCTAssertTrue(card.waitForExistence(timeout: 5)); card.tap()
+        XCTAssertTrue(app.buttons["copyPrompt"].waitForExistence(timeout: 3))
         capture("immersive-live-skill-heading")
         app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.75))
             .press(forDuration: 0.01, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.35)))
