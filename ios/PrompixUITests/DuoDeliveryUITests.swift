@@ -122,7 +122,7 @@ import XCTest
 
         app.launchArguments = ["--cached-only", "-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh-Hans"]
         app.launchPrompix()
-        XCTAssertTrue(app.buttons["searchButton"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["discoverySettings"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.buttons["allCreators"].waitForExistence(timeout: 5))
 
         let creators = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'creator-'"))
@@ -178,7 +178,7 @@ import XCTest
         }
         back.tap()
 
-        XCTAssertTrue(app.buttons["searchButton"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["discoverySettings"].waitForExistence(timeout: 5))
         let returnedCreator = app.buttons[lastID]
         XCTAssertTrue(returnedCreator.waitForExistence(timeout: 5))
         XCTAssertTrue(fullyVisible(returnedCreator, in: rail, window: window),

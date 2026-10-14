@@ -59,7 +59,6 @@ struct PromptDetail: View {
         .toolbarBackground(.hidden, for: .navigationBar)
         .toolbarColorScheme(colorScheme, for: .navigationBar)
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar(.hidden, for: .tabBar)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 ShareLink(item: "\(content.title)\n\n\(content.prompt)\n\n\(String(localized: "来自")) \(item.source.author ?? item.source.name) · \(item.source.license)\n\(item.source.url?.absoluteString ?? "https://prompix.dev")") { Label(String(localized: "分享"), systemImage: "square.and.arrow.up").frame(minWidth: 44, minHeight: 44) }
@@ -268,7 +267,7 @@ struct PromptDetail: View {
                             .lineLimit(1).minimumScaleFactor(0.8)
                     }
                 }.font(.body.weight(.semibold)).frame(minWidth: 50, maxWidth: actionsCollapsed ? 50 : .infinity, minHeight: 50)
-                    .foregroundStyle(Palette.paper)
+                    .foregroundStyle(colorScheme == .dark ? Color(red: 26 / 255, green: 30 / 255, blue: 24 / 255) : Color(red: 252 / 255, green: 252 / 255, blue: 249 / 255))
             }.buttonStyle(.plain).readingGlass(prominent: true).actionGlassIdentity("use", in: actionTransition)
                 .accessibilityLabel(item.isSkill ? String(localized: "使用这个 Skill") : String(localized: "使用 Prompt"))
                 .accessibilityIdentifier("usePrompt")

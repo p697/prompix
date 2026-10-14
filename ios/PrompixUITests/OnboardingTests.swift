@@ -40,14 +40,14 @@ extension XCUIApplication {
         capture("cosmos-03-use")
         app.buttons["onboardingComplete"].tap()
         XCTAssertTrue(app.buttons["onboardingComplete"].waitForNonExistence(timeout: 5))
-        XCTAssertTrue(app.buttons["searchButton"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["discoverySettings"].waitForExistence(timeout: 5))
         capture("cosmos-04-discover")
 
         // Remove the first-run reset to verify this run's persisted completion.
         app.terminate()
         app.launchArguments.removeLast()
         app.launch()
-        XCTAssertTrue(app.buttons["searchButton"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["discoverySettings"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.buttons["onboardingNext"].exists)
         app.buttons["设置"].tap()
         app.buttons["replayOnboarding"].tap()
@@ -62,7 +62,7 @@ extension XCUIApplication {
         XCTAssertTrue(app.buttons["onboardingSkip"].waitForExistence(timeout: 10))
         app.buttons["onboardingSkip"].tap()
         XCTAssertTrue(app.buttons["onboardingSkip"].waitForNonExistence(timeout: 5))
-        XCTAssertTrue(app.buttons["searchButton"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["discoverySettings"].waitForExistence(timeout: 5))
         app.buttons["kind-text"].tap()
         XCTAssertTrue(app.buttons["prompt-gentle-tarot"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.buttons["prompt-summer-citrus"].exists)
@@ -88,7 +88,7 @@ extension XCUIApplication {
                 action.tap()
             }
             XCTAssertTrue(app.buttons["onboardingComplete"].waitForNonExistence(timeout: 5))
-            XCTAssertTrue(app.buttons["searchButton"].exists)
+            XCTAssertTrue(app.buttons["discoverySettings"].exists)
             app.terminate()
         }
     }

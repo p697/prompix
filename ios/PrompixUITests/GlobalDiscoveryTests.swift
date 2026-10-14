@@ -20,7 +20,7 @@ import CryptoKit
         app.launchArguments = ["-AppleLanguages", "(\(language))", "-AppleLocale", language]
         if !online { app.launchArguments.insert("--cached-only", at: 0) }
         app.launchPrompix()
-        XCTAssertTrue(app.buttons["searchButton"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["discoverySettings"].waitForExistence(timeout: 10))
     }
 
     private func capture(_ name: String) {
@@ -328,7 +328,7 @@ import CryptoKit
         let status = app.descendants(matching: .any).matching(identifier: "catalogUpdateStatus").firstMatch
         let recovered = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in !status.exists }, object: nil)
         XCTAssertEqual(XCTWaiter.wait(for: [recovered], timeout: 90), .completed)
-        XCTAssertTrue(app.buttons["searchButton"].isHittable)
+        XCTAssertTrue(app.buttons["discoverySettings"].isHittable)
         capture("network-04-live-retry-completed")
         openOriginalEditor()
         XCTAssertEqual(editor.value as? String, edited)
@@ -377,7 +377,7 @@ import CryptoKit
             return compact.exists ? compact : app.buttons["previewButton"]
         }
         func openTarget() {
-            app.buttons["searchButton"].tap()
+            app.selectPrompixTab("搜索")
             let search = app.searchFields.firstMatch
             XCTAssertTrue(search.waitForExistence(timeout: 5)); search.tap(); search.typeText(title)
             let card = app.scrollViews["searchResults"].buttons["prompt-\(id)"]
@@ -400,7 +400,7 @@ import CryptoKit
         if FileManager.default.fileExists(atPath: cache.path) { try FileManager.default.removeItem(at: cache) }
         app.launchArguments = ["--cached-only", "--simulate-network-failure", "--simulate-slow-image-failure", "-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh-Hans"]
         app.launchPrompix()
-        XCTAssertTrue(app.buttons["searchButton"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["discoverySettings"].waitForExistence(timeout: 10))
         openTarget()
         preview().tap()
         let retry = app.buttons["loadFullImage"]
@@ -760,7 +760,7 @@ import CryptoKit
         XCTAssertEqual(try? Data(contentsOf: try acceptanceDirectory().appendingPathComponent("drafts.json")), drafts)
         XCTAssertTrue(app.buttons["allCreators"].exists)
         capture("independent-01-refreshed-discovery")
-        app.buttons["searchButton"].tap()
+        app.selectPrompixTab("搜索")
         let search = app.searchFields.firstMatch
         XCTAssertTrue(search.waitForExistence(timeout: 5))
         search.tap(); search.typeText("transcribe")
@@ -812,7 +812,7 @@ import CryptoKit
         let directory = try acceptanceDirectory()
         let drafts = try? Data(contentsOf: directory.appendingPathComponent("drafts.json"))
         launch()
-        app.buttons["searchButton"].tap()
+        app.selectPrompixTab("搜索")
         let search = app.searchFields.firstMatch
         XCTAssertTrue(search.waitForExistence(timeout: 5)); search.tap(); search.typeText("Supabase")
         let card = app.scrollViews["searchResults"].buttons["prompt-skill-publisher-supabase-supabase"]
@@ -843,7 +843,7 @@ import CryptoKit
             kind.tap()
             card = app.buttons["prompt-\(id)"]
         } else {
-            app.buttons["searchButton"].tap()
+            app.selectPrompixTab("搜索")
             let search = app.searchFields.firstMatch
             XCTAssertTrue(search.waitForExistence(timeout: 5))
             search.tap(); search.typeText(query + "\n")
@@ -1010,7 +1010,7 @@ import CryptoKit
         let catalog = try readSnapshot(CatalogSnapshot.self, from: directory, file: "catalog.json")
         let original = try XCTUnwrap(catalog.prompts.first { $0.id == id }?.localization?.translations["zh-Hans"]?.prompt)
         launch()
-        app.buttons["searchButton"].tap()
+        app.selectPrompixTab("搜索")
         let search = app.searchFields.firstMatch
         XCTAssertTrue(search.waitForExistence(timeout: 5)); search.tap(); search.typeText("旅行想法")
         let card = app.scrollViews["searchResults"].buttons["prompt-\(id)"]
@@ -1081,7 +1081,7 @@ import CryptoKit
         let evidence = XCTAttachment(string: expected); evidence.name = "variables-expected-clipboard"
         evidence.lifetime = .keepAlways; add(evidence)
         app.terminate(); launch()
-        app.buttons["searchButton"].tap()
+        app.selectPrompixTab("搜索")
         let restoredSearch = app.searchFields.firstMatch
         XCTAssertTrue(restoredSearch.waitForExistence(timeout: 5)); restoredSearch.tap(); restoredSearch.typeText("旅行想法")
         reveal(card); card.tap()
@@ -1129,7 +1129,7 @@ import CryptoKit
             try before.write(to: file, options: .atomic)
             XCTAssertEqual(try Data(contentsOf: file), before)
         }
-        app.buttons["searchButton"].tap()
+        app.selectPrompixTab("搜索")
         let search = app.searchFields.firstMatch
         XCTAssertTrue(search.waitForExistence(timeout: 5)); search.tap(); search.typeText("旅行想法")
         let card = app.scrollViews["searchResults"].buttons["prompt-\(id)"]
@@ -1229,7 +1229,7 @@ import CryptoKit
             let title = try XCTUnwrap(item["title"] as? String)
             for (locale, name) in [("zh-Hans", "简体中文"), ("en", "English")] {
                 app.terminate(); launch()
-                app.buttons["searchButton"].tap()
+                app.selectPrompixTab("搜索")
                 let search = app.searchFields.firstMatch
                 XCTAssertTrue(search.waitForExistence(timeout: 5))
                 search.tap(); search.typeText(title)
@@ -1323,7 +1323,7 @@ import CryptoKit
             let title = try XCTUnwrap(item["title"] as? String)
             // Each launch uses the verified local edition after the live refresh.
             app.terminate(); launch()
-            app.buttons["searchButton"].tap()
+            app.selectPrompixTab("搜索")
             let search = app.searchFields.firstMatch
             XCTAssertTrue(search.waitForExistence(timeout: 5))
             search.tap(); search.typeText(title)
@@ -1385,7 +1385,7 @@ import CryptoKit
             let skill = try XCTUnwrap(target["skill"] as? [String: Any])
             let files = try XCTUnwrap(skill["files"] as? [String])
             XCTAssertGreaterThan(files.count, 1)
-            app.buttons["searchButton"].tap()
+            app.selectPrompixTab("搜索")
             let search = app.searchFields.firstMatch
             XCTAssertTrue(search.waitForExistence(timeout: 5)); search.tap(); search.typeText(title)
             let card = app.scrollViews["searchResults"].buttons["prompt-\(id)"]
@@ -1436,7 +1436,7 @@ import CryptoKit
             let id = try XCTUnwrap(target["id"] as? String)
             let title = try XCTUnwrap(target["title"] as? String)
             let kind = try XCTUnwrap(target["kind"] as? String)
-            app.buttons["searchButton"].tap()
+            app.selectPrompixTab("搜索")
             let search = app.searchFields.firstMatch
             XCTAssertTrue(search.waitForExistence(timeout: 5)); search.tap(); search.typeText(title)
             let card = app.scrollViews["searchResults"].buttons["prompt-\(id)"]
@@ -1492,7 +1492,7 @@ import CryptoKit
         let source = try XCTUnwrap(target["source"] as? [String: Any])
         let context = try XCTUnwrap((source["context"] as? [[String: Any]])?.first)
         let contextID = try XCTUnwrap(context["id"] as? String)
-        app.buttons["searchButton"].tap()
+        app.selectPrompixTab("搜索")
         let search = app.searchFields.firstMatch
         XCTAssertTrue(search.waitForExistence(timeout: 5)); search.tap(); search.typeText(title)
         let card = app.scrollViews["searchResults"].buttons["prompt-\(id)"]
@@ -1750,7 +1750,7 @@ import CryptoKit
             visitedIDs.formUnion(after)
             for _ in 0..<5 { scrollFeed(forward: false) }
         }
-        XCTAssertTrue(app.buttons["searchButton"].exists)
+        XCTAssertTrue(app.buttons["discoverySettings"].exists)
         XCTAssertGreaterThan(visitedIDs.count, initialIDs.count)
         let directory = try acceptanceDirectory()
         XCTAssertEqual(try readSnapshot(CatalogSnapshot.self, from: directory, file: "catalog.json").version, catalog.version)
@@ -1768,6 +1768,29 @@ import CryptoKit
         let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: forward ? 0.7 : 0.4))
         let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: forward ? 0.4 : 0.7))
         start.press(forDuration: 0.05, thenDragTo: end)
+    }
+
+    func testPersistentTabsThroughCreatorAndDetail() {
+        launch()
+        let creator = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'creator-' ")).firstMatch
+        XCTAssertTrue(creator.waitForExistence(timeout: 5)); creator.tap()
+        XCTAssertTrue(app.buttons["saveCreator"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.tabBars.buttons["收藏"].isHittable)
+        capture("refinement-creator-tabs")
+        let item = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'prompt-' ")).firstMatch
+        reveal(item); item.tap()
+        XCTAssertTrue(app.buttons["copyPrompt"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.tabBars.buttons["收藏"].isHittable)
+        app.navigationBars.buttons.firstMatch.tap()
+        XCTAssertTrue(app.buttons["saveCreator"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.tabBars.buttons["收藏"].isHittable)
+        app.navigationBars.buttons.firstMatch.tap()
+        XCTAssertTrue(app.buttons["discoverySettings"].waitForExistence(timeout: 5))
+        app.buttons["discoverySettings"].tap()
+        XCTAssertTrue(app.buttons["replayOnboarding"].waitForExistence(timeout: 5))
+        capture("refinement-live-settings")
+        app.buttons["完成"].tap()
+        capture("refinement-live-home")
     }
 
     func testRepeatedCreatorAndTypeNavigation() {

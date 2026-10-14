@@ -593,3 +593,11 @@ Duo UI 测试必须将触摸和坐标绑定到目标元素所在 Window。实际
 发现页以方向与累计位移驱动顶栏，忽略回弹和非手势布局变化，不在滚动时改变内容高度。详情正文直接排版并完整显示，复制／编辑仍保留原始字符串；Markdown 的非网页定义字段、表格和超大文本保守回退原文，防止解析器丢弃 Prompt 参数。解析置于按源文字判等的子视图，滚动操作条和复制反馈不重复解析全文。
 
 参考真实 Cosmos 详情的收起行为，保留 Prompix 编辑、复制、使用三个直接操作；借助原生 GlassEffectContainer 与 glassEffectID 缩合，VoiceOver 不收起、减少动态效果不形变。来源、许可、示例和 Skill 文件移入明确的披露组，保留原有能力。详见[实现与验收](immersive-reading-0.6.0.md)。
+
+
+## 2026-10-14：0.6.1 的界面精简与连续导航
+
+- 用户验收要求优先：发现页移除重复搜索入口，独立 Search Tab 是全局搜索入口。瀑布流移除可见书签按钮；详情与原生长按菜单保留收藏，九语言空态说明同步调整。
+- 详情和创作者页不再设置 `.toolbar(.hidden, for: .tabBar)`。沿用每个 Tab 自己的 NavigationStack，保持原生 Tab Bar 连续可见；详情操作条位于其上方，不重建导航架构。依据：[Apple toolbar visibility](https://developer.apple.com/documentation/swiftui/view/toolbarvisibility(_:for:))。
+- 原生交互式 zoom 返回保留。玻璃主按钮的 tint 从 SwiftUI 页面 colorScheme 解析为固定 RGB 后交给材质，避免 UIColor 动态提供器在材质转场快照中切换强调色。保留 Liquid Glass 交互与滚动收缩；对应文字也按同一页面外观解析。依据：[Apple Liquid Glass](https://developer.apple.com/documentation/SwiftUI/Applying-Liquid-Glass-to-custom-views)。用户截图亮色与深色强调色相符，具体 UIKit 内部触发机制未声称得到系统级证明。
+- 设置页使用原生 plain List、统一纸色背景和分组留白，去掉嵌套白卡片；操作、缓存保护、来源与隐私入口保留。

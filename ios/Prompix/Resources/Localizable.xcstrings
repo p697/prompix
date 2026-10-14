@@ -11639,65 +11639,6 @@
         }
       }
     },
-    "轻点卡片上的书签。\n文字保存在本机，缩略图会下载以供离线查看。": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Tap the bookmark on a card.\nText stays on your device, and thumbnails download for offline browsing."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "轻点卡片上的书签。\n文字保存在本机，缩略图会下载以供离线查看。"
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "輕點卡片上的書籤。\n文字儲存在本機，縮圖會下載以供離線查看。"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "カードのブックマークをタップしてください。\nテキストはデバイスに保存され、サムネイルはオフライン閲覧用にダウンロードされます。"
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "카드의 북마크를 탭하세요.\n텍스트는 기기에 저장되며 썸네일은 오프라인으로 볼 수 있도록 다운로드됩니다."
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Toca el marcador de una tarjeta.\nEl texto se guarda en tu dispositivo y las miniaturas se descargan para verlas sin conexión."
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Toque no marcador de um cartão.\nO texto fica no seu dispositivo e as miniaturas são baixadas para visualização offline."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Touchez le signet sur une carte.\nLe texte reste sur votre appareil et les miniatures sont téléchargées pour une consultation hors ligne."
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Tippe auf das Lesezeichen einer Karte.\nDer Text bleibt auf deinem Gerät. Vorschaubilder werden zur Offline-Nutzung heruntergeladen."
-          }
-        }
-      }
-    },
     "运镜、转场与动态场景的实际案例": {
       "localizations": {
         "en": {
@@ -15095,6 +15036,65 @@
           "stringUnit": {
             "state": "translated",
             "value": "Metadaten"
+          }
+        }
+      }
+    },
+    "在详情页收藏喜欢的内容，也可以长按卡片收藏。": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save content from its detail page, or touch and hold a card."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在详情页收藏喜欢的内容，也可以长按卡片收藏。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在詳情頁收藏喜歡的內容，也可以長按卡片收藏。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "詳細ページで保存するか、カードを長押しして保存できます。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "상세 페이지에서 저장하거나 카드를 길게 눌러 저장하세요."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Guarda contenido desde su página de detalle o mantén pulsada una tarjeta."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Salve o conteúdo na página de detalhes ou mantenha um cartão pressionado."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enregistrez un contenu depuis sa page ou appuyez longuement sur une carte."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Speichere Inhalte auf der Detailseite oder halte eine Karte gedrückt."
           }
         }
       }
