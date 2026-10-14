@@ -910,12 +910,12 @@ import CryptoKit
     }
 
     private func revealHandoff(_ element: XCUIElement) {
-        // A centered native Form does not occupy the whole expanded display.
-        // Target its own scroll area, rather than the app window behind it.
+        // Target the use sheet, never the detail ScrollView behind the sheet.
+        let handoff = app.scrollViews["handoffScroll"]
         let form = app.collectionViews.firstMatch
-        let viewport: XCUIElement = form.exists ? form : app.scrollViews.firstMatch
+        let viewport: XCUIElement = handoff.exists ? handoff : form.exists ? form : app.scrollViews.firstMatch
         XCTAssertTrue(viewport.exists)
-        for _ in 0..<12 {
+        for _ in 0..<20 {
             let fixed = ["handoffOpen", "copyInstallCommand"].map { app.buttons[$0] }.first { $0.exists }
             let frame = viewport.frame
             let window = app.windows.containing(.any, identifier: fixed?.identifier ?? element.identifier).firstMatch
@@ -955,7 +955,7 @@ import CryptoKit
         capture("handoff-control-unreachable")
         let layout = XCTAttachment(string: "Viewport: \(viewport.frame); target: \(element.frame)\n\(app.debugDescription)")
         layout.name = "Handoff scroll geometry"; layout.lifetime = .keepAlways; add(layout)
-        XCTFail("Handoff control must be reachable inside its Form and clear of the action bar.")
+        XCTFail("Handoff control must be reachable inside its scroll area and clear of the action bar.")
     }
 
     func testHandoffLargestTextAccessibility() throws {
@@ -981,9 +981,8 @@ import CryptoKit
                 try app.performAccessibilityAudit(for: [.hitRegion, .sufficientElementDescription])
                 let preview = app.buttons["handoffPreview"]
                 revealHandoff(preview); preview.tap()
-                // SwiftUI propagates DisclosureGroup's identifier to its expanded
-                // text on iOS 27; constrain by static-text role and payload length.
-                let bodies = app.staticTexts.matching(NSPredicate(format: "identifier == 'handoffText' OR identifier == 'handoffPreview'"))
+                // Scope the expanded payload to the use sheet, excluding the detail below.
+                let bodies = app.scrollViews["handoffScroll"].staticTexts.matching(identifier: "handoffText")
                 var body: XCUIElement?
                 for _ in 0..<8 {
                     body = bodies.allElementsBoundByIndex.first { $0.label.count > 80 }
