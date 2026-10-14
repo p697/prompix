@@ -95,6 +95,51 @@ import CryptoKit
         let downloadedLocales: [String: String]
     }
 
+    func testFeedMediaAndScrollVisualAcceptance() throws {
+        guard ProcessInfo.processInfo.environment["PROMPIX_FEED_VISUAL_ACCEPTANCE"] == "1" else {
+            throw XCTSkip("Requires the backed-up published catalog on a dedicated simulator.")
+        }
+        let catalog = try readSnapshot(CatalogSnapshot.self, from: acceptanceDirectory(), file: "catalog.json")
+        let imageID = "x-post-2109653076499902934"
+        let videoID = "x-post-2109618758180634959"
+        XCTAssertTrue([imageID, videoID].allSatisfy { id in catalog.prompts.contains { $0.id == id } })
+        launch()
+        capture("feed-01-home")
+        func drag(_ from: CGFloat, _ to: CGFloat) {
+            app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: from))
+                .press(forDuration: 0.01, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: to)))
+        }
+        for index in 0..<3 {
+            drag(0.78, 0.32)
+            capture("feed-02-scroll-\(index)")
+        }
+        XCTAssertFalse(app.buttons["discoverySettings"].isHittable)
+        drag(0.42, 0.58)
+        XCTAssertTrue(app.buttons["discoverySettings"].waitForExistence(timeout: 3))
+        capture("feed-03-header-return")
+        app.selectPrompixTab("搜索")
+        let field = app.searchFields.firstMatch
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        for (query, id, name) in [("盐水礼服", imageID, "portrait"), ("微型机械师", videoID, "video")] {
+            field.tap()
+            // Tapping a long accessibility-size query places the caret mid-text.
+            // Use the native clear action rather than assuming an end position.
+            if field.buttons["清除文本"].exists { field.buttons["清除文本"].tap() }
+            field.typeText(query + "\n")
+            let card = app.buttons["prompt-\(id)"]
+            XCTAssertTrue(card.waitForExistence(timeout: 5))
+            capture("feed-04-\(name)-card")
+            card.tap()
+            XCTAssertTrue(app.buttons["copyPrompt"].waitForExistence(timeout: 5))
+            XCTAssertFalse(app.tabBars.buttons["收藏"].isHittable)
+            capture("feed-05-\(name)-detail")
+            app.goBackInPrompix()
+            XCTAssertTrue(card.waitForExistence(timeout: 5))
+            XCTAssertTrue(app.tabBars.buttons["收藏"].isHittable)
+        }
+        app.selectPrompixTab("发现")
+    }
+
     func testImmersiveLiveSkillAndCreatorSearch() throws {
         guard ProcessInfo.processInfo.environment["PROMPIX_IMMERSIVE_ACCEPTANCE"] == "1" else {
             throw XCTSkip("Use a backed-up dedicated simulator with the published catalog.")
