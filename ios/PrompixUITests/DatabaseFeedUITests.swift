@@ -43,6 +43,7 @@ import UIKit
         field.typeText(query + "\n")
     }
     private func firstDetail() {
+        search("preview")
         let card = app.buttons["prompt-database-fixture-0"]
         XCTAssertTrue(card.waitForExistence(timeout: 15))
         if !card.isHittable { app.swipeUp() }
@@ -50,23 +51,41 @@ import UIKit
         XCTAssertTrue(app.buttons["copyPrompt"].waitForExistence(timeout: 10))
     }
 
-    func testLatestCollectionIsVisibleAtLaunchAndOpensASeparateNewestFeed() throws {
+    func testHomeUsesLatestOrderWithoutLaunchBannerAndPullRefreshes() async throws {
         launch()
-        let heading = app.staticTexts["latestContentHeading"]
-        XCTAssertTrue(heading.waitForExistence(timeout: 10)); XCTAssertTrue(heading.isHittable)
-        let latest = app.buttons["prompt-database-fixture-9999"]
-        XCTAssertTrue(latest.waitForExistence(timeout: 10)); XCTAssertTrue(latest.isHittable)
-        capture("freshness-01-home-latest")
-        app.buttons["showLatestFeed"].tap()
-        XCTAssertTrue(app.buttons["leaveLatestFeed"].waitForExistence(timeout: 5))
-        XCTAssertTrue(latest.waitForExistence(timeout: 10)); latest.tap()
-        XCTAssertTrue(app.buttons["copyPrompt"].waitForExistence(timeout: 10))
-        XCTAssertEqual(app.staticTexts["detailTitle"].label, "Database item 9999")
-        capture("freshness-02-newest-detail")
-        app.buttons["closePromptDetail"].tap()
-        app.buttons["leaveLatestFeed"].tap()
-        XCTAssertTrue(heading.waitForExistence(timeout: 5))
-        XCTAssertTrue(try requests().contains { $0["query"] as? String == "__latest__" })
+        let newest = app.buttons["prompt-database-fixture-9999"]
+        XCTAssertTrue(newest.waitForExistence(timeout: 15))
+        XCTAssertFalse(app.otherElements["catalogUpdateStatus"].exists)
+        XCTAssertFalse(app.staticTexts["latestContentHeading"].exists)
+        XCTAssertFalse(app.buttons["showLatestFeed"].exists)
+        capture("refresh-01-quiet-home")
+        let before = try requests().filter { $0["operation"] as? String == "page" }.count
+        let gate = try directory().appending(path: "hold-feed-refresh")
+        try Data().write(to: gate)
+        defer { try? FileManager.default.removeItem(at: gate) }
+        try Data().write(to: directory().appending(path: "publish-new-item"))
+        let scroll = app.scrollViews["discoveryScroll"]
+        scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+            .press(forDuration: 0.1, thenDragTo: scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.9)), withVelocity: .slow, thenHoldForDuration: 0.2)
+        // UIRefreshControl draws the native spinner but is not exposed as an
+        // XCUI ProgressIndicator on iOS 27. Capture it while the response is held.
+        XCTAssertTrue(try requests().filter { $0["operation"] as? String == "state" }.count >= 2)
+        XCTAssertEqual(try requests().filter { $0["operation"] as? String == "page" }.count, before)
+        XCTAssertTrue(newest.exists, "Visible content stays in place during refresh")
+        capture("refresh-02-native-spinner")
+        try FileManager.default.removeItem(at: gate)
+        let added = app.buttons["prompt-database-fixture-10000"]
+        XCTAssertTrue(added.waitForExistence(timeout: 10))
+        let pages = try requests().filter { $0["operation"] as? String == "page" }
+        XCTAssertEqual(pages.count, before + 1)
+        XCTAssertTrue(pages.allSatisfy { $0["query"] as? String == "__latest__" && $0["cursor"] as? String == "" })
+        XCTAssertFalse(app.otherElements["catalogUpdateStatus"].exists)
+        XCTAssertTrue(added.exists)
+        capture("refresh-03-new-first-item")
+        app.terminate(); launch(["--feed-fixture-offline"])
+        XCTAssertTrue(added.waitForExistence(timeout: 10))
+        XCTAssertFalse(app.otherElements["catalogUpdateStatus"].exists)
+        capture("refresh-04-offline-cache")
     }
 
     func testProgressiveImageDetailRetainsPreviewAndPositionThenReusesCompleteCache() throws {
@@ -210,12 +229,13 @@ import UIKit
 
     func testTenThousandItemFeedOnlyFetchesVisiblePagesAndSearchesBeyondLoadedItems() async throws {
         launch()
-        XCTAssertTrue(app.buttons["prompt-database-fixture-0"].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.buttons["prompt-database-fixture-9999"].waitForExistence(timeout: 15))
         try await Task.sleep(for: .seconds(1))
         let initial = try requests()
         let initialPages = initial.filter { $0["operation"] as? String == "page" }
-        XCTAssertEqual(initialPages.filter { $0["query"] as? String == "__latest__" }.count, 1)
-        XCTAssertLessThanOrEqual(initialPages.filter { $0["query"] as? String == "" }.count, 2,
+        XCTAssertGreaterThanOrEqual(initialPages.count, 1)
+        XCTAssertTrue(initialPages.allSatisfy { $0["query"] as? String == "__latest__" })
+        XCTAssertLessThanOrEqual(initialPages.count, 2,
                                  "Layout may cancel an offscreen request, but cannot repeatedly refetch")
         XCTAssertTrue(initialPages.allSatisfy { $0["cursor"] as? String == "" }, "Initial layout must not fetch subsequent pages")
         XCTAssertFalse(initial.contains { $0["operation"] as? String == "detail" })
@@ -300,7 +320,7 @@ import UIKit
         let drafts = try Data(contentsOf: directory().appending(path: "drafts.json"))
         capture("database-04-language-and-personal-data")
         app.terminate(); launch(["--feed-fixture-offline"])
-        XCTAssertTrue(app.buttons["prompt-database-fixture-9999"].waitForExistence(timeout: 10), "The latest rail must remain available from its offline cache")
+        XCTAssertTrue(app.buttons["prompt-database-fixture-9999"].waitForExistence(timeout: 10), "The newest feed must remain available from its offline cache")
         XCTAssertTrue(try requests().contains { $0["offline"] as? Bool == true })
         app.selectPrompixTab("收藏")
         let savedCard = app.buttons["prompt-database-fixture-0"]

@@ -12,26 +12,42 @@ import XCTest
         return url
     }
 
-    func testForegroundRefreshUpdatesLatestAfterPublicationWithoutResettingTheBrowsingSnapshot() async throws {
+    func testForegroundRefreshUpdatesFirstPageAndLeavesUnchangedPublicationAlone() async throws {
         let source = try source(), server = FeedRepositoryServer()
         let library = Library(directory: directory, catalogURL: source, feedService: server)
         let feed = try XCTUnwrap(library.feed), now = Date()
         await library.refresh(now: now)
-        await feed.latest.load(FeedQuery(sort: "latest"))
-        await feed.discovery.load(FeedQuery(locale: "original"))
+        await feed.discovery.load(FeedQuery(sort: "latest"))
         let nextRelease = "feed-" + String(repeating: "f", count: 64)
         await server.setRelease(nextRelease)
         await library.refresh(now: now.addingTimeInterval(301))
-        XCTAssertEqual(feed.latest.release, nextRelease)
-        XCTAssertEqual(feed.discovery.release, FeedFixture.release, "An active paginated browse keeps its pinned snapshot")
-        let refreshed = await server.calls.filter { $0 == "latest" }.count
+        XCTAssertEqual(feed.discovery.release, nextRelease)
+        let refreshed = await server.latestCalls()
         XCTAssertEqual(refreshed, 2)
         await library.refresh(now: now.addingTimeInterval(602))
         let unchanged = await server.latestCalls()
-        XCTAssertEqual(unchanged, 2, "An unchanged publication must not refetch the latest rail")
-        await library.refresh(force: true, now: now.addingTimeInterval(603))
-        let explicit = await server.latestCalls()
-        XCTAssertEqual(explicit, 3, "Explicit refresh retries the latest rail even on the same release")
+        XCTAssertEqual(unchanged, 2)
+    }
+
+    func testForegroundKeepsPagedSnapshotUntilExplicitFirstPageRefresh() async throws {
+        let source = try source(), server = FeedRepositoryServer()
+        let library = Library(directory: directory, catalogURL: source, feedService: server)
+        let feed = try XCTUnwrap(library.feed), now = Date(), query = FeedQuery(sort: "latest")
+        await server.setPaging(true)
+        await library.refresh(now: now)
+        await feed.discovery.load(query)
+        await feed.discovery.loadMore()
+        XCTAssertTrue(feed.discovery.hasLoadedAdditionalPages)
+        let nextRelease = "feed-" + String(repeating: "f", count: 64)
+        await server.setRelease(nextRelease)
+        await library.refresh(now: now.addingTimeInterval(301))
+        XCTAssertEqual(feed.discovery.release, FeedFixture.release)
+        XCTAssertEqual(feed.discovery.items.count, 2)
+        await library.refresh(force: true)
+        await feed.discovery.load(query, force: true)
+        XCTAssertEqual(feed.discovery.release, nextRelease)
+        XCTAssertEqual(feed.discovery.items.count, 1)
+        XCTAssertFalse(feed.discovery.hasLoadedAdditionalPages)
     }
 
     func testPagedRefreshDoesNotDeleteUnloadedFavoritesOrDrafts() async throws {
@@ -123,6 +139,8 @@ import XCTest
 
 @MainActor private final class FeedWriteFailure { var enabled = false }
 private actor FeedRepositoryServer: FeedServing {
+    private var paging = false
+    func setPaging(_ value: Bool) { paging = value }
     private var removed = false
     private var unavailable = false
     private(set) var calls: [String] = []
@@ -133,7 +151,9 @@ private actor FeedRepositoryServer: FeedServing {
     func setUnavailable(_ value: Bool) { unavailable = value }
     func page(query: FeedQuery, cursor: String?, release: String?) async throws -> FeedPage {
         calls.append(query.sort == "latest" ? "latest" : "page")
-        return FeedPage(schemaVersion: 3, release: activeRelease, items: [], nextCursor: nil)
+        return FeedPage(schemaVersion: 3, release: release ?? activeRelease,
+                        items: paging ? [FeedFixture.card(id: cursor == nil ? "test-0" : "test-1")] : [],
+                        nextCursor: paging && cursor == nil ? "next" : nil)
     }
     func browse(locale: String) async throws -> FeedBrowse { throw FeedError.unavailable(5) }
     func state() async throws -> FeedState {

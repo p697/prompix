@@ -7,6 +7,8 @@ import Observation
     private(set) var query: Source.Query?
     private(set) var release: String?
     private(set) var nextCursor: String?
+    private(set) var hasLoadedAdditionalPages = false
+    private(set) var failedFirstPage = false
     private(set) var isLoading = false
     private(set) var failure: (any Error)?
     private(set) var isCached = false
@@ -29,13 +31,13 @@ import Observation
         }
         let sameQuery = query == normalized
         if let retryAt, now < retryAt {
-            if !sameQuery { cancel(); items = []; query = normalized; release = nil; nextCursor = nil; loadedAt = nil; isCached = false }
+            if !sameQuery { cancel(); items = []; query = normalized; release = nil; nextCursor = nil; loadedAt = nil; isCached = false; hasLoadedAdditionalPages = false }
             return
         }
         if sameQuery, !force, failure == nil, !isCached, let loadedAt, now.timeIntervalSince(loadedAt) < 300 { return }
         cancel()
-        if !sameQuery { items = []; release = nil; nextCursor = nil; loadedAt = nil; isCached = false }
-        query = normalized; failure = nil; retryAt = nil; isLoading = true
+        if !sameQuery { items = []; release = nil; nextCursor = nil; loadedAt = nil; isCached = false; hasLoadedAdditionalPages = false }
+        query = normalized; failedFirstPage = true; failure = nil; retryAt = nil; isLoading = true
         let owner = UUID(); requestID = owner
         let task = Task { [weak self] in
             guard let self else { return }
@@ -52,6 +54,7 @@ import Observation
                 try Source.validate(page, query: normalized, release: nil)
                 self.items = page.items; self.release = page.release; self.nextCursor = page.nextCursor
                 self.isCached = false; self.loadedAt = now; self.failure = nil
+                self.hasLoadedAdditionalPages = false; self.failedFirstPage = false
                 if let cache {
                     do { try await Source.save(page, in: cache, query: normalized, now: now); if self.owns(owner) { self.cacheWriteFailed = false } }
                     catch { if self.owns(owner) { self.cacheWriteFailed = true } }
@@ -66,7 +69,7 @@ import Observation
     func loadMore(now: Date = Date()) async {
         guard !Task.isCancelled, !isLoading, !isCached, let query, let cursor = nextCursor, let release,
               retryAt == nil || now >= retryAt!, !(failure as? FeedError == .snapshotExpired) else { return }
-        let owner = UUID(); requestID = owner; isLoading = true; failure = nil; retryAt = nil
+        let owner = UUID(); requestID = owner; isLoading = true; failure = nil; retryAt = nil; failedFirstPage = false
         let task = Task { [weak self] in
             guard let self else { return }
             do {
@@ -77,6 +80,7 @@ import Observation
                 let existing = Set(self.items.map(\.id))
                 guard page.nextCursor != cursor, !page.items.contains(where: { existing.contains($0.id) }) else { throw FeedError.invalidResponse }
                 self.items.append(contentsOf: page.items); self.nextCursor = page.nextCursor
+                self.hasLoadedAdditionalPages = true
             } catch { self.record(error, owner: owner, now: now) }
             self.finish(owner)
         }

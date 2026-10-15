@@ -266,9 +266,14 @@ enum CatalogSyncState: Equatable, Sendable {
                 version = feed.state?.release ?? version
                 updatedAt = feed.state?.publishedAt.flatMap(Self.parseDate)
                 syncState = .current
+                // Revalidate the visible first page after a new publication. An
+                // already paged session keeps its snapshot until pull-to-refresh.
+                if !force, let query = feed.discovery.query, !feed.discovery.isLoading,
+                   !feed.discovery.hasLoadedAdditionalPages, feed.discovery.release != feed.state?.release {
+                    await feed.discovery.load(query, force: true)
+                }
                 let releaseChanged = previousRelease != nil && previousRelease != feed.state?.release
                 if force || releaseChanged {
-                    if feed.latest.query != nil { await feed.latest.load(FeedQuery(sort: "latest"), force: true) }
                     if feed.browse.value != nil || feed.browse.failure != nil { await feed.browse.load(force: true) }
                     if feed.creators.query != nil { await feed.creators.load("", force: true) }
                 }

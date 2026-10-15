@@ -45,10 +45,21 @@ actor SimulatorFeedService: FeedServing {
             previewLabel: item.previewLabel, creator: item.creator, media: item.media, cover: nil, language: "original", availableLanguages: ["en", "ja"])
     }
     func page(query: FeedQuery, cursor: String?, release: String?) async throws -> FeedPage {
+        let gate = directory.appending(path: "hold-feed-refresh")
+        let deadline = Date().addingTimeInterval(30)
+        while FileManager.default.fileExists(atPath: gate.path) {
+            try Task.checkCancellation()
+            guard Date() < deadline else { throw FeedError.unavailable(0) }
+            try await Task.sleep(for: .milliseconds(100))
+        }
         try record("page", query: query.sort == "latest" ? "__latest__" : query.q, cursor: cursor)
         if query.q == "slow" { try? await Task.sleep(for: .seconds(2)) }
         if query.q == "retry", failed.insert("page-retry").inserted { throw FeedError.rateLimited(2) }
-        let indices = (0..<Self.count).filter { index in
+        let published = FileManager.default.fileExists(atPath: directory.appending(path: "publish-new-item").path)
+        let activeRelease = published ? "feed-" + String(repeating: "f", count: 64) : Self.release
+        let pageRelease = release ?? activeRelease
+        let count = Self.count + (pageRelease == Self.release ? 0 : 1)
+        let indices = (0..<count).filter { index in
             if removed && index == 0 { return false }
             let item = prompt(index)
             if let kind = query.kind, item.kind.rawValue != kind { return false }
@@ -66,7 +77,7 @@ actor SimulatorFeedService: FeedServing {
         let ordered = query.sort == "latest" ? Array(indices.reversed()) : indices
         let start = Int(cursor ?? "0") ?? 0
         let page = Array(ordered.dropFirst(start).prefix(FeedClient.pageSize))
-        return FeedPage(schemaVersion: 3, release: Self.release, items: page.map(card),
+        return FeedPage(schemaVersion: 3, release: pageRelease, items: page.map(card),
                         nextCursor: start + page.count < indices.count ? String(start + page.count) : nil)
     }
     func detail(id: String, revision: String?, locale: String) async throws -> FeedDetail {
