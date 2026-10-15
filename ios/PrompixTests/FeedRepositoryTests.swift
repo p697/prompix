@@ -12,6 +12,28 @@ import XCTest
         return url
     }
 
+    func testForegroundRefreshUpdatesLatestAfterPublicationWithoutResettingTheBrowsingSnapshot() async throws {
+        let source = try source(), server = FeedRepositoryServer()
+        let library = Library(directory: directory, catalogURL: source, feedService: server)
+        let feed = try XCTUnwrap(library.feed), now = Date()
+        await library.refresh(now: now)
+        await feed.latest.load(FeedQuery(sort: "latest"))
+        await feed.discovery.load(FeedQuery(locale: "original"))
+        let nextRelease = "feed-" + String(repeating: "f", count: 64)
+        await server.setRelease(nextRelease)
+        await library.refresh(now: now.addingTimeInterval(301))
+        XCTAssertEqual(feed.latest.release, nextRelease)
+        XCTAssertEqual(feed.discovery.release, FeedFixture.release, "An active paginated browse keeps its pinned snapshot")
+        let refreshed = await server.calls.filter { $0 == "latest" }.count
+        XCTAssertEqual(refreshed, 2)
+        await library.refresh(now: now.addingTimeInterval(602))
+        let unchanged = await server.latestCalls()
+        XCTAssertEqual(unchanged, 2, "An unchanged publication must not refetch the latest rail")
+        await library.refresh(force: true, now: now.addingTimeInterval(603))
+        let explicit = await server.latestCalls()
+        XCTAssertEqual(explicit, 3, "Explicit refresh retries the latest rail even on the same release")
+    }
+
     func testPagedRefreshDoesNotDeleteUnloadedFavoritesOrDrafts() async throws {
         let source = try source(), server = FeedRepositoryServer()
         let library = Library(directory: directory, catalogURL: source, feedService: server)
@@ -104,17 +126,20 @@ private actor FeedRepositoryServer: FeedServing {
     private var removed = false
     private var unavailable = false
     private(set) var calls: [String] = []
+    private var activeRelease = FeedFixture.release
+    func setRelease(_ value: String) { activeRelease = value }
+    func latestCalls() -> Int { calls.filter { $0 == "latest" }.count }
     func setRemoval(_ value: Bool) { removed = value }
     func setUnavailable(_ value: Bool) { unavailable = value }
     func page(query: FeedQuery, cursor: String?, release: String?) async throws -> FeedPage {
-        calls.append("page")
-        return FeedPage(schemaVersion: 3, release: FeedFixture.release, items: [], nextCursor: nil)
+        calls.append(query.sort == "latest" ? "latest" : "page")
+        return FeedPage(schemaVersion: 3, release: activeRelease, items: [], nextCursor: nil)
     }
     func browse(locale: String) async throws -> FeedBrowse { throw FeedError.unavailable(5) }
     func state() async throws -> FeedState {
         calls.append("state")
         if unavailable { throw FeedError.unavailable(5) }
-        return FeedState(schemaVersion: 3, release: FeedFixture.release, generation: "1", removalSequence: removed ? "1" : "0", count: removed ? 0 : 1, publishedAt: nil)
+        return FeedState(schemaVersion: 3, release: activeRelease, generation: "1", removalSequence: removed ? "1" : "0", count: removed ? 0 : 1, publishedAt: nil)
     }
     func removals(after: String) async throws -> FeedRemovals {
         calls.append("removals-" + after)

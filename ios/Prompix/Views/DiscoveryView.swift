@@ -135,7 +135,6 @@ struct DiscoverView: View {
                 .refreshable {
                     await library.refresh(force: true)
                     if let feed = library.feed {
-                        await feed.latest.load(FeedQuery(sort: "latest"), force: true)
                         await feed.discovery.load(feedQuery, force: true)
                     }
                 }
