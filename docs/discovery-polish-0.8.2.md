@@ -1,6 +1,6 @@
 # 0.8.2：等待时可浏览，读完后可继续发现
 
-本轮调研开始于 0.8.0（34），实现整合 0.8.1（35）的分页目录、首页最新排序、原生阅读页和绿色设计系统为基础，候选版本为 **0.8.2（36）**。范围是创作者等页面的加载体验，以及详情末尾的关联探索。没有改变内容来源、个人数据格式或底部导航。
+本轮调研开始于 0.8.0（34），实现整合 0.8.1（35）的分页目录、首页最新排序、原生阅读页和绿色设计系统为基础，模拟器验收版本为 **0.8.2（36）**。范围是创作者等页面的加载体验，以及详情末尾的关联探索。没有改变内容来源、个人数据格式或底部导航。
 
 ## 调研与取舍
 
@@ -51,4 +51,43 @@ PromptBase 的公开 UI 遇到网站安全验证，未继续。商店图片与�
 
 ## 验收与交付
 
-实际执行记录、截图及限制在本节完成验证后补齐。原始材料保存在仓库外 `Prompix-Codex/Evidence/discovery-polish-20261015/`。本轮仅提供模拟器版本，不覆盖用户手机。
+2026-10-15，在 iPhone Air 模拟器（`781ED135-F549-496B-8CBA-FE537E801884`，iOS 27.0）完成，使用 Xcode 27.1 RC。原始材料根目录为开发机外置盘 `/Volumes/Lucy-SSD/Prompix-Codex/Evidence/discovery-polish-20261015/`。
+
+| 检查 | 实际结果 | 证据 |
+| --- | --- | --- |
+| 原生测试 | 执行238项，235通过、3项环境限定测试跳过、0失败 | `tests/integrated-2.xcresult` |
+| 集成 UI | 5项通过：创作者目录查询竞态、已有作品/失败重试/筛选空态/缓存、探索分页与返回、首页最新排序与下拉刷新、线上创作者与探索 | 同上；`tests/integrated-2.log` |
+| 最大辅助字号与深色 | 单列探索入口、完整结果页、返回选择保持，1项通过；截图已人工检查 | `tests/accessibility.xcresult`；`polish-accessibility-*.png` |
+| Release 构建与线上运行 | 0.8.2（36）构建成功；相同 UI runner 指向 Release App，真实搜索→详情→创作者→模型列表→返回搜索，1项通过 | `tests/release-082.log`、`tests/release-live.xcresult`、`release-live-demo.mp4` |
+| 九语界面 | 269个通用键、17个引导键、6个使用面板键，九语完整性检查通过 | `python3 scripts/check-localizations.py` |
+
+关键截图：`polish-01-known-work-before-response.png` 是受控延迟下已知作品先呈现；`polish-03-filter-local-placeholder.png` 是切换条件时仅作品区域占位；`polish-02-inline-profile-failure.png` 是请求失败仍保留已知内容；`polish-live-02-creator.png`、`polish-live-03-continue-exploring.png`、`polish-live-04-model-results.png` 来自 Release 包的真实线上内容。测试中的 Database Author / Model 0 是隔离的合成夹具，不是发布内容。失败尝试及其日志保留，最终依据是上表的成功结果。
+
+Release 包保存于 `/Volumes/Lucy-SSD/Prompix-Codex/Releases/0.8.2-36/Prompix-simulator.app`，已在上述模拟器安装启动，Device Hub 已选中 iPhone Air；深色与最大字号验证结束后恢复为浅色、系统 Large。未安装或改动用户物理手机。
+
+### 复现
+
+在仓库执行以下命令（将结果路径设为尚不存在的新目录）：
+
+```sh
+export DEVELOPER_DIR=/Volumes/Lucy-SSD/Prompix-Codex/Toolchains/Xcode-27.1-RC.app/Contents/Developer
+export TMPDIR=/Volumes/Lucy-SSD/Prompix-Codex/Temp-discovery-polish
+xcodebuild -project ios/Prompix.xcodeproj -scheme Prompix \
+  -destination id=781ED135-F549-496B-8CBA-FE537E801884 \
+  -derivedDataPath /Volumes/Lucy-SSD/Prompix-Codex/DerivedData-DiscoveryPolish \
+  -parallel-testing-enabled NO -collect-test-diagnostics never \
+  -only-testing:PrompixTests \
+  -only-testing:PrompixUITests/DatabaseFeedUITests/testCreatorDirectoryUsesLocalPlaceholdersAndClearsPreviousQuery \
+  -only-testing:PrompixUITests/DatabaseFeedUITests/testCreatorPreviewSurvivesFailureAndFilteringNeverShowsOldResults \
+  -only-testing:PrompixUITests/DatabaseFeedUITests/testExplorationChangesScopePagesAndKeepsItsSelectionWhenReturning \
+  -only-testing:PrompixUITests/DatabaseFeedUITests/testHomeUsesLatestOrderWithoutLaunchBannerAndPullRefreshes \
+  test CODE_SIGNING_ALLOWED=NO
+```
+
+真实内容旅程另选 `testLiveCreatorAndContextualExploration`，加 `TEST_RUNNER_PROMPIX_DATABASE_LIVE_UI=1`。最大辅助字号测试选 `testAccessibleExplorationKeepsPathsAndResultsReachable`，加 `TEST_RUNNER_PROMPIX_EXPLORATION_ACCESSIBILITY=1` 并先设置模拟器字体为 `accessibility-extra-extra-extra-large`；结束后恢复原设置。Release 复验使用证据目录的 `tests/release-acceptance.xctestrun`，其 `UITargetAppPath` 明确指向 Release 构建。
+
+手工验收：从首页进入创作者，观察身份先出现；从搜索中打开“盐水礼服”，点作者查看作品，返回并读到正文末尾，切换“同模型 / 同作者”，点“查看全部”，再返回详情和原搜索。离线/慢请求的确定性复现使用上述 UI 夹具，不需要修改生产 API。
+
+### 边界
+
+本轮没有重新做物理手机性能测量，也没有进行 VoiceOver 听读的完整人工验收；最大字号和可操作性测试不能替代这两项。线上结果随目录更新而变化。关联是明确的目录条件，并非视觉相似或个性化推荐；没有新增付费服务。是否值得编辑推荐仍需长期产品质量与实际使用反馈评估，本轮不作保证。

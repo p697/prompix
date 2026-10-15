@@ -25,7 +25,7 @@ struct FeedCreatorResults: View {
                 Text(String(localized: "内容更新未完成")).font(.footnote).foregroundStyle(Palette.muted)
                 FeedRetryButton(retryAt: store.retryAt) {
                     Task {
-                        if store.nextCursor != nil, !store.isCached, store.failure as? FeedError != .snapshotExpired { await store.loadMore() }
+                        if !store.failedFirstPage, store.nextCursor != nil, !store.isCached, store.failure as? FeedError != .snapshotExpired { await store.loadMore() }
                         else { await store.load(query, force: true) }
                     }
                 }.accessibilityIdentifier("retryCreators")
@@ -44,7 +44,6 @@ struct FeedCreatorResults: View {
                 guard !Task.isCancelled else { return }
                 await store.load(query)
             }
-            .onDisappear { store.cancel() }
             .refreshable { await store.load(query, force: true) }
     }
 }
@@ -83,6 +82,5 @@ struct FeedCreatorSearch: View {
                 do { try await Task.sleep(for: .milliseconds(300)) } catch { return }
                 await store.load(query)
             }
-            .onDisappear { store.cancel() }
     }
 }

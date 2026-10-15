@@ -59,7 +59,7 @@ actor SimulatorFeedService: FeedServing {
         try record("page", query: query.sort == "latest" ? "__latest__" : query.q, cursor: cursor)
         if query.creator != nil {
             try record("creatorWorks", query: (query.creator ?? "") + ":" + (query.kind ?? "all"), cursor: cursor)
-            try await gate("creator")
+            try await waitForAcceptanceGate("creator")
         }
         if query.model != nil || query.collection != nil {
             try record("scopedPage", query: query.model ?? query.collection ?? "", cursor: cursor)
@@ -111,14 +111,14 @@ actor SimulatorFeedService: FeedServing {
     }
     func creators(q: String, cursor: String?, release: String?) async throws -> FeedCreatorsPage {
         try record("creators", query: q, cursor: cursor)
-        try await gate("directory")
+        try await waitForAcceptanceGate("directory")
         let values = (0..<75).filter { q.isEmpty || creator($0).matchesSearch(q) }
         let start = Int(cursor ?? "0") ?? 0, indices = Array(values.dropFirst(start).prefix(FeedClient.pageSize))
         return FeedCreatorsPage(schemaVersion: 3, release: Self.release, items: indices.map { index in
             .init(creator: creator(index), count: (Self.count - 1 - index) / 75 + 1)
         }, nextCursor: start + indices.count < values.count ? String(start + indices.count) : nil)
     }
-    private func gate(_ name: String) async throws {
+    private func waitForAcceptanceGate(_ name: String) async throws {
         let deadline = Date().addingTimeInterval(60)
         while FileManager.default.fileExists(atPath: directory.appending(path: "hold-" + name).path) {
             try Task.checkCancellation()
