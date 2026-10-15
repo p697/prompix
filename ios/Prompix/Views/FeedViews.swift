@@ -5,17 +5,23 @@ struct FeedResults: View {
     let query: FeedQuery
     var debounce = false
     var fallback: [Prompt] = []
+    var previews: [FeedCard] = []
+    var excludingID: String?
     @Environment(Library.self) private var library
     var body: some View {
-        let items = store.items.filter { !library.isRemoved(id: $0.id) }
+        let matches = store.query == ((try? query.validated()) ?? query)
+        let waiting = !matches || (store.failure == nil && (store.release == nil || (store.items.isEmpty && store.isLoading)))
+        let hasPage = matches && store.release != nil
+        let items = (hasPage ? store.items : previews).filter { $0.id != excludingID && !library.isRemoved(id: $0.id) }
         LazyVStack(spacing: 18) {
             if !items.isEmpty {
                 PreviewMasonryGrid(items: items, preview: ContentPreview.init) { FeedPromptCard(card: $0) }
                     .padding(.horizontal, 12)
             }
-            if items.isEmpty && (store.isLoading || store.query == nil) {
-                ProgressView(String(localized: "正在加载内容…")).padding(20).accessibilityIdentifier("feedLoading")
-            } else if store.failure != nil {
+            if waiting {
+                if items.isEmpty { FeedLoadingGrid().padding(.horizontal, 12) }
+                else { Text(String(localized: "正在更新…")).font(.footnote).foregroundStyle(Palette.muted).padding(.vertical, 8) }
+            } else if matches && store.failure != nil {
                 VStack(spacing: 10) {
                     Text(String(localized: "内容更新未完成")).font(.subheadline)
                     if !items.isEmpty { Text(String(localized: "已下载内容仍可浏览，轻点重试。")).font(.footnote).foregroundStyle(Palette.muted) }
@@ -30,11 +36,11 @@ struct FeedResults: View {
                 ContentUnavailableView(String(localized: "暂无匹配内容"), systemImage: "sparkle",
                                        description: Text(String(localized: "试试其他分类，或清除筛选条件。")))
             }
-            if items.isEmpty, store.failure != nil, !fallback.isEmpty {
+            if items.isEmpty, matches, store.failure != nil, !fallback.isEmpty {
                 Text(String(localized: "离线可用的内容")).font(.subheadline).foregroundStyle(Palette.muted)
                 PromptGrid(items: fallback).padding(.horizontal, 12)
             }
-            if store.nextCursor != nil {
+            if matches && store.nextCursor != nil {
                 FeedNextPageButton(isLoading: store.isLoading, enabled: store.failure == nil) {
                     Task { await store.loadMore() }
                 }.accessibilityIdentifier("loadMoreFeed")
@@ -205,41 +211,131 @@ struct FeedRetryButton: View {
 /// Owns a query surface independently of discovery/search and preserves it on redraw.
 struct OwnedFeedResults: View {
     @State private var store: FeedStore
+    let repository: FeedRepository
     let query: FeedQuery
     var fallback: [Prompt] = []
-    init(repository: FeedRepository, query: FeedQuery, fallback: [Prompt] = []) {
-        _store = State(initialValue: repository.makeStore()); self.query = query; self.fallback = fallback
-    }
-    var body: some View { FeedResults(store: store, query: query, fallback: fallback) }
-}
-
-/// Recommendations fetch one small page from the full catalog. They never drain
-/// the feed or depend on whichever cards discovery happened to load first.
-struct FeedRelatedResults: View {
-    let item: Prompt
-    @State private var store: FeedStore
-    @Environment(Library.self) private var library
-    init(item: Prompt, repository: FeedRepository) {
-        self.item = item; _store = State(initialValue: repository.makeStore())
-    }
-    private var query: FeedQuery {
-        let broad: Set<String> = ["好玩一点", "创作灵感", "日常有用", "文本", "图片", "视频", "网页"]
-        return FeedQuery(kind: item.isSkill ? "skill" : item.kind.rawValue, tag: item.tags.first { !broad.contains($0) })
+    var excludingID: String?
+    init(repository: FeedRepository, query: FeedQuery, fallback: [Prompt] = [], excludingID: String? = nil) {
+        _store = State(initialValue: repository.makeStore()); self.repository = repository
+        self.query = query; self.fallback = fallback; self.excludingID = excludingID
     }
     var body: some View {
-        let cards = Array(store.items.filter { $0.id != item.id && !library.isRemoved(id: $0.id) }.prefix(4))
-        VStack(alignment: .leading, spacing: 24) {
-            if store.query == nil || store.isLoading { ProgressView().frame(maxWidth: .infinity) }
-            if !cards.isEmpty {
+        FeedResults(store: store, query: query, fallback: fallback,
+                    previews: repository.previewCards(for: query), excludingID: excludingID)
+    }
+}
+
+/// An explicit query explains why these items are connected. This is catalog
+/// navigation, not a claim of visual similarity or personalized ranking.
+struct FeedExplorationPath: Identifiable {
+    let id: String
+    let label: String
+    let title: String
+    let query: FeedQuery
+    static func paths(for item: Prompt) -> [Self] {
+        var paths: [Self] = []
+        if let collection = Collection.all.first(where: { !$0.tags.isEmpty && $0.includes(item) }) {
+            paths.append(.init(id: "topic", label: String(localized: "同用途"), title: collection.title,
+                               query: FeedQuery(collection: collection.id)))
+        }
+        if !item.model.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            paths.append(.init(id: "model", label: String(localized: "同模型"), title: item.displayModel,
+                               query: FeedQuery(model: item.model)))
+        }
+        if let creator = item.creator {
+            paths.append(.init(id: "creator", label: String(localized: "同作者"), title: creator.displayName,
+                               query: FeedQuery(creator: creator.id)))
+        }
+        return paths
+    }
+}
+
+struct FeedRelatedResults: View {
+    let item: Prompt
+    let repository: FeedRepository
+    @State private var store: FeedStore
+    @State private var selectedID: String?
+    @Environment(Library.self) private var library
+    @Environment(\.dynamicTypeSize) private var typeSize
+    init(item: Prompt, repository: FeedRepository) {
+        self.item = item; self.repository = repository; _store = State(initialValue: repository.makeStore())
+    }
+    private var paths: [FeedExplorationPath] { FeedExplorationPath.paths(for: item) }
+    private var selected: FeedExplorationPath? { paths.first { $0.id == selectedID } ?? paths.first }
+    var body: some View {
+        if let path = selected {
+            let matches = store.query == path.query
+            let waiting = !matches || (store.failure == nil && (store.release == nil || (store.items.isEmpty && store.isLoading)))
+            let source = matches && store.release != nil ? store.items : repository.previewCards(for: path.query)
+            let cards = Array(source.filter { $0.id != item.id && !library.isRemoved(id: $0.id) }.prefix(4))
+            VStack(alignment: .leading, spacing: 18) {
                 Divider()
                 HStack {
-                    Text(String(localized: "相关 Prompt")).font(.headline).accessibilityAddTraits(.isHeader)
-                    Spacer(); Image(systemName: "arrow.down.right").foregroundStyle(Palette.muted).accessibilityHidden(true)
+                    Text(String(localized: "继续探索")).font(.headline).accessibilityAddTraits(.isHeader)
+                    Spacer()
+                    NavigationLink {
+                        FeedExplorationView(path: path, excludingID: item.id, repository: repository)
+                    } label: {
+                        Label(String(localized: "查看全部"), systemImage: "arrow.right").font(.footnote).frame(minHeight: 44)
+                    }.accessibilityIdentifier("allExplorationResults")
                 }
-                PreviewMasonryGrid(items: cards, preview: ContentPreview.init) { FeedPromptCard(card: $0) }
-                    .accessibilityIdentifier("relatedFeed")
-            }
-        }.task(id: query) { await store.load(query) }.onDisappear { store.cancel() }
+                if typeSize.isAccessibilitySize {
+                    VStack(spacing: 8) { pathButtons }
+                } else {
+                    ScrollView(.horizontal) { HStack(spacing: 8) { pathButtons } }.scrollIndicators(.hidden)
+                }
+                if !cards.isEmpty {
+                    PreviewMasonryGrid(items: cards, preview: ContentPreview.init) { FeedPromptCard(card: $0) }
+                        .accessibilityIdentifier("relatedFeed")
+                }
+                if waiting && cards.isEmpty {
+                    FeedLoadingGrid()
+                } else if matches && store.failure != nil {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(String(localized: "内容更新未完成")).font(.footnote).foregroundStyle(Palette.muted)
+                        FeedRetryButton(retryAt: store.retryAt) { Task { await store.load(path.query, force: true) } }
+                            .accessibilityIdentifier("retryExploration")
+                    }
+                } else if !waiting && cards.isEmpty && !store.isLoading {
+                    Text(String(localized: "暂无匹配内容")).font(.subheadline).foregroundStyle(Palette.muted).padding(.vertical, 12)
+                }
+            }.task(id: path.query) { await store.load(path.query) }.onDisappear { store.cancel() }
+        }
+    }
+    private var pathButtons: some View {
+        ForEach(paths) { path in
+            let active = path.id == selected?.id
+            Button { selectedID = path.id } label: {
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(path.label).font(.caption).opacity(active ? 0.85 : 0.7)
+                    Text(path.title).font(.subheadline.weight(.medium)).lineLimit(typeSize.isAccessibilitySize ? nil : 1)
+                }
+                .frame(minWidth: 100, maxWidth: typeSize.isAccessibilitySize ? .infinity : 230, minHeight: 44, alignment: .leading)
+                .padding(.horizontal, 14).padding(.vertical, 8)
+                .foregroundStyle(active ? Palette.paper : Palette.ink)
+                .background(active ? Palette.accent : Palette.soft, in: RoundedRectangle(cornerRadius: 12))
+                .contentShape(RoundedRectangle(cornerRadius: 12))
+            }.buttonStyle(.plain).accessibilityAddTraits(active ? .isSelected : [])
+                .accessibilityIdentifier("explore-\(path.id)")
+        }
+    }
+}
+
+private struct FeedExplorationView: View {
+    let path: FeedExplorationPath
+    let excludingID: String
+    let repository: FeedRepository
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(path.label).font(.subheadline).foregroundStyle(Palette.muted)
+                    Text(path.title).font(Typography.editorial(.title)).fixedSize(horizontal: false, vertical: true)
+                }.padding(.horizontal, 20).padding(.top, 12)
+                OwnedFeedResults(repository: repository, query: path.query, excludingID: excludingID)
+            }.padding(.bottom, 28)
+        }.background(Palette.paper).navigationTitle(path.title)
+            .navigationBarTitleDisplayMode(.inline).accessibilityIdentifier("explorationResults")
     }
 }
 

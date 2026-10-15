@@ -4,11 +4,12 @@ struct CreatorAvatar: View {
     let creator: Prompt.Creator
     var size: CGFloat = 48
     @State private var image: UIImage?
+    @State private var loadedURL: URL?
 
     var body: some View {
         ZStack {
             Circle().fill(Palette.soft)
-            if let image {
+            if let image = (loadedURL == creator.avatarURL ? image : nil) ?? creator.avatarURL.flatMap({ ImageStore.shared.cachedImage(for: $0) }) {
                 Image(uiImage: image).resizable().scaledToFill()
             } else {
                 Text(initials).font(.system(size: size * 0.34, weight: .medium))
@@ -18,12 +19,12 @@ struct CreatorAvatar: View {
         .frame(width: size, height: size).clipShape(Circle())
         .accessibilityHidden(true)
         .task(id: creator.avatarURL) {
-            image = nil
+            if loadedURL != creator.avatarURL { image = nil; loadedURL = nil }
             guard let url = creator.avatarURL else { return }
             do {
                 let loaded = try await ImageStore.shared.image(for: url)
                 guard !Task.isCancelled else { return }
-                image = loaded
+                image = loaded; loadedURL = url
             } catch {
                 // Initials remain useful when an avatar is unavailable or offline.
             }
@@ -158,13 +159,16 @@ struct CreatorRail: View {
                     }.accessibilityIdentifier("allCreators")
                 }
                 if entries.isEmpty {
-                    VStack(alignment: .leading, spacing: 8) {
+                    if let store = library.feed?.creators, store.query == nil || store.isLoading {
+                        CreatorLoadingRows(count: 1)
+                    } else { VStack(alignment: .leading, spacing: 8) {
                         Text(String(localized: "作者信息会随内容更新出现。"))
                             .font(.subheadline).foregroundStyle(Palette.muted)
                             .fixedSize(horizontal: false, vertical: true)
                         CreatorUpdateButton(identifier: "loadCreators")
                     }.frame(maxWidth: .infinity, alignment: .leading).padding(16)
                         .background(Palette.soft, in: RoundedRectangle(cornerRadius: 14))
+                    }
                 } else {
                     ForEach(Array(entries.prefix(1))) { entry in
                         NavigationLink { CreatorDetail(creator: entry.creator) } label: { CreatorRow(entry: entry) }
@@ -362,6 +366,7 @@ struct CreatorDetail: View {
             }.padding(.top, 12).padding(.bottom, 28)
         }
         .background(Palette.paper)
+        .accessibilityIdentifier("creatorProfileScroll")
         .navigationTitle(creator.displayName).navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {

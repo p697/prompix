@@ -51,6 +51,90 @@ import UIKit
         XCTAssertTrue(app.buttons["copyPrompt"].waitForExistence(timeout: 10))
     }
 
+    func testCreatorPreviewSurvivesFailureAndFilteringNeverShowsOldResults() throws {
+        launch()
+        let root = try directory()
+        try Data().write(to: root.appending(path: "hold-creator"))
+        let creator = app.buttons["creator-fixture-author-0"]
+        XCTAssertTrue(creator.waitForExistence(timeout: 10)); creator.tap()
+        let profile = app.scrollViews["creatorProfileScroll"]
+        XCTAssertTrue(profile.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.links["creatorExternalProfile"].exists || app.buttons["creatorExternalProfile"].exists)
+        XCTAssertTrue(profile.buttons["prompt-database-fixture-9975"].waitForExistence(timeout: 3), "Known work should be usable before the profile request completes")
+        XCTAssertFalse(app.progressIndicators.firstMatch.exists)
+        capture("polish-01-known-work-before-response")
+        try Data().write(to: root.appending(path: "fail-creator"))
+        try FileManager.default.removeItem(at: root.appending(path: "hold-creator"))
+        let retry = app.buttons["retryFeed"]
+        for _ in 0..<3 { if retry.isHittable { break }; app.swipeUp() }
+        XCTAssertTrue(retry.waitForExistence(timeout: 5))
+        capture("polish-02-inline-profile-failure")
+        try FileManager.default.removeItem(at: root.appending(path: "fail-creator"))
+        retry.tap()
+        XCTAssertTrue(app.buttons["prompt-database-fixture-75"].waitForExistence(timeout: 10))
+        for _ in 0..<3 { if app.buttons["creatorContentFilter"].isHittable { break }; app.swipeDown() }
+        try Data().write(to: root.appending(path: "hold-creator"))
+        app.buttons["creatorContentFilter"].tap(); app.buttons["图片"].tap()
+        XCTAssertTrue(app.otherElements["feedLoading"].waitForExistence(timeout: 3))
+        XCTAssertFalse(profile.buttons["prompt-database-fixture-0"].exists, "The previous text item cannot remain under the image filter")
+        XCTAssertFalse(app.progressIndicators.firstMatch.exists)
+        capture("polish-03-filter-local-placeholder")
+        try FileManager.default.removeItem(at: root.appending(path: "hold-creator"))
+        XCTAssertTrue(profile.buttons["prompt-database-fixture-225"].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.otherElements["feedLoading"].exists)
+        app.buttons["creatorContentFilter"].tap(); app.buttons["Skill"].tap()
+        XCTAssertTrue(app.staticTexts["暂无匹配内容"].waitForExistence(timeout: 8))
+        XCTAssertFalse(app.otherElements["feedLoading"].exists, "A confirmed empty result must stop loading")
+        capture("polish-04-confirmed-empty-filter")
+        try Data().write(to: root.appending(path: "hold-creator"))
+        app.buttons["creatorContentFilter"].tap(); app.buttons["全部"].tap()
+        XCTAssertTrue(profile.buttons["prompt-database-fixture-75"].waitForExistence(timeout: 3), "The cached first page must appear while the next network request is held")
+        XCTAssertFalse(app.otherElements["feedLoading"].exists)
+        capture("polish-08-cache-before-refresh")
+        try FileManager.default.removeItem(at: root.appending(path: "hold-creator"))
+    }
+
+    func testCreatorDirectoryUsesLocalPlaceholdersAndClearsPreviousQuery() throws {
+        launch()
+        app.buttons["allCreators"].tap()
+        XCTAssertTrue(app.buttons["creator-fixture-author-0"].waitForExistence(timeout: 10))
+        let root = try directory()
+        try Data().write(to: root.appending(path: "hold-directory"))
+        let field = app.searchFields.firstMatch
+        XCTAssertTrue(field.waitForExistence(timeout: 5)); field.tap(); field.typeText("Database Author 49\n")
+        XCTAssertTrue(app.otherElements["creatorLoading"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["creator-fixture-author-0"].exists)
+        XCTAssertFalse(app.progressIndicators.firstMatch.exists)
+        capture("polish-05-directory-placeholder")
+        try FileManager.default.removeItem(at: root.appending(path: "hold-directory"))
+        XCTAssertTrue(app.buttons["creator-fixture-author-49"].waitForExistence(timeout: 8))
+        XCTAssertFalse(app.otherElements["creatorLoading"].exists)
+    }
+
+    func testExplorationChangesScopePagesAndKeepsItsSelectionWhenReturning() throws {
+        launch(); firstDetail()
+        let pane = app.scrollViews["detailReadingPane"]
+        for _ in 0..<6 { if app.buttons["explore-model"].isHittable { break }; pane.swipeUp() }
+        let model = app.buttons["explore-model"]
+        XCTAssertTrue(model.waitForExistence(timeout: 5)); model.tap()
+        XCTAssertTrue(app.buttons["prompt-database-fixture-4"].waitForExistence(timeout: 10))
+        capture("polish-06-model-exploration")
+        app.buttons["allExplorationResults"].tap()
+        XCTAssertTrue(app.scrollViews["explorationResults"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.scrollViews["explorationResults"].buttons["prompt-database-fixture-0"].exists, "The starting item should not recommend itself")
+        for _ in 0..<16 {
+            app.swipeUp()
+            if try requests().contains(where: { $0["operation"] as? String == "scopedPage" && $0["query"] as? String == "Model 0" && $0["cursor"] as? String == "30" }) { break }
+        }
+        XCTAssertTrue(try requests().contains { $0["operation"] as? String == "scopedPage" && $0["query"] as? String == "Model 0" && $0["cursor"] as? String == "30" })
+        capture("polish-07-full-model-results-page-two")
+        app.navigationBars.buttons.firstMatch.tap()
+        XCTAssertTrue(model.waitForExistence(timeout: 5)); XCTAssertTrue(model.isSelected)
+        app.buttons["closePromptDetail"].tap()
+        XCTAssertTrue(app.searchFields.firstMatch.waitForExistence(timeout: 5))
+        XCTAssertEqual(app.searchFields.firstMatch.value as? String, "preview")
+    }
+
     func testHomeUsesLatestOrderWithoutLaunchBannerAndPullRefreshes() async throws {
         launch()
         let newest = app.buttons["prompt-database-fixture-9999"]
@@ -170,6 +254,56 @@ import UIKit
         XCTAssertTrue(app.buttons["copyPrompt"].waitForExistence(timeout: 8))
         XCTAssertEqual(app.staticTexts["detailTitle"].label, "Database item 0000")
         capture("progressive-07-recovered")
+    }
+
+    func testAccessibleExplorationKeepsPathsAndResultsReachable() throws {
+        guard ProcessInfo.processInfo.environment["PROMPIX_EXPLORATION_ACCESSIBILITY"] == "1" else { throw XCTSkip("Explicit largest-text acceptance only") }
+        XCTAssertEqual(UIApplication.shared.preferredContentSizeCategory, .accessibilityExtraExtraExtraLarge)
+        launch(); firstDetail()
+        let pane = app.scrollViews["detailReadingPane"]
+        for _ in 0..<16 { if app.buttons["explore-model"].isHittable { break }; pane.swipeUp() }
+        let model = app.buttons["explore-model"]
+        XCTAssertTrue(model.isHittable); model.tap(); capture("polish-accessibility-01-paths")
+        for _ in 0..<8 { if app.buttons["allExplorationResults"].isHittable { break }; pane.swipeDown() }
+        XCTAssertTrue(app.buttons["allExplorationResults"].isHittable); app.buttons["allExplorationResults"].tap()
+        let results = app.scrollViews["explorationResults"]
+        XCTAssertTrue(results.waitForExistence(timeout: 5))
+        XCTAssertTrue(results.buttons["prompt-database-fixture-4"].waitForExistence(timeout: 10))
+        capture("polish-accessibility-02-results")
+        app.navigationBars.buttons.firstMatch.tap()
+        XCTAssertTrue(model.waitForExistence(timeout: 5))
+    }
+
+    func testLiveCreatorAndContextualExploration() throws {
+        guard ProcessInfo.processInfo.environment["PROMPIX_DATABASE_LIVE_UI"] == "1" else { throw XCTSkip("Explicit live acceptance only") }
+        app.launchArguments = ["--feed-live-test", fixtureID, "-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh-Hans"]
+        app.launchPrompix()
+        XCTAssertTrue(app.buttons["discoverySettings"].waitForExistence(timeout: 15))
+        capture("polish-live-01-home")
+        search("盐水礼服")
+        let card = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'prompt-'")).firstMatch
+        XCTAssertTrue(card.waitForExistence(timeout: 20)); card.tap()
+        XCTAssertTrue(app.buttons["copyPrompt"].waitForExistence(timeout: 20))
+        let pane = app.scrollViews["detailReadingPane"]
+        for _ in 0..<6 { if app.buttons["creatorByline"].isHittable { break }; pane.swipeUp() }
+        XCTAssertTrue(app.buttons["creatorByline"].waitForExistence(timeout: 5)); app.buttons["creatorByline"].tap()
+        let profile = app.scrollViews["creatorProfileScroll"]
+        XCTAssertTrue(profile.waitForExistence(timeout: 5))
+        XCTAssertTrue(profile.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'prompt-'")).firstMatch.waitForExistence(timeout: 20))
+        capture("polish-live-02-creator")
+        app.navigationBars.buttons.firstMatch.tap()
+        for _ in 0..<18 { if app.buttons["explore-model"].isHittable { break }; pane.swipeUp() }
+        XCTAssertTrue(app.buttons["explore-model"].waitForExistence(timeout: 5))
+        capture("polish-live-03-continue-exploring")
+        app.buttons["explore-model"].tap(); app.buttons["allExplorationResults"].tap()
+        let results = app.scrollViews["explorationResults"]
+        XCTAssertTrue(results.waitForExistence(timeout: 5))
+        XCTAssertTrue(results.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'prompt-'")).firstMatch.waitForExistence(timeout: 20))
+        capture("polish-live-04-model-results")
+        app.navigationBars.buttons.firstMatch.tap()
+        XCTAssertTrue(app.buttons["explore-model"].isSelected)
+        app.buttons["closePromptDetail"].tap()
+        XCTAssertEqual(app.searchFields.firstMatch.value as? String, "盐水礼服")
     }
 
     func testLiveImageAndLongVideoDetailReuseSearchPreviews() throws {

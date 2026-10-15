@@ -35,6 +35,28 @@ struct FeedCheckpoint: Codable {
     }
     func makeCreatorStore() -> FeedCreatorStore { FeedCreatorStore(service: service, cache: cache) }
     func makeStore() -> FeedStore { FeedStore(service: service, cache: cache) }
+
+    /// A few already visible cards can preview an exact scoped query while its
+    /// first page arrives. They never become a page, cursor, or result count.
+    func previewCards(for value: FeedQuery) -> [FeedCard] {
+        guard let query = try? value.validated(), query.q.isEmpty, query.collection == nil,
+              query.creator != nil || query.tag != nil || query.model != nil else { return [] }
+        var seen = Set<String>()
+        var result: [FeedCard] = []
+        for card in [discovery.items, search.items].joined() {
+            guard !self.removedIDs.contains(card.id),
+                  card.language == query.locale || (card.language == "original" && !card.availableLanguages.contains(query.locale)),
+                  query.creator == nil || card.creator?.id == query.creator,
+                  query.tag == nil || card.tags.contains(query.tag!),
+                  query.model == nil || card.model == query.model,
+                  query.kind == nil || (query.kind == "skill" ? card.contentType == "skill" : card.contentType != "skill" && card.kind.rawValue == query.kind)
+            else { continue }
+            guard seen.insert(card.id).inserted else { continue }
+            result.append(card)
+            if result.count == 6 { break }
+        }
+        return result
+    }
     func refresh() async throws {
         let state = try await service.state().validated()
         var more = true

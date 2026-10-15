@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		0422CE6E47A316D7429B3124 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35CF1255F0978E92D3F337C9 /* OnboardingView.swift */; };
+		06671D7722614BB97763B7BE /* FeedLoadingViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6CA7CC853946FC6724B8B84E /* FeedLoadingViews.swift */; };
 		0696F273B8BDD0DB246A4D35 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7A197EAA0254BAC6F0D7DCAF /* Foundation.framework */; };
 		09093C2E484C22D11F08B9EC /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7A197EAA0254BAC6F0D7DCAF /* Foundation.framework */; };
 		0D7EE1AEC06B6E79A0F084CC /* ContentLanguage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D8281228F5BBEFD694DC3FE /* ContentLanguage.swift */; };
@@ -136,6 +137,7 @@
 		64BAAD363B7C55DE0851BC17 /* FeedBrowseTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FeedBrowseTests.swift; sourceTree = "<group>"; };
 		65156F34D91DE0965479AB60 /* Assets.xcassets */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		659BC9302599BEA5A0C1E2F7 /* OnboardingTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = OnboardingTests.swift; sourceTree = "<group>"; };
+		6CA7CC853946FC6724B8B84E /* FeedLoadingViews.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = FeedLoadingViews.swift; path = Views/FeedLoadingViews.swift; sourceTree = "<group>"; };
 		729699A339DD6DEAEEDA4F1A /* PromptUseSheet.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = PromptUseSheet.swift; path = Views/PromptUseSheet.swift; sourceTree = "<group>"; };
 		72BCD9955C0E1DCC9127BB1F /* SimulatorFeedService.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = SimulatorFeedService.swift; path = App/SimulatorFeedService.swift; sourceTree = "<group>"; };
 		72BCFD7CA2FFECDCABBD1942 /* FeedCache.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = FeedCache.swift; path = Models/FeedCache.swift; sourceTree = "<group>"; };
@@ -322,6 +324,7 @@
 				7B55483F9F7AD5707A67A9A7 /* WebExample.swift */,
 				478E1B01E05B8963D57D9268 /* Resources */,
 				456CE98DA68391D8A7CE3808 /* PendingPromptDetail.swift */,
+				6CA7CC853946FC6724B8B84E /* FeedLoadingViews.swift */,
 			);
 			name = Prompix;
 			path = Prompix;
@@ -517,6 +520,7 @@
 				65D201CA70E2830C347D6DFE /* Theme.swift in Sources */,
 				359BD388BE6470555812F459 /* WebExample.swift in Sources */,
 				F2FD8CDC88AA33C8711B2537 /* PendingPromptDetail.swift in Sources */,
+				06671D7722614BB97763B7BE /* FeedLoadingViews.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -581,12 +585,12 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CLANG_ENABLE_OBJC_WEAK = NO;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 35;
+				CURRENT_PROJECT_VERSION = 36;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				INFOPLIST_FILE = Prompix/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
-				MARKETING_VERSION = 0.8.1;
+				MARKETING_VERSION = 0.8.2;
 				PRODUCT_BUNDLE_IDENTIFIER = com.p697.prompix;
 				PRODUCT_NAME = Prompix;
 				SDKROOT = iphoneos;
@@ -702,12 +706,12 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CLANG_ENABLE_OBJC_WEAK = NO;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 35;
+				CURRENT_PROJECT_VERSION = 36;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				INFOPLIST_FILE = Prompix/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
-				MARKETING_VERSION = 0.8.1;
+				MARKETING_VERSION = 0.8.2;
 				PRODUCT_BUNDLE_IDENTIFIER = com.p697.prompix;
 				PRODUCT_NAME = Prompix;
 				SDKROOT = iphoneos;
