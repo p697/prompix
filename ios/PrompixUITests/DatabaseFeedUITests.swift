@@ -82,6 +82,10 @@ import UIKit
         XCTAssertFalse(app.otherElements["catalogUpdateStatus"].exists)
         XCTAssertTrue(added.exists)
         capture("refresh-03-new-first-item")
+        app.buttons["kind-image"].tap()
+        XCTAssertTrue(app.buttons["prompt-database-fixture-9997"].waitForExistence(timeout: 10))
+        app.buttons["kind-all"].tap()
+        XCTAssertTrue(added.waitForExistence(timeout: 10))
         app.terminate(); launch(["--feed-fixture-offline"])
         XCTAssertTrue(added.waitForExistence(timeout: 10))
         XCTAssertFalse(app.otherElements["catalogUpdateStatus"].exists)
@@ -199,7 +203,11 @@ import UIKit
             XCTAssertTrue(app.buttons["discoverySettings"].waitForExistence(timeout: 15))
         }
         openLive()
-        XCTAssertTrue(app.buttons["prompt-gentle-tarot"].waitForExistence(timeout: 20))
+        let (feedData, feedResponse) = try await URLSession.shared.data(from: URL(string: "https://api.prompix.dev/v3/feed?sort=latest&locale=zh-Hans&limit=30")!)
+        XCTAssertEqual((feedResponse as? HTTPURLResponse)?.statusCode, 200)
+        let feedJSON = try XCTUnwrap(JSONSerialization.jsonObject(with: feedData) as? [String: Any])
+        let firstID = try XCTUnwrap((feedJSON["items"] as? [[String: Any]])?.first?["id"] as? String)
+        XCTAssertTrue(app.buttons["prompt-" + firstID].waitForExistence(timeout: 20))
         capture("database-live-01-production-home")
         search("塔罗")
         let card = app.buttons["prompt-gentle-tarot"]

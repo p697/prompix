@@ -40,6 +40,9 @@ struct FeedResults: View {
                 }.accessibilityIdentifier("loadMoreFeed")
             }
         }
+        // SwiftUI cancels this task when it leaves the hierarchy. Do not cancel
+        // the entire store on disappearance: overscroll can hide this lazy child
+        // while its parent owns a separate, user-initiated refresh.
         .task(id: query) {
             if debounce {
                 do { try await Task.sleep(for: .milliseconds(300)) } catch { return }
@@ -47,7 +50,6 @@ struct FeedResults: View {
             guard !Task.isCancelled else { return }
             await store.load(query)
         }
-        .onDisappear { store.cancel() }
     }
 }
 
