@@ -242,23 +242,23 @@ struct PreviewMasonryGrid<Item: Identifiable, Cell: View>: View {
         // Separate masonry columns read column-first. A linear native stack
         // preserves the editorial sequence when navigating with VoiceOver.
         Group {
-        if typeSize.isAccessibilitySize || voiceOverEnabled {
-            LazyVStack(spacing: 24) { ForEach(items) { cell($0) } }
-        } else {
-            let columns = balancedColumns
-            HStack(alignment: .top, spacing: 0) {
-                ForEach(0..<layout.columns, id: \.self) { index in
-                    column(columns[index]).frame(width: layout.widths.isEmpty ? nil : layout.widths[index])
-                    if index < layout.columns - 1 { Color.clear.frame(width: layout.gaps[index], height: 1) }
-                }
-            }.frame(minWidth: 0, maxWidth: .infinity)
-                .onGeometryChange(for: PromptGridLayout.self) { proxy in
-                    if #available(iOS 27.1, *) {
-                        PromptGridLayout(width: proxy.size.width, division: proxy.reservedRegions(kind: .division)
-                            .map(\.frame).first { $0.height > $0.width && $0.minX > 0 && $0.maxX < proxy.size.width })
-                    } else { PromptGridLayout(width: proxy.size.width) }
-                } action: { layout = $0 }
-        }
+            if typeSize.isAccessibilitySize || voiceOverEnabled {
+                LazyVStack(spacing: 24) { ForEach(items) { cell($0) } }
+            } else {
+                let columns = balancedColumns
+                HStack(alignment: .top, spacing: 0) {
+                    ForEach(0..<layout.columns, id: \.self) { index in
+                        column(columns[index]).frame(width: layout.widths.isEmpty ? nil : layout.widths[index])
+                        if index < layout.columns - 1 { Color.clear.frame(width: layout.gaps[index], height: 1) }
+                    }
+                }.frame(minWidth: 0, maxWidth: .infinity)
+                    .onGeometryChange(for: PromptGridLayout.self) { proxy in
+                        if #available(iOS 27.1, *) {
+                            PromptGridLayout(width: proxy.size.width, division: proxy.reservedRegions(kind: .division)
+                                .map(\.frame).first { $0.height > $0.width && $0.minX > 0 && $0.maxX < proxy.size.width })
+                        } else { PromptGridLayout(width: proxy.size.width) }
+                    } action: { layout = $0 }
+            }
         }
         .onGeometryChange(for: GridViewport.self) { proxy in
             GridViewport(bounds: proxy.bounds(of: .scrollView(axis: .vertical)), width: proxy.size.width)

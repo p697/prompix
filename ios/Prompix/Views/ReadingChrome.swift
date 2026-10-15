@@ -35,6 +35,8 @@ struct ReadingScrollState {
     private var travel: CGFloat = 0
     private(set) var collapsed = false
 
+    init(collapsed: Bool = false) { self.collapsed = collapsed }
+
     mutating func update(offset: CGFloat, maximum: CGFloat, isScrolling: Bool) -> Bool {
         let position = min(max(0, offset), max(0, maximum))
         defer { previous = position }
@@ -55,6 +57,10 @@ private struct ReadingChrome: ViewModifier {
     @Environment(\.accessibilityVoiceOverEnabled) private var voiceOver
     @State private var tracker = ReadingScrollState()
     @State private var isScrolling = false
+    init(collapsed: Binding<Bool>) {
+        _collapsed = collapsed
+        _tracker = State(initialValue: ReadingScrollState(collapsed: collapsed.wrappedValue))
+    }
     @ViewBuilder func body(content: Content) -> some View {
         if #available(iOS 18, *) {
             content

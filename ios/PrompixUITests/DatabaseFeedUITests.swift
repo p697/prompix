@@ -313,12 +313,15 @@ import UIKit
         let pane = app.scrollViews["detailReadingPane"]
         pane.swipeUp(velocity: .slow)
         let pendingY = title.frame.minY
+        let pendingActionWidth = app.buttons["usePrompt"].frame.width
+        XCTAssertLessThan(pendingActionWidth, 80, "Scrolling a pending detail should collapse its actions")
         capture("progressive-02-scrolled-before-response")
         try Data().write(to: directory().appending(path: "release-detail"))
         XCTAssertTrue(app.buttons["copyPrompt"].waitForExistence(timeout: 8))
         XCTAssertTrue(app.buttons["copyPrompt"].wait(for: \.isEnabled, toEqual: true, timeout: 8))
         XCTAssertFalse(app.otherElements["promptBodySkeleton"].exists)
         XCTAssertEqual(title.frame.minY, pendingY, accuracy: 5, "Completing the body must preserve reading position")
+        XCTAssertEqual(app.buttons["usePrompt"].frame.width, pendingActionWidth, accuracy: 2, "Body completion must preserve the compact action bar")
         capture("progressive-03-complete-same-position")
         app.buttons["closePromptDetail"].tap()
         XCTAssertTrue(card.waitForExistence(timeout: 5)); card.tap()

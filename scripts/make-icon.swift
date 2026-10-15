@@ -15,7 +15,7 @@ for variant in ["AppIcon", "AppIconDark", "AppIconTinted"] {
     let dark = variant != "AppIcon", tinted = variant == "AppIconTinted"
     let context = CGContext(data: nil, width: size, height: size, bitsPerComponent: 8, bytesPerRow: 0,
                             space: space, bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)!
-    context.setFillColor(color(dark ? 0x171B19 : 0xF5F5F0))
+    context.setFillColor(color(tinted ? 0x171717 : dark ? 0x171B19 : 0xF5F5F0))
     context.fill(CGRect(x: 0, y: 0, width: size, height: size))
     for index in 0..<3 {
         context.saveGState()
@@ -25,7 +25,7 @@ for variant in ["AppIcon", "AppIconDark", "AppIconTinted"] {
         let path = CGPath(roundedRect: rect, cornerWidth: 40, cornerHeight: 40, transform: nil)
         context.saveGState()
         context.setShadow(offset: CGSize(width: 0, height: -6), blur: 20, color: CGColor(gray: 0, alpha: dark ? 0.22 : 0.08))
-        context.setFillColor(color(0xCBD7EF)); context.addPath(path); context.fillPath()
+        context.setFillColor(color(tinted ? 0xCCCCCC : 0xCBD7EF)); context.addPath(path); context.fillPath()
         context.restoreGState()
         context.addPath(path); context.clip()
         let colors: [CGColor] = tinted ? [color(0xF8F8F8), color(UInt(0xB0B0B0 + index * 0x151515)), color(0x777777)] :
