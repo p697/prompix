@@ -46,6 +46,9 @@ struct FeedResults: View {
                 }.accessibilityIdentifier("loadMoreFeed")
             }
         }
+        .feedLookahead(cursor: store.nextCursor, generation: store.firstPageGeneration, enabled: matches && !store.isLoading && store.failure == nil && !store.isCached) {
+            Task { await store.loadMore() }
+        }
         // SwiftUI cancels this task when it leaves the hierarchy. Do not cancel
         // the entire store on disappearance: overscroll can hide this lazy child
         // while its parent owns a separate, user-initiated refresh.
@@ -356,9 +359,9 @@ struct FeedNextPageButton: View {
     private var button: some View {
         Button(action: action) {
             HStack(spacing: 8) {
-                if isLoading { ProgressView() }
-                Text(String(localized: "加载更多"))
-            }.frame(minHeight: 44)
-        }.disabled(isLoading || !enabled)
+                if isLoading { SpectralActivity().frame(width: 34, height: 34) }
+                Text(isLoading ? String(localized: "正在加载内容…") : String(localized: "加载更多")).font(.footnote)
+            }.frame(minHeight: 56).foregroundStyle(Palette.muted)
+        }.buttonStyle(.plain).disabled(isLoading || !enabled)
     }
 }

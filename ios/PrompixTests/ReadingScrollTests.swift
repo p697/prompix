@@ -2,6 +2,14 @@ import XCTest
 @testable import Prompix
 
 final class ReadingScrollTests: XCTestCase {
+    func testRestoredCompactStateSurvivesInitialGeometry() {
+        var state = ReadingScrollState(collapsed: true)
+        XCTAssertTrue(state.update(offset: 0, maximum: 1_000, isScrolling: false))
+        XCTAssertTrue(state.update(offset: 250, maximum: 1_000, isScrolling: false))
+        XCTAssertTrue(state.update(offset: 260, maximum: 1_000, isScrolling: false))
+        XCTAssertFalse(state.update(offset: 220, maximum: 1_000, isScrolling: true))
+    }
+
     func testDeliberateDirectionChangesAndTopReset() {
         var state = ReadingScrollState()
         XCTAssertFalse(state.update(offset: 0, maximum: 1000, isScrolling: false))

@@ -151,7 +151,7 @@ struct DiscoverView: View {
             .background {
                 GeometryReader { proxy in
                     ReadingTopFade(collapsed: chromeCollapsed)
-                        .frame(height: proxy.safeAreaInsets.top + (chromeCollapsed ? 0 : proxy.size.height) + 48)
+                        .frame(height: proxy.safeAreaInsets.top + (chromeCollapsed ? 0 : proxy.size.height) + ReadingTopFade.featherHeight)
                         .offset(y: -proxy.safeAreaInsets.top)
                 }.allowsHitTesting(false).accessibilityHidden(true)
             }
@@ -159,12 +159,7 @@ struct DiscoverView: View {
     }
     private var discoveryHeader: some View {
         VStack(spacing: 4) {
-            HStack {
-                PrompixWordmark().accessibilityIdentifier("discoveryHeading")
-                Spacer()
-                Button { settingsPresented = true } label: { Image(systemName: "gearshape").frame(width: 44, height: 44) }
-                    .buttonStyle(.plain).readingGlass().accessibilityLabel(String(localized: "设置")).accessibilityIdentifier("discoverySettings")
-            }.font(.title3).padding(.horizontal, 20).padding(.vertical, 6)
+            RootPageHeader(settingsID: "discoverySettings") { settingsPresented = true }
             KindPicker(selection: $kind, skillsOnly: $skillsOnly)
         }.foregroundStyle(Palette.ink).padding(.bottom, 4)
             .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { headerHeight = $0 }
@@ -239,27 +234,57 @@ struct PreviewMasonryGrid<Item: Identifiable, Cell: View>: View {
     @Environment(\.dynamicTypeSize) private var typeSize
     @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
     @State private var layout = PromptGridLayout(width: 0)
+    @State private var viewport = GridViewport()
+    @State private var prefetchOwner = UUID()
+    @Environment(\.scenePhase) private var scenePhase
     @ScaledMetric(relativeTo: .footnote) private var titleSize = 13
     var body: some View {
         // Separate masonry columns read column-first. A linear native stack
         // preserves the editorial sequence when navigating with VoiceOver.
-        if typeSize.isAccessibilitySize || voiceOverEnabled {
-            LazyVStack(spacing: 24) { ForEach(items) { cell($0) } }
-        } else {
-            let columns = balancedColumns
-            HStack(alignment: .top, spacing: 0) {
-                ForEach(0..<layout.columns, id: \.self) { index in
-                    column(columns[index]).frame(width: layout.widths.isEmpty ? nil : layout.widths[index])
-                    if index < layout.columns - 1 { Color.clear.frame(width: layout.gaps[index], height: 1) }
-                }
-            }.frame(minWidth: 0, maxWidth: .infinity)
-                .onGeometryChange(for: PromptGridLayout.self) { proxy in
-                    if #available(iOS 27.1, *) {
-                        PromptGridLayout(width: proxy.size.width, division: proxy.reservedRegions(kind: .division)
-                            .map(\.frame).first { $0.height > $0.width && $0.minX > 0 && $0.maxX < proxy.size.width })
-                    } else { PromptGridLayout(width: proxy.size.width) }
-                } action: { layout = $0 }
+        Group {
+            if typeSize.isAccessibilitySize || voiceOverEnabled {
+                LazyVStack(spacing: 24) { ForEach(items) { cell($0) } }
+            } else {
+                let columns = balancedColumns
+                HStack(alignment: .top, spacing: 0) {
+                    ForEach(0..<layout.columns, id: \.self) { index in
+                        column(columns[index]).frame(width: layout.widths.isEmpty ? nil : layout.widths[index])
+                        if index < layout.columns - 1 { Color.clear.frame(width: layout.gaps[index], height: 1) }
+                    }
+                }.frame(minWidth: 0, maxWidth: .infinity)
+                    .onGeometryChange(for: PromptGridLayout.self) { proxy in
+                        if #available(iOS 27.1, *) {
+                            PromptGridLayout(width: proxy.size.width, division: proxy.reservedRegions(kind: .division)
+                                .map(\.frame).first { $0.height > $0.width && $0.minX > 0 && $0.maxX < proxy.size.width })
+                        } else { PromptGridLayout(width: proxy.size.width) }
+                    } action: { layout = $0 }
+            }
         }
+        .onGeometryChange(for: GridViewport.self) { proxy in
+            GridViewport(bounds: proxy.bounds(of: .scrollView(axis: .vertical)), width: proxy.size.width)
+        } action: { viewport = $0 }
+        .onChange(of: prefetchURLs, initial: true) { _, urls in ImageStore.shared.prefetch(urls, owner: prefetchOwner) }
+        .onAppear { ImageStore.shared.prefetch(prefetchURLs, owner: prefetchOwner) }
+        .onDisappear { ImageStore.shared.prefetch([], owner: prefetchOwner) }
+    }
+    private var prefetchURLs: [URL] {
+        guard scenePhase == .active, viewport.height > 0 else { return [] }
+        let linear = typeSize.isAccessibilitySize || voiceOverEnabled
+        let widths = linear ? [max(1, viewport.width)] : (layout.widths.isEmpty ? [180, 180] : layout.widths)
+        var bottoms = Array(repeating: CGFloat.zero, count: widths.count)
+        var candidates: [(CGFloat, URL)] = []
+        let font = UIFont.systemFont(ofSize: titleSize)
+        for item in items {
+            let column = bottoms.indices.min { bottoms[$0] < bottoms[$1] }!
+            let value = preview(item)
+            let top = bottoms[column]
+            let height = PromptCardGeometry.height(for: value, width: widths[column], titleFont: font)
+            bottoms[column] += height + (linear ? 24 : 14)
+            if !value.usesTextArtwork, viewport.includes(top: top, height: height), let url = value.media?.imageURL { candidates.append((top, url)) }
+            if bottoms.allSatisfy({ $0 > viewport.end }) { break }
+        }
+        var seen = Set<URL>()
+        return Array(candidates.sorted { $0.0 < $1.0 }.map(\.1).filter { seen.insert($0).inserted }.prefix(20))
     }
     private var balancedColumns: [[Int]] {
         let widths = layout.widths.isEmpty ? Array(repeating: CGFloat(180), count: layout.columns) : layout.widths
@@ -426,55 +451,152 @@ private struct PromptReadingPresentation: View {
 
 struct FavoritesView: View {
     @Environment(Library.self) private var library
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var typeSize
     @State private var kind: PromptKind?
     @State private var skillsOnly = false
     @State private var query = ""
     @State private var images = ImageStore.shared
     @State private var showCreators = false
     @State private var settingsPresented = false
+    @Namespace private var scopeLine
+    @ScaledMetric(relativeTo: .body) private var searchHeight = 48
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
-                    Picker(String(localized: "收藏类型"), selection: $showCreators) {
-                        Text(String(localized: "内容")).tag(false)
-                        Text(String(localized: "创作者")).tag(true)
-                    }.pickerStyle(.segmented).padding(.horizontal, 20).accessibilityIdentifier("savedContentType")
-                    if showCreators { SavedCreators(query: query) }
-                    else {
-                    KindPicker(selection: $kind, skillsOnly: $skillsOnly)
-                    if !images.offlineFailures.isEmpty {
-                        Button { Task { if let urls = library.savedImageURLs { await images.keepOffline(urls) } } } label: {
-                            Label(String(localized: "部分收藏预览尚未下载，轻点重试"), systemImage: "arrow.down.circle")
-                                .font(.footnote).foregroundStyle(Palette.muted)
-                        }.padding(.horizontal, 20)
-                    }
-                    let items = library.favorites.filter { PromptQuery(text: query, kind: kind, skillsOnly: skillsOnly).matches($0) }
-                    if !library.favoritesReadable {
-                        ContentUnavailableView {
-                            Label(String(localized: "收藏暂时无法读取"), systemImage: "bookmark.slash")
-                        } description: { Text(String(localized: "原文件和离线预览已保留，暂时不会覆盖你的收藏。")) }
-                        actions: { Button(String(localized: "重新读取收藏")) { library.reloadFavorites() }.buttonStyle(.bordered) }
-                    } else if items.isEmpty {
-                        if !query.isEmpty { ContentUnavailableView.search(text: query) }
-                        else if !library.favorites.isEmpty {
-                            ContentUnavailableView(String(localized: "暂无匹配内容"), systemImage: "bookmark", description: Text(String(localized: "试试其他分类，或清除筛选条件。")))
+                VStack(alignment: .leading, spacing: 14) {
+                    SavedSearchField(text: $query).frame(height: searchHeight).padding(.horizontal, 12)
+                    Group {
+                        if typeSize.isAccessibilitySize {
+                            VStack(alignment: .leading, spacing: 8) {
+                                savedScopes
+                                if !showCreators { kindMenu }
+                            }
                         } else {
-                            ContentUnavailableView(String(localized: "暂无收藏"), systemImage: "bookmark", description: Text(String(localized: "在详情页收藏喜欢的内容，也可以长按卡片收藏。")))
+                            HStack(spacing: 16) { savedScopes; if !showCreators { kindMenu } }
                         }
-                    } else { PromptGrid(items: items, origin: .favorite).padding(.horizontal, 16) }
-                    }
-                }.padding(.bottom, 24)
-            }.plainTopEdge().paperScreen()
-                .navigationTitle(String(localized: "收藏")).navigationBarTitleDisplayMode(.inline)
-                .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: String(localized: "搜索收藏"))
-                .toolbar {
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Button(String(localized: "设置"), systemImage: "gearshape") { settingsPresented = true }
-                            .accessibilityIdentifier("savedSettings")
+                    }.padding(.horizontal, 20)
+                    if showCreators { SavedCreators(query: query) }
+                    else { savedContent }
+                }.padding(.top, 2).padding(.bottom, 24)
+            }
+            .scrollDismissesKeyboard(.interactively)
+            .plainTopEdge().background(Palette.paper).foregroundStyle(Palette.ink)
+            .safeAreaInset(edge: .top, spacing: 0) {
+                RootPageHeader(title: String(localized: "收藏"), settingsID: "savedSettings") { settingsPresented = true }
+                    .background(Palette.paper)
+            }
+            .toolbar(.hidden, for: .navigationBar)
+            .sheet(isPresented: $settingsPresented) { SettingsView().promptSheet() }
+        }
+    }
+    private var savedScopes: some View {
+        HStack(spacing: 24) {
+            savedScope(false, title: String(localized: "内容"), count: library.favorites.count)
+            savedScope(true, title: String(localized: "创作者"), count: library.savedCreators.count)
+            Spacer(minLength: 0)
+        }
+    }
+    private func savedScope(_ creators: Bool, title: String, count: Int) -> some View {
+        Button { withAnimation(reduceMotion ? nil : .snappy(duration: 0.25)) { showCreators = creators } } label: {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Text(title).font(.headline)
+                Text(count.formatted()).font(.caption.monospacedDigit()).fixedSize().foregroundStyle(Palette.muted)
+            }.foregroundStyle(showCreators == creators ? Palette.ink : Palette.muted)
+                .frame(minHeight: 48).contentShape(Rectangle())
+                .overlay(alignment: .bottom) {
+                    if showCreators == creators {
+                        Capsule().fill(Palette.accent).frame(height: 2).matchedGeometryEffect(id: "saved-scope", in: scopeLine)
                     }
                 }
-                .sheet(isPresented: $settingsPresented) { SettingsView().promptSheet() }
+        }.buttonStyle(.plain).accessibilityAddTraits(showCreators == creators ? .isSelected : [])
+            .accessibilityIdentifier(creators ? "savedCreatorsScope" : "savedPromptsScope")
+    }
+    private var kindMenu: some View {
+        Menu {
+            Button(String(localized: "全部")) { kind = nil; skillsOnly = false }
+            ForEach(PromptKind.allCases) { value in
+                Button(value.title) { kind = value; skillsOnly = false }
+            }
+            Button("Skills") { kind = nil; skillsOnly = true }
+        } label: {
+            HStack(spacing: 5) {
+                Text(skillsOnly ? "Skills" : kind?.title ?? String(localized: "全部"))
+                Image(systemName: "chevron.down").font(.caption2)
+            }.font(.subheadline).foregroundStyle(Palette.muted).frame(minHeight: 44)
+        }.accessibilityIdentifier("savedKindFilter")
+    }
+    @ViewBuilder private var savedContent: some View {
+        if !images.offlineFailures.isEmpty {
+            Button { Task { if let urls = library.savedImageURLs { await images.keepOffline(urls) } } } label: {
+                Label(String(localized: "部分收藏预览尚未下载，轻点重试"), systemImage: "arrow.down.circle")
+                    .font(.footnote).foregroundStyle(Palette.muted)
+            }.padding(.horizontal, 20)
         }
+        let items = library.favorites.filter { PromptQuery(text: query, kind: kind, skillsOnly: skillsOnly).matches($0) }
+        if !library.favoritesReadable {
+            ContentUnavailableView {
+                Label(String(localized: "收藏暂时无法读取"), systemImage: "bookmark.slash")
+            } description: { Text(String(localized: "原文件和离线预览已保留，暂时不会覆盖你的收藏。")) }
+            actions: { Button(String(localized: "重新读取收藏")) { library.reloadFavorites() }.buttonStyle(.bordered) }
+        } else if items.isEmpty {
+            if !query.isEmpty { ContentUnavailableView.search(text: query) }
+            else if !library.favorites.isEmpty {
+                ContentUnavailableView(String(localized: "暂无匹配内容"), systemImage: "bookmark", description: Text(String(localized: "试试其他分类，或清除筛选条件。")))
+            } else {
+                VStack(spacing: 18) {
+                    SpectralPages(openness: 0.7, compact: true).frame(width: 112, height: 112)
+                    Text(String(localized: "暂无收藏")).font(.title3.weight(.medium))
+                    Text(String(localized: "在详情页收藏喜欢的内容，也可以长按卡片收藏。"))
+                        .font(.subheadline).foregroundStyle(Palette.muted).multilineTextAlignment(.center).lineSpacing(4)
+                }.padding(.horizontal, 48).padding(.vertical, 50).frame(maxWidth: .infinity)
+            }
+        } else { PromptGrid(items: items, origin: .favorite).padding(.horizontal, 12) }
+    }
+}
+
+/// Identical placement, material, tint and hit area across the two root pages.
+struct RootPageHeader: View {
+    var title: String?
+    let settingsID: String
+    let settings: () -> Void
+    var body: some View {
+        HStack {
+            if let title { Text(title).font(.title2.weight(.semibold)).tracking(-0.5).accessibilityAddTraits(.isHeader) }
+            else { PrompixWordmark().accessibilityIdentifier("discoveryHeading") }
+            Spacer()
+            Button(action: settings) { Image(systemName: "gearshape").frame(width: 44, height: 44) }
+                .buttonStyle(.plain).readingGlass().accessibilityLabel(String(localized: "设置"))
+                .accessibilityIdentifier(settingsID)
+        }.font(.title3).foregroundStyle(Palette.ink).padding(.horizontal, 20).padding(.vertical, 6)
+    }
+}
+
+/// UISearchBar retains native clear, keyboard and accessibility behavior without
+/// reserving a navigation drawer above this compact collection layout.
+private struct SavedSearchField: UIViewRepresentable {
+    @Binding var text: String
+    func makeUIView(context: Context) -> UISearchBar {
+        let bar = UISearchBar()
+        bar.searchBarStyle = .minimal
+        bar.placeholder = String(localized: "搜索收藏")
+        bar.delegate = context.coordinator
+        bar.autocapitalizationType = .none
+        bar.autocorrectionType = .no
+        bar.searchTextField.font = .preferredFont(forTextStyle: .subheadline)
+        bar.searchTextField.adjustsFontForContentSizeCategory = true
+        return bar
+    }
+    func updateUIView(_ bar: UISearchBar, context: Context) {
+        context.coordinator.parent = self
+        if bar.text != text { bar.text = text }
+        bar.tintColor = UIColor(Palette.accent)
+    }
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+    final class Coordinator: NSObject, UISearchBarDelegate {
+        var parent: SavedSearchField
+        init(_ parent: SavedSearchField) { self.parent = parent }
+        func searchBar(_ searchBar: UISearchBar, textDidChange searchText: String) { parent.text = searchText }
+        func searchBarSearchButtonClicked(_ searchBar: UISearchBar) { searchBar.resignFirstResponder() }
     }
 }

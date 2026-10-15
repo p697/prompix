@@ -94,3 +94,71 @@ struct LoadingSurface: View {
             .allowsHitTesting(false)
     }
 }
+
+/// Three luminous forms gather, orbit and open again. It reports activity,
+/// never a percentage, and exists only while a real request is in flight.
+struct SpectralActivity: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var visible = true
+    @State private var lowPower = ProcessInfo.processInfo.isLowPowerModeEnabled
+    @State private var started = Date()
+    private var animates: Bool { visible && scenePhase == .active && !reduceMotion && !lowPower }
+    var body: some View {
+        drawing
+            .onAppear { visible = true }
+            .onDisappear { visible = false }
+            .onReceive(NotificationCenter.default.publisher(for: .NSProcessInfoPowerStateDidChange)) { _ in
+                lowPower = ProcessInfo.processInfo.isLowPowerModeEnabled
+            }
+            .accessibilityHidden(true).allowsHitTesting(false)
+    }
+    @ViewBuilder private var drawing: some View {
+        if #available(iOS 18, *) {
+            timeline.onScrollVisibilityChange(threshold: 0.01) { visible = $0 }
+        } else { timeline }
+    }
+    private var timeline: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 30, paused: !animates)) { clock in
+            let phase = animates ? clock.date.timeIntervalSince(started) * .pi / 2 : 0.8
+            Canvas { context, size in
+                let unit = min(size.width, size.height)
+                let center = CGPoint(x: size.width / 2, y: size.height / 2)
+                let expansion = 0.5 + 0.5 * sin(phase)
+                let radius = unit * (0.10 + 0.16 * expansion)
+                let colors = [Palette.spectrumBlue, Palette.spectrumIris, Palette.spectrumRose]
+                for index in 0..<9 {
+                    let angle = Double(index) * .pi * 2 / 9 + phase * 0.45
+                    let r = unit * (0.40 - expansion * 0.05)
+                    let point = CGPoint(x: center.x + cos(angle) * r, y: center.y + sin(angle) * r)
+                    let dot = CGRect(x: point.x - unit * 0.016, y: point.y - unit * 0.016, width: unit * 0.032, height: unit * 0.032)
+                    context.fill(Path(ellipseIn: dot), with: .color(colors[index % 3].opacity(reduceTransparency ? 1 : 0.55)))
+                }
+                for index in 0..<3 {
+                    let angle = Double(index) * .pi * 2 / 3 + phase * 0.65
+                    let point = CGPoint(x: center.x + cos(angle) * radius, y: center.y + sin(angle) * radius)
+                    let diameter = unit * (0.34 - 0.07 * expansion)
+                    let rect = CGRect(x: point.x - diameter / 2, y: point.y - diameter / 2, width: diameter, height: diameter)
+                    let path = Path(ellipseIn: rect)
+                    if reduceTransparency { context.fill(path, with: .color(colors[index])) }
+                    else {
+                        context.fill(path, with: .linearGradient(Gradient(colors: [.white, colors[index], colors[(index + 1) % 3]]),
+                            startPoint: CGPoint(x: rect.minX, y: rect.minY), endPoint: CGPoint(x: rect.maxX, y: rect.maxY)))
+                    }
+                }
+            }
+        }
+    }
+}
+
+struct ContentActivityLabel: View {
+    var body: some View {
+        HStack(spacing: 10) {
+            SpectralActivity().frame(width: 32, height: 32)
+            Text(String(localized: "正在加载内容…")).font(.footnote).foregroundStyle(Palette.muted)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(String(localized: "正在加载内容…"))
+    }
+}

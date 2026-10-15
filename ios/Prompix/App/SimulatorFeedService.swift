@@ -11,11 +11,12 @@ actor SimulatorFeedService: FeedServing {
     private let offline: Bool
     private let removed: Bool
     private let progressive: Bool
+    private let imagePrefetch: Bool
     private var failed = Set<String>()
     private var hasNewItem: Bool { FileManager.default.fileExists(atPath: directory.appending(path: "publish-new-item").path) }
     private var activeRelease: String { hasNewItem ? "feed-" + String(repeating: "f", count: 64) : Self.release }
-    init(directory: URL, offline: Bool, removed: Bool, progressive: Bool = false) {
-        self.directory = directory; self.offline = offline; self.removed = removed; self.progressive = progressive
+    init(directory: URL, offline: Bool, removed: Bool, progressive: Bool = false, imagePrefetch: Bool = false) {
+        self.directory = directory; self.offline = offline; self.removed = removed; self.progressive = progressive; self.imagePrefetch = imagePrefetch
     }
     private func record(_ operation: String, query: String = "", cursor: String? = nil) throws {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -32,13 +33,16 @@ actor SimulatorFeedService: FeedServing {
               profileURL: URL(string: "https://example.com/author/\(index)")!)
     }
     private func prompt(_ index: Int) -> Prompt {
-        Prompt(id: "database-fixture-\(index)", kind: [.text, .image, .video, .web][index % 4],
+        let media: Prompt.Media? = imagePrefetch
+            ? .init(image: nil, video: nil, demoURL: nil, imageURL: URL(string: "https://api.prompix.dev/media/acceptance/\(directory.lastPathComponent)/\(index).png"), aspectRatio: 0.95)
+            : progressive && index % 4 != 0 ? .init(image: "lake", video: nil, demoURL: nil, aspectRatio: 0.95) : nil
+        return Prompt(id: "database-fixture-\(index)", kind: [.text, .image, .video, .web][index % 4],
                title: String(format: "Database item %04d", index), summary: "First-party content for database feed acceptance.",
                prompt: "  Original fixture \(index)\nPreserve whitespace and [topic].\n", example: "A synthetic example",
                tags: ["好玩一点", "肖像", "写作"], model: "Model \(index % 4)", toolURL: nil,
                artwork: "text-editorial", previewLabel: "Synthetic preview",
                source: .init(name: "Prompix", url: nil, license: "Original", method: "Acceptance fixture"),
-               media: progressive && index % 4 != 0 ? .init(image: "lake", video: nil, demoURL: nil, aspectRatio: 0.95) : nil, creator: creator(index % 75))
+               media: media, creator: creator(index % 75))
     }
     private func card(_ index: Int) -> FeedCard {
         let item = prompt(index)
@@ -48,6 +52,7 @@ actor SimulatorFeedService: FeedServing {
     }
     func page(query: FeedQuery, cursor: String?, release: String?) async throws -> FeedPage {
         try record("page-start", query: query.sort ?? query.q, cursor: cursor)
+        if cursor != nil { try await waitForAcceptanceGate("next-page") }
         let gate = directory.appending(path: "hold-feed-refresh")
         let deadline = Date().addingTimeInterval(30)
         while FileManager.default.fileExists(atPath: gate.path) {
@@ -149,5 +154,32 @@ actor SimulatorFeedService: FeedServing {
         return FeedRemovals(schemaVersion: 3, items: removed && after == "0" ? [.init(sequence: "1", id: "database-fixture-0")] : [],
                             nextAfter: removed ? "1" : after, hasMore: false)
     }
+}
+/// Synthetic thumbnails and request evidence stay in an explicit simulator fixture.
+final class SimulatorPrefetchImages: URLProtocol, @unchecked Sendable {
+    private static let lock = NSLock()
+    override class func canInit(with request: URLRequest) -> Bool { request.url?.path.hasPrefix("/media/acceptance/") == true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func startLoading() {
+        guard let url = request.url else { return }
+        let parts = url.pathComponents
+        guard parts.count == 5, UUID(uuidString: parts[3]) != nil else { return }
+        let directory = URL.cachesDirectory.appending(path: "FeedAcceptance/" + parts[3])
+        Self.lock.withLock {
+            let file = directory.appending(path: "image-requests.txt")
+            try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            if !FileManager.default.fileExists(atPath: file.path) { try? Data().write(to: file) }
+            if let handle = try? FileHandle(forWritingTo: file) {
+                defer { try? handle.close() }
+                _ = try? handle.seekToEnd()
+                try? handle.write(contentsOf: Data((url.deletingPathExtension().lastPathComponent + "\n").utf8))
+            }
+        }
+        let bytes = Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAEUlEQVR4nGNILAjAihiGlgQAP6xIQWSZPVUAAAAASUVORK5CYII=")!
+        client?.urlProtocol(self, didReceive: HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: ["Content-Type": "image/png"])!, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: bytes)
+        client?.urlProtocolDidFinishLoading(self)
+    }
+    override func stopLoading() {}
 }
 #endif

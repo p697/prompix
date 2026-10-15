@@ -4,6 +4,7 @@ import SwiftUI
 /// The scroll view keeps its original safe-area layout but draws behind this veil.
 struct ReadingTopFade: View {
     var collapsed = false
+    static let featherHeight: CGFloat = 24
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     var body: some View {
         Group {
@@ -21,7 +22,7 @@ struct ReadingTopFade: View {
                     .init(color: .black.opacity(0.85), location: 0.25),
                     .init(color: .black.opacity(0.35), location: 0.65),
                     .init(color: .clear, location: 1)
-                ], startPoint: .top, endPoint: .bottom).frame(height: 48)
+                ], startPoint: .top, endPoint: .bottom).frame(height: Self.featherHeight)
             }
         }
         .allowsHitTesting(false).accessibilityHidden(true)
@@ -33,6 +34,8 @@ struct ReadingScrollState {
     private var previous: CGFloat?
     private var travel: CGFloat = 0
     private(set) var collapsed = false
+
+    init(collapsed: Bool = false) { self.collapsed = collapsed }
 
     mutating func update(offset: CGFloat, maximum: CGFloat, isScrolling: Bool) -> Bool {
         let position = min(max(0, offset), max(0, maximum))
@@ -54,6 +57,10 @@ private struct ReadingChrome: ViewModifier {
     @Environment(\.accessibilityVoiceOverEnabled) private var voiceOver
     @State private var tracker = ReadingScrollState()
     @State private var isScrolling = false
+    init(collapsed: Binding<Bool>) {
+        _collapsed = collapsed
+        _tracker = State(initialValue: ReadingScrollState(collapsed: collapsed.wrappedValue))
+    }
     @ViewBuilder func body(content: Content) -> some View {
         if #available(iOS 18, *) {
             content
@@ -98,8 +105,8 @@ private struct ReadingGlass: ViewModifier {
     // Material snapshots can supply temporary UIKit traits during interactive zoom.
     // Resolve the tint from the page appearance before handing it to Liquid Glass.
     private var tint: Color {
-        colorScheme == .dark ? Color(red: 173 / 255, green: 190 / 255, blue: 255 / 255)
-            : Color(red: 64 / 255, green: 89 / 255, blue: 191 / 255)
+        colorScheme == .dark ? Color(red: 210 / 255, green: 224 / 255, blue: 218 / 255)
+            : Color(red: 47 / 255, green: 61 / 255, blue: 55 / 255)
     }
     @ViewBuilder func body(content: Content) -> some View {
         if #available(iOS 26, *) {
@@ -109,5 +116,60 @@ private struct ReadingGlass: ViewModifier {
         } else {
             content.background(.regularMaterial, in: Capsule())
         }
+    }
+}
+
+/// The same geometry is mounted for a card preview and its complete content.
+/// Loading never inserts a new bottom bar or changes the reader's viewport.
+struct ReadingActionBar: View {
+    let isSkill: Bool
+    var ready = true
+    var collapsed = false
+    var copied = false
+    var edit: () -> Void = {}
+    var copy: () -> Void = {}
+    var use: () -> Void = {}
+    @Namespace private var transition
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var typeSize
+    @Environment(\.colorScheme) private var colorScheme
+    var body: some View {
+        Group {
+            if #available(iOS 26, *) { GlassEffectContainer(spacing: 12) { buttons } }
+            else { buttons }
+        }
+        .padding(.horizontal, 20).padding(.vertical, 8)
+        .frame(maxWidth: 600).frame(maxWidth: .infinity)
+        .animation(reduceMotion ? nil : .spring(response: 0.38, dampingFraction: 0.86), value: collapsed)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier(collapsed ? "readingActionsCompact" : "readingActionsExpanded")
+    }
+    private var buttons: some View {
+        HStack(spacing: 10) {
+            Button(action: edit) {
+                Image(systemName: "square.and.pencil").font(.body).frame(width: 50, height: 50)
+            }.buttonStyle(.plain).readingGlass().actionGlassIdentity("edit", in: transition)
+                .accessibilityLabel(String(localized: "编辑后使用")).accessibilityIdentifier("editPromptAction")
+            Button(action: copy) {
+                Image(systemName: copied ? "checkmark" : "doc.on.doc").font(.body).frame(width: 50, height: 50)
+            }.buttonStyle(.plain).readingGlass().actionGlassIdentity("copy", in: transition)
+                .accessibilityLabel(copied ? String(localized: "已复制") : String(localized: "复制 Prompt"))
+                .accessibilityIdentifier("copyPrompt").sensoryFeedback(.success, trigger: copied)
+            Button(action: use) {
+                HStack(spacing: 8) {
+                    Image(systemName: "arrow.up.right")
+                    if !collapsed {
+                        Text(typeSize.isAccessibilitySize ? String(localized: "使用") : isSkill ? String(localized: "使用这个 Skill") : String(localized: "使用 Prompt"))
+                            .lineLimit(1).minimumScaleFactor(0.8)
+                    }
+                }.font(.body.weight(.semibold)).frame(minWidth: 50, maxWidth: collapsed ? 50 : .infinity, minHeight: 50)
+                    .foregroundStyle(colorScheme == .dark ? Color(red: 0.10, green: 0.13, blue: 0.12) : .white)
+            }.buttonStyle(.plain).readingGlass(prominent: true).actionGlassIdentity("use", in: transition)
+                .accessibilityLabel(isSkill ? String(localized: "使用这个 Skill") : String(localized: "使用 Prompt"))
+                .accessibilityIdentifier("usePrompt")
+        }
+        .disabled(!ready)
+        .accessibilityHint(ready ? "" : String(localized: "正在加载内容…"))
+        .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
     }
 }

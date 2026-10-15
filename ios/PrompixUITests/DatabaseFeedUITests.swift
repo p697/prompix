@@ -212,6 +212,88 @@ import UIKit
         capture("refresh-04-offline-cache")
     }
 
+    func testMediaPrewarmsBeyondVisibleCardsWithoutFetchingEntirePage() throws {
+        launch(["--feed-image-prefetch-test"])
+        search("preview")
+        XCTAssertTrue(app.buttons["prompt-database-fixture-1"].waitForExistence(timeout: 10))
+        let file = try directory().appending(path: "image-requests.txt")
+        let recorded = try String(contentsOf: file, encoding: .utf8).split(separator: "\n").compactMap { Int($0) }.filter { $0 < 30 }
+        let visible = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'prompt-database-fixture-'")).allElementsBoundByIndex
+            .filter { $0.isHittable }.compactMap { Int($0.identifier.replacingOccurrences(of: "prompt-database-fixture-", with: "")) }
+        let lastVisible = try XCTUnwrap(visible.max())
+        XCTAssertTrue(recorded.contains { $0 > lastVisible + 1 }, "A future thumbnail should already be downloaded")
+        XCTAssertLessThan(try XCTUnwrap(recorded.max()), 25, "Lookahead must not eagerly fetch the whole page")
+        let evidence = XCTAttachment(string: "Visible card indices: \(visible); downloaded thumbnails: \(recorded)")
+        evidence.name = "media-lookahead-requests"; evidence.lifetime = .keepAlways; add(evidence)
+        capture("motion-05-image-lookahead")
+    }
+
+    func testNextPageStartsBeforeFooterAndStopsAfterLeavingEdge() throws {
+        launch()
+        search("preview")
+        XCTAssertTrue(app.buttons["prompt-database-fixture-0"].waitForExistence(timeout: 10))
+        let root = try directory()
+        try Data().write(to: root.appending(path: "hold-next-page"))
+        let scroll = app.scrollViews["searchResults"]
+        var requested = false
+        for _ in 0..<18 {
+            let start = scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.78))
+            start.press(forDuration: 0.05, thenDragTo: scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.48)))
+            requested = try requests().contains { $0["operation"] as? String == "page-start" && $0["cursor"] as? String == "30" }
+            if requested { break }
+        }
+        XCTAssertTrue(requested, "Page two should start before the reader reaches the footer")
+        XCTAssertFalse(app.buttons["loadMoreFeed"].isHittable, "Request should start with about a screen still to read")
+        capture("motion-01-prefetch-before-footer")
+        app.swipeUp()
+        capture("motion-02-paging-activity")
+        try FileManager.default.removeItem(at: root.appending(path: "hold-next-page"))
+        XCTAssertTrue(app.buttons["prompt-database-fixture-30"].waitForExistence(timeout: 8))
+        let pages = try requests().filter { $0["operation"] as? String == "page-start" && $0["cursor"] as? String != "" }
+        XCTAssertEqual(pages.count, 1, "An appended page must not automatically drain the catalog")
+    }
+
+    func testSavedLayoutSharesSettingsPositionAndPreservesSearch() throws {
+        launch()
+        let settingsFrame = app.buttons["discoverySettings"].frame
+        firstDetail()
+        app.buttons["detailFavorite"].tap()
+        app.buttons["closePromptDetail"].tap()
+        app.selectPrompixTab("收藏")
+        let savedSettings = app.buttons["savedSettings"]
+        XCTAssertTrue(savedSettings.waitForExistence(timeout: 5))
+        XCTAssertEqual(savedSettings.frame.minX, settingsFrame.minX, accuracy: 1)
+        XCTAssertEqual(savedSettings.frame.minY, settingsFrame.minY, accuracy: 1)
+        let card = app.buttons["prompt-database-fixture-0"]
+        XCTAssertTrue(card.isHittable)
+        capture("motion-03-saved-gallery")
+        let field = app.searchFields.firstMatch
+        field.tap(); field.typeText("no-matching-item\n")
+        XCTAssertFalse(card.exists)
+        app.buttons["savedCreatorsScope"].tap()
+        XCTAssertFalse(card.exists)
+        capture("motion-04-saved-search-empty")
+    }
+
+    func testSavedLayoutAtAccessibilityTextKeepsControlsReachable() throws {
+        launch(["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"])
+        firstDetail()
+        app.buttons["detailFavorite"].tap()
+        app.buttons["closePromptDetail"].tap()
+        app.selectPrompixTab("收藏")
+        XCTAssertTrue(app.buttons["savedSettings"].isHittable)
+        XCTAssertTrue(app.searchFields.firstMatch.isHittable)
+        XCTAssertTrue(app.buttons["savedPromptsScope"].isHittable)
+        XCTAssertTrue(app.buttons["savedCreatorsScope"].isHittable)
+        let filter = app.buttons["savedKindFilter"]
+        XCTAssertTrue(filter.isHittable)
+        XCTAssertFalse(filter.frame.intersects(app.buttons["savedCreatorsScope"].frame))
+        capture("motion-accessibility-saved")
+        try app.performAccessibilityAudit(for: [.hitRegion, .sufficientElementDescription])
+        app.buttons["savedSettings"].tap()
+        XCTAssertTrue(app.buttons["replayOnboarding"].waitForExistence(timeout: 5))
+    }
+
     func testProgressiveImageDetailRetainsPreviewAndPositionThenReusesCompleteCache() throws {
         launch(["--feed-detail-preview-test"])
         search("preview")
@@ -222,16 +304,24 @@ import UIKit
         XCTAssertEqual(title.label, "Database item 0001")
         XCTAssertTrue(app.otherElements["promptBodySkeleton"].exists)
         XCTAssertFalse(app.progressIndicators.firstMatch.exists)
-        XCTAssertFalse(app.buttons["copyPrompt"].exists)
+        XCTAssertTrue(app.buttons["copyPrompt"].exists)
+        XCTAssertFalse(app.buttons["copyPrompt"].isEnabled)
+        XCTAssertTrue(app.buttons["usePrompt"].exists)
+        XCTAssertTrue(app.buttons["sharePrompt"].exists)
+        XCTAssertTrue(app.buttons["detailFavorite"].exists)
         capture("progressive-01-image-before-response")
         let pane = app.scrollViews["detailReadingPane"]
         pane.swipeUp(velocity: .slow)
         let pendingY = title.frame.minY
+        let pendingActionWidth = app.buttons["usePrompt"].frame.width
+        XCTAssertLessThan(pendingActionWidth, 80, "Scrolling a pending detail should collapse its actions")
         capture("progressive-02-scrolled-before-response")
         try Data().write(to: directory().appending(path: "release-detail"))
         XCTAssertTrue(app.buttons["copyPrompt"].waitForExistence(timeout: 8))
+        XCTAssertTrue(app.buttons["copyPrompt"].wait(for: \.isEnabled, toEqual: true, timeout: 8))
         XCTAssertFalse(app.otherElements["promptBodySkeleton"].exists)
         XCTAssertEqual(title.frame.minY, pendingY, accuracy: 5, "Completing the body must preserve reading position")
+        XCTAssertEqual(app.buttons["usePrompt"].frame.width, pendingActionWidth, accuracy: 2, "Body completion must preserve the compact action bar")
         capture("progressive-03-complete-same-position")
         app.buttons["closePromptDetail"].tap()
         XCTAssertTrue(card.waitForExistence(timeout: 5)); card.tap()
@@ -253,10 +343,15 @@ import UIKit
             XCTAssertEqual(app.staticTexts["detailTitle"].label, String(format: "Database item %04d", index))
             XCTAssertTrue(app.otherElements["promptBodySkeleton"].exists)
             XCTAssertFalse(app.progressIndicators.firstMatch.exists)
-            XCTAssertFalse(app.buttons["copyPrompt"].exists)
+            XCTAssertTrue(app.buttons["copyPrompt"].exists)
+            XCTAssertFalse(app.buttons["copyPrompt"].isEnabled)
+            XCTAssertTrue(app.buttons["usePrompt"].exists)
+            XCTAssertTrue(app.buttons["sharePrompt"].exists)
+            XCTAssertTrue(app.buttons["detailFavorite"].exists)
             capture("progressive-08-preview-type-\(index)")
             try Data().write(to: directory().appending(path: "release-detail"))
             XCTAssertTrue(app.buttons["copyPrompt"].waitForExistence(timeout: 8))
+            XCTAssertTrue(app.buttons["copyPrompt"].wait(for: \.isEnabled, toEqual: true, timeout: 8))
             XCTAssertTrue(app.buttons["previewButton"].exists)
             capture("progressive-09-ready-type-\(index)")
             app.buttons["closePromptDetail"].tap()
@@ -279,12 +374,17 @@ import UIKit
         try Data().write(to: directory().appending(path: "release-detail"))
         XCTAssertTrue(app.buttons["retryDetail"].waitForExistence(timeout: 8))
         XCTAssertEqual(app.staticTexts["detailTitle"].label, "Database item 0000")
-        XCTAssertFalse(app.buttons["copyPrompt"].exists)
+        XCTAssertTrue(app.buttons["copyPrompt"].exists)
+        XCTAssertFalse(app.buttons["copyPrompt"].isEnabled)
+        XCTAssertTrue(app.buttons["usePrompt"].exists)
+        XCTAssertTrue(app.buttons["sharePrompt"].exists)
+        XCTAssertTrue(app.buttons["detailFavorite"].exists)
         XCTAssertFalse(app.progressIndicators.firstMatch.exists)
         capture("progressive-06-inline-error")
         try FileManager.default.removeItem(at: directory().appending(path: "fail-detail"))
         app.buttons["retryDetail"].tap()
         XCTAssertTrue(app.buttons["copyPrompt"].waitForExistence(timeout: 8))
+        XCTAssertTrue(app.buttons["copyPrompt"].wait(for: \.isEnabled, toEqual: true, timeout: 8))
         XCTAssertEqual(app.staticTexts["detailTitle"].label, "Database item 0000")
         capture("progressive-07-recovered")
     }

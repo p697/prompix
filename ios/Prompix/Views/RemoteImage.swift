@@ -13,14 +13,23 @@ import Observation
     private let memory = NSCache<NSURL, CachedImage>()
     private let session: URLSession
     private var pending: [URL: Task<UIImage, Error>] = [:]
+    private let prepared = NSCache<NSURL, NSData>()
+    @ObservationIgnored private var downloads: [URL: Task<Data, Error>] = [:]
+    @ObservationIgnored private var prefetchOwners: [UUID: [URL]] = [:]
+    @ObservationIgnored private var prefetching = Set<URL>()
+    @ObservationIgnored private var attemptedPrefetch = Set<URL>()
     private let offlineDirectory: URL
     private var retainedURLs = Set<URL>()
     private(set) var offlineFailures = Set<URL>()
     init(offlineDirectory: URL? = nil, session: URLSession? = nil) {
         self.offlineDirectory = offlineDirectory ?? URL.applicationSupportDirectory.appending(path: "Prompix/OfflineImages", directoryHint: .isDirectory)
         memory.totalCostLimit = 40 * 1024 * 1024
+        prepared.totalCostLimit = 16 * 1024 * 1024
         let configuration = URLSessionConfiguration.default
         #if DEBUG && targetEnvironment(simulator)
+        if ProcessInfo.processInfo.arguments.contains("--feed-image-prefetch-test") {
+            configuration.protocolClasses = [SimulatorPrefetchImages.self] + (configuration.protocolClasses ?? [])
+        }
         if ProcessInfo.processInfo.arguments.contains("--simulate-network-failure") {
             configuration.protocolClasses = [SimulatorNetworkFailure.self] + (configuration.protocolClasses ?? [])
         }
@@ -31,7 +40,7 @@ import Observation
         self.session = session ?? URLSession(configuration: configuration)
     }
     func cachedImage(for url: URL) -> UIImage? { memory.object(forKey: url as NSURL)?.image }
-    func clear() { memory.removeAllObjects(); session.configuration.urlCache?.removeAllCachedResponses() }
+    func clear() { memory.removeAllObjects(); prepared.removeAllObjects(); attemptedPrefetch.removeAll(); session.configuration.urlCache?.removeAllCachedResponses() }
     private func offlineFile(for url: URL) -> URL {
         let key = SHA256.hash(data: Data(url.absoluteString.utf8)).map { String(format: "%02x", $0) }.joined()
         return offlineDirectory.appending(path: key + ".jpg")
@@ -74,10 +83,13 @@ import Observation
         }
         if let existing = pending[url] { return try await existing.value }
         let task = Task { @MainActor in
-            let data = try await CatalogSync.fetch(url, maximum: 8_000_000, session: session)
-            guard let source = CGImageSourceCreateWithData(data as CFData, nil),
-                  let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, [kCGImageSourceCreateThumbnailFromImageAlways: true, kCGImageSourceThumbnailMaxPixelSize: 1600, kCGImageSourceCreateThumbnailWithTransform: true] as CFDictionary) else { throw SyncError.invalidResponse }
-            return UIImage(cgImage: cgImage)
+            let data = try await download(url)
+            // ImageIO decoding must not compete with a swipe or presentation on MainActor.
+            return try await Task.detached(priority: .userInitiated) {
+                guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+                      let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, [kCGImageSourceCreateThumbnailFromImageAlways: true, kCGImageSourceThumbnailMaxPixelSize: 1600, kCGImageSourceCreateThumbnailWithTransform: true, kCGImageSourceShouldCacheImmediately: true] as CFDictionary) else { throw SyncError.invalidResponse }
+                return UIImage(cgImage: cgImage)
+            }.value
         }
         pending[url] = task
         defer { pending[url] = nil }
@@ -85,6 +97,39 @@ import Observation
         memory.setObject(CachedImage(image), forKey: url as NSURL, cost: Int(image.size.width * image.size.height * 4))
         return image
     }
+    private func download(_ url: URL) async throws -> Data {
+        if let data = prepared.object(forKey: url as NSURL) { return data as Data }
+        if let existing = downloads[url] { return try await existing.value }
+        let task = Task { try await CatalogSync.fetch(url, maximum: 8_000_000, session: session) }
+        downloads[url] = task
+        defer { downloads[url] = nil }
+        let data = try await task.value
+        prepared.setObject(data as NSData, forKey: url as NSURL, cost: data.count)
+        return data
+    }
+    /// One global two-request budget, even during fast scroll/filter changes.
+    /// Prewarm compressed bytes, not dozens of 1600px decoded bitmaps.
+    func prefetch(_ urls: [URL], owner: UUID) {
+        prefetchOwners[owner] = urls.isEmpty ? nil : Array(urls.prefix(20))
+        let wanted = Set(prefetchOwners.values.flatMap { $0 })
+        attemptedPrefetch.formIntersection(wanted.union(prefetching))
+        pumpPrefetch()
+    }
+    private func pumpPrefetch() {
+        guard !ProcessInfo.processInfo.isLowPowerModeEnabled else { return }
+        let wanted = prefetchOwners.values.flatMap { $0 }
+        for url in wanted where prefetching.count < 2 {
+            guard !prefetching.contains(url), !attemptedPrefetch.contains(url),
+                  memory.object(forKey: url as NSURL) == nil, prepared.object(forKey: url as NSURL) == nil else { continue }
+            prefetching.insert(url); attemptedPrefetch.insert(url)
+            Task {
+                _ = try? await download(url)
+                prefetching.remove(url)
+                pumpPrefetch()
+            }
+        }
+    }
+
 }
 struct RemoteImage: View {
     let url: URL

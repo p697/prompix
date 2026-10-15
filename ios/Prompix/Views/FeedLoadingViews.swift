@@ -6,9 +6,12 @@ struct FeedLoadingGrid: View {
     @Environment(\.dynamicTypeSize) private var typeSize
     @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
     var body: some View {
-        HStack(alignment: .top, spacing: 14) {
-            FeedLoadingTile(ratio: 0.85)
-            if !typeSize.isAccessibilitySize && !voiceOverEnabled { FeedLoadingTile(ratio: 1.15) }
+        VStack(alignment: .leading, spacing: 12) {
+            ContentActivityLabel()
+            HStack(alignment: .top, spacing: 14) {
+                FeedLoadingTile(ratio: 0.85)
+                if !typeSize.isAccessibilitySize && !voiceOverEnabled { FeedLoadingTile(ratio: 1.15) }
+            }
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(String(localized: "正在加载内容…"))
@@ -32,7 +35,8 @@ struct FeedLoadingTile: View {
 struct CreatorLoadingRows: View {
     var count = 4
     var body: some View {
-        VStack(spacing: 0) {
+        VStack(alignment: .leading, spacing: 0) {
+            ContentActivityLabel().padding(.vertical, 6)
             ForEach(0..<count, id: \.self) { index in
                 HStack(spacing: 14) {
                     LoadingSurface().frame(width: 50, height: 50).clipShape(Circle())
