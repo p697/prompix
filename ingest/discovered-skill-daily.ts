@@ -64,9 +64,13 @@ export async function prepareDiscoveredSkills(root: string, records: readonly XI
     } catch { report.failed++; report.issues.push({ repo: "github-search", reason: "Search unavailable or incomplete" }); }
   }
   report.leads = state.leads.length; report.xLeads = state.leads.filter(l => l.origin === "x").length;
-  const ready = state.leads.filter(l => !l.attemptedAt || nowMS - Date.parse(l.attemptedAt) >= 6 * 3600000)
-    .sort((a, b) => Number(b.origin === "x") - Number(a.origin === "x")
-      || b.priority - a.priority || Date.parse(a.attemptedAt ?? "1970-01-01T00:00:00Z") - Date.parse(b.attemptedAt ?? "1970-01-01T00:00:00Z") || b.foundAt.localeCompare(a.foundAt)).slice(0, 3);
+  const eligible = state.leads.filter(l => !l.attemptedAt || nowMS - Date.parse(l.attemptedAt) >= 6 * 3600000)
+    .sort((a, b) => Date.parse(a.attemptedAt ?? "1970-01-01T00:00:00Z") - Date.parse(b.attemptedAt ?? "1970-01-01T00:00:00Z")
+      || b.priority - a.priority || b.foundAt.localeCompare(a.foundAt));
+  // Reserve most capacity for X, while letting new search leads and unchecked
+  // repositories progress instead of repeatedly inspecting the same favorites.
+  const selected = [...eligible.filter(l => l.origin === "x").slice(0, 2), ...eligible.filter(l => l.origin === "github").slice(0, 1)];
+  const ready = selected.concat(eligible.filter(l => !selected.includes(l))).slice(0, 3);
   for (const lead of ready) {
     lead.attemptedAt = now; await atomic(path, state); report.repositories++;
     try {

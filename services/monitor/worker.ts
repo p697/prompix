@@ -83,7 +83,10 @@ export default {
         size += value.byteLength; if (size > 2048) { await reader.cancel(); return new Response("Too large", { status: 413, headers }); }
         chunks.push(value);
       }
-      const event = heartbeatSchema.safeParse(JSON.parse(Buffer.concat(chunks).toString("utf8")));
+      let value: unknown;
+      try { value = JSON.parse(Buffer.concat(chunks).toString("utf8")); }
+      catch { return new Response("Invalid JSON", { status: 400, headers }); }
+      const event = heartbeatSchema.safeParse(value);
       if (!event.success || Date.parse(event.data.finishedAt ?? event.data.startedAt) > Date.now() + 300000)
         return new Response("Invalid event", { status: 400, headers });
       return Response.json(await monitor.heartbeat(event.data), { headers });

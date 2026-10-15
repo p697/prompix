@@ -110,3 +110,20 @@ test("historical experiments and evaluation fixtures are excluded from current p
     assert.equal(discoverSkillPackages(tree).packages.length, 0);
   }
 });
+
+test("X gets most inspection slots while unchecked repositories and GitHub searches cannot starve", async () => {
+  const root = await mkdtemp(join(tmpdir(), "prompix-discovery-fairness-"));
+  const inspected: string[] = [];
+  const records = Array.from({ length: 5 }, (_, index) => ({ postID: String(index + 1), sourceURL: `https://x.com/artist/status/${index + 1}`,
+    snapshot: "test", state: "blocked" as const, reason: "missing-prompt-boundary",
+    expandedLinks: [`https://github.com/artist/${index < 2 ? "creative" : "other"}-${index}`] }));
+  const options = { search: async () => ({ incomplete_results: false, items: [0, 1].map(i => ({ html_url: `https://github.com/search/design-${i}`, private: false })) }),
+    inspect: async (repo: string) => { inspected.push(repo); return { revision, packages: [], held: 0 }; } };
+  try {
+    await prepareDiscoveredSkills(root, records, { ...options, now: "2026-10-15T00:00:00Z" });
+    assert.equal(inspected.filter(r => r.startsWith("artist/")).length, 2);
+    assert.equal(inspected.filter(r => r.startsWith("search/")).length, 1);
+    await prepareDiscoveredSkills(root, records, { ...options, now: "2026-10-15T06:00:00Z" });
+    assert.equal(inspected.length, 6); assert.equal(new Set(inspected).size, 6);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
