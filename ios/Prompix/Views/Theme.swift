@@ -10,18 +10,23 @@ enum Palette {
         })
     }
 
-    static let paper = adaptive(0xFCFCF9, 0x1A1E18)
-    static let surface = adaptive(0xFFFFFF, 0x292E25)
-    static let soft = adaptive(0xECEEE4, 0x30362B)
-    static let ink = adaptive(0x252A22, 0xF1F2E9)
-    static let muted = adaptive(0x62685B, 0xB8BFAC)
-    static let accent = adaptive(0x435332, 0xD1E190)
-    static let highlight = adaptive(0xD6E579, 0xC8D974)
-    static let highlightInk = Color(red: 0.15, green: 0.18, blue: 0.11)
-    static let noteSage = adaptive(0xEEF0E4, 0x2B3427)
-    static let noteRose = adaptive(0xF3EAE5, 0x382D29)
-    static let noteLavender = adaptive(0xECEBF2, 0x302F3B)
-    static let line = adaptive(0xDCE0D2, 0x434A3B)
+    static let paper = adaptive(0xFAFBFE, 0x12151D)
+    static let surface = adaptive(0xFFFFFF, 0x202531)
+    static let soft = adaptive(0xEDF0F7, 0x272E3C)
+    static let ink = adaptive(0x1B2130, 0xEDF0FA)
+    static let muted = adaptive(0x626B7B, 0xA9B3C7)
+    static let accent = adaptive(0x4059BF, 0xADBEFF)
+    static let highlight = adaptive(0xDAE4FF, 0xA9BCFF)
+    static let highlightInk = Color(red: 0.12, green: 0.19, blue: 0.40)
+    static let noteMint = adaptive(0xEAF2F1, 0x223433)
+    static let noteRose = adaptive(0xF5EDF3, 0x352937)
+    static let noteLavender = adaptive(0xEFEDFA, 0x2B2B40)
+    static let line = adaptive(0xDCE2EF, 0x3D475C)
+
+    // These decorative colors never carry text or encode a state by themselves.
+    static let spectrumBlue = Color(red: 0.32, green: 0.47, blue: 0.94)
+    static let spectrumIris = Color(red: 0.57, green: 0.49, blue: 0.87)
+    static let spectrumRose = Color(red: 0.87, green: 0.67, blue: 0.80)
 }
 
 enum Typography {
@@ -61,6 +66,8 @@ private struct PaperScreen: ViewModifier {
 struct KindPicker: View {
     @Binding var selection: PromptKind?
     @Binding var skillsOnly: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Namespace private var selectionLine
     init(selection: Binding<PromptKind?>, skillsOnly: Binding<Bool> = .constant(false)) {
         _selection = selection
         _skillsOnly = skillsOnly
@@ -77,6 +84,8 @@ struct KindPicker: View {
             }.padding(.horizontal, 16)
         }
         .accessibilityIdentifier("kindPicker")
+        .animation(reduceMotion ? nil : .snappy(duration: 0.24), value: selection)
+        .animation(reduceMotion ? nil : .snappy(duration: 0.24), value: skillsOnly)
     }
     private func choice(_ kind: PromptKind?, title: String) -> some View {
         let selected = selection == kind && !skillsOnly
@@ -91,7 +100,10 @@ struct KindPicker: View {
             .foregroundStyle(selected ? Palette.accent : Palette.muted)
             .padding(.horizontal, 2).frame(minWidth: 44, minHeight: 48)
             .overlay(alignment: .bottom) {
-                Capsule().fill(selected ? Palette.accent : .clear).frame(height: 2)
+                if selected {
+                    Capsule().fill(Palette.accent).frame(height: 2)
+                        .matchedGeometryEffect(id: "kind-selection", in: selectionLine)
+                }
             }.contentShape(Rectangle())
     }
 }

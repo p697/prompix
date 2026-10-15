@@ -98,8 +98,8 @@ private struct ReadingGlass: ViewModifier {
     // Material snapshots can supply temporary UIKit traits during interactive zoom.
     // Resolve the tint from the page appearance before handing it to Liquid Glass.
     private var tint: Color {
-        colorScheme == .dark ? Color(red: 209 / 255, green: 225 / 255, blue: 144 / 255)
-            : Color(red: 67 / 255, green: 83 / 255, blue: 50 / 255)
+        colorScheme == .dark ? Color(red: 173 / 255, green: 190 / 255, blue: 255 / 255)
+            : Color(red: 64 / 255, green: 89 / 255, blue: 191 / 255)
     }
     @ViewBuilder func body(content: Content) -> some View {
         if #available(iOS 26, *) {

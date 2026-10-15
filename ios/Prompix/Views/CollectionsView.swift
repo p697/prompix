@@ -175,8 +175,10 @@ struct SettingsView: View {
         NavigationStack {
             List {
                 Section {
-                    Text("Prompix").font(.largeTitle.weight(.medium)).tracking(-1)
-                        .foregroundStyle(Palette.ink).padding(.top, 12).padding(.bottom, 20)
+                    HStack(spacing: 10) {
+                        SpectralPages(compact: true).frame(width: 40, height: 40)
+                        Text("Prompix").font(.largeTitle.weight(.medium)).tracking(-1)
+                    }.foregroundStyle(Palette.ink).padding(.top, 12).padding(.bottom, 20)
                         .listRowSeparator(.hidden)
                     LabeledContent(String(localized: "版本")) { Text("\(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—") (\(Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "—"))").foregroundStyle(Palette.muted) }
                     LabeledContent(String(localized: "内容数量")) { Text(library.feed.map { $0.state.map { String($0.count) } ?? "—" } ?? String(library.prompts.count)).foregroundStyle(Palette.muted) }

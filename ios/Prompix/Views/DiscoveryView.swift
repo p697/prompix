@@ -160,8 +160,7 @@ struct DiscoverView: View {
     private var discoveryHeader: some View {
         VStack(spacing: 4) {
             HStack {
-                Text("Prompix").font(.title2.weight(.semibold)).tracking(-0.8)
-                    .accessibilityAddTraits(.isHeader).accessibilityIdentifier("discoveryHeading")
+                PrompixWordmark().accessibilityIdentifier("discoveryHeading")
                 Spacer()
                 Button { settingsPresented = true } label: { Image(systemName: "gearshape").frame(width: 44, height: 44) }
                     .buttonStyle(.plain).readingGlass().accessibilityLabel(String(localized: "设置")).accessibilityIdentifier("discoverySettings")

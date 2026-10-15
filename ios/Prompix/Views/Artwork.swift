@@ -43,13 +43,13 @@ struct Artwork: View {
     }
     private func communityArtwork(size: CGSize) -> some View {
         ZStack {
-            Color(red: 0.92, green: 0.91, blue: 0.85)
+            Palette.soft
             VStack(alignment: .leading, spacing: 16) {
                 Image(systemName: item.kind == .web ? "curlybraces" : "quote.opening").font(.system(size: 28, weight: .ultraLight))
                 Text(item.displayTitle).font(.system(size: min(size.width * 0.12, 28), weight: .regular, design: .default)).lineLimit(5).minimumScaleFactor(0.75)
                 Spacer(minLength: 0)
                 Text(item.displayKind).font(.system(size: 11, weight: .medium))
-            }.foregroundStyle(Color(red: 0.28, green: 0.32, blue: 0.23)).padding(size.width * 0.12)
+            }.foregroundStyle(Palette.ink).padding(size.width * 0.12)
         }
     }
     private func editorialCover(_ cover: Prompt.Cover, size: CGSize) -> some View {
@@ -107,7 +107,7 @@ struct Artwork: View {
     private var noteColor: Color {
         if item.isSkill { return Palette.soft }
         switch item.cover?.tone ?? item.artwork {
-        case "sage", "tarot": return Palette.noteSage
+        case "sage", "tarot": return Palette.noteMint
         case "clay", "letter": return Palette.noteRose
         case "sky", "learn": return Palette.noteLavender
         default: return Palette.soft

@@ -97,7 +97,7 @@ private struct PromptBodySkeleton: View {
                 VStack(alignment: .leading, spacing: 14) {
                     ForEach([1.0, 0.93, 0.98, 0.62], id: \.self) { fraction in
                         GeometryReader { geometry in
-                            RoundedRectangle(cornerRadius: 3).fill(Palette.soft)
+                            LoadingSurface().clipShape(RoundedRectangle(cornerRadius: 3))
                                 .frame(width: geometry.size.width * fraction)
                         }.frame(height: lineHeight)
                     }
