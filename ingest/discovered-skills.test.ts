@@ -160,3 +160,26 @@ test("an approved discovered package survives database publication with its comp
   assert.equal(detail.item.prompt, candidate.prompt);
   assert.equal(detail.item.media?.imageURL, candidate.media?.imageURL);
 });
+
+test("the manual review command can maintain discovered packages and pins approval to their verified revision", async t => {
+  const { mkdir, writeFile } = await import("node:fs/promises");
+  const { execFile } = await import("node:child_process");
+  const { promisify } = await import("node:util");
+  const root = await mkdtemp(join(tmpdir(), "prompix-discovered-review-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const f = fixture(), pack = discoverSkillPackages(f.tree).packages[0];
+  const { candidate } = await verifyDiscoveredSkill("artist/creative-skills", revision, pack, f.read);
+  await mkdir(join(root, "candidates"));
+  await writeFile(join(root, "candidates/discovered-skills.json"), JSON.stringify([candidate]));
+  const metadataPath = join(root, "metadata.json");
+  await writeFile(metadataPath, JSON.stringify({ title: "Design an original poster", summary: candidate.summary,
+    example: candidate.example, tags: candidate.tags, previewLabel: candidate.previewLabel }));
+  const result = await promisify(execFile)(process.execPath, ["--import", "tsx", "ingest/review.ts", candidate.id, metadataPath],
+    { cwd: new URL("../", import.meta.url), env: { ...process.env, PROMPIX_CONTENT_DIR: root }, timeout: 30000 });
+  assert.deepEqual(JSON.parse(result.stdout), { reviewed: candidate.id, status: "metadata-reviewed-awaiting-media-check", published: false });
+  const reviews = JSON.parse(await readFile(join(root, "editorial.json"), "utf8"));
+  assert.equal(reviews[candidate.id].sourceRevision, revision);
+  assert.equal(applyEditorialReviews([candidate], reviews)[0].reviewStatus, "candidate");
+  const changed = { ...candidate, source: { ...candidate.source, revision: "b".repeat(40) } };
+  assert.equal(applyEditorialReviews([changed], reviews)[0].reviewStatus, "draft");
+});
