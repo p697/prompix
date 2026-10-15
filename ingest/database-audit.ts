@@ -5,7 +5,7 @@ import { loadPublicationState } from "./release-publication.ts";
 
 const runSchema = z.object({ runID: z.uuid(), startedAt: z.iso.datetime(), finishedAt: z.iso.datetime().optional(),
   state: z.enum(["running", "succeeded", "failed"]), published: z.boolean(), version: z.string().optional() });
-const states = new Set(["ok", "success", "succeeded", "failed", "error", "skipped", "disabled", "retired", "unavailable", "complete", "partial", "budget-exhausted", "cached"]);
+const states = new Set(["ok", "success", "succeeded", "failed", "error", "skipped", "disabled", "retired", "unavailable", "complete", "partial", "budget-exhausted", "cached", "daily-limit", "window-limit"]);
 
 /** Only bounded numeric counters and known states enter SQL; raw errors and URLs stay out. */
 function counters(value: unknown, depth = 0): Record<string, unknown> {

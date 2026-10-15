@@ -157,16 +157,18 @@ def certificate_dates(der: bytes) -> tuple[dt.datetime, dt.datetime]:
                  for key in ('notBefore', 'notAfter'))
 
 
-def export_option_checks(options: dict, method: str) -> dict[str, bool]:
+def export_option_checks(options: dict, method: str, requested: dict | None = None) -> dict[str, bool]:
     version_management = options.get('manageAppVersionAndBuildNumber')
     team = options.get('teamID')
     checks = {
         'localExportOnly': options.get('method') == method and options.get('destination') == 'export',
-        # Xcode omits this Store-only setting from generated debugging options.
-        # Actual archive/export version equality is checked independently below.
-        'noAutomaticVersionMutation': version_management is False or (method == 'debugging' and version_management is None),
+        # Generated debugging options omit this flag even when explicitly false.
+        # Require the original supplied options in that case, plus version equality below.
+        'noAutomaticVersionMutation': (requested or options).get('manageAppVersionAndBuildNumber') is False and version_management is not True,
         'explicitExportTeam': isinstance(team, str) and bool(re.fullmatch(r'[A-Z0-9]+', team)),
     }
+    if requested is not None:
+        checks['requestedExportOptionsMatch'] = all(requested.get(key) == options.get(key) for key in ('method', 'destination', 'teamID'))
     if method == 'app-store-connect':
         checks['distributionOptions'] = options.get('uploadSymbols') is True and options.get('testFlightInternalTestingOnly') is False
     return checks
@@ -246,7 +248,11 @@ class Auditor:
         self.report['sourceCommit'] = commit
         self.stage = 'exportOptions'
         options = plistlib.loads((args.export_dir / 'ExportOptions.plist').read_bytes())
-        for name, passed in export_option_checks(options, args.method).items():
+        requested_path = getattr(args, 'export_options', None)
+        requested = plistlib.loads(requested_path.read_bytes()) if requested_path else None
+        if requested_path:
+            self.report['requestedOptionsSHA256'] = hashlib.sha256(requested_path.read_bytes()).hexdigest()
+        for name, passed in export_option_checks(options, args.method, requested).items():
             self.check(name, passed)
         team = options['teamID']
         self.stage = 'archiveApplication'
@@ -320,6 +326,7 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument('--source-commit', required=True)
     result.add_argument('--archive', required=True, type=Path)
     result.add_argument('--export-dir', required=True, type=Path)
+    result.add_argument('--export-options', type=Path, help='Original options passed to xcodebuild; required when the generated export omits explicit version settings.')
     result.add_argument('--expected-version', required=True)
     result.add_argument('--expected-build', required=True)
     result.add_argument('--method', required=True, choices=('debugging', 'app-store-connect'))

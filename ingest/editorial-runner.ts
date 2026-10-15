@@ -1,3 +1,4 @@
+import { isDiscoveredSkill, discoveredSkillIssue } from "./discovered-skills.ts";
 import { createHash } from "node:crypto";
 import { isPublisherSkill, publisherSkillIssue } from "./publisher-skills.ts";
 import { z } from "zod";
@@ -50,11 +51,11 @@ export type EditorialReport = { status: "disabled" | "no-pending" | "daily-limit
   blockedAttempt?: { ordinal: number; state: "reserved" | "failed"; reservedAt: string } };
 type ReviewIdentityInput = Pick<Candidate, "id" | "fingerprint"> & Partial<Pick<Candidate, "source" | "skill">>;
 export function editorialReviewContext(item: ReviewIdentityInput): string | undefined {
-  if (!item.source || !isPublisherSkill({ id: item.id, source: item.source })) return;
+  if (!item.source || !(isPublisherSkill({ id: item.id, source: item.source }) || isDiscoveredSkill({ id: item.id, source: item.source }))) return;
   return createHash("sha256").update(JSON.stringify(["publisher-package-2", item.skill ?? null])).digest("hex");
 }
 export const editorialDecisionKey = (item: ReviewIdentityInput) => {
-  const bound = (item.source && isPublisherSkill({ id: item.id, source: item.source })) || item.id.startsWith("skill-publisher-") ||
+  const bound = (item.source && (isPublisherSkill({ id: item.id, source: item.source }) || isDiscoveredSkill({ id: item.id, source: item.source }))) || item.id.startsWith("skill-publisher-") ||
     item.id.startsWith("skill-clawhub-") || item.source?.name === "ClawHub" || item.source?.name === "X";
   const context = editorialReviewContext(item);
   return `${item.id}:${item.fingerprint}${bound && item.source?.revision ? `:${item.source.revision}` : ""}${context ? `:${context}` : ""}`;
@@ -94,7 +95,9 @@ export function automaticReviewEligibility(item: Candidate): string | undefined 
   });
   const publisher = isPublisherSkill(item);
   if (publisher) { const issue = publisherSkillIssue(item); if (issue) return issue; }
-  if (!community && !youmind && !skill && !registry && !nativeX && !publisher) return "Source is outside the automatic-review allowlist";
+  const discovered = isDiscoveredSkill(item);
+  if (discovered) { const issue = discoveredSkillIssue(item); if (issue) return issue; }
+  if (!community && !youmind && !skill && !registry && !nativeX && !publisher && !discovered) return "Source is outside the automatic-review allowlist";
   if (item.prompt.trim().length < 20) return "Insufficient complete copyable instructions";
   if (item.kind === "image" && !item.media?.imageURL) return "A real source image is required";
   if (item.kind === "video" && !(item.media?.imageURL && item.media.videoURL)) return "A real source poster and clip are required";
@@ -102,21 +105,35 @@ export function automaticReviewEligibility(item: Candidate): string | undefined 
   if (JSON.stringify([editorialInput(item)]).length > 36000) return "Complete source exceeds the bounded review input; manual review required";
 }
 
-/** Published edits first, then stable round-robin across source/modality shelves. */
+/** Weighted review capacity: X discovery 50%, creative work 30%, maintenance 10%, technical 10%.
+ * Empty shelves lend capacity; this changes review order, never approval standards. */
 export function editorialQueue(items: readonly Candidate[], previous: readonly Prompt[], rotation = 0): Candidate[] {
   const published = new Set(previous.map(item => item.id));
-  const edited = items.filter(item => published.has(item.id)).sort((a, b) => a.id.localeCompare(b.id));
-  const shelves = new Map<string, Candidate[]>();
-  for (const item of items.filter(item => !published.has(item.id))) {
-    const key = `${item.source.name}:${item.contentType === "skill" ? "skill" : item.kind}`;
-    const shelf = shelves.get(key) ?? []; shelf.push(item); shelves.set(key, shelf);
+  const buckets: Record<string, Candidate[]> = { x: [], creative: [], maintenance: [], technical: [] };
+  for (const item of items) {
+    const text = `${item.title} ${item.summary} ${item.tags.join(" ")}`;
+    const creative = /image|video|design|illustrat|photograph|story|writing|presentation|animation|图片|视频|设计|写作|海报/i.test(text);
+    const technical = !creative && /expo|supabase|database|postgres|backend|debug|typescript|kubernetes|数据库|调试/i.test(text);
+    const bucket = published.has(item.id) ? "maintenance" : item.source.name === "X" || /; discovered via https:\/\/(?:x|twitter)\.com\//.test(item.source.method) ? "x" : technical ? "technical" : "creative";
+    buckets[bucket].push(item);
   }
-  const sortedGroups = [...shelves.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([, values]) =>
-    values.sort((a, b) => Number(b.featured) - Number(a.featured) || a.id.localeCompare(b.id)));
-  const offset = sortedGroups.length ? rotation % sortedGroups.length : 0;
-  const groups = [...sortedGroups.slice(offset), ...sortedGroups.slice(0, offset)];
-  const queue = [...edited];
-  for (let index = 0; groups.some(group => index < group.length); index++) for (const group of groups) if (group[index]) queue.push(group[index]);
+  for (const [key, values] of Object.entries(buckets)) {
+    const shelves = new Map<string, Candidate[]>();
+    for (const item of values) {
+      const name = `${item.source.name}:${item.contentType === "skill" ? "skill" : item.kind}`;
+      const shelf = shelves.get(name) ?? []; shelf.push(item); shelves.set(name, shelf);
+    }
+    const groups = [...shelves.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([, group]) => group.sort((a, b) =>
+      Number(b.featured) - Number(a.featured) || (b.source.post?.createdAt ?? "").localeCompare(a.source.post?.createdAt ?? "") || a.id.localeCompare(b.id)));
+    const offset = groups.length ? rotation % groups.length : 0, rotated = [...groups.slice(offset), ...groups.slice(0, offset)];
+    buckets[key] = [];
+    for (let index = 0; rotated.some(group => index < group.length); index++) for (const group of rotated) if (group[index]) buckets[key].push(group[index]);
+  }
+  const queue: Candidate[] = [], cycle = ["maintenance", "x", "creative", "x", "creative", "x", "technical", "x", "creative", "x"];
+  for (let index = 0; queue.length < items.length; index++) {
+    const item = buckets[cycle[index % cycle.length]].shift() ?? buckets.x.shift() ?? buckets.creative.shift() ?? buckets.maintenance.shift() ?? buckets.technical.shift();
+    if (item) queue.push(item);
+  }
   return queue;
 }
 
@@ -130,7 +147,7 @@ export async function runEditorialReview(options: { candidates: readonly Candida
   const savedLedger = options.ledger === undefined ? undefined : editorialLedgerSchema.parse(options.ledger);
   let ledger = savedLedger?.day === options.day ? savedLedger : undefined;
   const pending = options.candidates.filter(item => options.reviews[item.id]?.fingerprint !== item.fingerprint
-    || ((isPublisherSkill(item) || isClawHubItem(item) || isNativeXDraft(item)) && options.reviews[item.id]?.sourceRevision !== item.source.revision));
+    || ((isPublisherSkill(item) || isDiscoveredSkill(item) || isClawHubItem(item) || isNativeXDraft(item)) && options.reviews[item.id]?.sourceRevision !== item.source.revision));
   const report: EditorialReport = { status: options.provider ? "no-pending" : "disabled", pending: pending.length, eligible: 0,
     requests: 0, dailyRequests: ledger?.requests ?? 0, maxRequests, attemptedCandidates: 0, approved: 0, deferred: 0, rejected: 0,
     cachedDecisions: 0, preflightDeferred: 0, inputCharacters: 0, model: editorialModel };
@@ -146,7 +163,7 @@ export async function runEditorialReview(options: { candidates: readonly Candida
     if (reason) {
       cache.decisions[key] = { id: item.id, fingerprint: item.fingerprint, decision: "defer", reason, metadata: null, reviewedAt: now, model: "preflight-v1",
         ...(editorialReviewContext(item) ? { reviewContext: editorialReviewContext(item) } : {}),
-        ...((isPublisherSkill(item) || isClawHubItem(item) || isNativeXDraft(item)) ? { sourceRevision: item.source.revision } : {}) };
+        ...((isPublisherSkill(item) || isDiscoveredSkill(item) || isClawHubItem(item) || isNativeXDraft(item)) ? { sourceRevision: item.source.revision } : {}) };
       report.preflightDeferred++;
     } else eligible.push(item);
   }
@@ -207,14 +224,14 @@ export async function runEditorialReview(options: { candidates: readonly Candida
           if (!decision.metadata || decision.metadata.previewLabel !== previewLabel(candidate)) throw new Error("Approval is missing honest editorial metadata");
           const { cover, ...metadata } = decision.metadata;
           const entry = { fingerprint: candidate.fingerprint, reviewedAt: now,
-            ...((isPublisherSkill(candidate) || isClawHubItem(candidate) || isNativeXDraft(candidate)) ? { sourceRevision: candidate.source.revision } : {}),
+            ...((isPublisherSkill(candidate) || isDiscoveredSkill(candidate) || isClawHubItem(candidate) || isNativeXDraft(candidate)) ? { sourceRevision: candidate.source.revision } : {}),
             metadata: editorialMetadataSchema.parse({ ...metadata, ...(cover ? { cover } : {}) }) };
           if (applyEditorialReviews([candidate], { [candidate.id]: entry })[0].reviewStatus !== "candidate") throw new Error("Approval has no complete source preview");
           nextReviews[candidate.id] = entry;
         } else if (decision.metadata !== null) throw new Error("A deferred or rejected review cannot supply publication metadata");
         nextDecisions[editorialDecisionKey(candidate)] = { ...decision, reviewedAt: now, model: editorialModel,
             ...(editorialReviewContext(candidate) ? { reviewContext: editorialReviewContext(candidate) } : {}),
-          ...((isPublisherSkill(candidate) || isClawHubItem(candidate) || isNativeXDraft(candidate)) ? { sourceRevision: candidate.source.revision } : {}) };
+          ...((isPublisherSkill(candidate) || isDiscoveredSkill(candidate) || isClawHubItem(candidate) || isNativeXDraft(candidate)) ? { sourceRevision: candidate.source.revision } : {}) };
       }
       // Save approvals before their decision cache, so a cache-only success can
       // never prevent an approved record from reaching the existing review gate.

@@ -149,6 +149,24 @@ export async function activatePublication(db: TransactionalDatabase, id: string,
     const count = (await tx.query<{ count: number }>(
       "select count(*)::integer as count from prompix.release_entries where release_id=$1", [id])).rows[0].count;
     if (count !== release.item_count) throw new FeedError("conflict", 409);
+    // The state row lock serializes the daily ceiling across concurrent writers and rollback.
+    if (state.active_release) {
+      const quota = (await tx.query<{ used: number; incoming: number }>(`select
+        (select count(*)::integer from prompix.content where counts_toward_daily_limit
+          and first_published_at >= (date_trunc('day',now() at time zone 'UTC') at time zone 'UTC')) as used,
+        (select count(*)::integer from prompix.release_entries e join prompix.content c on c.id=e.content_id
+          where e.release_id=$1 and c.first_published_at is null and c.removed_at is null) as incoming`, [id])).rows[0];
+      if (quota.used + quota.incoming > 100) throw new Error("Daily new-publication ceiling exceeded");
+    }
+    await tx.query(`update prompix.content c set first_published_at=now(),counts_toward_daily_limit=$2
+      from prompix.release_entries e where e.release_id=$1 and e.content_id=c.id and c.first_published_at is null and c.removed_at is null`,
+      [id, !!state.active_release]);
+    // Assign once per immutable release. Rollback keeps its original pagination order.
+    await tx.query(`with ranked as (
+      select e.position,(row_number() over(order by c.first_published_at desc nulls last,e.position)-1)::integer as latest_position
+      from prompix.release_entries e join prompix.content c on c.id=e.content_id where e.release_id=$1
+    ) update prompix.release_entries e set latest_position=r.latest_position from ranked r
+      where e.release_id=$1 and e.position=r.position and e.latest_position is null`, [id]);
     await removeLocked(tx, release.removed_ids, "Publication removal");
     await tx.query("update prompix.releases set published_at=coalesce(published_at,now()) where id=$1", [id]);
     const next = (await tx.query<{ generation: string }>(`update prompix.state set active_release=$1,

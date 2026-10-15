@@ -54,7 +54,7 @@ struct FeedResults: View {
 struct PromptCardFace: View {
     let preview: ContentPreview
     @Environment(\.dynamicTypeSize) private var typeSize
-    private var titleIsInArtwork: Bool { preview.isSkill || preview.kind == .text }
+    private var titleIsInArtwork: Bool { preview.usesTextArtwork }
     var body: some View {
         VStack(alignment: .leading, spacing: PromptCardGeometry.titleSpacing) {
             if typeSize.isAccessibilitySize && titleIsInArtwork {
@@ -262,5 +262,49 @@ struct FeedNextPageButton: View {
                 Text(String(localized: "加载更多"))
             }.frame(minHeight: 44)
         }.disabled(isLoading || !enabled)
+    }
+}
+
+/// An independent, bounded first page makes new approvals visible before evergreen discovery shelves.
+struct LatestContentRail: View {
+    let store: FeedStore
+    let showAll: () -> Void
+    @Environment(Library.self) private var library
+    @Environment(\.dynamicTypeSize) private var typeSize
+    private var query: FeedQuery { FeedQuery(sort: "latest") }
+    var body: some View {
+        let items = Array(store.items.filter { !library.isRemoved(id: $0.id) }.prefix(6))
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text(String(localized: "最新收录")).font(.subheadline.weight(.medium))
+                    .accessibilityAddTraits(.isHeader).accessibilityIdentifier("latestContentHeading")
+                Spacer()
+                Button(action: showAll) {
+                    Label(String(localized: "查看全部"), systemImage: "arrow.right").font(.footnote)
+                }.frame(minHeight: 44).accessibilityIdentifier("showLatestFeed")
+            }.padding(.horizontal, 20)
+            if items.isEmpty {
+                if store.isLoading || store.query == nil {
+                    ProgressView(String(localized: "正在加载内容…")).padding(.horizontal, 20)
+                } else if store.failure != nil {
+                    FeedRetryButton(retryAt: store.retryAt) { Task { await store.load(query, force: true) } }
+                        .padding(.horizontal, 20).accessibilityIdentifier("retryLatestContent")
+                }
+            } else {
+                ScrollView(.horizontal) {
+                    LazyHStack(alignment: .top, spacing: 12) {
+                        ForEach(items) { card in
+                            FeedPromptCard(card: card).frame(width: typeSize.isAccessibilitySize ? 240 : 156)
+                        }
+                    }.padding(.horizontal, 16)
+                }.scrollIndicators(.hidden)
+                if store.isCached && store.failure != nil {
+                    Text(String(localized: "已下载内容仍可浏览，轻点重试。"))
+                        .font(.caption).foregroundStyle(Palette.muted).padding(.horizontal, 20)
+                }
+            }
+        }.padding(.bottom, 8)
+            .task(id: query) { await store.load(query) }
+            .onDisappear { store.cancel() }
     }
 }

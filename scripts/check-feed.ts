@@ -24,22 +24,27 @@ async function request(path: string, status = 200, method = "GET"): Promise<unkn
   }
   return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
 }
-for (const locale of ["original", "zh-Hans"] as const) {
+const byID = new Map(expected.records.map(row => [row.content_id, row]));
+for (const locale of ["original", "zh-Hans"] as const) for (const sort of ["curated", "latest"] as const) {
   const ids: string[] = []; let cursor: string | null = null, pages = 0;
   do {
-    const query = new URLSearchParams({ limit: "50", locale }); if (cursor) query.set("cursor", cursor);
+    const query = new URLSearchParams({ limit: "50", locale, sort }); if (cursor) query.set("cursor", cursor);
     const page = validateArtifact(feedPageSchema, await request("/v3/feed?" + query));
     assert.equal(page.release, expected.id);
     for (const card of page.items) {
-      const row = expected.records[ids.length]; assert.ok(row, "Unexpected feed row");
+      const row = sort === "curated" ? expected.records[ids.length] : byID.get(card.id); assert.ok(row, "Unexpected feed row");
       const expectedCard = row.translations.find(item => item.locale === locale)?.card ?? row.card;
       assert.equal(publicationIdentity(card), publicationIdentity(expectedCard)); ids.push(card.id);
     }
     assert.notEqual(page.nextCursor, cursor || "never-a-cursor"); cursor = page.nextCursor;
     assert.ok(++pages <= 2001, "Pagination did not terminate");
   } while (cursor);
-  assert.deepEqual(ids, source.prompts.map(item => item.id)); assert.equal(new Set(ids).size, ids.length);
+  const expectedIDs = source.prompts.map(item => item.id);
+  assert.deepEqual(sort === "curated" ? ids : [...ids].sort(), sort === "curated" ? expectedIDs : expectedIDs.sort());
+  assert.equal(new Set(ids).size, ids.length);
 }
+const latest = validateArtifact(feedPageSchema, await request("/v3/feed?sort=latest&limit=50"));
+if (latest.nextCursor) await request("/v3/feed?" + new URLSearchParams({ sort: "curated", limit: "50", cursor: latest.nextCursor }), 400);
 const richest = [...expected.records].sort((a, b) => b.translations.length - a.translations.length)[0];
 for (const locale of ["original", ...richest.languages]) {
   const detail = validateArtifact(feedDetailSchema, await request(`/v3/contents/${richest.content_id}?revision=${richest.id}&locale=${locale}`));

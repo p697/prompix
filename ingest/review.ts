@@ -1,4 +1,5 @@
 import { isPublisherSkill, skillPublishers } from "./publisher-skills.ts";
+import { isDiscoveredSkill } from "./discovered-skills.ts";
 import { readFile, mkdir, writeFile, rename, realpath } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, resolve, relative, isAbsolute, dirname } from "node:path";
@@ -23,7 +24,7 @@ if (!relativeRoot || (!relativeRoot.startsWith("..") && !isAbsolute(relativeRoot
 const unlock = await lockContent(root);
 try {
 let candidate: Candidate | undefined;
-for (const source of [...repositories.map((source) => source.id), "prompts-chat", "x-native", "clawhub-community", videoArchive.id, ...skillSources.map(source => `skill-${source.id}`), ...skillPublishers.map(source => `publisher-skills-${source.id}`)]) {
+for (const source of [...repositories.map((source) => source.id), "prompts-chat", "x-native", "clawhub-community", "discovered-skills", videoArchive.id, ...skillSources.map(source => `skill-${source.id}`), ...skillPublishers.map(source => `publisher-skills-${source.id}`)]) {
   try {
     const items: Candidate[] = JSON.parse(await readFile(join(root, "candidates", `${source}.json`), "utf8"));
     candidate = items.find((item) => item.id === id);
@@ -38,9 +39,9 @@ let reviews = reviewsSchema.parse({});
 try { reviews = reviewsSchema.parse(JSON.parse(await readFile(file, "utf8"))); }
 catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
 reviews[id] = { fingerprint: candidate.fingerprint, reviewedAt: new Date().toISOString(), metadata,
-  ...((isPublisherSkill(candidate) || isClawHubItem(candidate) || isNativeXDraft(candidate)) && candidate.source.revision ? { sourceRevision: candidate.source.revision } : {}) };
+  ...((isPublisherSkill(candidate) || isDiscoveredSkill(candidate) || isClawHubItem(candidate) || isNativeXDraft(candidate)) && candidate.source.revision ? { sourceRevision: candidate.source.revision } : {}) };
 const approved = applyEditorialReviews([candidate], reviews)[0];
-if (approved.reviewStatus !== "candidate" && !isNativeXDraft(candidate)) throw new Error("Website review requires both a working demo URL and a real preview image URL");
+if (approved.reviewStatus !== "candidate" && !isNativeXDraft(candidate)) throw new Error("Candidate does not meet current source identity and publication requirements");
 await writeFile(`${file}.tmp`, JSON.stringify(reviews, null, 2) + "\n");
 await rename(`${file}.tmp`, file);
 const visual = approved.kind !== "text" || !!(approved.media?.imageURL || approved.media?.imageURLs?.length || approved.media?.videoURL);

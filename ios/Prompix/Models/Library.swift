@@ -260,12 +260,15 @@ enum CatalogSyncState: Equatable, Sendable {
             isRefreshing = true; syncState = .checking; syncMessage = nil; lastAttempt = now
             defer { isRefreshing = false }
             do {
+                let previousRelease = feed.state?.release
                 try await feed.refresh()
                 try Task.checkCancellation()
                 version = feed.state?.release ?? version
                 updatedAt = feed.state?.publishedAt.flatMap(Self.parseDate)
                 syncState = .current
-                if force {
+                let releaseChanged = previousRelease != nil && previousRelease != feed.state?.release
+                if force || releaseChanged {
+                    if feed.latest.query != nil { await feed.latest.load(FeedQuery(sort: "latest"), force: true) }
                     if feed.browse.value != nil || feed.browse.failure != nil { await feed.browse.load(force: true) }
                     if feed.creators.query != nil { await feed.creators.load("", force: true) }
                 }

@@ -9,6 +9,24 @@ import { TranslationProviderError } from "./translation-provider.ts";
 const fixture = catalogSchema.parse(JSON.parse(await readFile(new URL("../ios/Prompix/Resources/catalog.json", import.meta.url), "utf8"))).prompts[0];
 const item = { ...fixture, title: "Portrait", summary: "Generate a portrait with gentle studio lighting.", prompt: "Create a portrait of {subject}, add https://example.com/reference and --ar 16:9. Keep `field_name`.", example: "Replace {subject} with the person you want to depict.", previewLabel: "Studio example", cover: { text: "Portrait", eyebrow: "IMAGE", tone: "sage" as const } };
 
+test("oversized historical fields split without truncation, broken syntax or blocking other records", () => {
+  const prose = "The scene you create should tell your story with a clear focus. Keep {subject}, https://example.com/reference and `field_name` unchanged. 🌿\n\n".repeat(290);
+  for (const body of [prose, JSON.stringify({ prompt: prose, seed: 42, model: "literal_model" })]) {
+    const source = { ...item, prompt: body };
+    const cache = emptyTranslationCache(), segments = promptSegments(source);
+    assert.ok(segments.length > promptSegments(item).length);
+    assert.ok(segments.every(segment => segment.text.length <= 30000));
+    assert.doesNotThrow(() => translationBatches([source, item], cache, ["en"]));
+    cache.segments.en = Object.fromEntries(segments.map(segment => [segment.id, segment.text]));
+    assert.equal(localizePrompt(source, "en", cache)?.prompt, body, "Reassembly must retain every source byte, including whitespace and JSON formatting");
+    const chunk = segments.find(segment => segment.text.length > 1000)!;
+    delete cache.segments.en[chunk.id];
+    assert.equal(localizePrompt(source, "en", cache), undefined, "Partial chunks cannot become a complete translation");
+    cache.segments.en[chunk.id] = chunk.text.replace(/⟦PP\d+⟧/, "lost placeholder");
+    assert.equal(localizePrompt(source, "en", cache), undefined);
+  }
+});
+
 function fillCache(locale: "en" | "zh-Hans" = "en") {
   const cache = emptyTranslationCache();
   cache.segments[locale] = Object.fromEntries(promptSegments(item).map(segment => [segment.id, locale === "en" ? segment.text : "生成肖像。" + [...segment.text.matchAll(/⟦PP\d+⟧/g)].map(match => match[0]).join(" ")]));
@@ -608,6 +626,7 @@ process.stdin.on("end", () => {
   fs.appendFileSync(${JSON.stringify(calls)}, request.locale + "\\n");
   fs.writeFileSync(process.argv[process.argv.indexOf("--output-last-message") + 1], JSON.stringify({ translations: [] }));
 });
+
 `);
     await chmod(executable, 0o700);
     const result = await prepareDailyTranslations([item], root, {
@@ -617,5 +636,26 @@ process.stdin.on("end", () => {
     assert.equal(result.report.status, "updated"); assert.equal(result.report.attempted, 1);
     assert.equal(await readFile(calls, "utf8"), "zh-Hans\n");
     assert.equal(result.report.coverage.en, 1);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+
+test("exhausted transient translation failures remain visible to monitoring without replaying spent budget", async () => {
+  const { mkdtemp, writeFile, rm, chmod } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const { prepareDailyTranslations } = await import("./translation-daily.ts");
+  const root = await mkdtemp(join(tmpdir(), "prompix-translation-failure-"));
+  try {
+    const executable = join(root, "fail.cjs");
+    await writeFile(executable, `#!${process.execPath}\nprocess.stdin.resume(); process.stdin.on("end", () => process.exit(1));\n`);
+    await chmod(executable, 0o700);
+    const env = { PROMPIX_TRANSLATION_PROVIDER: "codex", PROMPIX_CODEX: executable,
+      PROMPIX_TRANSLATION_LOCALES: "ja", PROMPIX_TRANSLATION_MAX_REQUESTS: "1" };
+    const failed = await prepareDailyTranslations([item], root, env);
+    assert.equal(failed.report.status, "partial"); assert.equal(failed.report.failed, 1);
+    const repeated = await prepareDailyTranslations([item], root, env);
+    assert.equal(repeated.report.attempted, 1); assert.equal(repeated.report.failed, 1);
+    assert.equal(repeated.report.status, "updated", "Old failures must not masquerade as another failed run");
   } finally { await rm(root, { recursive: true, force: true }); }
 });

@@ -1,3 +1,4 @@
+import { exportPublicationHistory, restorePublicationHistory } from "../services/feed/publication-history.ts";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
@@ -12,12 +13,14 @@ if (!source || !isAbsolute(source)) throw new Error("Provide an absolute backup 
 const bytes = await readFile(source), manifest = JSON.parse(await readFile(source + ".manifest.json", "utf8"));
 assert.equal(createHash("sha256").update(bytes).digest("hex"), manifest.sha256, "Backup checksum mismatch");
 const backup = JSON.parse(bytes.toString("utf8"));
-assert.equal(backup.format, "prompix-publication-backup-v1");
+assert.ok(["prompix-publication-backup-v1", "prompix-publication-backup-v2"].includes(backup.format));
 preparePublication(backup.catalog);
 const { pg, writer, reader } = await createTestDatabase();
 try {
   const release = await stagePublication(writer, backup.catalog);
+  if (backup.format === "prompix-publication-backup-v2") await restorePublicationHistory(writer, backup.firstPublications);
   await activatePublication(writer, release, "0");
+  if (backup.format === "prompix-publication-backup-v2") assert.deepEqual(await exportPublicationHistory(writer), backup.firstPublications);
   const restored = await exportPublication(writer);
   assert.deepEqual(restored.prompts, backup.catalog.prompts, "Restored content differs");
   assert.deepEqual([...(restored.removedIDs ?? [])].sort(), [...(backup.catalog.removedIDs ?? [])].sort());

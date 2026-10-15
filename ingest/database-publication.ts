@@ -4,6 +4,7 @@ import type { Catalog } from "../packages/schema/catalog.ts";
 import type { TransactionalDatabase } from "../services/feed/database.ts";
 import { activatePublication, exportRelease, stagePublication } from "../services/feed/publication.ts";
 import { connectDatabase, publisherConfiguration } from "../services/feed/postgres.ts";
+import { retryConnection } from "./transient-retry.ts";
 
 const releaseID = z.string().regex(/^feed-[a-f0-9]{64}$/);
 const generation = z.string().regex(/^(0|[1-9][0-9]{0,17})$/);
@@ -41,8 +42,10 @@ export function databasePublisher(using: <T>(operation: (db: TransactionalDataba
 export async function withPublisherDatabase<T>(operation: (db: TransactionalDatabase) => Promise<T>, environment: NodeJS.ProcessEnv = process.env): Promise<T> {
   const path = environment.PROMPIX_DATABASE_CA;
   if (!path) throw new Error("Database publisher CA is not configured");
-  const db = await connectDatabase({ ...publisherConfiguration(environment, await readFile(path, "utf8")),
-    query_timeout: 30000, statement_timeout: 25000, lock_timeout: 5000, idle_in_transaction_session_timeout: 30000 });
+  const config = { ...publisherConfiguration(environment, await readFile(path, "utf8")),
+    query_timeout: 30000, statement_timeout: 25000, lock_timeout: 5000, idle_in_transaction_session_timeout: 30000 };
+  // No query has executed yet. Never replay an uncertain transaction commit here.
+  const db = await retryConnection(() => connectDatabase(config));
   try { return await operation(db); } finally { await db.close(); }
 }
 

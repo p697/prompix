@@ -1,3 +1,4 @@
+import { isDiscoveredSkill, discoveredSkillIssue } from "./discovered-skills.ts";
 import { isPublisherSkill, publisherSkillIssue } from "./publisher-skills.ts";
 import { z } from "zod";
 import { promptSchema } from "../packages/schema/catalog.ts";
@@ -35,12 +36,12 @@ export function applyEditorialReviews(items: Candidate[], reviews: Reviews): Can
     // quality. Every community item needs a review of its current source text.
     const baseline: Candidate = { ...item, reviewStatus: "draft" };
     const review = reviews[item.id];
-    if (!review || review.fingerprint !== item.fingerprint || ((isPublisherSkill(item) || isClawHubItem(item) || isNativeXDraft(item)) && review.sourceRevision !== item.source.revision)) return baseline;
+    if (!review || review.fingerprint !== item.fingerprint || ((isPublisherSkill(item) || isDiscoveredSkill(item) || isClawHubItem(item) || isNativeXDraft(item)) && review.sourceRevision !== item.source.revision)) return baseline;
     const { demoURL, imageURL, imageURLs, priority, ...metadata } = review.metadata;
     const updated: Candidate = {
       ...baseline,
       ...metadata,
-      media: !isNativeXDraft(item) && (demoURL || imageURL || imageURLs) ? {
+      media: !isNativeXDraft(item) && !isDiscoveredSkill(item) && (demoURL || imageURL || imageURLs) ? {
         image: null, video: null, demoURL: null,
         ...item.media,
         ...(demoURL ? { demoURL } : {}),
@@ -51,7 +52,7 @@ export function applyEditorialReviews(items: Candidate[], reviews: Reviews): Can
       editorialRank: priority ?? 0,
     };
     // Preserve source attachments; editorial metadata cannot substitute an X post.
-    if ((isPublisherSkill(item) && publisherSkillIssue(item)) || nativeXSourceIssue(item) || (isNativeXDraft(item) && nativeXSourceDigest(item) !== item.source.revision)) return { ...updated, reviewStatus: "draft" };
+    if ((isDiscoveredSkill(item) && discoveredSkillIssue(item)) || (isPublisherSkill(item) && publisherSkillIssue(item)) || nativeXSourceIssue(item) || (isNativeXDraft(item) && nativeXSourceDigest(item) !== item.source.revision)) return { ...updated, reviewStatus: "draft" };
     // Website cards need an inspectable result, not just a code-generation brief.
     if (updated.kind === "web" && (!updated.media?.demoURL || !updated.media?.imageURL)) return baseline;
     return updated;

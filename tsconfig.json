@@ -13,7 +13,9 @@
     "ingest/**/*.ts",
     "packages/**/*.ts",
     "scripts/**/*.ts",
-    "services/feed/**/*.ts"
+    "services/feed/**/*.ts",
+    "services/monitor/state.ts",
+    "services/monitor/*.test.ts"
   ],
   "exclude": [
     "services/feed/worker.ts",

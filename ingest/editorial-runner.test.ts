@@ -373,16 +373,16 @@ process.stdin.on("end", () => {
     await chmod(executable, 0o700);
     const environment = { PROMPIX_EDITORIAL_PROVIDER: "codex", PROMPIX_CODEX: executable, PROMPIX_EDITORIAL_MAX_REQUESTS: "3" };
     const items = Array.from({ length: 12 }, (_, index) => candidate(`wrapper-${index}`));
-    const first = await prepareDailyEditorial(items, {}, [], root, true, environment);
+    const first = await prepareDailyEditorial(items, {}, [], root, true, environment, () => new Date(`${today}T21:00:00Z`));
     assert.equal(first.report.status, "reviewed"); assert.equal(first.report.requests, 2); assert.equal(first.report.dailyRequests, 3);
     const ledger = editorialLedgerSchema.parse(JSON.parse(await readFile(ledgerPath, "utf8")));
     assert.deepEqual(ledger.attempts[0], legacy);
     assert.deepEqual(await readdir(join(directory, "responses")), [`${today}-002.json`, `${today}-003.json`, `${today}.json`].sort());
     assert.equal(await readFile(join(directory, "responses", `${today}.json`), "utf8"), "legacy audit evidence\n");
-    const second = await prepareDailyEditorial(items, first.reviews, [], root, true, environment);
+    const second = await prepareDailyEditorial(items, first.reviews, [], root, true, environment, () => new Date(`${today}T21:00:00Z`));
     assert.equal(second.report.requests, 0); assert.equal(second.report.dailyRequests, 3);
     const next = await prepareDailyEditorial(items, first.reviews, [], root, true,
-      { ...environment, PROMPIX_EDITORIAL_MAX_REQUESTS: "4" });
+      { ...environment, PROMPIX_EDITORIAL_MAX_REQUESTS: "4" }, () => new Date(`${today}T21:00:00Z`));
     assert.equal(next.report.requests, 1); assert.equal(next.report.dailyRequests, 4);
     assert.ok((await readdir(join(directory, "responses"))).includes(`${today}-004.json`));
     for (const invalid of ["", "2.5", "65", "-1", "Infinity", " 4 "]) await assert.rejects(
@@ -391,7 +391,7 @@ process.stdin.on("end", () => {
     const tomorrow = new Date(Date.parse(`${today}T00:00:00Z`) + 86400000);
     const rollover = await prepareDailyEditorial([...items, ...Array.from({ length: 6 }, (_, index) => candidate(`rollover-${index}`))],
       next.reviews, [], root, true, { ...environment, PROMPIX_EDITORIAL_MAX_REQUESTS: "6" },
-      () => ++clockReads <= 2 ? new Date(`${today}T23:59:59Z`) : tomorrow);
+      () => ++clockReads <= 3 ? new Date(`${today}T23:59:59Z`) : tomorrow);
     assert.equal(rollover.report.status, "failed"); assert.match(rollover.report.error!, /UTC editorial review day changed/);
     assert.equal(rollover.report.approved, 3); assert.equal(rollover.report.dailyRequests, 6);
     const responses = await readdir(join(directory, "responses"));

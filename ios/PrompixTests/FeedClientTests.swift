@@ -23,6 +23,19 @@ import XCTest
         let collectionPage = try await client.page(query: FeedQuery(locale: "zh-Hans", collection: topic.id))
         XCTAssertFalse(collectionPage.items.isEmpty)
     }
+    func testLatestQueryHasSeparateCacheIdentityAndKeepsLegacyQueryDecodable() async throws {
+        let legacy = FeedQuery(locale: "original")
+        let decoded = try JSONDecoder().decode(FeedQuery.self, from: JSONEncoder().encode(legacy))
+        XCTAssertNil(decoded.sort)
+        let latest = try FeedQuery(locale: "original", sort: "latest").validated()
+        XCTAssertNotEqual(latest, legacy)
+        XCTAssertEqual(latest.parameters.first { $0.name == "sort" }?.value, "latest")
+        XCTAssertThrowsError(try FeedQuery(sort: "untrusted").validated())
+        let (client, server) = connection()
+        server.set("/v3/feed", bytes: try FeedFixture.page())
+        _ = try await client.page(query: latest)
+        XCTAssertTrue(server.urls[0].query?.contains("sort=latest") == true)
+    }
     private func connection() -> (FeedClient, FeedTestServer) {
         let server = FeedTestServer(), token = UUID().uuidString
         FeedTestServers.shared.insert(server, token: token)

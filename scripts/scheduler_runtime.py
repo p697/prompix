@@ -109,6 +109,7 @@ def run_collection(base, node):
             '--env-file-if-exists=' + str(Path.home() / '.config/prompix/editorial.env'),
             '--env-file-if-exists=' + str(Path.home() / '.config/prompix/publication.env'),
             '--env-file-if-exists=' + str(Path.home() / '.config/prompix/database.env'),
+            '--env-file-if-exists=' + str(Path.home() / '.config/prompix/alerts.env'),
             '--import', 'tsx', 'ingest/daily.ts', '--publish',
         ], cwd=runtime, pass_fds=(descriptor,), env=collection_environment()).returncode
 

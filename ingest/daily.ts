@@ -1,3 +1,6 @@
+import { limitNewPublications } from "./publication-quota.ts";
+import { withPublisherDatabase } from "./database-publication.ts";
+import { prepareDiscoveredSkills } from "./discovered-skill-daily.ts";
 import { preparePublisherSkills } from "./publisher-skill-daily.ts";
 import { prepareXAvailability, filterXAvailability, assertXAvailability } from "./x-availability.ts";
 import { mkdir, readFile, writeFile, rm } from "node:fs/promises";
@@ -193,6 +196,9 @@ async function run() {
     all.push(...filterXAvailability(xIntake.candidates, xAvailability.state).prompts);
     await atomic(join(root, "candidates", "x-native.json"), xIntake.candidates);
     await atomic(join(root, "x-intake", "status.json"), { updatedAt: new Date().toISOString(), ...xIntake.report, threads: xIntake.threads, records: xIntake.records });
+    const discoveredSkills = await prepareDiscoveredSkills(root, xIntake.records, { enabled: publishing });
+    report.sources["skill-discovery"] = discoveredSkills.report;
+    all.push(...discoveredSkills.candidates);
     report.sources[videoArchive.id] = { status: "retired", count: 0 };
     const candidates = enrichCreators(mergeCandidates(all), creators);
     report.counts.candidates = countByKind(candidates);
@@ -355,6 +361,13 @@ async function run() {
     const xVisible = filterXAvailability(registryVisible.prompts, xAvailability.state);
     report.sources["x-withheld"] = { ids: xVisible.withheldIDs };
     let complete = enrichCreators(xVisible.prompts, creators);
+    // Only publishable records consume a slot. A cached visual deferral or a
+    // failed download must not block all later approvals on every run.
+    if (publishing && publication.previous?.database) {
+      const quota = await withPublisherDatabase(db => limitNewPublications(db, complete));
+      complete = quota.prompts;
+      report.sources["publication-quota"] = quota.report;
+    }
     if (publishing) complete = await mirrorCreatorAvatars(complete, async url => {
       const mirrored = await publishAvatar(url, root, mediaMap, upload);
       await atomic(join(root, "media-map.json"), mediaMap);

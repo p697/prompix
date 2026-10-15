@@ -50,6 +50,7 @@ struct DiscoverView: View {
     @Environment(Library.self) private var library
     @State private var kind: PromptKind?
     @State private var skillsOnly = false
+    @State private var latestOnly = false
     @State private var topic: String?
     @State private var model: String?
     @State private var chromeCollapsed = false
@@ -58,7 +59,7 @@ struct DiscoverView: View {
     @State private var settingsPresented = false
     private let topics = ["好玩一点", "创作灵感", "日常有用"]
     private var items: [Prompt] { library.prompts.filter { PromptQuery(kind: kind, topic: topic, model: model, skillsOnly: skillsOnly).matches($0) } }
-    private var feedQuery: FeedQuery { FeedQuery(kind: skillsOnly ? "skill" : kind?.rawValue, tag: topic, model: model) }
+    private var feedQuery: FeedQuery { FeedQuery(kind: skillsOnly ? "skill" : kind?.rawValue, tag: topic, model: model, sort: latestOnly ? "latest" : nil) }
     private var models: [String] {
         if let feed = library.feed { return feed.browse.value?.models.map(\.name) ?? [] }
         return Array(Set(library.prompts.filter { PromptQuery(kind: kind, skillsOnly: skillsOnly).matches($0) }.map(\.model))).sorted()
@@ -75,13 +76,16 @@ struct DiscoverView: View {
                         Color.clear.frame(height: headerHeight).id("discovery-top")
                         Group {
                             if library.isRefreshing || library.syncMessage != nil { CatalogUpdateStatus().padding(.horizontal, 20) }
-                            if !isFiltered {
+                            if !isFiltered && !latestOnly {
+                                if let feed = library.feed {
+                                    LatestContentRail(store: feed.latest) { latestOnly = true; chromeCollapsed = false }
+                                }
                                 CreatorRail()
                                 CollectionRail().padding(.bottom, 6)
                             }
                             discoveryContext
                             if skillsOnly {
-                                Text(String(localized: "可带到编程助手中使用的技能，包含完整说明与源文件。"))
+                                Text(String(localized: "可在支持 Agent Skills 的工具中使用，包含完整说明与源文件；具体依赖请查看详情。"))
                                     .font(.subheadline).foregroundStyle(Palette.muted).padding(.horizontal, 20)
                             }
                             if let feed = library.feed {
@@ -130,11 +134,14 @@ struct DiscoverView: View {
                 }
                 .refreshable {
                     await library.refresh(force: true)
-                    if let feed = library.feed { await feed.discovery.load(feedQuery, force: true) }
+                    if let feed = library.feed {
+                        await feed.discovery.load(feedQuery, force: true)
+                    }
                 }
                 .onChange(of: kind) { _, _ in model = nil; topic = nil; chromeCollapsed = false; scroll.scrollTo("discovery-top", anchor: .top) }
                 .onChange(of: skillsOnly) { _, _ in model = nil; topic = nil; chromeCollapsed = false; scroll.scrollTo("discovery-top", anchor: .top) }
                 .onChange(of: topic) { _, _ in chromeCollapsed = false; scroll.scrollTo("discovery-top", anchor: .top) }
+                .onChange(of: latestOnly) { _, _ in chromeCollapsed = false; scroll.scrollTo("discovery-top", anchor: .top) }
                 .onChange(of: model) { _, _ in chromeCollapsed = false; scroll.scrollTo("discovery-top", anchor: .top) }
             }
             .toolbar(.hidden, for: .navigationBar)
@@ -163,7 +170,7 @@ struct DiscoverView: View {
     }
     private var resultHeading: some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Text(skillsOnly ? String(localized: "Agent Skills") : isFiltered ? String(localized: "筛选结果") : String(localized: "全部内容"))
+            Text(latestOnly ? String(localized: "最新收录") : skillsOnly ? String(localized: "Agent Skills") : isFiltered ? String(localized: "筛选结果") : String(localized: "全部内容"))
                 .font(.subheadline.weight(.medium))
             if library.feed == nil {
                 Text(items.count.formatted()).font(.caption.monospacedDigit()).foregroundStyle(Palette.muted)
@@ -174,6 +181,10 @@ struct DiscoverView: View {
     }
     private var resultActions: some View {
         HStack(spacing: 16) {
+            if latestOnly {
+                Button(String(localized: "返回精选")) { latestOnly = false }
+                    .font(.footnote).frame(minHeight: 44).accessibilityIdentifier("leaveLatestFeed")
+            }
             if isFiltered {
                 Button(String(localized: "清除筛选")) { kind = nil; skillsOnly = false; topic = nil; model = nil }
                     .font(.footnote).frame(minHeight: 44)
@@ -347,7 +358,7 @@ enum PromptCardGeometry {
     static let titleSpacing: CGFloat = 6
     static func aspectRatio(for item: Prompt) -> CGFloat { aspectRatio(for: ContentPreview(item)) }
     static func aspectRatio(for item: ContentPreview) -> CGFloat {
-        if item.isSkill { return 0.95 }
+        if item.usesTextArtwork { return 0.95 }
         // Retain common portrait and widescreen shapes. Only extreme ratios crop.
         if let ratio = item.media?.aspectRatio { return max(0.65, min(1.8, ratio)) }
         return switch item.kind { case .text: 0.95; case .image: item.artwork == "lake" ? 1.02 : 0.76; case .video: 0.94; case .web: WebsiteExamples.files[item.id] != nil ? 0.62 : 0.87 }
@@ -357,7 +368,7 @@ enum PromptCardGeometry {
     }
     static func height(for item: ContentPreview, width: CGFloat, titleFont: UIFont) -> CGFloat {
         let preview = width / aspectRatio(for: item)
-        guard !item.isSkill && item.kind != .text else { return preview }
+        guard !item.usesTextArtwork else { return preview }
         let bounds = (item.displayTitle as NSString).boundingRect(
             with: CGSize(width: max(1, width - 4), height: .greatestFiniteMagnitude),
             options: [.usesLineFragmentOrigin, .usesFontLeading],

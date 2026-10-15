@@ -45,7 +45,7 @@ actor SimulatorFeedService: FeedServing {
             previewLabel: item.previewLabel, creator: item.creator, media: item.media, cover: nil, language: "original", availableLanguages: ["en", "ja"])
     }
     func page(query: FeedQuery, cursor: String?, release: String?) async throws -> FeedPage {
-        try record("page", query: query.q, cursor: cursor)
+        try record("page", query: query.sort == "latest" ? "__latest__" : query.q, cursor: cursor)
         if query.q == "slow" { try? await Task.sleep(for: .seconds(2)) }
         if query.q == "retry", failed.insert("page-retry").inserted { throw FeedError.rateLimited(2) }
         let indices = (0..<Self.count).filter { index in
@@ -63,8 +63,9 @@ actor SimulatorFeedService: FeedServing {
             if ["tail", "current"].contains(query.q) { return index == 9999 }
             return true
         }
+        let ordered = query.sort == "latest" ? Array(indices.reversed()) : indices
         let start = Int(cursor ?? "0") ?? 0
-        let page = Array(indices.dropFirst(start).prefix(FeedClient.pageSize))
+        let page = Array(ordered.dropFirst(start).prefix(FeedClient.pageSize))
         return FeedPage(schemaVersion: 3, release: Self.release, items: page.map(card),
                         nextCursor: start + page.count < indices.count ? String(start + page.count) : nil)
     }

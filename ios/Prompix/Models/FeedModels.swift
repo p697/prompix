@@ -140,10 +140,11 @@ struct FeedQuery: Codable, Hashable, Sendable {
     var tag: String?
     var model: String?
     var q = ""
+    var sort: String?
 
     func validated() throws -> Self {
         var value = self
-        guard FeedValidation.locale(locale), kind == nil || ["text", "image", "video", "web", "skill"].contains(kind!),
+        guard sort == nil || ["curated", "latest"].contains(sort!), FeedValidation.locale(locale), kind == nil || ["text", "image", "video", "web", "skill"].contains(kind!),
               [creator, tag, model, q].compactMap({ $0 }).allSatisfy({ !$0.unicodeScalars.contains { $0.value < 32 || $0.value == 127 } }),
               collection == nil || FeedCollections.definitions[collection!] != nil,
               creator == nil || FeedValidation.text(creator!, max: 200),
@@ -155,7 +156,7 @@ struct FeedQuery: Codable, Hashable, Sendable {
     }
     var parameters: [URLQueryItem] {
         var values = [URLQueryItem(name: "locale", value: locale)]
-        for (name, value) in [("kind", kind), ("collection", collection), ("creator", creator), ("tag", tag), ("model", model), ("q", q.isEmpty ? nil : q)] {
+        for (name, value) in [("sort", sort), ("kind", kind), ("collection", collection), ("creator", creator), ("tag", tag), ("model", model), ("q", q.isEmpty ? nil : q)] {
             if let value { values.append(URLQueryItem(name: name, value: value)) }
         }
         return values

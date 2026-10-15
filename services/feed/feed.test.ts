@@ -211,17 +211,25 @@ test("10,000 items: keyset traversal has no omissions or duplicates", { timeout:
   const id = await stagePublication(writer, { schemaVersion: 1, version: "scale-test", prompts });
   await activatePublication(writer, id, "0");
   const importedMs = performance.now() - start;
-  const seen = new Set<string>(); let cursor: string | undefined; let pages = 0; const times: number[] = [];
-  do {
-    const began = performance.now();
-    const page = await getFeed(reader, { filters, limit: 50, cursor }, secret);
-    times.push(performance.now() - began); pages++;
-    for (const item of page.items) { assert.ok(!seen.has(item.id)); seen.add(item.id); }
-    assert.ok(Buffer.byteLength(JSON.stringify(page)) < 1_000_000);
-    cursor = page.nextCursor ?? undefined;
-  } while (cursor);
-  assert.equal(seen.size, 10000); assert.equal(pages, 200);
-  assert.deepEqual([...seen], prompts.map(item => item.id));
+  const traversals = [];
+  for (const sort of ["curated", "latest"] as const) {
+    const seen = new Set<string>(); let cursor: string | undefined; let pages = 0; const times: number[] = [];
+    do {
+      const began = performance.now();
+      const page = await getFeed(reader, { filters: { ...filters, sort }, limit: 50, cursor }, secret);
+      times.push(performance.now() - began); pages++;
+      for (const item of page.items) { assert.ok(!seen.has(item.id)); seen.add(item.id); }
+      assert.ok(Buffer.byteLength(JSON.stringify(page)) < 1_000_000);
+      cursor = page.nextCursor ?? undefined;
+    } while (cursor);
+    assert.equal(seen.size, 10000); assert.equal(pages, 200);
+    // A single bootstrap release gives each item the same first-publication time.
+    // Its original position is the stable tie-breaker in both complete traversals.
+    assert.deepEqual([...seen], prompts.map(item => item.id));
+    times.sort((a, b) => a - b);
+    traversals.push({ sort, items: seen.size, pages, pageMedianMs: Math.round(times[100]),
+      pageP95Ms: Math.round(times[190]), pageMaxMs: Math.round(times[199]) });
+  }
   await pg.exec("analyze prompix.content; analyze prompix.releases; analyze prompix.revisions; analyze prompix.release_entries");
   let searchSQL = "", searchValues: unknown[] = [];
   const captured: Database = { query: (sql, values) => {
@@ -241,8 +249,6 @@ test("10,000 items: keyset traversal has no omissions or duplicates", { timeout:
   inspect(plan.Plan);
   // Assert work, not host-dependent elapsed time. The old plan scanned ~50 million rows.
   assert.ok(contentRowsScanned < 100000, `Repeated content scans: ${contentRowsScanned}`);
-  times.sort((a, b) => a - b);
-  t.diagnostic(JSON.stringify({ engine: "PGlite PostgreSQL", items: seen.size, pages, importedMs: Math.round(importedMs),
-    pageMedianMs: Math.round(times[100]), pageP95Ms: Math.round(times[190]), pageMaxMs: Math.round(times[199]),
+  t.diagnostic(JSON.stringify({ engine: "PGlite PostgreSQL", importedMs: Math.round(importedMs), traversals,
     broadSearchMs: Math.round(plan["Execution Time"]), contentRowsScanned }));
 });

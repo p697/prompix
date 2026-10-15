@@ -1,0 +1,85 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import type { Prompt } from "../../packages/schema/catalog.ts";
+import { createTestDatabase } from "./test-database.ts";
+import { stagePublication, activatePublication, removeContent } from "./publication.ts";
+import { getFeed, getState } from "./queries.ts";
+import { limitNewPublications } from "../../ingest/publication-quota.ts";
+import { runVisualReview, visualReviewVersion } from "../../ingest/visual-review.ts";
+const secret = "freshness-test-secret-0000000000000000000000000000";
+const prompt = (id: string): Prompt => ({ id, kind: "text", title: id, summary: "First-party fixture", prompt: "Write an original short story.", example: "A garden.",
+  tags: ["fixture"], model: "test", toolURL: null, artwork: "test", previewLabel: "Preview", source: { name: "Prompix", url: null, license: "Original", method: "Test fixture" }, media: null });
+const input = (prompts: Prompt[]) => ({ schemaVersion: 1 as const, version: "fixture", prompts });
+test("unusable media at the front of the queue cannot consume all new-publication slots", async t => {
+  const { pg, writer } = await createTestDatabase(); t.after(() => pg.close());
+  const held = Array.from({ length: 30 }, (_, i) => ({ ...prompt(`held-${i}`), kind: "web" as const }));
+  const ready = Array.from({ length: 30 }, (_, i) => prompt(`ready-${i}`));
+  const visual = await runVisualReview({ prompts: [...held, ...ready], previous: [], day: "2026-10-15",
+    cache: { version: visualReviewVersion, decisions: {} },
+    prepareMedia: async () => { throw new Error("Unavailable preview"); }, persistCache: async () => {}, persistLedger: async () => {} });
+  const result = await limitNewPublications(writer, visual.prompts, new Date("2026-10-15T00:00:00Z"));
+  assert.equal(visual.withheldIDs.length, 30);
+  assert.deepEqual(result.prompts.map(item => item.id), ready.slice(0, 25).map(item => item.id));
+  assert.equal(result.report.deferred, 5);
+});
+test("latest feed sorts by first successful publication, not staging or edits, and pins cursors across releases", async t => {
+  const { pg, writer, reader } = await createTestDatabase(); t.after(() => pg.close());
+  const old = [prompt("old-a"), prompt("old-b"), prompt("old-c")];
+  const first = await stagePublication(writer, input(old));
+  assert.equal((await writer.query("select first_published_at from prompix.content where id='old-a'")).rows[0].first_published_at, null);
+  await activatePublication(writer, first, "0");
+  await pg.exec("update prompix.content set first_published_at=now()-interval '2 days'");
+  const second = await stagePublication(writer, input([{ ...old[0], title: "An edited title" }, ...old.slice(1), prompt("new-a"), prompt("new-b")]));
+  await activatePublication(writer, second, "1");
+  const filters = { locale: "original" as const, q: "", sort: "latest" as const };
+  const page = await getFeed(reader, { filters, limit: 1 }, secret);
+  assert.equal(page.items[0].id, "new-a");
+  const third = await stagePublication(writer, input([...old, prompt("new-a"), prompt("new-b"), prompt("new-c")]));
+  await activatePublication(writer, third, "2");
+  const next = await getFeed(reader, { filters, limit: 10, cursor: page.nextCursor! }, secret);
+  assert.deepEqual(next.items.map(i => i.id), ["new-b", "old-a", "old-b", "old-c"]);
+  assert.equal((await getFeed(reader, { filters, limit: 10 }, secret)).items[0].id, "new-c");
+  await assert.rejects(getFeed(reader, { filters: { ...filters, sort: "curated" }, limit: 10, cursor: page.nextCursor! }, secret), /invalid_request/);
+  await removeContent(writer, ["new-b"], "Fixture removal");
+  await activatePublication(writer, second, (await getState(reader)).generation);
+  assert.deepEqual((await getFeed(reader, { filters, limit: 10 }, secret)).items.map(i => i.id), ["new-a", "old-a", "old-b", "old-c"]);
+});
+test("new-publication ceiling survives multiple activations and rollback while existing content edits remain allowed", async t => {
+  const { pg, writer, reader } = await createTestDatabase(); t.after(() => pg.close());
+  const baseline = await stagePublication(writer, input([prompt("baseline")])); await activatePublication(writer, baseline, "0");
+  const items = Array.from({ length: 100 }, (_, i) => prompt(`new-${i}`));
+  const release = await stagePublication(writer, input(items)); await activatePublication(writer, release, "1");
+  const over = await stagePublication(writer, input([...items, prompt("over-limit")]));
+  await assert.rejects(activatePublication(writer, over, "2"), /ceiling exceeded/);
+  assert.equal((await getState(reader)).release, release);
+  assert.equal((await writer.query("select first_published_at from prompix.content where id='over-limit'")).rows[0].first_published_at, null);
+  await activatePublication(writer, baseline, "2");
+  await assert.rejects(activatePublication(writer, over, "3"), /ceiling exceeded/);
+  const edited = await stagePublication(writer, input([{ ...items[0], title: "Edited after quota" }])); await activatePublication(writer, edited, "3");
+  const quota = await limitNewPublications(writer, [items[0], prompt("held")]);
+  assert.deepEqual(quota.prompts.map(i => i.id), [items[0].id]); assert.equal(quota.report.deferred, 1);
+});
+test("quota carries unused capacity through the day and never counts staged drafts as already published", async t => {
+  const { pg, writer } = await createTestDatabase(); t.after(() => pg.close());
+  const items = Array.from({ length: 110 }, (_, i) => prompt(`draft-${i}`));
+  await stagePublication(writer, input(items));
+  const early = await limitNewPublications(writer, items, new Date("2026-10-15T00:00:00Z"));
+  const late = await limitNewPublications(writer, items, new Date("2026-10-15T18:00:00Z"));
+  assert.equal(early.prompts.length, 25); assert.equal(late.prompts.length, 100); assert.equal(late.report.deferred, 10);
+});
+
+test("backup restoration preserves first-publication order and quota history including inactive identities", async t => {
+  const { exportPublicationHistory, restorePublicationHistory } = await import("./publication-history.ts");
+  const first = await createTestDatabase(), restored = await createTestDatabase();
+  t.after(async () => { await first.pg.close(); await restored.pg.close(); });
+  const a = await stagePublication(first.writer, input([prompt("old")])); await activatePublication(first.writer, a, "0");
+  await first.pg.exec("update prompix.content set first_published_at=now()-interval '2 days'");
+  const b = await stagePublication(first.writer, input([prompt("old"), prompt("fresh")])); await activatePublication(first.writer, b, "1");
+  const c = await stagePublication(first.writer, input([prompt("fresh")])); await activatePublication(first.writer, c, "2");
+  const history = await exportPublicationHistory(first.writer);
+  const target = await stagePublication(restored.writer, input([prompt("fresh")]));
+  await restorePublicationHistory(restored.writer, history); await activatePublication(restored.writer, target, "0");
+  assert.deepEqual(await exportPublicationHistory(restored.writer), history);
+  await assert.rejects(restorePublicationHistory(restored.writer, history), /uninitialized/);
+  assert.equal((await limitNewPublications(restored.writer, [prompt("fresh"), prompt("old")])).report.selected, 0);
+});

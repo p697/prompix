@@ -150,14 +150,42 @@ function numericHints(values: readonly string[]): { numericHints?: Record<string
   const hints = Object.fromEntries(values.flatMap((value, index) => /^\d+(?:[.,:]\d+)*(?:%|px|fps|mm|cm|ms|s|w|万|千|亿|萬|億)?$/i.test(value) ? [[`⟦PP${index}⟧`, value]] : []));
   return Object.keys(hints).length ? { numericHints: hints } : {};
 }
+/** Split only oversized fields, preserving existing cache identities for normal
+ * records. Boundaries never cut protected syntax or a Unicode surrogate pair. */
+function translationParts(text: string, visual: boolean) {
+  const original = protectText(text, visual);
+  if (original.masked.length <= 30000) return [{ ...original, sourceText: text, prefix: "", suffix: "" }];
+  const parts: { masked: string; protectedValues: string[]; sourceText: string; prefix: string; suffix: string }[] = [];
+  for (let start = 0; start < original.masked.length;) {
+    let end = Math.min(start + 12000, original.masked.length);
+    if (end < original.masked.length) {
+      const window = original.masked.slice(start, end);
+      const boundary = Math.max(window.lastIndexOf("\n"), window.lastIndexOf(" "));
+      if (boundary >= 6000) end = start + boundary + 1;
+      const token = original.masked.lastIndexOf("⟦", end - 1);
+      if (token >= start && original.masked.indexOf("⟧", token) >= end) end = token;
+      if (/[\uD800-\uDBFF]/.test(original.masked[end - 1])) end--;
+    }
+    if (end <= start) throw new Error("Cannot safely split translation source");
+    const raw = original.masked.slice(start, end), prefix = raw.match(/^\s*/u)![0], suffix = raw.slice(prefix.length).match(/\s*$/u)![0];
+    const protectedValues: string[] = [];
+    const masked = raw.slice(prefix.length, raw.length - suffix.length).replace(/⟦PP(\d+)⟧/g, (_, index) => {
+      protectedValues.push(original.protectedValues[Number(index)]); return `⟦PP${protectedValues.length - 1}⟧`;
+    });
+    parts.push({ masked, protectedValues, sourceText: restoreText(masked, protectedValues), prefix, suffix });
+    start = end;
+  }
+  return parts;
+}
 export function promptSegments(item: Prompt): Segment[] {
   const segments = new Map<string, Segment>();
   const collect = (text: string) => {
-    const { masked, protectedValues } = protectText(text, item.kind === "image" || item.kind === "video");
-    if (/[\p{L}]/u.test(masked.replace(/⟦PP\d+⟧/g, ""))) {
-      const segment = { id: hash(masked), text: masked, sourceText: text, protectedValues, ...numericHints(protectedValues) };
-      const previous = segments.get(segment.id);
-      if (previous) mergeSegmentContexts(previous, segment); else segments.set(segment.id, segment);
+    for (const { masked, protectedValues, sourceText } of translationParts(text, item.kind === "image" || item.kind === "video")) {
+      if (/[\p{L}]/u.test(masked.replace(/⟦PP\d+⟧/g, ""))) {
+        const segment = { id: hash(masked), text: masked, sourceText, protectedValues, ...numericHints(protectedValues) };
+        const previous = segments.get(segment.id);
+        if (previous) mergeSegmentContexts(previous, segment); else segments.set(segment.id, segment);
+      }
     }
     return text;
   };
@@ -253,15 +281,16 @@ export function validateSegment(source: string, translated: string, locale: Tran
 export function localizePrompt(item: Prompt, locale: TranslationLocale, cache: TranslationCache, reviews: readonly TranslationRejection[] = []): LocalizedText | undefined {
   if (cache.version !== translationVersion) return undefined;
   const translate = (text: string) => {
-    const { masked, protectedValues } = protectText(text, item.kind === "image" || item.kind === "video");
-    if (!/[\p{L}]/u.test(masked.replace(/⟦PP\d+⟧/g, ""))) return text;
-    const translated = cache.segments[locale]?.[hash(masked)];
-    if (translated === undefined) throw new Error("Missing translation segment");
-    validateSegment(masked, translated, locale, numericHints(protectedValues).numericHints);
-    validateReviewedTranslation(reviews, locale, hash(masked), translated);
-    const restored = restoreText(translated, protectedValues);
-    validateReviewedTranslationField(reviews, locale, text, restored);
-    return restored;
+    return translationParts(text, item.kind === "image" || item.kind === "video").map(({ masked, protectedValues, sourceText, prefix, suffix }) => {
+      if (!/[\p{L}]/u.test(masked.replace(/⟦PP\d+⟧/g, ""))) return prefix + sourceText + suffix;
+      const translated = cache.segments[locale]?.[hash(masked)];
+      if (translated === undefined) throw new Error("Missing translation segment");
+      validateSegment(masked, translated, locale, numericHints(protectedValues).numericHints);
+      validateReviewedTranslation(reviews, locale, hash(masked), translated);
+      const restored = restoreText(translated, protectedValues);
+      validateReviewedTranslationField(reviews, locale, sourceText, restored);
+      return prefix + restored + suffix;
+    }).join("");
   };
   try {
     const original = translationText(item);

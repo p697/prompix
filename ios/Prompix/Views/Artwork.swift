@@ -14,7 +14,7 @@ struct Artwork: View {
     var body: some View {
         GeometryReader { proxy in
             ZStack {
-                if item.kind == .text || item.isSkill { noteArtwork(size: proxy.size) }
+                if item.usesTextArtwork { noteArtwork(size: proxy.size) }
                 else if let name = item.media?.image, UIImage(named: name) != nil { photo(name, size: proxy.size) }
                 else if let url = item.media?.imageURL { RemoteImage(url: url, contentMode: compact || fillsFrame ? .fill : .fit).frame(width: proxy.size.width, height: proxy.size.height).clipped() }
                 else if item.kind == .web, UIImage(named: "web-\(item.id)") != nil {
@@ -83,8 +83,8 @@ struct Artwork: View {
             noteColor
             VStack(alignment: .leading, spacing: compact ? 6 : 12) {
                 HStack(spacing: 6) {
-                    Image(systemName: item.isSkill ? "curlybraces" : "text.quote")
-                    if !compact { Text(item.isSkill ? "SKILL.md" : item.displayKind) }
+                    Image(systemName: item.isSkill ? "square.stack.3d.up" : "text.quote")
+                    if !compact { Text(item.displayKind) }
                     Spacer(minLength: 0)
                 }.font(.system(size: compact ? 12 : 10, weight: .medium))
                     .foregroundStyle(Palette.muted)

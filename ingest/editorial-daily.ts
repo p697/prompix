@@ -6,6 +6,7 @@ import { atomic, json } from "./publication.ts";
 import { editorialCacheSchema, editorialLedgerSchema, editorialVersion, runEditorialReview } from "./editorial-runner.ts";
 import { codexEditorialProvider } from "./editorial-provider.ts";
 import { reviewRequestLimit } from "./review-budget.ts";
+import { windowBudget } from "./discovery-budget.ts";
 
 /** Daily already owns the content lock; no independent scheduler or agent loop. */
 export async function prepareDailyEditorial(candidates: Candidate[], reviews: Reviews, previous: Prompt[], root: string,
@@ -20,7 +21,7 @@ export async function prepareDailyEditorial(candidates: Candidate[], reviews: Re
   if (configured && configured !== "codex") throw new Error("Unsupported editorial provider; publication stopped");
   let requestSequence = ledger?.requests ?? 0;
   return runEditorialReview({ candidates, previous, reviews, cache, ledger, day,
-    maxRequests: reviewRequestLimit(environment.PROMPIX_EDITORIAL_MAX_REQUESTS),
+    maxRequests: windowBudget(reviewRequestLimit(environment.PROMPIX_EDITORIAL_MAX_REQUESTS), clock()),
     provider: publishing && configured === "codex" ? async items => {
       if (clock().toISOString().slice(0, 10) !== day) throw new Error("UTC editorial review day changed before provider call; reserved attempt remains consumed");
       const sequence = requestSequence;

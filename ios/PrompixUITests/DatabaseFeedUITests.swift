@@ -50,6 +50,25 @@ import UIKit
         XCTAssertTrue(app.buttons["copyPrompt"].waitForExistence(timeout: 10))
     }
 
+    func testLatestCollectionIsVisibleAtLaunchAndOpensASeparateNewestFeed() throws {
+        launch()
+        let heading = app.staticTexts["latestContentHeading"]
+        XCTAssertTrue(heading.waitForExistence(timeout: 10)); XCTAssertTrue(heading.isHittable)
+        let latest = app.buttons["prompt-database-fixture-9999"]
+        XCTAssertTrue(latest.waitForExistence(timeout: 10)); XCTAssertTrue(latest.isHittable)
+        capture("freshness-01-home-latest")
+        app.buttons["showLatestFeed"].tap()
+        XCTAssertTrue(app.buttons["leaveLatestFeed"].waitForExistence(timeout: 5))
+        XCTAssertTrue(latest.waitForExistence(timeout: 10)); latest.tap()
+        XCTAssertTrue(app.buttons["copyPrompt"].waitForExistence(timeout: 10))
+        XCTAssertEqual(app.staticTexts["detailTitle"].label, "Database item 9999")
+        capture("freshness-02-newest-detail")
+        app.buttons["closePromptDetail"].tap()
+        app.buttons["leaveLatestFeed"].tap()
+        XCTAssertTrue(heading.waitForExistence(timeout: 5))
+        XCTAssertTrue(try requests().contains { $0["query"] as? String == "__latest__" })
+    }
+
     func testProgressiveImageDetailRetainsPreviewAndPositionThenReusesCompleteCache() throws {
         launch(["--feed-detail-preview-test"])
         search("preview")
@@ -194,15 +213,19 @@ import UIKit
         XCTAssertTrue(app.buttons["prompt-database-fixture-0"].waitForExistence(timeout: 15))
         try await Task.sleep(for: .seconds(1))
         let initial = try requests()
-        XCTAssertEqual(initial.filter { $0["operation"] as? String == "page" }.count, 1, "Initial layout must not drain every page")
+        let initialPages = initial.filter { $0["operation"] as? String == "page" }
+        XCTAssertEqual(initialPages.filter { $0["query"] as? String == "__latest__" }.count, 1)
+        XCTAssertLessThanOrEqual(initialPages.filter { $0["query"] as? String == "" }.count, 2,
+                                 "Layout may cancel an offscreen request, but cannot repeatedly refetch")
+        XCTAssertTrue(initialPages.allSatisfy { $0["cursor"] as? String == "" }, "Initial layout must not fetch subsequent pages")
         XCTAssertFalse(initial.contains { $0["operation"] as? String == "detail" })
         capture("database-01-bounded-first-page")
         for _ in 0..<14 {
             app.swipeUp()
-            if try requests().filter({ $0["operation"] as? String == "page" }).count > 1 { break }
+            if try requests().contains(where: { $0["operation"] as? String == "page" && $0["cursor"] as? String == "30" }) { break }
         }
         let pages = try requests().filter { $0["operation"] as? String == "page" }
-        XCTAssertGreaterThan(pages.count, 1); XCTAssertLessThan(pages.count, 5)
+        XCTAssertTrue(pages.contains { $0["cursor"] as? String == "30" }); XCTAssertLessThan(pages.count, 6)
         capture("database-02-next-page")
         search("tail")
         XCTAssertTrue(app.buttons["prompt-database-fixture-9999"].waitForExistence(timeout: 10))
@@ -277,7 +300,7 @@ import UIKit
         let drafts = try Data(contentsOf: directory().appending(path: "drafts.json"))
         capture("database-04-language-and-personal-data")
         app.terminate(); launch(["--feed-fixture-offline"])
-        XCTAssertTrue(app.buttons["prompt-database-fixture-0"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["prompt-database-fixture-9999"].waitForExistence(timeout: 10), "The latest rail must remain available from its offline cache")
         XCTAssertTrue(try requests().contains { $0["offline"] as? Bool == true })
         app.selectPrompixTab("收藏")
         let savedCard = app.buttons["prompt-database-fixture-0"]
