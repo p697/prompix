@@ -149,6 +149,7 @@ actor SimulatorFeedService: FeedServing {
     }
     func browse(locale: String) async throws -> FeedBrowse {
         try record("browse")
+        try await waitForAcceptanceGate("browse")
         return FeedBrowse(schemaVersion: 3, release: Self.release, collections: FeedCollections.definitions.keys.sorted().map { id in
             let definition = FeedCollections.definitions[id]!
             let indices = (0..<Self.count).filter {

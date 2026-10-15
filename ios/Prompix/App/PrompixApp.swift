@@ -14,6 +14,12 @@ import SwiftUI
             let fixtureDirectory = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
                 .appending(path: "FeedAcceptance").appending(path: arguments[index + 1])
             directory = fixtureDirectory
+            if arguments.contains("--feed-home-loading-test") {
+                try? FileManager.default.createDirectory(at: fixtureDirectory, withIntermediateDirectories: true)
+                for gate in ["directory", "browse", "feed-refresh"] {
+                    try? Data().write(to: fixtureDirectory.appending(path: "hold-" + gate))
+                }
+            }
             if arguments[index] == "--feed-legacy-test" { service = nil }
             else if arguments[index] == "--feed-live-test" { service = FeedClient() }
             else { service = SimulatorFeedService(directory: fixtureDirectory, offline: arguments.contains("--feed-fixture-offline"), removed: arguments.contains("--feed-fixture-removal"), progressive: arguments.contains("--feed-detail-preview-test"), imagePrefetch: arguments.contains("--feed-image-prefetch-test")) }

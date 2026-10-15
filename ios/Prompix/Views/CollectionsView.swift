@@ -89,15 +89,67 @@ struct CollectionsDirectory: View {
             .refreshable { await library.feed?.browse.load(force: true) }
     }
 }
+/// Deduplicate by item identity AND source image: different cards can reuse one
+/// image. Selection is bounded to the first page and never reorders the feed.
+enum HomeCoverSelection {
+    static func select(_ candidates: [ContentPreview], avoiding: [ContentPreview], limit: Int = 2) -> [ContentPreview] {
+        guard limit > 0 else { return [] }
+        var ids = Set(avoiding.map(\.id))
+        var images = Set(avoiding.compactMap { $0.media?.imageURL?.absoluteString ?? $0.media?.image })
+        var selected: [ContentPreview] = []
+        let distinct = candidates.filter { candidate in
+            let image = candidate.media?.imageURL?.absoluteString ?? candidate.media?.image
+            return !ids.contains(candidate.id) && (image.map { !images.contains($0) } ?? true)
+        }
+        let visual = distinct.filter { $0.hasSourceImage || WebsiteExamples.files[$0.id] != nil }
+        // A single readable text cover is preferable to narrow text columns;
+        // never mix a typographic Skill into an available visual composition.
+        let pool = visual.isEmpty ? Array(distinct.prefix(1)) : visual
+        for candidate in pool {
+            let image = candidate.media?.imageURL?.absoluteString ?? candidate.media?.image
+            guard !ids.contains(candidate.id), image.map({ !images.contains($0) }) ?? true else { continue }
+            ids.insert(candidate.id)
+            if let image { images.insert(image) }
+            selected.append(candidate)
+            if selected.count == limit { break }
+        }
+        return selected
+    }
+}
+
 struct CollectionRail: View {
     @Environment(Library.self) private var library
     @Environment(\.dynamicTypeSize) private var typeSize
     @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
     private var collections: [Collection] {
         ["portraits", "play", "graphics", "web", "video"].compactMap { id in Collection.all.first { $0.id == id } }
-            .filter { $0.count(in: library) > 0 }
+    }
+    private var waiting: Bool {
+        guard let feed = library.feed else { return false }
+        return feed.discovery.query != FeedQuery(sort: "latest") ||
+            (feed.browse.value == nil && feed.browse.failure == nil) ||
+            (feed.discovery.release == nil && feed.discovery.failure == nil)
+    }
+    private var covers: [String: [ContentPreview]] {
+        var result: [String: [ContentPreview]] = [:]
+        let page = Array((library.feed?.discovery.query == FeedQuery(sort: "latest") ? library.feed?.discovery.items ?? [] : []).prefix(30)).filter { !library.isRemoved(id: $0.id) }
+        var excluded = library.feed.map { feed in
+            Array(page.prefix(8)).map(ContentPreview.init) + feed.creatorDiscovery.items.prefix(12).compactMap { feed.creatorPreview($0).map(ContentPreview.init) }
+        } ?? Array(library.prompts.prefix(8)).map(ContentPreview.init)
+        for collection in collections {
+            let additional = page.filter { card in
+                (collection.kind == nil || card.kind == collection.kind) &&
+                    (collection.tags.isEmpty || !collection.tags.isDisjoint(with: card.tags))
+            }.map(ContentPreview.init)
+            let candidates = collection.previews(in: library) + additional
+            let selected = HomeCoverSelection.select(candidates, avoiding: excluded)
+            result[collection.id] = selected
+            excluded += selected
+        }
+        return result
     }
     var body: some View {
+        let selected = covers
         VStack(alignment: .leading, spacing: 2) {
             HStack(alignment: .firstTextBaseline) {
                 Text(String(localized: "按用途探索")).font(Typography.editorial(.title3))
@@ -122,30 +174,47 @@ struct CollectionRail: View {
                 } }.padding(.horizontal, 20)
             } else {
                 ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 12) {
+                    HStack(alignment: .top, spacing: 12) {
                         ForEach(collections) { collection in
-                            let count = collection.count(in: library)
                             NavigationLink { CollectionDetail(collection: collection) } label: {
-                                VStack(alignment: .leading, spacing: 10) {
-                                    HStack(spacing: 2) {
-                                        ForEach(collection.previews(in: library).prefix(2)) { cover in
-                                            Artwork(preview: cover, compact: true).frame(maxWidth: .infinity).clipped()
+                                VStack(alignment: .leading, spacing: 8) {
+                                    ZStack {
+                                        Palette.soft
+                                        if waiting { LoadingSurface() }
+                                        else if let previews = selected[collection.id], !previews.isEmpty {
+                                            HStack(spacing: 2) {
+                                                ForEach(previews) { cover in
+                                                    Artwork(preview: cover, compact: true, fillsFrame: true)
+                                                        .frame(maxWidth: .infinity).clipped()
+                                                }
+                                            }
+                                        } else {
+                                            // A topic identity is honest when the small candidate
+                                            // pool has no distinct cover. No fake work or duplicate.
+                                            HStack(spacing: 16) {
+                                                Image(systemName: collection.kind?.symbol ?? "sparkles")
+                                                    .font(.system(size: 28, weight: .light))
+                                                Text(collection.subtitle).font(.subheadline)
+                                                    .lineLimit(3).multilineTextAlignment(.leading)
+                                            }.foregroundStyle(Palette.muted).padding(20)
                                         }
-                                    }.frame(height: 140).clipShape(RoundedRectangle(cornerRadius: 14)).accessibilityHidden(true)
+                                    }.frame(height: 116).clipShape(RoundedRectangle(cornerRadius: 14)).accessibilityHidden(true)
                                     VStack(alignment: .leading, spacing: 5) {
-                                        Text(collection.title).font(.subheadline.weight(.medium)).lineLimit(2)
-                                            .fixedSize(horizontal: false, vertical: true)
-                                        Text(String(localized: "\(count) 条内容")).font(.caption).foregroundStyle(Palette.muted)
+                                        Text(collection.title).font(.subheadline.weight(.medium))
+                                            .lineLimit(1)
+                                        Text(String(localized: "\(collection.count(in: library)) 条内容"))
+                                            .font(.caption).foregroundStyle(Palette.muted)
+                                            .redacted(reason: waiting ? .placeholder : [])
                                     }.frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 2)
                                 }.frame(width: 246)
-                                    .foregroundStyle(Palette.ink).multilineTextAlignment(.leading)
-                                    .contentShape(Rectangle())
+                                    .foregroundStyle(Palette.ink).multilineTextAlignment(.leading).contentShape(Rectangle())
                             }.buttonStyle(.plain).accessibilityIdentifier("home-collection-\(collection.id)")
                         }
                     }.padding(.horizontal, 20)
                 }
             }
-        }.task { await library.feed?.browse.load() }
+        }
+            .task { await library.feed?.browse.load() }
     }
 }
 struct CollectionDetail: View {

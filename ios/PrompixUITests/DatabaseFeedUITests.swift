@@ -51,6 +51,56 @@ import UIKit
         XCTAssertTrue(app.buttons["copyPrompt"].waitForExistence(timeout: 10))
     }
 
+    func testHomeSkeletonsKeepSectionAnchorsThroughIndependentResponses() throws {
+        launch(["--feed-home-loading-test"])
+        let root = try directory()
+        let creators = app.buttons["allCreators"], collections = app.buttons["allCollections"]
+        let heading = app.buttons["discoveryFilters"]
+        XCTAssertTrue(collections.waitForExistence(timeout: 5))
+        XCTAssertTrue(heading.waitForExistence(timeout: 5))
+        let anchors = [creators.frame.minY, collections.frame.minY, heading.frame.minY]
+        func checkAnchors() {
+            for (index, value) in [creators.frame.minY, collections.frame.minY, heading.frame.minY].enumerated() {
+                XCTAssertEqual(value, anchors[index], accuracy: 1, "Section \(index) moved during loading")
+            }
+        }
+        capture("home-loading-01-all-skeletons")
+        try FileManager.default.removeItem(at: root.appending(path: "hold-directory"))
+        XCTAssertTrue(app.buttons["creator-fixture-author-0"].waitForExistence(timeout: 8))
+        checkAnchors(); capture("home-loading-02-creators-ready")
+        try FileManager.default.removeItem(at: root.appending(path: "hold-browse"))
+        try FileManager.default.removeItem(at: root.appending(path: "hold-feed-refresh"))
+        XCTAssertTrue(app.buttons["prompt-database-fixture-9999"].waitForExistence(timeout: 15))
+        checkAnchors(); capture("home-loading-03-loaded")
+        app.terminate(); launch(["--feed-fixture-offline"])
+        XCTAssertTrue(app.buttons["creator-fixture-author-0"].waitForExistence(timeout: 8))
+        checkAnchors(); capture("home-loading-04-cached-offline")
+    }
+
+    func testHomeFailureAndRetryKeepReservedSpace() throws {
+        launch(["--feed-home-loading-test"])
+        let root = try directory()
+        let collections = app.buttons["allCollections"], heading = app.buttons["discoveryFilters"]
+        XCTAssertTrue(heading.waitForExistence(timeout: 5))
+        let positions = [collections.frame.minY, heading.frame.minY]
+        for gate in ["directory", "browse"] {
+            try Data().write(to: root.appending(path: "fail-" + gate))
+            try FileManager.default.removeItem(at: root.appending(path: "hold-" + gate))
+        }
+        try FileManager.default.removeItem(at: root.appending(path: "hold-feed-refresh"))
+        XCTAssertTrue(app.buttons["loadCreators"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["prompt-database-fixture-9999"].waitForExistence(timeout: 10))
+        XCTAssertEqual(collections.frame.minY, positions[0], accuracy: 1)
+        XCTAssertEqual(heading.frame.minY, positions[1], accuracy: 1)
+        capture("home-loading-failed")
+        try FileManager.default.removeItem(at: root.appending(path: "fail-directory"))
+        app.buttons["loadCreators"].tap()
+        XCTAssertTrue(app.buttons["creator-fixture-author-0"].waitForExistence(timeout: 10))
+        XCTAssertEqual(collections.frame.minY, positions[0], accuracy: 1)
+        XCTAssertEqual(heading.frame.minY, positions[1], accuracy: 1)
+        capture("home-loading-recovered")
+    }
+
     func testCreatorDirectoryControlsRemainReachableAtLargestText() throws {
         guard ProcessInfo.processInfo.environment["PROMPIX_CREATOR_ACCESSIBILITY"] == "1" else { throw XCTSkip("Explicit largest-text acceptance only") }
         launch()
@@ -73,7 +123,8 @@ import UIKit
         first.tap()
         XCTAssertTrue(app.scrollViews["creatorProfileScroll"].waitForExistence(timeout: 10))
         capture("creator-live-profile")
-        app.navigationBars.buttons.element(boundBy: 0).tap()
+        if app.buttons["BackButton"].exists { app.buttons["BackButton"].tap() }
+        else { app.navigationBars.buttons.element(boundBy: 0).tap() }
         app.buttons["allCreators"].tap()
         XCTAssertTrue(app.buttons["creatorDirectoryFilter"].waitForExistence(timeout: 10))
         app.buttons["creatorDirectoryFilter"].tap(); app.buttons["视频"].tap()
