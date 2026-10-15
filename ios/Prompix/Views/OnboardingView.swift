@@ -6,6 +6,7 @@ struct PrompixOnboarding: View {
     @Environment(\.dynamicTypeSize) private var typeSize
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var page = 0
+    @State private var pagesUnfolded = false
     @State private var examples: [Prompt] = []
     @State private var writingExample: Prompt?
     @State private var capturedExamples = false
@@ -124,35 +125,31 @@ struct PrompixOnboarding: View {
         // Artwork scales with its container; larger text scrolls above the fixed actions.
         let height = min(width * 1.05, max(200, viewport.height * 0.67))
         if index == 0 {
-            collage.frame(width: width, height: height)
+            brandIllustration.frame(width: width, height: height)
         } else {
             collectionPreview.frame(maxWidth: width)
         }
     }
 
-    private var collage: some View {
+    private var brandIllustration: some View {
         GeometryReader { space in
-            let width = space.size.width
-            let height = space.size.height
-            ZStack {
-                tile(at: 0).frame(width: width * 0.23, height: height * 0.26)
-                    .position(x: width * 0.14, y: height * 0.22)
-                tile(at: 1).frame(width: width * 0.28, height: height * 0.31)
-                    .position(x: width * 0.51, y: height * 0.17)
-                tile(at: 2).frame(width: width * 0.21, height: height * 0.23)
-                    .position(x: width * 0.86, y: height * 0.29)
+            VStack(spacing: 0) {
+                SpectralPages(openness: reduceMotion || pagesUnfolded ? 1 : 0.06)
+                    .frame(height: space.size.height * 0.84)
+                    .task {
+                        guard !pagesUnfolded else { return }
+                        // Mount the artwork before interpolating its geometry.
+                        // Only this decoration waits; every action is usable now.
+                        if !reduceMotion { try? await Task.sleep(for: .milliseconds(100)) }
+                        withAnimation(reduceMotion || Task.isCancelled ? nil : .spring(duration: 0.85, bounce: 0.12)) {
+                            pagesUnfolded = true
+                        }
+                    }
                 Text("Prompix")
-                    .font(.system(size: width * 0.20, weight: .semibold, design: .default))
-                    .tracking(-width * 0.008)
-                    .lineLimit(1).minimumScaleFactor(0.7)
-                    .position(x: width * 0.5, y: height * 0.52)
-                tile(at: 3).frame(width: width * 0.25, height: height * 0.27)
-                    .position(x: width * 0.15, y: height * 0.78)
-                tile(at: 4).frame(width: width * 0.31, height: height * 0.30)
-                    .position(x: width * 0.55, y: height * 0.83)
-                tile(at: 5).frame(width: width * 0.20, height: height * 0.21)
-                    .position(x: width * 0.88, y: height * 0.75)
+                    .font(.system(size: min(48, space.size.width * 0.14), weight: .medium))
+                    .tracking(-2)
             }
+            .frame(maxWidth: .infinity)
         }
     }
 
@@ -208,7 +205,12 @@ struct PrompixOnboarding: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(24)
-            .background(Palette.soft, in: RoundedRectangle(cornerRadius: 16))
+            .background(Palette.surface, in: RoundedRectangle(cornerRadius: 12))
+            .overlay(alignment: .top) {
+                LinearGradient(colors: [Palette.spectrumBlue, Palette.spectrumIris, Palette.spectrumRose], startPoint: .leading, endPoint: .trailing)
+                    .frame(height: 2).padding(.horizontal, 24)
+            }
+            .overlay { RoundedRectangle(cornerRadius: 12).strokeBorder(Palette.line, lineWidth: 0.5) }
             if let writingExample {
                 Button { openTrial(writingExample) } label: {
                     HStack(spacing: 10) {
@@ -239,7 +241,7 @@ struct PrompixOnboarding: View {
             OnboardingArtwork(item: examples[index])
                 .clipShape(RoundedRectangle(cornerRadius: 3))
         } else {
-            Rectangle().fill(index.isMultiple(of: 2) ? Palette.soft : Palette.noteSage)
+            Rectangle().fill(index.isMultiple(of: 2) ? Palette.soft : Palette.noteMint)
                 .overlay {
                     Image(systemName: ["text.quote", "photo", "play", "safari", "curlybraces", "sparkle"][index % 6])
                         .font(.title.weight(.ultraLight)).foregroundStyle(Palette.accent)
@@ -295,7 +297,7 @@ struct PrompixOnboarding: View {
         guard !capturedExamples else { return }
         capturedExamples = true
         // Freeze this presentation's selection so a foreground catalog update cannot
-        // rearrange the collage. Only existing catalog entries are used.
+        // rearrange the examples. Only existing catalog entries are used.
         let items = library.prompts
         let localImages = items.filter { item in
             item.kind == .image && OnboardingArtwork.hasBundledPreview(item)
@@ -311,7 +313,7 @@ struct PrompixOnboarding: View {
         // is already in the catalog; opening the preview needs no network.
         var seen = Set<String>()
         let story = Array(localImages.prefix(1)) + [writingExample].compactMap { $0 } + localImages + remaining
-        examples = Array(story.filter { seen.insert($0.id).inserted }.prefix(6))
+        examples = Array(story.filter { seen.insert($0.id).inserted }.prefix(2))
     }
 
     private func title(for index: Int) -> String {
