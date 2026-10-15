@@ -2,6 +2,32 @@ import XCTest
 @testable import Prompix
 
 final class PromptSearchTests: XCTestCase {
+    func testPublishedCatalogSearchTiming() throws {
+        guard let path = ProcessInfo.processInfo.environment["PROMPIX_SEARCH_BENCHMARK_CATALOG"] else {
+            throw XCTSkip("Requires an external published-catalog fixture; content is never committed.")
+        }
+        let catalog = try JSONDecoder().decode(Catalog.self, from: Data(contentsOf: URL(fileURLWithPath: path))).validated()
+        for term in ["portrait", "studio portrait", "unmatched-search-term"] {
+            let start = ContinuousClock.now
+            _ = PromptQuery(text: term).results(in: catalog.prompts)
+            print("Search benchmark: \(catalog.prompts.count) items, \(term), \(start.duration(to: .now))")
+        }
+        let start = ContinuousClock.now
+        _ = CreatorDirectory.browse(in: catalog.prompts, query: CreatorQuery())
+        print("Creator browse benchmark: \(catalog.prompts.count) items, \(start.duration(to: .now))")
+    }
+
+    func testCancelledSearchStopsBeforeScanningTheRemainingCatalog() {
+        let items = (0..<1000).map { prompt(id: "item-\($0)") }
+        var visited = 0
+        let results = PromptQuery(text: "useful").results(in: items) {
+            visited += 1
+            return visited == 2
+        }
+        XCTAssertTrue(results.isEmpty, "Cancelled work must not publish partial results")
+        XCTAssertEqual(visited, 2)
+    }
+
     func testMultipleWordsMustAllMatchEvenWhenSpreadAcrossFields() {
         let author = creator(name: "Maya Chen", username: "maya")
         let relevant = prompt(id: "relevant", title: "Studio portrait", body: "Shape soft light.", creator: author)

@@ -3,25 +3,51 @@ import SwiftUI
 /// Owns its navigation history so searches survive switching to another tab.
 struct SearchView: View {
     @Environment(Library.self) private var library
-    @Binding var query: String
-    @Binding var focused: Bool
+    let isSelected: Bool
+    let activation: Int
+    @State private var query = ""
+    @State private var searchPresented = false
+    @State private var suspendingLegacySearch = false
+    @FocusState private var searchFocused: Bool
+    @State private var handledActivation: Int?
     @State private var kind: PromptKind?
     @State private var skillsOnly = false
     @State private var recent = UserDefaults.standard.stringArray(forKey: "recentSearches") ?? []
+    @State private var completedSearch: LocalSearchRequest?
+    @State private var matchedPrompts: [Prompt] = []
+    @State private var matchedCreators: [CreatorEntry] = []
 
     private var normalizedQuery: String { query.trimmingCharacters(in: .whitespacesAndNewlines) }
     private var isBrowsing: Bool { normalizedQuery.isEmpty && kind == nil && !skillsOnly }
-    private var results: [Prompt] {
-        PromptQuery(text: query, kind: kind, skillsOnly: skillsOnly).results(in: library.prompts)
+    private var localSearch: LocalSearchRequest? {
+        guard !isBrowsing else { return nil }
+        if let store = library.feed?.search {
+            // Server results are primary. Scan local full text only when the
+            // current request failed without a usable cached page.
+            let feedQuery = FeedQuery(kind: skillsOnly ? "skill" : kind?.rawValue, q: query)
+            guard let normalized = try? feedQuery.validated(), store.query == normalized,
+                  store.failure != nil, store.items.isEmpty else { return nil }
+        }
+        return LocalSearchRequest(query: PromptQuery(text: query, kind: kind, skillsOnly: skillsOnly),
+                                  catalog: library.prompts, includesCreators: library.feed == nil && kind == nil && !skillsOnly && !normalizedQuery.isEmpty)
     }
-    private var creators: [CreatorEntry] {
-        guard !normalizedQuery.isEmpty, kind == nil, !skillsOnly else { return [] }
-        return CreatorDirectory.entries(in: library.prompts).filter { $0.creator.matchesSearch(normalizedQuery) }
+    private var results: [Prompt] { completedSearch == localSearch ? matchedPrompts : [] }
+    private var creators: [CreatorEntry] { completedSearch == localSearch ? matchedCreators : [] }
+    private var searchText: Binding<String> {
+        Binding(get: { query }, set: { value in
+            if !suspendingLegacySearch { query = value }
+        })
+    }
+
+    @ViewBuilder private func searchableContent<Content: View>(_ content: Content) -> some View {
+        if #available(iOS 18, *) {
+            content.searchFocused($searchFocused)
+        } else { content }
     }
 
     var body: some View {
         NavigationStack {
-            ScrollView {
+            searchableContent(ScrollView {
                 LazyVStack(alignment: .leading, spacing: 20) {
                     KindPicker(selection: $kind, skillsOnly: $skillsOnly)
                     if isBrowsing {
@@ -41,10 +67,10 @@ struct SearchView: View {
             .plainTopEdge().paperScreen()
             .navigationTitle(String(localized: "搜索"))
             .navigationBarTitleDisplayMode(.inline)
-            .searchable(text: $query, isPresented: $focused, prompt: String(localized: "搜索 Prompt、Skills 或创作者"))
+            .searchable(text: searchText, isPresented: $searchPresented, prompt: String(localized: "搜索 Prompt、Skills 或创作者"))
             .autocorrectionDisabled().textInputAutocapitalization(.never)
             .onSubmit(of: .search) { rememberQuery() }
-             .refreshable {
+            .refreshable {
                 await library.refresh(force: true)
                 await library.feed?.search.load(FeedQuery(kind: skillsOnly ? "skill" : kind?.rawValue, q: query), force: true)
             }
@@ -57,7 +83,43 @@ struct SearchView: View {
                         Label(String(localized: "更新内容"), systemImage: "arrow.clockwise")
                     }.disabled(library.isRefreshing).accessibilityIdentifier("refreshSearchCatalog")
                 }
+            })
+        }
+        .task(id: isSelected ? activation : nil) {
+            guard isSelected, handledActivation != activation else { return }
+            // Let the selected destination mount before asking its search field
+            // for focus. A presentation binding alone can remain true after the
+            // keyboard was dismissed and cannot express another focus request.
+            await Task.yield()
+            guard !Task.isCancelled, isSelected else { return }
+            handledActivation = activation
+            suspendingLegacySearch = false
+            searchPresented = true
+            searchFocused = true
+        }
+        .onChange(of: isSelected) { _, selected in
+            if !selected {
+                searchFocused = false
+                if #unavailable(iOS 18) {
+                    // iOS 17 has no searchFocused API. Re-arm presentation for
+                    // the next visit without accepting its automatic text reset.
+                    suspendingLegacySearch = true
+                    searchPresented = false
+                }
             }
+        }
+        .task(id: isSelected ? localSearch : nil) {
+            guard isSelected, let request = localSearch, completedSearch != request else { return }
+            do { try await Task.sleep(for: .milliseconds(200)) } catch { return }
+            let worker = Task.detached(priority: .userInitiated) {
+                let prompts = request.query.results(in: request.catalog, isCancelled: { Task.isCancelled })
+                let creators = request.includesCreators && !Task.isCancelled
+                    ? CreatorDirectory.entries(in: request.catalog).filter { $0.creator.matchesSearch(request.query.text) } : []
+                return (prompts, creators)
+            }
+            let matches = await withTaskCancellationHandler { await worker.value } onCancel: { worker.cancel() }
+            guard !Task.isCancelled else { return }
+            matchedPrompts = matches.0; matchedCreators = matches.1; completedSearch = request
         }
     }
 
@@ -107,6 +169,12 @@ struct SearchView: View {
         } else { legacyResults }
     }
     @ViewBuilder private var legacyResults: some View {
+        if completedSearch != localSearch {
+            ProgressView().frame(maxWidth: .infinity).padding()
+        } else { legacyMatches }
+    }
+
+    @ViewBuilder private var legacyMatches: some View {
         let matchedCreators = creators
         let matchedPrompts = results
         if !matchedCreators.isEmpty {
@@ -156,4 +224,10 @@ struct SearchView: View {
         }).prefix(6))
         UserDefaults.standard.set(recent, forKey: "recentSearches")
     }
+}
+
+private struct LocalSearchRequest: Equatable {
+    let query: PromptQuery
+    let catalog: [Prompt]
+    let includesCreators: Bool
 }

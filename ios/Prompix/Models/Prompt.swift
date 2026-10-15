@@ -233,7 +233,7 @@ struct Catalog: Codable {
     enum CatalogError: Error { case unsupportedVersion, invalidItems }
 }
 
-struct PromptQuery {
+struct PromptQuery: Equatable {
     var text = ""
     var kind: PromptKind?
     var topic: String?
@@ -242,7 +242,7 @@ struct PromptQuery {
     var creatorID: String?
     /// Rank direct intent matches before incidental mentions in long instructions.
     /// Preserve editorial order for empty queries and equal relevance.
-    func results(in items: [Prompt]) -> [Prompt] {
+    func results(in items: [Prompt], isCancelled: () -> Bool = { false }) -> [Prompt] {
         let query = text.trimmingCharacters(in: .whitespacesAndNewlines)
         let terms = query.split(whereSeparator: { $0.isWhitespace }).map(String.init)
         func containsTerms(_ value: String) -> Bool {
@@ -258,8 +258,9 @@ struct PromptQuery {
             return 0
         }
         var ranked: [(offset: Int, item: Prompt, rank: Int)] = []
-        for (offset, item) in items.enumerated() where matches(item) {
-            ranked.append((offset, item, relevance(item)))
+        for (offset, item) in items.enumerated() {
+            guard !isCancelled() else { return [] }
+            if matches(item) { ranked.append((offset, item, relevance(item))) }
         }
         ranked.sort { $0.rank == $1.rank ? $0.offset < $1.offset : $0.rank > $1.rank }
         return ranked.map { $0.item }

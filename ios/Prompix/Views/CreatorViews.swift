@@ -146,24 +146,39 @@ enum CreatorDirectory {
 
 struct CreatorRail: View {
     @Environment(Library.self) private var library
+    @State private var localEntries: [CreatorEntry] = []
+    @State private var completedLocalRequest: LocalCreatorRailRequest?
+    private var localRequest: LocalCreatorRailRequest? {
+        library.feed == nil ? LocalCreatorRailRequest(catalog: library.prompts, query: CreatorQuery()) : nil
+    }
     private var entries: [CreatorEntry] {
         if let feed = library.feed { return Array(feed.creatorDiscovery.items.prefix(12)).map { CreatorEntry(creator: $0.creator, count: $0.count, preview: feed.creatorPreview($0)) } }
-        return Array(CreatorDirectory.browse(in: library.prompts, query: CreatorQuery()).prefix(12))
+        return completedLocalRequest == localRequest ? localEntries : []
     }
 
     @Environment(\.scenePhase) private var scenePhase
     var body: some View {
         content.task { await library.feed?.creatorDiscovery.load(CreatorQuery()) }
+            .task(id: localRequest) {
+                guard let request = localRequest, completedLocalRequest != request else { return }
+                let worker = Task.detached(priority: .userInitiated) {
+                    Array(CreatorDirectory.browse(in: request.catalog, query: request.query).prefix(12))
+                }
+                let entries = await withTaskCancellationHandler { await worker.value } onCancel: { worker.cancel() }
+                guard !Task.isCancelled else { return }
+                localEntries = entries; completedLocalRequest = request
+            }
             .onChange(of: scenePhase) { _, phase in
                 if phase == .active { Task { await library.feed?.creatorDiscovery.load(CreatorQuery()) } }
             }
     }
     private var loading: Bool {
-        guard entries.isEmpty, let store = library.feed?.creatorDiscovery else { return false }
+        guard let store = library.feed?.creatorDiscovery else { return completedLocalRequest != localRequest }
         return store.failure == nil && (store.query == nil || store.isLoading)
     }
     private var content: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        let entries = entries
+        return VStack(alignment: .leading, spacing: 4) {
             HStack {
                 Text(String(localized: "创作者")).font(.subheadline.weight(.medium)).accessibilityAddTraits(.isHeader)
                 Spacer()
@@ -201,6 +216,11 @@ struct CreatorRail: View {
             }
         }
     }
+}
+
+private struct LocalCreatorRailRequest: Equatable {
+    let catalog: [Prompt]
+    let query: CreatorQuery
 }
 
 /// Loading, image, and avatar-only states have identical geometry, including

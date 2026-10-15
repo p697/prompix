@@ -51,6 +51,42 @@ import UIKit
         XCTAssertTrue(app.buttons["copyPrompt"].waitForExistence(timeout: 10))
     }
 
+    func testSearchTabFocusAndTextSurviveRepeatedSwitches() {
+        launch()
+        for index in 0..<4 {
+            app.selectPrompixTab("搜索")
+            XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 3))
+            app.typeText(index == 0 ? "preview\n" : "s\n")
+            XCTAssertEqual(app.searchFields.firstMatch.value as? String, "preview" + String(repeating: "s", count: index))
+            app.selectPrompixTab(index.isMultiple(of: 2) ? "收藏" : "发现")
+        }
+        capture("database-search-autofocus")
+    }
+
+    func testSearchWithPublishedLegacyCache() throws {
+        guard let path = ProcessInfo.processInfo.environment["PROMPIX_SEARCH_BENCHMARK_CATALOG"] else {
+            throw XCTSkip("Requires an external published catalog in an isolated simulator namespace.")
+        }
+        let data = try Data(contentsOf: URL(fileURLWithPath: path))
+        launch(); app.terminate()
+        try data.write(to: directory().appending(path: "catalog.json"), options: .atomic)
+        app.launchArguments = ["--feed-legacy-test", fixtureID, "--cached-only", "-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh-Hans"]
+        app.launchPrompix()
+        XCTAssertTrue(app.buttons["discoverySettings"].waitForExistence(timeout: 10))
+        app.selectPrompixTab("搜索")
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 3))
+        app.typeText("portrait\n")
+        XCTAssertTrue(app.staticTexts["searchResultCount"].waitForExistence(timeout: 5))
+        app.selectPrompixTab("收藏"); app.selectPrompixTab("搜索")
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 3))
+        XCTAssertEqual(app.searchFields.firstMatch.value as? String, "portrait")
+        app.typeText("zzzzzz")
+        XCTAssertTrue(app.staticTexts["没有找到相关内容"].waitForExistence(timeout: 5))
+        app.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 6))
+        XCTAssertTrue(app.staticTexts["searchResultCount"].waitForExistence(timeout: 5))
+        capture("legacy-published-search-focus-and-latest-results")
+    }
+
     func testHomeSkeletonsKeepSectionAnchorsThroughIndependentResponses() throws {
         launch(["--feed-home-loading-test"])
         let root = try directory()
