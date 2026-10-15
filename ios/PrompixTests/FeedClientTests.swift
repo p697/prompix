@@ -36,6 +36,18 @@ import XCTest
         _ = try await client.page(query: latest)
         XCTAssertTrue(server.urls[0].query?.contains("sort=latest") == true)
     }
+    func testCreatorDiscoverySendsServerFiltersAndValidatesPreviews() async throws {
+        let (client, server) = connection()
+        let creator = Prompt.Creator(id: "test-author", platform: "web", displayName: "Test", profileURL: URL(string: "https://example.com/test")!)
+        let page = FeedCreatorsPage(schemaVersion: 3, release: FeedFixture.release, items: [.init(creator: creator, count: 1)], nextCursor: nil)
+        server.set("/v3/creators", bytes: try JSONEncoder().encode(page))
+        _ = try await client.creatorDiscovery(query: CreatorQuery(q: " ＣＡＦÉ ", kind: "video", sort: .name))
+        let parameters = try XCTUnwrap(URLComponents(url: server.urls[0], resolvingAgainstBaseURL: false)?.queryItems)
+        XCTAssertEqual(parameters.first { $0.name == "q" }?.value, "cafe")
+        XCTAssertEqual(parameters.first { $0.name == "kind" }?.value, "video")
+        XCTAssertEqual(parameters.first { $0.name == "sort" }?.value, "name")
+        XCTAssertEqual(parameters.first { $0.name == "limit" }?.value, "30")
+    }
     private func connection() -> (FeedClient, FeedTestServer) {
         let server = FeedTestServer(), token = UUID().uuidString
         FeedTestServers.shared.insert(server, token: token)

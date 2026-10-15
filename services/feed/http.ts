@@ -1,3 +1,5 @@
+import { getCreatorDiscovery } from "./creator-discovery.ts";
+import { parseCreatorDiscovery } from "./creator-filters.ts";
 import { ZodError } from "zod";
 import { detailResponseByteLimit, feedLocale, feedResponseByteLimit, parseFeedQuery } from "../../packages/schema/feed.ts";
 import { FeedError, type Database } from "./database.ts";
@@ -33,6 +35,7 @@ export async function serveFeed(request: Request, db: Database, secret: string):
       return respond(await getFeed(db, query, secret));
     }
     if (url.pathname === "/v3/creators") {
+      if (url.searchParams.has("sort")) return respond(await getCreatorDiscovery(db, parseCreatorDiscovery(url), secret));
       if ([...url.searchParams.keys()].some(key => !["q", "limit", "cursor"].includes(key)))
         throw new FeedError("invalid_request", 400);
       let query: ReturnType<typeof parseFeedQuery>;

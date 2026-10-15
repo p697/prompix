@@ -81,6 +81,7 @@ struct FeedCreatorsPage: Codable, Sendable {
     struct Entry: Codable, Identifiable, Sendable {
         let creator: Prompt.Creator
         let count: Int
+        var preview: FeedCard? = nil
         var id: String { creator.id }
     }
     let schemaVersion: Int
@@ -94,6 +95,10 @@ struct FeedCreatorsPage: Codable, Sendable {
         for item in items {
             guard (1...100000).contains(item.count) else { throw FeedError.invalidResponse }
             try ContentValidation.creator(item.creator)
+            if let preview = item.preview {
+                _ = try preview.validated(locale: "original")
+                guard preview.creator?.id == item.creator.id else { throw FeedError.invalidResponse }
+            }
         }
         return self
     }

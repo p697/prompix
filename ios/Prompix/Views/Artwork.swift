@@ -5,11 +5,12 @@ struct Artwork: View {
     var compact = false
     // Feed previews fill their reserved frame; full-image reading remains fitted.
     var fillsFrame = false
+    var showsVideoBadge = true
     init(item: Prompt, compact: Bool = false, fillsFrame: Bool = false) {
         self.item = ContentPreview(item); self.compact = compact; self.fillsFrame = fillsFrame
     }
-    init(preview: ContentPreview, compact: Bool = false, fillsFrame: Bool = false) {
-        item = preview; self.compact = compact; self.fillsFrame = fillsFrame
+    init(preview: ContentPreview, compact: Bool = false, fillsFrame: Bool = false, showsVideoBadge: Bool = true) {
+        item = preview; self.compact = compact; self.fillsFrame = fillsFrame; self.showsVideoBadge = showsVideoBadge
     }
     var body: some View {
         GeometryReader { proxy in
@@ -31,7 +32,7 @@ struct Artwork: View {
                 default: abstractArtwork(size: proxy.size)
                 }
                 }
-                if item.kind == .video {
+                if item.kind == .video && showsVideoBadge {
                     VStack { Spacer(); HStack {
                         Label(item.media?.videoURL == nil ? "0:06" : String(localized: "播放"), systemImage: "play.fill").font(.system(size: 11, weight: .medium, design: .monospaced))
                             .foregroundStyle(.white).padding(.horizontal, 9).padding(.vertical, 6).background(.black.opacity(0.28), in: Capsule())

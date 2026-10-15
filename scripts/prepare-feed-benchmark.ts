@@ -4,6 +4,7 @@ import { isAbsolute, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Database } from "../services/feed/database.ts";
 import { encodeCursor } from "../services/feed/cursor.ts";
+import { getCreatorDiscovery } from "../services/feed/creator-discovery.ts";
 import { getBrowse, getCreators, getFeed } from "../services/feed/queries.ts";
 
 // Generates a transaction-only hosted benchmark. Execution is an explicit operator step.
@@ -30,6 +31,12 @@ caseName = "after_9000"; await getFeed(capture, { filters, limit: 30, cursor: en
 caseName = "type_and_tag"; await getFeed(capture, { filters: { ...filters, kind: "image", tag: "group-18" }, limit: 30 }, secret);
 caseName = "search_relevance"; await getFeed(capture, { filters: { ...filters, q: "benchmark story" }, limit: 30 }, secret);
 caseName = "creator_directory"; await getCreators(capture, { q: "", limit: 50 }, secret);
+for (const sort of ["recommended", "latest", "count", "name"] as const) {
+  caseName = "creator_discovery_" + sort;
+  await getCreatorDiscovery(capture, { filters: { q: "", sort }, limit: 30 }, secret);
+}
+caseName = "creator_discovery_image_search";
+await getCreatorDiscovery(capture, { filters: { q: "creator", kind: "image", sort: "recommended" }, limit: 30 }, secret);
 caseName = "browse_facets"; await getBrowse(capture, "original");
 caseName = "collection_page"; await getFeed(capture, { filters: { ...filters, collection: "portraits" }, limit: 30 }, secret);
 
@@ -49,7 +56,7 @@ with fixtures as (
       'title',case when i%11=0 then 'Benchmark story' else 'Synthetic original ' || i end,
       'summary','First-party load fixture','prompt',repeat('Write a benchmark story about a teacup. ',25),
       'example','A synthetic example','previewLabel','Preview','model','Model ' || (i%5),'artwork','test',
-      'tags',jsonb_build_array('synthetic','肖像','写作','group-' || (i%100)),'media',null,'toolURL',null,
+      'tags',jsonb_build_array('synthetic','肖像','写作','group-' || (i%100)),'media',case when i%2=0 then jsonb_build_object('imageURL','https://api.prompix.dev/media/synthetic-benchmark.jpg') else null end,'toolURL',null,
       'source',jsonb_build_object('name','Prompix','license','Original','method','Synthetic benchmark','url',null),
       'creator',jsonb_build_object('id','creator-' || (i%500),'displayName','Creator ' || (i%500),'platform','web','profileURL','https://example.com/creator')) as original
   from generate_series(1,10000) i
@@ -66,6 +73,8 @@ with fields as (select v.id,f.* from ${schema}.revisions v cross join lateral ${
 update ${schema}.revisions v set search_text=f.search_text,search_titles=f.search_titles,search_creator=f.search_creator,search_metadata=f.search_metadata from fields f where f.id=v.id;
 insert into ${schema}.release_creators(release_id,creator_id,creator,item_count,search_text)
 select '${release}',creator_id,(array_agg(card->'creator'))[1],count(*)::integer,min(search_creator) from ${schema}.revisions group by creator_id;
+update ${schema}.release_entries set latest_position=position;
+select ${schema}.prepare_creator_discovery('${release}');
 update ${schema}.state set active_release='${release}',generation=1 where singleton;
 analyze ${schema}.content; analyze ${schema}.releases; analyze ${schema}.revisions; analyze ${schema}.translations; analyze ${schema}.release_entries; analyze ${schema}.release_creators;
 create function ${schema}.measure(query text) returns jsonb language plpgsql set search_path='' as $measure$

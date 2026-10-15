@@ -1,4 +1,5 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
+import { creatorFiltersSchema, type CreatorFilters } from "./creator-filters.ts";
 import { z } from "zod";
 import { contentID, feedFiltersSchema, type FeedFilters } from "../../packages/schema/feed.ts";
 
@@ -49,5 +50,20 @@ export function encodeCreatorCursor(cursor: CreatorCursor, secret: string): stri
 export function decodeCreatorCursor(token: string, q: string, secret: string, now = Date.now()): CreatorCursor {
   const cursor = creatorCursorSchema.parse(verifyPayload(token, secret));
   if (cursor.q !== q || !validExpiry(cursor.expires, now)) throw new Error("Expired or mismatched cursor");
+  return cursor;
+}
+
+const discoveryCursorSchema = z.object({
+  v: z.literal(2), scope: z.literal("creator-discovery"), release: contentID,
+  key: z.string().min(1).max(512), after: z.string().min(1).max(200), day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  filters: creatorFiltersSchema, expires: z.number().int().positive(),
+}).strict();
+export function encodeDiscoveryCursor(cursor: z.infer<typeof discoveryCursorSchema>, secret: string): string {
+  return signPayload(discoveryCursorSchema.parse(cursor), secret);
+}
+export function decodeDiscoveryCursor(token: string, filters: CreatorFilters, secret: string, now = Date.now()) {
+  const cursor = discoveryCursorSchema.parse(verifyPayload(token, secret));
+  if (!validExpiry(cursor.expires, now) || JSON.stringify(cursor.filters) !== JSON.stringify(creatorFiltersSchema.parse(filters)))
+    throw new Error("Expired or mismatched cursor");
   return cursor;
 }

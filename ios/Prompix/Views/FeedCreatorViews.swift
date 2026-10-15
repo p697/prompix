@@ -1,21 +1,22 @@
 import SwiftUI
 
 struct FeedCreatorResults: View {
-    @State private var store: FeedCreatorStore
+    @State private var store: CreatorDiscoveryStore
     let repository: FeedRepository
-    let query: String
-    init(repository: FeedRepository, query: String) {
-        _store = State(initialValue: repository.makeCreatorStore()); self.repository = repository; self.query = query
+    let query: CreatorQuery
+    init(repository: FeedRepository, query: CreatorQuery) {
+        _store = State(initialValue: repository.makeCreatorDiscoveryStore()); self.repository = repository; self.query = query
     }
     var body: some View {
-        let normalized = (try? FeedCreatorsSource.validate(query)) ?? query
+        let normalized = (try? CreatorDiscoverySource.validate(query)) ?? query
         let matches = store.query == normalized
         let waiting = !matches || (store.failure == nil && (store.release == nil || (store.items.isEmpty && store.isLoading)))
-        let items = matches && store.release != nil ? store.items : (normalized.isEmpty ? repository.creators.items : [])
+        let items = matches && store.release != nil ? store.items : (normalized == repository.creatorDiscovery.query ? repository.creatorDiscovery.items : [])
+        ScrollView {
         LazyVStack(spacing: 0) {
             ForEach(items) { item in
-                NavigationLink { CreatorDetail(creator: item.creator) } label: {
-                    CreatorRow(entry: CreatorEntry(creator: item.creator, count: item.count)).padding(.vertical, 14)
+                NavigationLink { CreatorDetail(creator: item.creator, initialKind: query.kind) } label: {
+                    CreatorRow(entry: CreatorEntry(creator: item.creator, count: item.count, preview: repository.creatorPreview(item))).padding(.vertical, 14)
                 }.buttonStyle(.plain).accessibilityIdentifier("creator-\(item.id)")
                 if item.id != items.last?.id { Rectangle().fill(Palette.line).frame(height: 0.5).padding(.leading, 64) }
             }
@@ -30,8 +31,8 @@ struct FeedCreatorResults: View {
                     }
                 }.accessibilityIdentifier("retryCreators")
             } else if items.isEmpty && !waiting && !store.isLoading {
-                if query.isEmpty { ContentUnavailableView(String(localized: "暂无创作者"), systemImage: "person.crop.circle") }
-                else { ContentUnavailableView.search(text: query) }
+                if query.q.isEmpty { ContentUnavailableView(String(localized: "暂无创作者"), systemImage: "person.crop.circle") }
+                else { ContentUnavailableView.search(text: query.q) }
             }
             if matches && store.nextCursor != nil {
                 FeedNextPageButton(isLoading: store.isLoading, enabled: store.failure == nil) {
@@ -42,12 +43,14 @@ struct FeedCreatorResults: View {
             .feedLookahead(cursor: store.nextCursor, generation: store.firstPageGeneration, enabled: matches && !store.isLoading && store.failure == nil && !store.isCached) {
                 Task { await store.loadMore() }
             }
+        }
+            .refreshable { await store.load(query, force: true) }
             .task(id: query) {
-                if !query.isEmpty { do { try await Task.sleep(for: .milliseconds(300)) } catch { return } }
+                if !query.q.isEmpty { do { try await Task.sleep(for: .milliseconds(300)) } catch { return } }
                 guard !Task.isCancelled else { return }
                 await store.load(query)
             }
-            .refreshable { await store.load(query, force: true) }
+
     }
 }
 
