@@ -8,6 +8,7 @@ import Observation
     private(set) var release: String?
     private(set) var nextCursor: String?
     private(set) var hasLoadedAdditionalPages = false
+    private(set) var firstPageGeneration = 0
     private(set) var failedFirstPage = false
     private(set) var isLoading = false
     private(set) var failure: (any Error)?
@@ -37,6 +38,7 @@ import Observation
         if sameQuery, !force, failure == nil, !isCached, let loadedAt, now.timeIntervalSince(loadedAt) < 300 { return }
         cancel()
         if !sameQuery { items = []; release = nil; nextCursor = nil; loadedAt = nil; isCached = false; hasLoadedAdditionalPages = false }
+        firstPageGeneration &+= 1
         query = normalized; failedFirstPage = true; failure = nil; retryAt = nil; isLoading = true
         let owner = UUID(); requestID = owner
         let task = Task { [weak self] in

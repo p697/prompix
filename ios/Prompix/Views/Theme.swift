@@ -10,18 +10,18 @@ enum Palette {
         })
     }
 
-    static let paper = adaptive(0xFAFBFE, 0x12151D)
-    static let surface = adaptive(0xFFFFFF, 0x202531)
-    static let soft = adaptive(0xEDF0F7, 0x272E3C)
-    static let ink = adaptive(0x1B2130, 0xEDF0FA)
-    static let muted = adaptive(0x626B7B, 0xA9B3C7)
-    static let accent = adaptive(0x4059BF, 0xADBEFF)
-    static let highlight = adaptive(0xDAE4FF, 0xA9BCFF)
-    static let highlightInk = Color(red: 0.12, green: 0.19, blue: 0.40)
+    static let paper = adaptive(0xFAFAF7, 0x171B19)
+    static let surface = adaptive(0xFFFFFF, 0x242A27)
+    static let soft = adaptive(0xEEEFEA, 0x2D3530)
+    static let ink = adaptive(0x222D28, 0xEEF2ED)
+    static let muted = adaptive(0x646F68, 0xACB9B0)
+    static let accent = adaptive(0x2F3D37, 0xD2E0DA)
+    static let highlight = adaptive(0xE0E9D9, 0xCEDDCC)
+    static let highlightInk = Color(red: 0.16, green: 0.22, blue: 0.18)
     static let noteMint = adaptive(0xEAF2F1, 0x223433)
     static let noteRose = adaptive(0xF5EDF3, 0x352937)
     static let noteLavender = adaptive(0xEFEDFA, 0x2B2B40)
-    static let line = adaptive(0xDCE2EF, 0x3D475C)
+    static let line = adaptive(0xDDDFD8, 0x424E45)
 
     // These decorative colors never carry text or encode a state by themselves.
     static let spectrumBlue = Color(red: 0.32, green: 0.47, blue: 0.94)

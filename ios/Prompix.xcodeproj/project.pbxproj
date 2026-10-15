@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		005BBBEFB1E6FE7DC3ED7A83 /* SpectralIdentity.swift in Sources */ = {isa = PBXBuildFile; fileRef = A51D595D7C2482D07EC982B2 /* SpectralIdentity.swift */; };
 		0422CE6E47A316D7429B3124 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35CF1255F0978E92D3F337C9 /* OnboardingView.swift */; };
+		05FF868485C3D3B308F32E97 /* ImagePrefetchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 59CAE6E8837FCDC584FA7416 /* ImagePrefetchTests.swift */; };
 		06671D7722614BB97763B7BE /* FeedLoadingViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6CA7CC853946FC6724B8B84E /* FeedLoadingViews.swift */; };
 		0696F273B8BDD0DB246A4D35 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7A197EAA0254BAC6F0D7DCAF /* Foundation.framework */; };
 		09093C2E484C22D11F08B9EC /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7A197EAA0254BAC6F0D7DCAF /* Foundation.framework */; };
@@ -20,6 +21,7 @@
 		2248DBF1D36A0F4A532853EB /* GlobalDiscoveryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 142689FAC72ECA287A9B647B /* GlobalDiscoveryTests.swift */; };
 		26A4EDD551F5B86B5D057844 /* UsePrompt.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = DA9E93D8AB311D99E273825C /* UsePrompt.xcstrings */; };
 		297405265D83C30FDCA4FE93 /* LanguagePackLibraryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 26BC5CA1213DF09A75CB31D2 /* LanguagePackLibraryTests.swift */; };
+		2B778FDD6DF29002251C355E /* FeedLookahead.swift in Sources */ = {isa = PBXBuildFile; fileRef = A83C38BE8CD96EFA628BECFB /* FeedLookahead.swift */; };
 		2B86B3F9F13CD8EDBAF33F56 /* PromptTemplate.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1FED2DFA86748AD06697141 /* PromptTemplate.swift */; };
 		2BC9F581D7E7D16C3D2ADF1C /* SkillInformation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 13862A1EC4FA83D2C3F43BAC /* SkillInformation.swift */; };
 		2C80340C8F415E706E524657 /* PromptHandoff.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3924487E48772312E2258997 /* PromptHandoff.swift */; };
@@ -134,6 +136,7 @@
 		52E6E85F77C32DE413470BF2 /* Onboarding.xcstrings */ = {isa = PBXFileReference; includeInIndex = 1; path = Onboarding.xcstrings; sourceTree = "<group>"; };
 		560639ED3782BBA70E02D355 /* PromptDetail.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = PromptDetail.swift; path = Views/PromptDetail.swift; sourceTree = "<group>"; };
 		56F6F0B4F634C5A2C8C181CF /* FeedClientTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FeedClientTests.swift; sourceTree = "<group>"; };
+		59CAE6E8837FCDC584FA7416 /* ImagePrefetchTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ImagePrefetchTests.swift; sourceTree = "<group>"; };
 		604783F590F826D14BEDC9A7 /* Artwork.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = Artwork.swift; path = Views/Artwork.swift; sourceTree = "<group>"; };
 		64BAAD363B7C55DE0851BC17 /* FeedBrowseTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FeedBrowseTests.swift; sourceTree = "<group>"; };
 		65156F34D91DE0965479AB60 /* Assets.xcassets */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -161,6 +164,7 @@
 		A364B71A3C3F9C43309F18C1 /* LanguagePackCatalog.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = LanguagePackCatalog.swift; path = Models/LanguagePackCatalog.swift; sourceTree = "<group>"; };
 		A51D595D7C2482D07EC982B2 /* SpectralIdentity.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = SpectralIdentity.swift; path = Views/SpectralIdentity.swift; sourceTree = "<group>"; };
 		A5413214BE50C4D2DBD54D0B /* Localizable.xcstrings */ = {isa = PBXFileReference; includeInIndex = 1; path = Localizable.xcstrings; sourceTree = "<group>"; };
+		A83C38BE8CD96EFA628BECFB /* FeedLookahead.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = FeedLookahead.swift; path = Views/FeedLookahead.swift; sourceTree = "<group>"; };
 		A89B669891E91206437D4FC8 /* CollectionsView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = CollectionsView.swift; path = Views/CollectionsView.swift; sourceTree = "<group>"; };
 		AEF4CD522AF9313AA5F48274 /* PromptMarkdownTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PromptMarkdownTests.swift; sourceTree = "<group>"; };
 		BFABEE1DF2183222C41711E2 /* WebExamples */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = folder; path = WebExamples; sourceTree = "<group>"; };
@@ -281,6 +285,7 @@
 				C87281C6B8469CA647E24DF0 /* PromptTemplateTests.swift */,
 				8010FB854213A7A33D9BAB25 /* ReadingScrollTests.swift */,
 				2A0FB4E2BCB8B1CD6317E64D /* Resources */,
+				59CAE6E8837FCDC584FA7416 /* ImagePrefetchTests.swift */,
 			);
 			name = PrompixTests;
 			path = PrompixTests;
@@ -328,6 +333,7 @@
 				456CE98DA68391D8A7CE3808 /* PendingPromptDetail.swift */,
 				6CA7CC853946FC6724B8B84E /* FeedLoadingViews.swift */,
 				A51D595D7C2482D07EC982B2 /* SpectralIdentity.swift */,
+				A83C38BE8CD96EFA628BECFB /* FeedLookahead.swift */,
 			);
 			name = Prompix;
 			path = Prompix;
@@ -525,6 +531,7 @@
 				F2FD8CDC88AA33C8711B2537 /* PendingPromptDetail.swift in Sources */,
 				06671D7722614BB97763B7BE /* FeedLoadingViews.swift in Sources */,
 				005BBBEFB1E6FE7DC3ED7A83 /* SpectralIdentity.swift in Sources */,
+				2B778FDD6DF29002251C355E /* FeedLookahead.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -561,6 +568,7 @@
 				5D3834EC158D204A7F259780 /* PromptSearchTests.swift in Sources */,
 				966EA3F85DB6E8282D78EE89 /* PromptTemplateTests.swift in Sources */,
 				5889251AD85F1E18966D737B /* ReadingScrollTests.swift in Sources */,
+				05FF868485C3D3B308F32E97 /* ImagePrefetchTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -589,12 +597,12 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CLANG_ENABLE_OBJC_WEAK = NO;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 38;
+				CURRENT_PROJECT_VERSION = 39;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				INFOPLIST_FILE = Prompix/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
-				MARKETING_VERSION = 0.9.0;
+				MARKETING_VERSION = 0.9.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.p697.prompix;
 				PRODUCT_NAME = Prompix;
 				SDKROOT = iphoneos;
@@ -710,12 +718,12 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CLANG_ENABLE_OBJC_WEAK = NO;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 38;
+				CURRENT_PROJECT_VERSION = 39;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				INFOPLIST_FILE = Prompix/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
-				MARKETING_VERSION = 0.9.0;
+				MARKETING_VERSION = 0.9.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.p697.prompix;
 				PRODUCT_NAME = Prompix;
 				SDKROOT = iphoneos;

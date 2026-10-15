@@ -1,30 +1,42 @@
 import AppKit
 import CoreGraphics
-// Original folded-page mark, rendered at full App Store resolution.
+
+// Original three-page identity, sharing the in-app mark's geometry and palette.
+// Render full bleed; the OS supplies the icon's corner mask.
 let size = 1024
-let colorSpace = CGColorSpaceCreateDeviceRGB()
-let context = CGContext(data: nil, width: size, height: size, bitsPerComponent: 8, bytesPerRow: 0, space: colorSpace, bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)!
-context.setFillColor(CGColor(red: 0.26, green: 0.31, blue: 0.24, alpha: 1))
-context.fill(CGRect(x: 0, y: 0, width: size, height: size))
-// Two opening pages; the quiet gap reads as a path into a collection.
-context.setFillColor(CGColor(red: 0.94, green: 0.93, blue: 0.86, alpha: 1))
-let left = CGMutablePath()
-left.move(to: CGPoint(x: 255, y: 740))
-left.addCurve(to: CGPoint(x: 482, y: 666), control1: CGPoint(x: 338, y: 750), control2: CGPoint(x: 432, y: 730))
-left.addLine(to: CGPoint(x: 482, y: 258))
-left.addCurve(to: CGPoint(x: 259, y: 337), control1: CGPoint(x: 425, y: 320), control2: CGPoint(x: 344, y: 348))
-left.addQuadCurve(to: CGPoint(x: 235, y: 363), control: CGPoint(x: 235, y: 335))
-left.addLine(to: CGPoint(x: 235, y: 714))
-left.addQuadCurve(to: CGPoint(x: 255, y: 740), control: CGPoint(x: 235, y: 738))
-context.addPath(left); context.fillPath()
-let right = CGMutablePath()
-right.move(to: CGPoint(x: 546, y: 665))
-right.addCurve(to: CGPoint(x: 755, y: 784), control1: CGPoint(x: 607, y: 725), control2: CGPoint(x: 688, y: 770))
-right.addQuadCurve(to: CGPoint(x: 785, y: 763), control: CGPoint(x: 785, y: 790))
-right.addLine(to: CGPoint(x: 785, y: 414))
-right.addQuadCurve(to: CGPoint(x: 761, y: 385), control: CGPoint(x: 785, y: 389))
-right.addCurve(to: CGPoint(x: 546, y: 258), control1: CGPoint(x: 677, y: 374), control2: CGPoint(x: 607, y: 325))
-right.closeSubpath(); context.addPath(right); context.fillPath()
-let image = NSBitmapImageRep(cgImage: context.makeImage()!)
-let output = CommandLine.arguments.dropFirst().first ?? "ios/Prompix/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon.png"
-try image.representation(using: .png, properties: [:])!.write(to: URL(fileURLWithPath: output))
+let output = CommandLine.arguments.dropFirst().first ?? "ios/Prompix/Resources/Assets.xcassets/AppIcon.appiconset"
+let directory = URL(fileURLWithPath: output, isDirectory: true)
+try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+let space = CGColorSpaceCreateDeviceRGB()
+func color(_ rgb: UInt) -> CGColor {
+    CGColor(red: CGFloat((rgb >> 16) & 255) / 255, green: CGFloat((rgb >> 8) & 255) / 255, blue: CGFloat(rgb & 255) / 255, alpha: 1)
+}
+for variant in ["AppIcon", "AppIconDark", "AppIconTinted"] {
+    let dark = variant != "AppIcon", tinted = variant == "AppIconTinted"
+    let context = CGContext(data: nil, width: size, height: size, bitsPerComponent: 8, bytesPerRow: 0,
+                            space: space, bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)!
+    context.setFillColor(color(dark ? 0x171B19 : 0xF5F5F0))
+    context.fill(CGRect(x: 0, y: 0, width: size, height: size))
+    for index in 0..<3 {
+        context.saveGState()
+        context.translateBy(x: 512, y: 238)
+        context.rotate(by: CGFloat(index - 1) * -29 * .pi / 180)
+        let rect = CGRect(x: -160, y: 0, width: 320, height: 562)
+        let path = CGPath(roundedRect: rect, cornerWidth: 40, cornerHeight: 40, transform: nil)
+        context.saveGState()
+        context.setShadow(offset: CGSize(width: 0, height: -6), blur: 20, color: CGColor(gray: 0, alpha: dark ? 0.22 : 0.08))
+        context.setFillColor(color(0xCBD7EF)); context.addPath(path); context.fillPath()
+        context.restoreGState()
+        context.addPath(path); context.clip()
+        let colors: [CGColor] = tinted ? [color(0xF8F8F8), color(UInt(0xB0B0B0 + index * 0x151515)), color(0x777777)] :
+            [color(0xE2F2FA), color(index == 2 ? 0xDEABCC : 0xADC7F5), color(index == 0 ? 0x5278F0 : 0x927DDE), color(0x3B4DA6)]
+        let stops: [CGFloat] = tinted ? [0, 0.5, 1] : [0, 0.35, 0.75, 1]
+        let gradient = CGGradient(colorsSpace: space, colors: colors as CFArray, locations: stops)!
+        context.drawLinearGradient(gradient, start: CGPoint(x: -160, y: 562), end: CGPoint(x: 160, y: 0), options: [])
+        context.setStrokeColor(CGColor(gray: 1, alpha: dark ? 0.28 : 0.65))
+        context.setLineWidth(2); context.addPath(path); context.strokePath()
+        context.restoreGState()
+    }
+    let image = NSBitmapImageRep(cgImage: context.makeImage()!)
+    try image.representation(using: .png, properties: [:])!.write(to: directory.appendingPathComponent(variant + ".png"))
+}

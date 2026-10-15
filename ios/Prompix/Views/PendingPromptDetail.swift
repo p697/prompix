@@ -7,6 +7,7 @@ struct PendingPromptDetail: View {
     let retryAt: Date?
     let position: DetailReadingPosition
     let retry: () -> Void
+    @State private var actionsCollapsed = false
     private var preview: ContentPreview { ContentPreview(card) }
 
     var body: some View {
@@ -14,7 +15,7 @@ struct PendingPromptDetail: View {
             if #available(iOS 27.1, *), preview.hasDetailMedia {
                 ArrangementView {
                     ScrollView { reading.padding(.bottom, 28).frame(maxWidth: 700).frame(maxWidth: .infinity) }
-                        .preservingReadingPosition(position).accessibilityIdentifier("detailReadingPane")
+                        .preservingReadingPosition(position).readingChrome($actionsCollapsed).accessibilityIdentifier("detailReadingPane")
                 } secondary: {
                     ScrollView { media.padding(.bottom, 24).frame(maxWidth: 600).frame(maxWidth: .infinity) }
                         .preservingReadingPosition(position, media: true).accessibilityIdentifier("detailMediaPane")
@@ -25,9 +26,23 @@ struct PendingPromptDetail: View {
                         media
                         reading
                     }.padding(.bottom, 28).frame(maxWidth: 700).frame(maxWidth: .infinity)
-                }.preservingReadingPosition(position).accessibilityIdentifier("detailReadingPane")
+                }.preservingReadingPosition(position).readingChrome($actionsCollapsed).accessibilityIdentifier("detailReadingPane")
             }
         }.foregroundStyle(Palette.ink)
+            .onChange(of: actionsCollapsed) { _, value in position.actionsCollapsed = value }
+            .promptActionBar {
+                ReadingActionBar(isSkill: card.contentType == "skill", ready: false, collapsed: actionsCollapsed)
+            }
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {} label: { Label(String(localized: "分享"), systemImage: "square.and.arrow.up").frame(minWidth: 44, minHeight: 44) }
+                        .disabled(true).accessibilityIdentifier("sharePrompt")
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {} label: { Label(String(localized: "收藏 Prompt"), systemImage: "bookmark").frame(minWidth: 44, minHeight: 44) }
+                        .disabled(true).accessibilityIdentifier("detailFavorite")
+                }
+            }
     }
     @ViewBuilder private var media: some View {
         if preview.hasDetailMedia {
@@ -92,7 +107,7 @@ private struct PromptBodySkeleton: View {
     @ScaledMetric(relativeTo: .body) private var lineHeight = 12.0
     var body: some View {
         VStack(alignment: .leading, spacing: 24) {
-            Capsule().fill(Palette.soft).frame(width: 112, height: 16).frame(height: 44)
+            ContentActivityLabel().frame(height: 44)
             ForEach(0..<2) { _ in
                 VStack(alignment: .leading, spacing: 14) {
                     ForEach([1.0, 0.93, 0.98, 0.62], id: \.self) { fraction in
@@ -115,6 +130,7 @@ private struct PromptBodySkeleton: View {
 final class DetailReadingPosition {
     var reading: CGFloat = 0
     var media: CGFloat = 0
+    var actionsCollapsed = false
 }
 
 extension View {

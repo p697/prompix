@@ -22,7 +22,6 @@ struct PromptDetail: View {
     @State private var languageRequestID: UUID?
     @State private var languageTask: Task<Void, Never>?
     @State private var actionsCollapsed = false
-    @Namespace private var actionTransition
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var typeSize
     @Environment(\.colorScheme) private var colorScheme
@@ -51,6 +50,7 @@ struct PromptDetail: View {
         self.origin = origin
         self.readingPosition = readingPosition
         _language = State(initialValue: item.preferredTranslation)
+        _actionsCollapsed = State(initialValue: readingPosition?.actionsCollapsed ?? false)
     }
     private var related: [Prompt] {
         RelatedPrompts.select(for: item, from: library.prompts)
@@ -233,42 +233,9 @@ struct PromptDetail: View {
             }
     }
     private var readingActions: some View {
-        Group {
-            if #available(iOS 26, *) {
-                GlassEffectContainer(spacing: 12) { actionButtons }
-            } else { actionButtons }
-        }
-        .padding(.horizontal, 20).padding(.vertical, 8)
-        .frame(maxWidth: 600).frame(maxWidth: .infinity)
-        .animation(reduceMotion ? nil : .spring(response: 0.38, dampingFraction: 0.86), value: actionsCollapsed)
-        .accessibilityElement(children: .contain).accessibilityIdentifier(actionsCollapsed ? "readingActionsCompact" : "readingActionsExpanded")
-    }
-    private var actionButtons: some View {
-        HStack(spacing: 10) {
-            Button(action: openEditor) {
-                Image(systemName: "square.and.pencil").font(.body).frame(width: 50, height: 50)
-            }.buttonStyle(.plain).readingGlass().actionGlassIdentity("edit", in: actionTransition)
-                .accessibilityLabel(String(localized: "编辑后使用")).accessibilityIdentifier("editPromptAction")
-            Button {
-                UIPasteboard.general.string = content.prompt; copied = true
-            } label: {
-                Image(systemName: copied ? "checkmark" : "doc.on.doc").font(.body).frame(width: 50, height: 50)
-            }.buttonStyle(.plain).readingGlass().actionGlassIdentity("copy", in: actionTransition)
-                .accessibilityLabel(copied ? String(localized: "已复制") : String(localized: "复制 Prompt"))
-                .accessibilityIdentifier("copyPrompt").sensoryFeedback(.success, trigger: copied)
-            Button(action: openUseSheet) {
-                HStack(spacing: 8) {
-                    Image(systemName: "arrow.up.right")
-                    if !actionsCollapsed {
-                        Text(typeSize.isAccessibilitySize ? String(localized: "使用") : item.isSkill ? String(localized: "使用这个 Skill") : String(localized: "使用 Prompt"))
-                            .lineLimit(1).minimumScaleFactor(0.8)
-                    }
-                }.font(.body.weight(.semibold)).frame(minWidth: 50, maxWidth: actionsCollapsed ? 50 : .infinity, minHeight: 50)
-                    .foregroundStyle(colorScheme == .dark ? Color(red: 26 / 255, green: 30 / 255, blue: 24 / 255) : Color(red: 252 / 255, green: 252 / 255, blue: 249 / 255))
-            }.buttonStyle(.plain).readingGlass(prominent: true).actionGlassIdentity("use", in: actionTransition)
-                .accessibilityLabel(item.isSkill ? String(localized: "使用这个 Skill") : String(localized: "使用 Prompt"))
-                .accessibilityIdentifier("usePrompt")
-        }.dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+        ReadingActionBar(isSkill: item.isSkill, collapsed: actionsCollapsed, copied: copied,
+                         edit: openEditor, copy: { UIPasteboard.general.string = content.prompt; copied = true },
+                         use: openUseSheet)
     }
     private func openUseSheet() {
         let prepared = library.draft(for: item, language: effectiveLanguage)

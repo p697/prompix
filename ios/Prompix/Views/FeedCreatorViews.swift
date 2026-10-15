@@ -39,6 +39,9 @@ struct FeedCreatorResults: View {
                 }.accessibilityIdentifier("loadMoreCreators")
             }
         }.padding(.horizontal, 20).padding(.bottom, 24)
+            .feedLookahead(cursor: store.nextCursor, generation: store.firstPageGeneration, enabled: matches && !store.isLoading && store.failure == nil && !store.isCached) {
+                Task { await store.loadMore() }
+            }
             .task(id: query) {
                 if !query.isEmpty { do { try await Task.sleep(for: .milliseconds(300)) } catch { return } }
                 guard !Task.isCancelled else { return }
