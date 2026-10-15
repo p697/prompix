@@ -1,10 +1,12 @@
+import { randomUUID } from "node:crypto";
 import { readXIntake } from "./x-intake.ts";
 import { readXReplyCursors, nextXReply, replyWindow, xReplyRequest, saveXReplyPage } from "./x-replies.ts";
 import { join } from "node:path";
 import { z } from "zod";
 import { atomic, json } from "./publication.ts";
-import { searchXFeed, xFeedRequest } from "./x.ts";
+import { searchXFeed, xFeedRequest, TransientXReadError } from "./x.ts";
 import { mergeCreatorCache, type CreatorCache } from "./creators.ts";
+import { windowBudget } from "./discovery-budget.ts";
 
 const exclude = "-is:retweet -is:reply -is:quote";
 // Independent discovery: topics span creators and tools, rather than mirroring
@@ -14,7 +16,10 @@ export const xFeeds = [
   { id: "video", query: `(prompt OR 提示词 OR プロンプト) (seedance OR veo OR sora OR kling OR runway) has:videos ${exclude}` },
   { id: "text", query: `(prompt OR 提示词 OR プロンプト) (ChatGPT OR Claude) (writing OR story OR tarot OR productivity OR 写作 OR 塔罗) ${exclude}` },
   { id: "web", query: `(prompt OR 提示词) (website OR "landing page" OR "web app" OR 网页) (v0 OR lovable OR bolt OR Claude) ${exclude}` },
-  { id: "skills", query: `("SKILL.md" OR "agent skill" OR "agent skills") (github OR clawhub OR "claude code" OR codex) ${exclude}` },
+  { id: "skills", query: `("SKILL.md" OR "agent skill" OR "agent skills") (design OR image OR video OR writing OR marketing OR creative OR 设计 OR 图片 OR 视频) ${exclude}` },
+  { id: "image-art", query: `(prompt OR 提示词 OR プロンプト) (cinematic OR editorial OR illustration OR poster OR portrait OR 海报 OR 插画) has:images ${exclude}` },
+  { id: "video-story", query: `(prompt OR workflow OR 提示词) (animation OR filmmaking OR storyboard OR cinematic OR 动画 OR 短片) has:videos ${exclude}` },
+  { id: "creative-skills", query: `("skill" OR "skills" OR "工作流") (github OR clawhub) (image OR video OR design OR storytelling OR presentation OR 图片 OR 视频) ${exclude}` },
 ] as const;
 const id = z.string().regex(/^\d{1,19}$/);
 const cursorSchema = z.object({
@@ -22,11 +27,13 @@ const cursorSchema = z.object({
   newest: id.optional(), startedAt: z.iso.datetime().optional(),
 });
 const stateSchema = z.object({
+  cooldownUntil: z.iso.datetime().optional(),
   nextFeed: z.number().int().nonnegative().default(0),
   cursors: z.record(z.string().regex(/^[a-f0-9]{64}$/), cursorSchema).default({}),
 });
 const attemptSchema = z.object({
   feed: z.string(), request: z.string(), reservedPosts: z.number().int().nonnegative(),
+  retryable: z.boolean().optional(), retryAfter: z.iso.datetime().optional(),
   state: z.enum(["reserved", "completed", "failed"]), count: z.number().int().nonnegative().optional(),
 });
 const ledgerSchema = z.object({
@@ -43,16 +50,16 @@ export function xFeedLimits(env: NodeJS.ProcessEnv = process.env) {
   return { requests: bounded("PROMPIX_X_MAX_REQUESTS", 4, 20), posts: bounded("PROMPIX_X_MAX_POSTS", 200, 1000) };
 }
 export type XFeedReport = {
-  status: "dry-run" | "not-configured" | "ok" | "daily-limit" | "no-pending" | "failed";
+  status: "dry-run" | "not-configured" | "ok" | "daily-limit" | "window-limit" | "no-pending" | "failed";
   requests: number; count: number; creators: number; dailyRequests: number; reservedPosts: number;
   limits: ReturnType<typeof xFeedLimits>; feeds: { id: string; count: number; hasNextPage: boolean }[];
   message?: string;
 };
 
-/** Caller holds the content lock. Failed/uncertain paid attempts are never retried that day. */
+/** Caller holds the content lock. Every retry reserves another slot; interrupted reservations remain blocked. */
 export async function collectXFeeds(root: string, options: {
   enabled: boolean; bearer?: string; now?: () => Date;
-  limits?: ReturnType<typeof xFeedLimits>; search?: typeof searchXFeed; replyOnly?: boolean;
+  limits?: ReturnType<typeof xFeedLimits>; search?: typeof searchXFeed; replyOnly?: boolean; sleep?: (ms: number) => Promise<void>;
 }) {
   const now = options.now ?? (() => new Date()), day = now().toISOString().slice(0, 10);
   const limits = options.limits ?? xFeedLimits();
@@ -64,6 +71,7 @@ export async function collectXFeeds(root: string, options: {
   if (!options.bearer) return { ...report, status: "not-configured" as const };
   const path = join(root, "x-feed-state.json"), ledgerPath = join(root, "x-feed-attempts", `${day}.json`);
   const state = stateSchema.parse(await json(path, {}));
+  if (state.cooldownUntil && Date.parse(state.cooldownUntil) > now().getTime()) return { ...report, status: "failed" as const };
   const creatorsPath = join(root, "creators.json");
   let creators = await json<CreatorCache>(creatorsPath, {});
   const legacy = legacySchema.parse(await json(join(root, "x-state.json"), {}));
@@ -76,13 +84,18 @@ export async function collectXFeeds(root: string, options: {
     report.reservedPosts = ledger.legacyPosts + ledger.attempts.reduce((sum, a) => sum + a.reservedPosts, 0);
   };
   refreshTotals();
-  if (ledger.attempts.some(a => a.state !== "completed")) return { ...report, status: "daily-limit" as const };
+  const failures = () => ledger.attempts.filter(a => a.state === "failed" && a.retryable).length;
+  if (ledger.attempts.some(a => a.state === "reserved" || (a.state === "failed" && !a.retryable)) || failures() >= 3)
+    return { ...report, status: "daily-limit" as const };
+  if (ledger.attempts.some(a => a.retryAfter && Date.parse(a.retryAfter) > now().getTime())) return { ...report, status: "failed" as const };
+  const requestAllowance = windowBudget(limits.requests, now());
+  const postAllowance = windowBudget(limits.posts, now());
   const leads = (await readXIntake(root, creators)).replyLeads;
   let replyCursors = await readXReplyCursors(root);
-  while (report.dailyRequests < limits.requests && limits.posts - report.reservedPosts >= 10) {
+  while (report.dailyRequests < requestAllowance && postAllowance - report.reservedPosts >= 10) {
     if (now().toISOString().slice(0, 10) !== day) break;
     const feed = xFeeds[state.nextFeed % xFeeds.length];
-    const limit = Math.min(50, limits.posts - report.reservedPosts);
+    const limit = Math.min(50, postAllowance - report.reservedPosts);
     const fingerprint = xFeedRequest(feed.query, { limit }).fingerprint;
     let cursor = state.cursors[fingerprint] ?? {};
     // Pagination cursors are ephemeral. Restart an old window from its committed
@@ -90,9 +103,9 @@ export async function collectXFeeds(root: string, options: {
     if (cursor.nextToken && (!cursor.startedAt || now().getTime() - Date.parse(cursor.startedAt) > 48 * 3600_000)) {
       cursor = { since: cursor.since };
     }
-    // Alternate reply recovery and fresh topics. Repeated invocations preserve this
+    // Reserve at most one in six reads for reply recovery. Repeated invocations preserve this
     // choice through the same daily ledger, rather than resetting an extra budget.
-    const reply = options.replyOnly || ledger.attempts.length % 2 === 0 ? nextXReply(leads, replyCursors, now().toISOString()) : undefined;
+    const reply = options.replyOnly || ledger.attempts.length % 6 === 5 ? nextXReply(leads, replyCursors, now().toISOString()) : undefined;
     if (options.replyOnly && !reply) { report.status = "no-pending"; break; }
     const request = reply ? xReplyRequest(reply, replyWindow(reply, replyCursors, now().toISOString()).nextToken, limit)
       : xFeedRequest(feed.query, { limit, since: cursor.since, nextToken: cursor.nextToken });
@@ -113,7 +126,7 @@ export async function collectXFeeds(root: string, options: {
         const saved = await saveXReplyPage(root, reply, replyCursors, now().toISOString(), result);
         replyCursors = saved.cursors;
       } else {
-        const snapshot = `${day}-feed-${String(ledger.attempts.length).padStart(3, "0")}.json`;
+        const snapshot = `${day}-feed-${String(ledger.attempts.length).padStart(3, "0")}-${randomUUID()}.json`;
         await atomic(join(root, "x-discovery", snapshot), { ...result, capturedAt: now().toISOString(), feed: feed.id, reviewStatus: "draft" });
         const newest = [cursor.newest, result.newest].filter((v): v is string => !!v)
           .sort((a, b) => BigInt(a) > BigInt(b) ? -1 : 1)[0];
@@ -131,12 +144,23 @@ export async function collectXFeeds(root: string, options: {
       report.feeds.push({ id: feedID, count: result.posts.length, hasNextPage: !!result.nextToken });
     } catch (error) {
       attempt.state = "failed";
+      if (error instanceof TransientXReadError) {
+        attempt.retryable = true;
+        attempt.retryAfter = new Date(now().getTime() + error.retryAfterMS).toISOString();
+        if (error.retryAfterMS > 30000) { state.cooldownUntil = attempt.retryAfter; await atomic(path, state); }
+      }
       await atomic(ledgerPath, ledger);
       report.status = "failed";
       report.message = (error instanceof Error ? error.message : "X feed failed").replaceAll(options.bearer, "[redacted]").slice(0, 300);
+      if (attempt.retryable && failures() < 3 && error instanceof TransientXReadError && error.retryAfterMS <= 30000
+        && report.dailyRequests < requestAllowance && postAllowance - report.reservedPosts >= 10) {
+        await (options.sleep ?? (ms => new Promise(resolve => setTimeout(resolve, ms))))(Math.max(error.retryAfterMS, failures() === 1 ? 1000 : 3000));
+        continue;
+      }
       return report;
     }
   }
-  report.status = report.requests ? "ok" : report.status === "no-pending" ? "no-pending" : "daily-limit";
+  report.status = report.status === "failed" && ledger.attempts.at(-1)?.state === "failed" ? "failed" : report.requests ? "ok" : report.status === "no-pending" ? "no-pending"
+    : report.dailyRequests < limits.requests && limits.posts - report.reservedPosts >= 10 ? "window-limit" : "daily-limit";
   return report;
 }

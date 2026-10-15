@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { rm } from "node:fs/promises";
 import { join } from "node:path";
 import { atomic, lockContent } from "./publication.ts";
+import { sendHeartbeat } from "./monitor-heartbeat.ts";
 import { auditDailyRun } from "./database-audit.ts";
 
 type Report = { startedAt: string; published: boolean; error?: string };
@@ -10,6 +11,7 @@ type Dependencies = {
   invalidate: (path: string) => Promise<void>;
   lock: typeof lockContent;
   log: (record: unknown) => void;
+  heartbeat: (record: Record<string, unknown>) => Promise<void>;
   audit: (record: Record<string, unknown>) => Promise<void>;
 };
 
@@ -17,6 +19,7 @@ type Dependencies = {
 export async function withDailyStatus<T extends Report>(root: string, report: T, work: () => Promise<void>, overrides: Partial<Dependencies> = {}) {
   const io: Dependencies = {
     write: atomic, invalidate: path => rm(path, { force: true }), lock: lockContent,
+    heartbeat: sendHeartbeat,
     audit: record => auditDailyRun(root, record),
     log: record => console.log(JSON.stringify(record)), ...overrides,
   };
@@ -25,6 +28,10 @@ export async function withDailyStatus<T extends Report>(root: string, report: T,
   const path = join(root, "status.json"), runID = randomUUID();
   let failure: { reason: unknown } | undefined;
   const diagnostics: { statusWriteError?: string; statusInvalidationError?: string; unlockError?: string; auditWriteError?: string } = {};
+  const heartbeat = async (record: Record<string, unknown>) => {
+    try { await io.heartbeat(record); }
+    catch { io.log({ event: "monitor_heartbeat_failed", runID, state: record.state }); }
+  };
   const fail = (reason: unknown) => { failure ??= { reason }; };
   let started = false;
   let finishedAt: string;
@@ -32,6 +39,7 @@ export async function withDailyStatus<T extends Report>(root: string, report: T,
   try {
     const initial = { ...report, runID, state: "running" };
     io.log(initial);
+    await heartbeat(initial);
     try {
       await io.write(path, initial);
       started = true;
@@ -67,6 +75,7 @@ export async function withDailyStatus<T extends Report>(root: string, report: T,
       }
       try { await unlock(); }
       catch (error) { diagnostics.unlockError = String(error); fail(error); }
+      await heartbeat(snapshot());
       io.log({ ...snapshot(), started });
     }
   }

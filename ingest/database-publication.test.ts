@@ -22,10 +22,11 @@ function catalog(count: number): Catalog {
   const prompts = Array.from({ length: count }, (_, i) => prompt(i));
   return { schemaVersion: 1, version: editionVersion(prompts, []), publishedAt: "2026-10-14T00:00:00.000Z", prompts, removedIDs: [] };
 }
-async function fixture() {
+async function fixture(baselineCount = 2) {
   const root = await mkdtemp(join(tmpdir(), "prompix-database-publication-"));
   const { pg, writer } = await createTestDatabase(), original = catalog(2);
-  const initial = await stagePublication(writer, original);
+  // Large-library cases bootstrap historical rows, then test ordinary bounded daily changes.
+  const initial = await stagePublication(writer, catalog(baselineCount));
   await activatePublication(writer, initial, "0");
   const publisher = databasePublisher(operation => operation(writer));
   const manifest = manifestSchema.parse({ schemaVersion: 1, version: original.version, publishedAt: original.publishedAt,
@@ -44,7 +45,7 @@ async function fixture() {
 }
 
 test("database input retains 1,201 items while legacy exports remain bounded and preserve raw text", async t => {
-  const f = await fixture(); t.after(f.cleanup);
+  const f = await fixture(1101); t.after(f.cleanup);
   const next = catalog(1201), preparation = await f.start();
   const result = await publishDailyCatalog(f.root, next, preparation, f.transport);
   assert.equal(result.authoritative.prompts.length, 1201);
@@ -74,7 +75,7 @@ test("compatibility export respects the decoded byte limit without hiding malfor
 });
 
 test("partial activation resumes the persisted target without another input or paid batch", async t => {
-  const f = await fixture(); t.after(f.cleanup);
+  const f = await fixture(1002); t.after(f.cleanup);
   const next = catalog(1003);
   f.failUpload(key => { if (key === "v2/latest.json") throw new Error("Storage offline"); });
   await assert.rejects(publishDailyCatalog(f.root, next, await f.start(), f.transport), /Storage offline/);
@@ -90,7 +91,7 @@ test("partial activation resumes the persisted target without another input or p
 });
 
 test("a new removal corrects the full retained target and both compatibility channels on retry", async t => {
-  const f = await fixture(); t.after(f.cleanup);
+  const f = await fixture(1003); t.after(f.cleanup);
   f.failUpload(key => { if (key === "v1/latest.json") throw new Error("Legacy pointer offline"); });
   const next = catalog(1004);
   await assert.rejects(publishDailyCatalog(f.root, next, await f.start(), f.transport), /Legacy pointer offline/);
@@ -121,7 +122,7 @@ test("database failure and concurrent publication cannot silently revert to the 
 });
 
 test("database rollback requires a full DB release, preserves tombstones and creates a durable hold", async t => {
-  const f = await fixture(); t.after(f.cleanup);
+  const f = await fixture(1101); t.after(f.cleanup);
   await publishDailyCatalog(f.root, catalog(1101), await f.start(), f.transport);
   const target = (await f.publisher.pointer()).release;
   const next = catalog(1201); next.prompts.shift(); next.removedIDs = ["fixture-0"];

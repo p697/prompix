@@ -8,9 +8,9 @@
     "backfill:video": "tsx ingest/backfill.ts",
     "validate": "tsx ingest/cli.ts validate",
     "stage": "tsx ingest/cli.ts stage",
-    "test": "tsx --test ingest/*.test.ts services/feed/*.test.ts",
+    "test": "tsx --test ingest/*.test.ts services/feed/*.test.ts services/monitor/*.test.ts",
     "test:feed": "tsx --test services/feed/*.test.ts",
-    "typecheck": "tsc --noEmit && tsc -p services/content/tsconfig.json && tsc -p services/feed/tsconfig.json",
+    "typecheck": "tsc --noEmit && tsc -p services/content/tsconfig.json && tsc -p services/feed/tsconfig.json && tsc -p services/monitor/tsconfig.json",
     "types:feed": "wrangler types services/feed/worker-configuration.d.ts --config services/feed/wrangler.jsonc --env-interface FeedEnv --include-runtime false",
     "daily": "tsx ingest/daily.ts",
     "remove": "tsx ingest/remove.ts",
@@ -25,7 +25,8 @@
     "collect:skills": "tsx ingest/skill-intake.ts",
     "report:database": "tsx scripts/report-database.ts",
     "backup:database-publication": "tsx scripts/backup-database-publication.ts",
-    "check:database-backup": "tsx scripts/check-database-backup.ts"
+    "check:database-backup": "tsx scripts/check-database-backup.ts",
+    "types:monitor": "wrangler types services/monitor/worker-configuration.d.ts --config services/monitor/wrangler.jsonc --env-interface MonitorEnv --include-runtime false"
   },
   "dependencies": {
     "csv-parse": "^7.0.3",

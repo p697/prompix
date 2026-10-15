@@ -1,0 +1,17 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "prompix-ingest-monitor",
+  "account_id": "2af7e222bfcfd78b5df8f627971dfbca",
+  "main": "worker.ts",
+  "compatibility_date": "2026-10-15",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "preview_urls": false,
+  "vars": {"MONITOR_LABEL": "production"},
+  "durable_objects": {"bindings": [{"name": "MONITOR", "class_name": "IngestMonitor"}]},
+  "migrations": [{"tag": "v1", "new_sqlite_classes": ["IngestMonitor"]}],
+  "send_email": [{"name": "ALERT_EMAIL", "allowed_sender_addresses": ["alerts@prompix.dev"]}],
+  "secrets": {"required": ["HEARTBEAT_SECRET", "ALERT_RECIPIENT"]},
+  "observability": {"enabled": true, "head_sampling_rate": 1, "redact_query_string": true,
+    "logs": {"enabled": true, "invocation_logs": false}}
+}

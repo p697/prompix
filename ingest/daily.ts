@@ -1,3 +1,6 @@
+import { limitNewPublications } from "./publication-quota.ts";
+import { withPublisherDatabase } from "./database-publication.ts";
+import { prepareDiscoveredSkills } from "./discovered-skill-daily.ts";
 import { preparePublisherSkills } from "./publisher-skill-daily.ts";
 import { prepareXAvailability, filterXAvailability, assertXAvailability } from "./x-availability.ts";
 import { mkdir, readFile, writeFile, rm } from "node:fs/promises";
@@ -193,6 +196,9 @@ async function run() {
     all.push(...filterXAvailability(xIntake.candidates, xAvailability.state).prompts);
     await atomic(join(root, "candidates", "x-native.json"), xIntake.candidates);
     await atomic(join(root, "x-intake", "status.json"), { updatedAt: new Date().toISOString(), ...xIntake.report, threads: xIntake.threads, records: xIntake.records });
+    const discoveredSkills = await prepareDiscoveredSkills(root, xIntake.records, { enabled: publishing });
+    report.sources["skill-discovery"] = discoveredSkills.report;
+    all.push(...discoveredSkills.candidates);
     report.sources[videoArchive.id] = { status: "retired", count: 0 };
     const candidates = enrichCreators(mergeCandidates(all), creators);
     report.counts.candidates = countByKind(candidates);
@@ -219,6 +225,11 @@ async function run() {
       const { fingerprint: _, featured: __, reviewStatus: ___, editorialRank: ____, ...prompt } = candidate;
       return { ...prompt, prompt: publicationText(candidate, reviews) };
     });
+    if (publishing && publication.previous?.database) {
+      const quota = await withPublisherDatabase(db => limitNewPublications(db, planned));
+      planned = quota.prompts;
+      report.sources["publication-quota"] = quota.report;
+    }
     const refreshed = await refreshCreatorProfiles(planned, creators, root, {
       enabled: process.env.PROMPIX_CREATOR_LOOKUP_ENABLED === "true", publishing, bearer: process.env.X_BEARER_TOKEN,
     });

@@ -14,6 +14,8 @@ struct ContentPreview: Identifiable {
     let attribution: String
     let media: Prompt.Media?
     let cover: Prompt.Cover?
+    var hasSourceImage: Bool { media?.image != nil || media?.imageURL != nil }
+    var usesTextArtwork: Bool { (isSkill || kind == .text) && !hasSourceImage }
     var displayKind: String { isSkill ? "Skill" : kind.title }
     var displaySymbol: String { isSkill ? "square.stack.3d.up" : kind.symbol }
 

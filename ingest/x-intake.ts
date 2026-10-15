@@ -271,7 +271,7 @@ export async function readXIntake(root: string, creators: CreatorCache = {}, exc
   excerpts ??= await readXExcerptReviews(root);
   const directory = join(root, "x-discovery");
   let names: string[];
-  try { names = (await readdir(directory)).filter(name => /^\d{4}-\d{2}-\d{2}(?:-(?:feed|check)-\d{3})?\.json$/.test(name)); }
+  try { names = (await readdir(directory)).filter(name => /^\d{4}-\d{2}-\d{2}(?:-(?:feed|check)-\d{3}(?:-[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})?)?\.json$/.test(name)); }
   catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return convertXDiscovery([], creators); throw error; }
   const snapshots: Snapshot[] = [], errors: XIntakeReport["snapshotErrors"] = [];
   for (const name of names.sort()) {

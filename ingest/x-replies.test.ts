@@ -9,7 +9,7 @@ import { analyzeXReplyThread, xReplyRequest, replyWindow, nextXReply, readXReply
 import { collectXFeeds } from "./x-feed.ts";
 import { parseXSearchResponse, type xFeedRequest } from "./x.ts";
 
-const now = "2026-10-13T03:00:00.000Z";
+const now = "2026-10-13T21:00:00.000Z";
 const root: XPost = { id: "100", author_id: "9", text: "A new image. Prompt in first reply.", created_at: "2026-10-13T01:00:00.000Z" };
 const creator = { id: "x-fixture", platform: "x" as const, externalID: "9", username: "fixture", displayName: "Fixture", profileURL: "https://x.com/fixture" };
 const lead: XReplyLead = { post: root, creator, capturedAt: now, snapshot: "fixture.json", media: [] };
@@ -110,19 +110,19 @@ test("reply windows expire safely, keep separate query identities, and periodica
   assert.equal(replyWindow(lead, { "100": cursor }, "2026-10-16T03:00:00Z").nextToken, undefined);
   assert.equal(replyWindow({ ...lead, creator: { ...creator, username: "renamed" } }, { "100": cursor }, now).nextToken, undefined);
   assert.equal(nextXReply([lead], { "100": { ...cursor, completedAt: now } }, now), undefined);
-  assert.equal(nextXReply([lead], { "100": { ...cursor, completedAt: now } }, "2026-10-14T03:00:00Z")?.post.id, "100");
+  assert.equal(nextXReply([lead], { "100": { ...cursor, completedAt: now } }, "2026-10-14T21:00:00Z")?.post.id, "100");
   assert.equal(nextXReply([lead], {}, "2026-10-20T03:00:00Z"), undefined);
 });
 
-test("ordinary runs alternate root recovery and new topics under one budget", () => fixture(async directory => {
+test("ordinary runs reserve one in six calls for reply recovery under one budget", () => fixture(async directory => {
   const queries: string[] = [];
   const collected = await collectXFeeds(directory, { enabled: true, bearer: "fixture", now: () => new Date(now),
-    limits: { requests: 2, posts: 100 }, search: async (_, request) => {
+    limits: { requests: 6, posts: 300 }, search: async (_, request) => {
       queries.push(request.query); return result(request, request.conversation ? [reply()] : [{ ...root, id: "200", text: "A topic result." }]);
     } });
-  assert.equal(collected.requests, 2);
-  assert.match(queries[0], /^conversation_id:100/);
-  assert.match(queries[1], /has:images/);
+  assert.equal(collected.requests, 6);
+  assert.match(queries[5], /^conversation_id:100/);
+  assert.match(queries[0], /has:images/);
   assert.equal((await readXIntake(directory)).report.discovered, 2);
   assert.equal((await readXReplyCursors(directory))["100"].pages, 1);
 }));

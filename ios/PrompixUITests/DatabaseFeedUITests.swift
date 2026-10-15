@@ -50,6 +50,25 @@ import UIKit
         XCTAssertTrue(app.buttons["copyPrompt"].waitForExistence(timeout: 10))
     }
 
+    func testLatestCollectionIsVisibleAtLaunchAndOpensASeparateNewestFeed() throws {
+        launch()
+        let heading = app.staticTexts["latestContentHeading"]
+        XCTAssertTrue(heading.waitForExistence(timeout: 10)); XCTAssertTrue(heading.isHittable)
+        let latest = app.buttons["prompt-database-fixture-9999"]
+        XCTAssertTrue(latest.waitForExistence(timeout: 10)); XCTAssertTrue(latest.isHittable)
+        capture("freshness-01-home-latest")
+        app.buttons["showLatestFeed"].tap()
+        XCTAssertTrue(app.buttons["leaveLatestFeed"].waitForExistence(timeout: 5))
+        XCTAssertTrue(latest.waitForExistence(timeout: 10)); latest.tap()
+        XCTAssertTrue(app.buttons["copyPrompt"].waitForExistence(timeout: 10))
+        XCTAssertEqual(app.staticTexts["detailTitle"].label, "Database item 9999")
+        capture("freshness-02-newest-detail")
+        app.buttons["closePromptDetail"].tap()
+        app.buttons["leaveLatestFeed"].tap()
+        XCTAssertTrue(heading.waitForExistence(timeout: 5))
+        XCTAssertTrue(try requests().contains { $0["query"] as? String == "__latest__" })
+    }
+
     func testProgressiveImageDetailRetainsPreviewAndPositionThenReusesCompleteCache() throws {
         launch(["--feed-detail-preview-test"])
         search("preview")

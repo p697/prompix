@@ -46,7 +46,7 @@ export async function getFeed(db: Database, query: { filters: FeedFilters; limit
   // match. Resolve visibility once before ranking; ordinary keyset pages remain inlined.
   // Fetch card/translation payloads only after the bounded page has been selected.
   const rows = (await db.query<{ position: number; rank: number; card: FeedCard }>(`with visible_entries as ${patterns.length ? "materialized" : "not materialized"} (
-    select e.position,e.revision_id from prompix.release_entries e
+    select ${filters.sort === "latest" ? "e.latest_position" : "e.position"} as position,e.revision_id from prompix.release_entries e
     join prompix.releases r on r.id=e.release_id
     join prompix.content c on c.id=e.content_id
     where e.release_id=$1 and r.published_at is not null and c.removed_at is null
@@ -142,7 +142,7 @@ export async function getBrowse(db: Database, locale: FeedLocale) {
   const result = (await db.query<{ collections: { id: string; count: number; covers: FeedCard[] }[];
     models: { name: string; count: number }[]; modelCount: number }>(`
     with visible_entries as materialized (
-      select e.position,e.revision_id from prompix.release_entries e
+      select e.latest_position as position,e.revision_id from prompix.release_entries e
       join prompix.releases r on r.id=e.release_id
       join prompix.content c on c.id=e.content_id
       where e.release_id=$1 and r.published_at is not null and c.removed_at is null

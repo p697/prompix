@@ -2,6 +2,20 @@ import XCTest
 @testable import Prompix
 
 @MainActor final class FeedRevisionTests: XCTestCase {
+    func testSkillSourceImageUsesPhotoArtworkAndRetainsAVisibleTitle() throws {
+        let cardData = try FeedFixture.page()
+        var raw = try XCTUnwrap(JSONSerialization.jsonObject(with: cardData) as? [String: Any])
+        var cards = try XCTUnwrap(raw["items"] as? [[String: Any]])
+        cards[0]["contentType"] = "skill"
+        cards[0]["media"] = ["imageURL": "https://api.prompix.dev/media/" + String(repeating: "a", count: 64) + ".jpg", "aspectRatio": 1.5]
+        raw["items"] = cards
+        let page = try JSONDecoder().decode(FeedPage.self, from: JSONSerialization.data(withJSONObject: raw))
+        let preview = ContentPreview(try XCTUnwrap(page.items.first))
+        XCTAssertTrue(preview.isSkill)
+        XCTAssertFalse(preview.usesTextArtwork)
+        XCTAssertEqual(PromptCardGeometry.aspectRatio(for: preview), 1.5)
+        XCTAssertGreaterThan(PromptCardGeometry.height(for: preview, width: 156, titleFont: .preferredFont(forTextStyle: .footnote)), 104)
+    }
     func testSynchronousDetailReuseRequiresMatchingRevisionAndDownloadedLocale() async throws {
         let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }

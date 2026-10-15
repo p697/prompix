@@ -15,6 +15,7 @@ struct FeedCheckpoint: Codable {
 @MainActor @Observable final class FeedRepository {
     let discovery: FeedStore
     let search: FeedStore
+    let latest: FeedStore
     let creators: FeedCreatorStore
     let browse: FeedBrowseStore
     let service: any FeedServing
@@ -31,6 +32,7 @@ struct FeedCheckpoint: Codable {
         self.service = service; self.cache = cache; self.checkpoint = checkpoint; self.commitRemovals = commitRemovals
         removedIDs = Set(checkpoint.removedIDs)
         creators = FeedCreatorStore(service: service, cache: cache); browse = FeedBrowseStore(service: service, cache: cache)
+        latest = FeedStore(service: service, cache: cache)
         discovery = FeedStore(service: service, cache: cache); search = FeedStore(service: service, cache: cache)
     }
     func makeCreatorStore() -> FeedCreatorStore { FeedCreatorStore(service: service, cache: cache) }
@@ -121,7 +123,7 @@ struct FeedCheckpoint: Codable {
         // A known takedown blocks use immediately, even if durable storage fails.
         removedIDs = ids; details = details.filter { !ids.contains($0.key) }
         detailSizes = detailSizes.filter { !ids.contains($0.key) }
-        detailOrder.removeAll { ids.contains($0) }; discovery.discard(ids); search.discard(ids)
+        detailOrder.removeAll { ids.contains($0) }; discovery.discard(ids); search.discard(ids); latest.discard(ids)
         guard next.after != checkpoint.after || ids != Set(checkpoint.removedIDs) else { return }
         try commitRemovals(next)
         checkpoint = next

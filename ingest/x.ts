@@ -222,7 +222,11 @@ export function parseXLookupResponse(value: unknown, ids: readonly string[]) {
     coverage: searchCoverage({ ...body, meta: { result_count: posts.length } }) };
 }
 
-/** One bounded request. Never retry a paid read or probe another field convention. */
+/** A retryable read still consumes its reserved request and post budget. */
+export class TransientXReadError extends Error {
+  constructor(message: string, public readonly retryAfterMS = 1000) { super(message); }
+}
+/** One bounded request. Retry policy belongs to the persistent, budgeted caller. */
 async function requestX(url: string, bearer: string, operation: "search" | "lookup", maxBytes = 500_000) {
   const unchanged = operation === "search" ? "cursor unchanged" : "cached posts unchanged";
   let response: Response;
@@ -230,10 +234,16 @@ async function requestX(url: string, bearer: string, operation: "search" | "look
     response = await fetch(url, {
       headers: { Authorization: `Bearer ${bearer}` }, redirect: "manual", signal: AbortSignal.timeout(60_000),
     });
-  } catch { throw new Error(`X ${operation} request failed; ${unchanged}`); }
+  } catch { throw new TransientXReadError(`X ${operation} request failed; ${unchanged}`); }
   if (!response.ok) {
     try { await response.body?.cancel(); } catch { /* Discard error bodies and transport diagnostics. */ }
-    throw new Error(`X ${operation} returned HTTP ${response.status}; ${unchanged}`);
+    const message = `X ${operation} returned HTTP ${response.status}; ${unchanged}`;
+    if (response.status === 429 || response.status >= 500) {
+      const retry = response.headers.get("retry-after");
+      const delay = retry && /^\d+$/.test(retry) ? Number(retry) * 1000 : retry ? Date.parse(retry) - Date.now() : 1000;
+      throw new TransientXReadError(message, Number.isFinite(delay) ? Math.max(1000, Math.min(delay, 24 * 3600000)) : 1000);
+    }
+    throw new Error(message);
   }
   let bytes: Buffer;
   try { bytes = await readResponseBytes(response, maxBytes); }

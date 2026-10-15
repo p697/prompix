@@ -1,3 +1,4 @@
+import { exportPublicationHistory } from "../services/feed/publication-history.ts";
 import { createHash } from "node:crypto";
 import { mkdir, realpath, writeFile } from "node:fs/promises";
 import { basename, dirname, isAbsolute, relative, resolve, sep } from "node:path";
@@ -21,7 +22,8 @@ const backup = await withPublisherDatabase(db => db.transaction(async tx => {
   const state = await getState(tx);
   const catalog = await exportRelease(tx, state.release);
   preparePublication(catalog);
-  return { format: "prompix-publication-backup-v1", createdAt: new Date().toISOString(), state, catalog };
+  const firstPublications = await exportPublicationHistory(tx);
+  return { format: "prompix-publication-backup-v2", firstPublications, createdAt: new Date().toISOString(), state, catalog };
 }));
 const bytes = JSON.stringify(backup);
 await writeFile(destination, bytes, { flag: "wx", mode: 0o600 });
