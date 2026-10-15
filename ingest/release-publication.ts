@@ -129,16 +129,46 @@ export async function loadPublicationState(root: string): Promise<PublicationSta
   return bytes ? stateSchema.parse(JSON.parse(bytes.toString())) : { schemaVersion: 1, v2Initialized: false, v1Frozen: false };
 }
 async function saveState(root: string, state: PublicationState) { await atomic(statePath(root), stateSchema.parse(state)); }
-export const defaultReleaseTransport: ReleaseTransport = {
-  async read(url, maximum) {
-    const parsed = new URL(url);
-    if (parsed.origin !== base || parsed.username || parsed.password) throw new Error("Untrusted publication URL");
-    const response = await fetch(url, { redirect: "error", headers: { "Cache-Control": "no-cache" }, signal: AbortSignal.timeout(60_000) });
-    if (response.status === 404) { await response.body?.cancel(); return { status: 404 }; }
-    if (response.status !== 200) { await response.body?.cancel(); throw new Error(`Content HTTP ${response.status}`); }
-    return { status: 200, bytes: await readResponseBytes(response, maximum) };
-  }, upload,
-};
+class RetryableReadStatus extends Error {
+  constructor(readonly status: number) { super(`Content HTTP ${status}`); }
+}
+function transientReadError(error: unknown): boolean {
+  for (let depth = 0; error instanceof Error && depth < 6; depth++, error = error.cause) {
+    if (error instanceof RetryableReadStatus || error.name === "TimeoutError") return true;
+    const code = (error as NodeJS.ErrnoException).code;
+    if (["ECONNRESET", "ECONNREFUSED", "ETIMEDOUT", "EPIPE", "ENETUNREACH", "EHOSTUNREACH", "EAI_AGAIN",
+      "UND_ERR_CONNECT_TIMEOUT", "UND_ERR_HEADERS_TIMEOUT", "UND_ERR_BODY_TIMEOUT", "UND_ERR_SOCKET"].includes(code ?? "")) return true;
+  }
+  return false;
+}
+/** Only bounded public GETs are replayed; pointer writes and SQL commits are never retried here. */
+export function createReleaseTransport(options: { fetcher?: typeof fetch; sleep?: (ms: number) => Promise<void> } = {}): ReleaseTransport {
+  const fetcher = options.fetcher ?? fetch;
+  const sleep = options.sleep ?? (ms => new Promise(resolve => setTimeout(resolve, ms)));
+  return {
+    async read(url, maximum) {
+      const parsed = new URL(url);
+      if (parsed.origin !== base || parsed.username || parsed.password) throw new Error("Untrusted publication URL");
+      for (let attempt = 0; ; attempt++) {
+        try {
+          const response = await fetcher(url, { redirect: "error", headers: { "Cache-Control": "no-cache" }, signal: AbortSignal.timeout(60_000) });
+          if (response.status === 404) { await response.body?.cancel(); return { status: 404 }; }
+          if (response.status !== 200) {
+            await response.body?.cancel();
+            if (response.status === 429 || response.status >= 500) throw new RetryableReadStatus(response.status);
+            throw new Error(`Content HTTP ${response.status}`);
+          }
+          return { status: 200, bytes: await readResponseBytes(response, maximum) };
+        } catch (error) {
+          if (attempt < 3 && transientReadError(error)) { await sleep([1000, 3000, 8000][attempt]); continue; }
+          // Public path and attempts identify the failing step without logging credentials or bodies.
+          throw new Error(`Publication read failed: ${parsed.hostname}${parsed.pathname} after ${attempt + 1} attempt(s)`, { cause: error });
+        }
+      }
+    }, upload,
+  };
+}
+export const defaultReleaseTransport = createReleaseTransport();
 export function publicationDatabase(state: PublicationState, transport = defaultReleaseTransport): DatabasePublisher | undefined {
   if (transport.database) return transport.database;
   if (state.databaseInitialized || state.pending?.database || process.env.PROMPIX_DATABASE_ENABLED === "true")
