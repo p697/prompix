@@ -164,7 +164,7 @@ def export_option_checks(options: dict, method: str) -> dict[str, bool]:
         'localExportOnly': options.get('method') == method and options.get('destination') == 'export',
         # Xcode omits this Store-only setting from generated debugging options.
         # Actual archive/export version equality is checked independently below.
-        'noAutomaticVersionMutation': version_management is False or (method == 'debugging' and version_management is None),
+        'noAutomaticVersionMutation': version_management is False,
         'explicitExportTeam': isinstance(team, str) and bool(re.fullmatch(r'[A-Z0-9]+', team)),
     }
     if method == 'app-store-connect':

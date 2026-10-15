@@ -39,8 +39,10 @@ class IdentifierTests(unittest.TestCase):
 
 
 class ExportOptionTests(unittest.TestCase):
-    def test_generated_development_options_may_omit_store_only_version_flag(self):
+    def test_development_version_management_must_be_explicitly_disabled(self):
         options = {'method': 'debugging', 'destination': 'export', 'teamID': 'TESTTEAM'}
+        self.assertFalse(AUDIT.export_option_checks(options, 'debugging')['noAutomaticVersionMutation'])
+        options['manageAppVersionAndBuildNumber'] = False
         self.assertTrue(all(AUDIT.export_option_checks(options, 'debugging').values()))
         options['manageAppVersionAndBuildNumber'] = True
         self.assertFalse(AUDIT.export_option_checks(options, 'debugging')['noAutomaticVersionMutation'])

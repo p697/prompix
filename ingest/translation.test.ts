@@ -626,6 +626,7 @@ process.stdin.on("end", () => {
   fs.appendFileSync(${JSON.stringify(calls)}, request.locale + "\\n");
   fs.writeFileSync(process.argv[process.argv.indexOf("--output-last-message") + 1], JSON.stringify({ translations: [] }));
 });
+
 `);
     await chmod(executable, 0o700);
     const result = await prepareDailyTranslations([item], root, {
@@ -635,5 +636,26 @@ process.stdin.on("end", () => {
     assert.equal(result.report.status, "updated"); assert.equal(result.report.attempted, 1);
     assert.equal(await readFile(calls, "utf8"), "zh-Hans\n");
     assert.equal(result.report.coverage.en, 1);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+
+test("exhausted transient translation failures remain visible to monitoring without replaying spent budget", async () => {
+  const { mkdtemp, writeFile, rm, chmod } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const { prepareDailyTranslations } = await import("./translation-daily.ts");
+  const root = await mkdtemp(join(tmpdir(), "prompix-translation-failure-"));
+  try {
+    const executable = join(root, "fail.cjs");
+    await writeFile(executable, `#!${process.execPath}\nprocess.stdin.resume(); process.stdin.on("end", () => process.exit(1));\n`);
+    await chmod(executable, 0o700);
+    const env = { PROMPIX_TRANSLATION_PROVIDER: "codex", PROMPIX_CODEX: executable,
+      PROMPIX_TRANSLATION_LOCALES: "ja", PROMPIX_TRANSLATION_MAX_REQUESTS: "1" };
+    const failed = await prepareDailyTranslations([item], root, env);
+    assert.equal(failed.report.status, "partial"); assert.equal(failed.report.failed, 1);
+    const repeated = await prepareDailyTranslations([item], root, env);
+    assert.equal(repeated.report.attempted, 1); assert.equal(repeated.report.failed, 1);
+    assert.equal(repeated.report.status, "updated", "Old failures must not masquerade as another failed run");
   } finally { await rm(root, { recursive: true, force: true }); }
 });

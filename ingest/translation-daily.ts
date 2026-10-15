@@ -9,7 +9,7 @@ import { attachTranslations, inheritPreviousTranslations, translationLocales } f
 import { codexTranslationProvider, openAITranslationProvider } from "./translation-provider.ts";
 import { runTranslations, type TranslationRunReport } from "./translation-runner.ts";
 
-export type DailyTranslationStatus = { status: "cached" | "running" | "updated" | "busy" | "failed"; model?: string; error?: string;
+export type DailyTranslationStatus = { status: "cached" | "running" | "updated" | "busy" | "failed" | "partial"; model?: string; error?: string;
   total: number; coverage: Record<string, number>; pendingRecords: Record<string, number>; attempted?: number; rejected?: number; failed?: number; reservedUSD?: number; measuredUSD?: number | null };
 export async function prepareDailyTranslations(items: readonly Prompt[], root: string, environment: NodeJS.ProcessEnv = process.env, allowModelCalls = true) {
   const directory = join(root, "translations"), cachePath = join(directory, "cache.json"), lock = join(directory, "run.lock");
@@ -54,7 +54,7 @@ export async function prepareDailyTranslations(items: readonly Prompt[], root: s
           report = await runTranslations({ items: prepared, cache, provider, providerName, model, locales, fairLocales: true,
             maxRequests: Number(environment.PROMPIX_TRANSLATION_MAX_REQUESTS ?? "36"), maxUSD: Number(environment.PROMPIX_TRANSLATION_MAX_USD ?? "2"), maxOutputTokens,
             persist: async (state, progress) => { await atomic(cachePath, state); await atomic(ledgerPath, { ...progress, day, model, updatedAt: new Date().toISOString() }); }, prior, reviews });
-          status = "updated";
+          status = report.failed > (prior?.failed ?? 0) ? "partial" : "updated";
         } catch (reason) { status = "failed"; error = reason instanceof Error ? reason.message : "Translation preparation failed"; }
         finally { await rm(lock, { recursive: true, force: true }); }
       }
