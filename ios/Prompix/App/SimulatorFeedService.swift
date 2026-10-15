@@ -57,6 +57,13 @@ actor SimulatorFeedService: FeedServing {
             catch { try? record("page-cancelled"); throw error }
         }
         try record("page", query: query.sort == "latest" ? "__latest__" : query.q, cursor: cursor)
+        if query.creator != nil {
+            try record("creatorWorks", query: (query.creator ?? "") + ":" + (query.kind ?? "all"), cursor: cursor)
+            try await waitForAcceptanceGate("creator")
+        }
+        if query.model != nil || query.collection != nil {
+            try record("scopedPage", query: query.model ?? query.collection ?? "", cursor: cursor)
+        }
         if query.q == "slow" { try? await Task.sleep(for: .seconds(2)) }
         if query.q == "retry", failed.insert("page-retry").inserted { throw FeedError.rateLimited(2) }
         let pageRelease = release ?? activeRelease
@@ -104,11 +111,22 @@ actor SimulatorFeedService: FeedServing {
     }
     func creators(q: String, cursor: String?, release: String?) async throws -> FeedCreatorsPage {
         try record("creators", query: q, cursor: cursor)
+        try await waitForAcceptanceGate("directory")
         let values = (0..<75).filter { q.isEmpty || creator($0).matchesSearch(q) }
         let start = Int(cursor ?? "0") ?? 0, indices = Array(values.dropFirst(start).prefix(FeedClient.pageSize))
         return FeedCreatorsPage(schemaVersion: 3, release: Self.release, items: indices.map { index in
             .init(creator: creator(index), count: (Self.count - 1 - index) / 75 + 1)
         }, nextCursor: start + indices.count < values.count ? String(start + indices.count) : nil)
+    }
+    private func waitForAcceptanceGate(_ name: String) async throws {
+        let deadline = Date().addingTimeInterval(60)
+        while FileManager.default.fileExists(atPath: directory.appending(path: "hold-" + name).path) {
+            try Task.checkCancellation()
+            guard Date() < deadline else { throw FeedError.unavailable(0) }
+            try await Task.sleep(for: .milliseconds(100))
+        }
+        try Task.checkCancellation()
+        if FileManager.default.fileExists(atPath: directory.appending(path: "fail-" + name).path) { throw FeedError.unavailable(0) }
     }
     func browse(locale: String) async throws -> FeedBrowse {
         try record("browse")

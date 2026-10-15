@@ -12,6 +12,31 @@ import XCTest
         return url
     }
 
+    func testScopedPreviewsStayBoundToQueryAndDisappearAfterRemoval() async throws {
+        let server = FeedRepositoryServer()
+        await server.setCards([FeedFixture.card()])
+        let feed = FeedRepository(service: server, cache: FeedCache(directory: directory), checkpoint: FeedCheckpoint(), commitRemovals: { _ in })
+        await feed.discovery.load(FeedQuery(locale: "original"))
+        await feed.search.load(FeedQuery(locale: "original", q: "fixture"))
+        XCTAssertEqual(feed.previewCards(for: FeedQuery(locale: "original", model: "Test model")).map(\.id), ["test-item"], "Repeated cards across surfaces must not duplicate")
+        XCTAssertTrue(feed.previewCards(for: FeedQuery(locale: "original", kind: "image", model: "Test model")).isEmpty)
+        XCTAssertTrue(feed.previewCards(for: FeedQuery(locale: "original", kind: "skill", model: "Test model")).isEmpty)
+        XCTAssertTrue(feed.previewCards(for: FeedQuery(locale: "original", model: "Other model")).isEmpty)
+        XCTAssertTrue(feed.previewCards(for: FeedQuery(locale: "original", model: "Test model", q: "different")).isEmpty)
+        XCTAssertTrue(feed.previewCards(for: FeedQuery(locale: "original")).isEmpty)
+        XCTAssertTrue(feed.previewCards(for: FeedQuery(locale: "original", creator: "other-creator")).isEmpty)
+        await server.setRemoval(true); try await feed.refresh()
+        XCTAssertTrue(feed.previewCards(for: FeedQuery(locale: "original", model: "Test model")).isEmpty)
+    }
+
+    func testExplorationUsesExactModelAndDoesNotInventAnUnmatchedTopic() throws {
+        let item = FeedFixture.prompt(), paths = FeedExplorationPath.paths(for: item)
+        XCTAssertEqual(paths.map(\.id), ["model"])
+        XCTAssertEqual(paths.first?.query.model, item.model)
+        XCTAssertNil(paths.first?.query.kind, "A model path can explore multiple modalities")
+        XCTAssertEqual(try paths.first?.query.validated(), paths.first?.query)
+    }
+
     func testForegroundRefreshUpdatesFirstPageAndLeavesUnchangedPublicationAlone() async throws {
         let source = try source(), server = FeedRepositoryServer()
         let library = Library(directory: directory, catalogURL: source, feedService: server)
@@ -145,6 +170,8 @@ private actor FeedRepositoryServer: FeedServing {
     private var unavailable = false
     private(set) var calls: [String] = []
     private var activeRelease = FeedFixture.release
+    private var cards: [FeedCard] = []
+    func setCards(_ value: [FeedCard]) { cards = value }
     func setRelease(_ value: String) { activeRelease = value }
     func latestCalls() -> Int { calls.filter { $0 == "latest" }.count }
     func setRemoval(_ value: Bool) { removed = value }
@@ -152,7 +179,7 @@ private actor FeedRepositoryServer: FeedServing {
     func page(query: FeedQuery, cursor: String?, release: String?) async throws -> FeedPage {
         calls.append(query.sort == "latest" ? "latest" : "page")
         return FeedPage(schemaVersion: 3, release: release ?? activeRelease,
-                        items: paging ? [FeedFixture.card(id: cursor == nil ? "test-0" : "test-1")] : [],
+                        items: paging ? [FeedFixture.card(id: cursor == nil ? "test-0" : "test-1")] : cards,
                         nextCursor: paging && cursor == nil ? "next" : nil)
     }
     func browse(locale: String) async throws -> FeedBrowse { throw FeedError.unavailable(5) }
