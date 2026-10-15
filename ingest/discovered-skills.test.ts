@@ -127,3 +127,36 @@ test("X gets most inspection slots while unchecked repositories and GitHub searc
     assert.equal(inspected.length, 6); assert.equal(new Set(inspected).size, 6);
   } finally { await rm(root, { recursive: true, force: true }); }
 });
+
+test("an approved discovered package survives database publication with its complete inventory and immutable source", async t => {
+  const { selectLibrary } = await import("./library.ts");
+  const { createTestDatabase } = await import("../services/feed/test-database.ts");
+  const { stagePublication, activatePublication } = await import("../services/feed/publication.ts");
+  const { getFeed, getDetail } = await import("../services/feed/queries.ts");
+  const { promptSchema } = await import("../packages/schema/catalog.ts");
+  const f = fixture(), pack = discoverSkillPackages(f.tree).packages[0];
+  const { candidate } = await verifyDiscoveredSkill("artist/creative-skills", revision, pack, f.read,
+    "https://x.com/artist/status/123");
+  const review = { fingerprint: candidate.fingerprint, sourceRevision: revision, reviewedAt: "2026-10-15T00:00:00Z",
+    metadata: { title: "Design an original poster", summary: candidate.summary, example: candidate.example,
+      tags: candidate.tags, previewLabel: candidate.previewLabel, imageURL: "https://unverified.example/cover.jpg" } };
+  assert.equal(selectLibrary(applyEditorialReviews([candidate], {}), new Set()).length, 0);
+  assert.equal(selectLibrary(applyEditorialReviews([candidate], { [candidate.id]: { ...review, sourceRevision: "b".repeat(40) } }), new Set()).length, 0);
+  const approved = selectLibrary(applyEditorialReviews([candidate], { [candidate.id]: review }), new Set());
+  assert.equal(approved.length, 1);
+  assert.equal(approved[0].media?.imageURL, candidate.media?.imageURL, "Editorial metadata cannot replace a licensed package cover");
+  const { pg, writer, reader } = await createTestDatabase(); t.after(() => pg.close());
+  const release = await stagePublication(writer, { schemaVersion: 1, version: "first-party-package-fixture",
+    prompts: approved.map(item => promptSchema.parse(item)) });
+  await assert.rejects(getDetail(reader, candidate.id, "original"), /not_found/);
+  await activatePublication(writer, release, "0");
+  const page = await getFeed(reader, { filters: { locale: "original", q: "", sort: "latest" }, limit: 30 },
+    "discovered-skill-test-secret-000000000000000000000000");
+  assert.deepEqual(page.items.map(item => item.id), [candidate.id]);
+  assert.equal(page.items[0].contentType, "skill");
+  const detail = await getDetail(reader, candidate.id, "original", page.items[0].revision);
+  assert.deepEqual(detail.item.skill, candidate.skill);
+  assert.deepEqual(detail.item.source, candidate.source);
+  assert.equal(detail.item.prompt, candidate.prompt);
+  assert.equal(detail.item.media?.imageURL, candidate.media?.imageURL);
+});
