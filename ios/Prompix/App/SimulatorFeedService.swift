@@ -12,6 +12,8 @@ actor SimulatorFeedService: FeedServing {
     private let removed: Bool
     private let progressive: Bool
     private var failed = Set<String>()
+    private var hasNewItem: Bool { FileManager.default.fileExists(atPath: directory.appending(path: "publish-new-item").path) }
+    private var activeRelease: String { hasNewItem ? "feed-" + String(repeating: "f", count: 64) : Self.release }
     init(directory: URL, offline: Bool, removed: Bool, progressive: Bool = false) {
         self.directory = directory; self.offline = offline; self.removed = removed; self.progressive = progressive
     }
@@ -55,8 +57,6 @@ actor SimulatorFeedService: FeedServing {
         try record("page", query: query.sort == "latest" ? "__latest__" : query.q, cursor: cursor)
         if query.q == "slow" { try? await Task.sleep(for: .seconds(2)) }
         if query.q == "retry", failed.insert("page-retry").inserted { throw FeedError.rateLimited(2) }
-        let published = FileManager.default.fileExists(atPath: directory.appending(path: "publish-new-item").path)
-        let activeRelease = published ? "feed-" + String(repeating: "f", count: 64) : Self.release
         let pageRelease = release ?? activeRelease
         let count = Self.count + (pageRelease == Self.release ? 0 : 1)
         let indices = (0..<count).filter { index in
@@ -82,7 +82,7 @@ actor SimulatorFeedService: FeedServing {
     }
     func detail(id: String, revision: String?, locale: String) async throws -> FeedDetail {
         try record("detail", query: id + ":" + locale)
-        guard let index = Int(id.split(separator: "-").last ?? ""), (0..<Self.count).contains(index) else { throw FeedError.notFound }
+        guard let index = Int(id.split(separator: "-").last ?? ""), (0..<(Self.count + (hasNewItem ? 1 : 0))).contains(index) else { throw FeedError.notFound }
         if removed && index == 0 { throw FeedError.removed }
         if progressive {
             // Tests control completion after inspecting the genuine pending UI.
@@ -122,7 +122,7 @@ actor SimulatorFeedService: FeedServing {
     }
     func state() async throws -> FeedState {
         try record("state")
-        return FeedState(schemaVersion: 3, release: Self.release, generation: "1", removalSequence: removed ? "1" : "0", count: Self.count - (removed ? 1 : 0), publishedAt: nil)
+        return FeedState(schemaVersion: 3, release: activeRelease, generation: hasNewItem ? "2" : "1", removalSequence: removed ? "1" : "0", count: Self.count + (hasNewItem ? 1 : 0) - (removed ? 1 : 0), publishedAt: nil)
     }
     func removals(after: String) async throws -> FeedRemovals {
         try record("removals", cursor: after)
