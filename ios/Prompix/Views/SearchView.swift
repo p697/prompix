@@ -24,9 +24,6 @@ struct SearchView: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 20) {
                     KindPicker(selection: $kind, skillsOnly: $skillsOnly)
-                    if library.isRefreshing || library.syncMessage != nil {
-                        CatalogUpdateStatus().padding(.horizontal, 20)
-                    }
                     if isBrowsing {
                         Text(String(localized: "搜索全部已发布内容，联网时自动更新。"))
                             .font(.footnote).foregroundStyle(Palette.muted)

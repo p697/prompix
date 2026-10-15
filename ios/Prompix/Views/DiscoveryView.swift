@@ -50,16 +50,12 @@ struct DiscoverView: View {
     @Environment(Library.self) private var library
     @State private var kind: PromptKind?
     @State private var skillsOnly = false
-    @State private var latestOnly = false
     @State private var topic: String?
     @State private var model: String?
-    @State private var chromeCollapsed = false
-    @State private var headerHeight: CGFloat = 112
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var settingsPresented = false
     private let topics = ["好玩一点", "创作灵感", "日常有用"]
     private var items: [Prompt] { library.prompts.filter { PromptQuery(kind: kind, topic: topic, model: model, skillsOnly: skillsOnly).matches($0) } }
-    private var feedQuery: FeedQuery { FeedQuery(kind: skillsOnly ? "skill" : kind?.rawValue, tag: topic, model: model, sort: latestOnly ? "latest" : nil) }
+    private var feedQuery: FeedQuery { FeedQuery(kind: skillsOnly ? "skill" : kind?.rawValue, tag: topic, model: model, sort: "latest") }
     private var models: [String] {
         if let feed = library.feed { return feed.browse.value?.models.map(\.name) ?? [] }
         return Array(Set(library.prompts.filter { PromptQuery(kind: kind, skillsOnly: skillsOnly).matches($0) }.map(\.model))).sorted()
@@ -73,13 +69,9 @@ struct DiscoverView: View {
             ScrollViewReader { scroll in
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 14) {
-                        Color.clear.frame(height: headerHeight).id("discovery-top")
+                        Color.clear.frame(height: 0).id("discovery-top")
                         Group {
-                            if library.isRefreshing || library.syncMessage != nil { CatalogUpdateStatus().padding(.horizontal, 20) }
-                            if !isFiltered && !latestOnly {
-                                if let feed = library.feed {
-                                    LatestContentRail(store: feed.latest) { latestOnly = true; chromeCollapsed = false }
-                                }
+                            if !isFiltered {
                                 CreatorRail()
                                 CollectionRail().padding(.bottom, 6)
                             }
@@ -112,37 +104,29 @@ struct DiscoverView: View {
                         }
                     }.padding(.bottom, 24)
                 }
+                .accessibilityIdentifier("discoveryScroll")
                 .plainTopEdge()
                 .scrollClipDisabled()
                 .background(Palette.paper).foregroundStyle(Palette.ink)
-                .readingChrome($chromeCollapsed)
-                .overlay(alignment: .top) {
-                    GeometryReader { proxy in
-                        ReadingTopFade(collapsed: chromeCollapsed)
-                            .frame(height: proxy.safeAreaInsets.top + (chromeCollapsed ? 0 : headerHeight) + 48)
-                            .offset(y: -proxy.safeAreaInsets.top)
-                            .animation(reduceMotion ? nil : .smooth(duration: 0.28), value: chromeCollapsed)
-                    }.allowsHitTesting(false).accessibilityHidden(true)
-                }
-                .overlay(alignment: .top) {
-                    discoveryHeader
-                        .offset(y: chromeCollapsed ? -headerHeight - 12 : 0)
-                        .opacity(chromeCollapsed ? 0 : 1)
-                        .allowsHitTesting(!chromeCollapsed)
-                        .accessibilityHidden(chromeCollapsed)
-                        .animation(reduceMotion ? nil : .smooth(duration: 0.28), value: chromeCollapsed)
+                .safeAreaInset(edge: .top, spacing: 0) {
+                    discoveryHeader.background(Palette.paper)
                 }
                 .refreshable {
-                    await library.refresh(force: true)
-                    if let feed = library.feed {
-                        await feed.discovery.load(feedQuery, force: true)
-                    }
+                    // SwiftUI can cancel the refresh action when lazy sections
+                    // move during overscroll. The user's bounded request owns its
+                    // lifetime; query changes still cancel it inside the store.
+                    await Task { @MainActor in
+                        async let metadata: Void = library.refresh(force: true)
+                        if let feed = library.feed {
+                            await feed.discovery.load(feedQuery, force: true)
+                        }
+                        await metadata
+                    }.value
                 }
-                .onChange(of: kind) { _, _ in model = nil; topic = nil; chromeCollapsed = false; scroll.scrollTo("discovery-top", anchor: .top) }
-                .onChange(of: skillsOnly) { _, _ in model = nil; topic = nil; chromeCollapsed = false; scroll.scrollTo("discovery-top", anchor: .top) }
-                .onChange(of: topic) { _, _ in chromeCollapsed = false; scroll.scrollTo("discovery-top", anchor: .top) }
-                .onChange(of: latestOnly) { _, _ in chromeCollapsed = false; scroll.scrollTo("discovery-top", anchor: .top) }
-                .onChange(of: model) { _, _ in chromeCollapsed = false; scroll.scrollTo("discovery-top", anchor: .top) }
+                .onChange(of: kind) { _, _ in model = nil; topic = nil; scroll.scrollTo("discovery-top", anchor: .top) }
+                .onChange(of: skillsOnly) { _, _ in model = nil; topic = nil; scroll.scrollTo("discovery-top", anchor: .top) }
+                .onChange(of: topic) { _, _ in scroll.scrollTo("discovery-top", anchor: .top) }
+                .onChange(of: model) { _, _ in scroll.scrollTo("discovery-top", anchor: .top) }
             }
             .toolbar(.hidden, for: .navigationBar)
             .sheet(isPresented: $settingsPresented) { SettingsView().promptSheet() }
@@ -159,7 +143,6 @@ struct DiscoverView: View {
             }.font(.title3).padding(.horizontal, 20).padding(.vertical, 6)
             KindPicker(selection: $kind, skillsOnly: $skillsOnly)
         }.foregroundStyle(Palette.ink).padding(.bottom, 4)
-            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { headerHeight = $0 }
             .accessibilityElement(children: .contain).accessibilityIdentifier("discoveryHeader")
     }
     private var discoveryContext: some View {
@@ -170,7 +153,7 @@ struct DiscoverView: View {
     }
     private var resultHeading: some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Text(latestOnly ? String(localized: "最新收录") : skillsOnly ? String(localized: "Agent Skills") : isFiltered ? String(localized: "筛选结果") : String(localized: "全部内容"))
+            Text(skillsOnly ? String(localized: "Agent Skills") : isFiltered ? String(localized: "筛选结果") : String(localized: "全部内容"))
                 .font(.subheadline.weight(.medium))
             if library.feed == nil {
                 Text(items.count.formatted()).font(.caption.monospacedDigit()).foregroundStyle(Palette.muted)
@@ -181,10 +164,6 @@ struct DiscoverView: View {
     }
     private var resultActions: some View {
         HStack(spacing: 16) {
-            if latestOnly {
-                Button(String(localized: "返回精选")) { latestOnly = false }
-                    .font(.footnote).frame(minHeight: 44).accessibilityIdentifier("leaveLatestFeed")
-            }
             if isFiltered {
                 Button(String(localized: "清除筛选")) { kind = nil; skillsOnly = false; topic = nil; model = nil }
                     .font(.footnote).frame(minHeight: 44)
@@ -218,43 +197,6 @@ struct DiscoverView: View {
         }.accessibilityIdentifier("discoveryFilters")
     }
 
-}
-
-struct CatalogUpdateStatus: View {
-    @Environment(Library.self) private var library
-    var body: some View {
-        if library.isRefreshing || library.syncMessage != nil {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 10) {
-                    if library.isRefreshing { ProgressView().controlSize(.small) }
-                    else { Image(systemName: "arrow.clockwise").foregroundStyle(Palette.accent) }
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(title).font(.footnote.weight(.medium))
-                        Text(library.isRefreshing ? String(localized: "更新期间可继续浏览已下载内容。") : String(localized: "已下载内容仍可浏览，轻点重试。"))
-                            .font(.caption).foregroundStyle(Palette.muted).fixedSize(horizontal: false, vertical: true)
-                    }
-                    Spacer(minLength: 0)
-                    if !library.isRefreshing {
-                        Button(String(localized: "重试")) { Task { await library.refresh(force: true) } }
-                            .font(.footnote.weight(.medium)).frame(minWidth: 44, minHeight: 44)
-                            .accessibilityIdentifier("retryCatalogUpdate")
-                    }
-                }
-                if let fraction = library.syncState.fractionCompleted {
-                    ProgressView(value: fraction).tint(Palette.accent)
-                }
-            }.padding(14).background(Palette.soft, in: RoundedRectangle(cornerRadius: 14))
-                .accessibilityElement(children: .contain).accessibilityIdentifier("catalogUpdateStatus")
-        }
-    }
-    private var title: String {
-        switch library.syncState {
-        case .checking: String(localized: "正在检查内容更新…")
-        case .downloading: String(localized: "正在下载新内容…")
-        case .installing: String(localized: "正在整理新内容…")
-        default: library.isRefreshing ? String(localized: "正在更新…") : String(localized: "内容更新未完成")
-        }
-    }
 }
 
 struct PromptGrid: View {

@@ -12,6 +12,8 @@ actor SimulatorFeedService: FeedServing {
     private let removed: Bool
     private let progressive: Bool
     private var failed = Set<String>()
+    private var hasNewItem: Bool { FileManager.default.fileExists(atPath: directory.appending(path: "publish-new-item").path) }
+    private var activeRelease: String { hasNewItem ? "feed-" + String(repeating: "f", count: 64) : Self.release }
     init(directory: URL, offline: Bool, removed: Bool, progressive: Bool = false) {
         self.directory = directory; self.offline = offline; self.removed = removed; self.progressive = progressive
     }
@@ -45,10 +47,21 @@ actor SimulatorFeedService: FeedServing {
             previewLabel: item.previewLabel, creator: item.creator, media: item.media, cover: nil, language: "original", availableLanguages: ["en", "ja"])
     }
     func page(query: FeedQuery, cursor: String?, release: String?) async throws -> FeedPage {
+        try record("page-start", query: query.sort ?? query.q, cursor: cursor)
+        let gate = directory.appending(path: "hold-feed-refresh")
+        let deadline = Date().addingTimeInterval(30)
+        while FileManager.default.fileExists(atPath: gate.path) {
+            try Task.checkCancellation()
+            guard Date() < deadline else { throw FeedError.unavailable(0) }
+            do { try await Task.sleep(for: .milliseconds(100)) }
+            catch { try? record("page-cancelled"); throw error }
+        }
         try record("page", query: query.sort == "latest" ? "__latest__" : query.q, cursor: cursor)
         if query.q == "slow" { try? await Task.sleep(for: .seconds(2)) }
         if query.q == "retry", failed.insert("page-retry").inserted { throw FeedError.rateLimited(2) }
-        let indices = (0..<Self.count).filter { index in
+        let pageRelease = release ?? activeRelease
+        let count = Self.count + (pageRelease == Self.release ? 0 : 1)
+        let indices = (0..<count).filter { index in
             if removed && index == 0 { return false }
             let item = prompt(index)
             if let kind = query.kind, item.kind.rawValue != kind { return false }
@@ -66,12 +79,12 @@ actor SimulatorFeedService: FeedServing {
         let ordered = query.sort == "latest" ? Array(indices.reversed()) : indices
         let start = Int(cursor ?? "0") ?? 0
         let page = Array(ordered.dropFirst(start).prefix(FeedClient.pageSize))
-        return FeedPage(schemaVersion: 3, release: Self.release, items: page.map(card),
+        return FeedPage(schemaVersion: 3, release: pageRelease, items: page.map(card),
                         nextCursor: start + page.count < indices.count ? String(start + page.count) : nil)
     }
     func detail(id: String, revision: String?, locale: String) async throws -> FeedDetail {
         try record("detail", query: id + ":" + locale)
-        guard let index = Int(id.split(separator: "-").last ?? ""), (0..<Self.count).contains(index) else { throw FeedError.notFound }
+        guard let index = Int(id.split(separator: "-").last ?? ""), (0..<(Self.count + (hasNewItem ? 1 : 0))).contains(index) else { throw FeedError.notFound }
         if removed && index == 0 { throw FeedError.removed }
         if progressive {
             // Tests control completion after inspecting the genuine pending UI.
@@ -111,7 +124,7 @@ actor SimulatorFeedService: FeedServing {
     }
     func state() async throws -> FeedState {
         try record("state")
-        return FeedState(schemaVersion: 3, release: Self.release, generation: "1", removalSequence: removed ? "1" : "0", count: Self.count - (removed ? 1 : 0), publishedAt: nil)
+        return FeedState(schemaVersion: 3, release: activeRelease, generation: hasNewItem ? "2" : "1", removalSequence: removed ? "1" : "0", count: Self.count + (hasNewItem ? 1 : 0) - (removed ? 1 : 0), publishedAt: nil)
     }
     func removals(after: String) async throws -> FeedRemovals {
         try record("removals", cursor: after)

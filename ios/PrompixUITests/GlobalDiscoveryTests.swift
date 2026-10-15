@@ -319,9 +319,9 @@ import CryptoKit
             } catch { XCTFail("Restore the backed-up simulator draft file after this run: \(error)") }
         }
         func launchWithFailure() {
-            app.launchArguments = ["--simulate-network-failure", "-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh-Hans"]
+            app.launchArguments = ["--legacy-feed", "--simulate-network-failure", "-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh-Hans"]
             app.launchPrompix()
-            XCTAssertTrue(app.buttons["retryCatalogUpdate"].waitForExistence(timeout: 15))
+            XCTAssertFalse(app.otherElements["catalogUpdateStatus"].exists)
             XCTAssertTrue(app.buttons["allCreators"].exists)
         }
         func openOriginalEditor() {
@@ -360,8 +360,6 @@ import CryptoKit
         capture("network-03-reopened-edited-draft")
         app.navigationBars.buttons["完成"].tap()
         app.goBackInPrompix()
-        let retry = app.buttons["retryCatalogUpdate"]
-        XCTAssertTrue(retry.waitForExistence(timeout: 5))
         let current = try acceptanceDirectory()
         XCTAssertEqual(try Data(contentsOf: current.appendingPathComponent("catalog.json")), catalogBytes)
         XCTAssertEqual(try Data(contentsOf: current.appendingPathComponent("favorites.json")), favorites)
@@ -369,10 +367,13 @@ import CryptoKit
         // Retry now reaches the real production manifest and language artifacts.
         try FileManager.default.createDirectory(at: recoveryURL(current).deletingLastPathComponent(), withIntermediateDirectories: true)
         try Data("restored".utf8).write(to: recoveryURL(current), options: .atomic)
-        retry.tap()
-        let status = app.descendants(matching: .any).matching(identifier: "catalogUpdateStatus").firstMatch
-        let recovered = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in !status.exists }, object: nil)
-        XCTAssertEqual(XCTWaiter.wait(for: [recovered], timeout: 90), .completed)
+        app.buttons["discoverySettings"].tap()
+        let check = app.buttons["检查内容更新"]
+        reveal(check); check.tap()
+        XCTAssertTrue(check.waitForExistence(timeout: 90))
+        XCTAssertTrue(check.isEnabled)
+        XCTAssertFalse(app.staticTexts["内容更新未完成"].exists)
+        app.buttons["完成"].tap()
         XCTAssertTrue(app.buttons["discoverySettings"].isHittable)
         capture("network-04-live-retry-completed")
         openOriginalEditor()

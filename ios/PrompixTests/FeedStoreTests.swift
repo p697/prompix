@@ -20,6 +20,43 @@ import XCTest
         XCTAssertEqual(calls[1].cursor, "next")
     }
 
+    func testFailedPullRefreshKeepsCardsAndRetriesFirstPageInsteadOfOldCursor() async throws {
+        let server = FeedStoreServer(), store = FeedStore(service: server)
+        let query = FeedQuery(locale: "original", sort: "latest")
+        await store.load(query)
+        let original = store.items.map(\.id)
+        await server.setFailure(.unavailable(0))
+        await store.load(query, force: true)
+        XCTAssertEqual(store.items.map(\.id), original)
+        XCTAssertEqual(store.nextCursor, "next")
+        XCTAssertTrue(store.failedFirstPage)
+        await server.setFailure(nil)
+        await store.load(query, force: true)
+        XCTAssertFalse(store.failedFirstPage)
+        let calls = await server.calls
+        XCTAssertEqual(calls.count, 3)
+        XCTAssertTrue(calls.allSatisfy { $0.cursor == nil })
+    }
+
+    func testLatestCacheCannotReuseCuratedOrderOrCursor() async throws {
+        let cache = FeedCache(directory: directory), server = FeedStoreServer()
+        let curated = FeedQuery(locale: "original"), latest = FeedQuery(locale: "original", sort: "latest")
+        try await cache.store(FeedPage(schemaVersion: 3, release: FeedFixture.release,
+            items: [FeedFixture.card(id: "old-curated")], nextCursor: "old-cursor"), query: curated)
+        await server.setFailure(.unavailable(0))
+        let store = FeedStore(service: server, cache: cache)
+        await store.load(latest)
+        XCTAssertTrue(store.items.isEmpty)
+        XCTAssertNil(store.nextCursor)
+        await server.setFailure(nil)
+        await store.load(latest, force: true)
+        await server.setFailure(.unavailable(0))
+        let reopened = FeedStore(service: server, cache: cache)
+        await reopened.load(latest)
+        XCTAssertEqual(reopened.items.map(\.id), ["test-0", "test-1"])
+        XCTAssertNil(reopened.nextCursor)
+    }
+
     func testLateSearchCannotOverwriteNewQueryEvenWhenTransportIgnoresCancellation() async throws {
         let server = FeedStoreServer(), store = FeedStore(service: server)
         await server.setDelay("old", seconds: 0.15)
