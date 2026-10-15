@@ -50,6 +50,13 @@ test("successful runs without publication cannot hide a stale publication", () =
   acceptHeartbeat(s, event(origin + 31 * HOUR, "succeeded", true), origin + 32 * HOUR);
   assert.equal(s.incident, undefined); assert.equal(s.outbox.at(-1)?.kind, "recovered");
 });
+test("successful unchanged publications cannot hide a stalled discovery pipeline", () => {
+  const s = initialState(origin);
+  for (let hour = 0; hour <= 30; hour += 6) acceptHeartbeat(s, { ...event(origin + hour * HOUR, "succeeded", true), added: 0 }, origin + hour * HOUR + 60000);
+  assert.equal(s.incident, "content_stale"); assert.equal(s.outbox.length, 1);
+  acceptHeartbeat(s, { ...event(origin + 31 * HOUR, "succeeded", true), added: 2 }, origin + 32 * HOUR);
+  assert.equal(s.incident, undefined); assert.equal(s.outbox.at(-1)?.kind, "recovered");
+});
 test("email retries retain the notice and acknowledging it preserves concurrent recovery", () => {
   const s = initialState(origin);
   acceptHeartbeat(s, event(origin, "failed"), origin + 60000);

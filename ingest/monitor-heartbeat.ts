@@ -10,8 +10,10 @@ export async function sendHeartbeat(record: Record<string, unknown>, options: Op
   const url = new URL(endpoint);
   if (url.protocol !== "https:" || url.username || url.password || url.search || url.hash || url.pathname !== "/heartbeat")
     throw new Error("Invalid monitor endpoint");
+  const changes = record.changes as { added?: { total?: number } } | undefined;
   const event = heartbeatSchema.parse({ runID: record.runID, startedAt: record.startedAt, state: record.state,
     finishedAt: record.finishedAt, published: record.published,
+    added: record.published ? changes?.added?.total ?? 0 : 0,
     degraded: [record.sources, record.editorial, record.visualReview, record.translations].some(value => degraded(value)) });
   const fetcher = options.fetcher ?? fetch;
   const sleep = options.sleep ?? (ms => new Promise(resolve => setTimeout(resolve, ms)));

@@ -25,3 +25,10 @@ test("optional monitor is disabled only when both configuration values are absen
   await sendHeartbeat(record, { env: {} });
   await assert.rejects(sendHeartbeat(record, { env: { PROMPIX_MONITOR_SECRET: "fixture" } }), /Incomplete/);
 });
+test("heartbeat reports only committed addition counts, without transmitting content changes", async () => {
+  const bodies: any[] = [];
+  for (const published of [false, true]) await sendHeartbeat({ ...record, state: "succeeded", finishedAt: "2026-10-15T00:01:00Z", published,
+    changes: { added: { total: 4 }, private: "source contents" } }, { env, fetcher: async (_url, init) => { bodies.push(JSON.parse(String(init?.body))); return new Response(null); } });
+  assert.deepEqual(bodies.map(body => body.added), [0, 4]);
+  assert.ok(bodies.every(body => body.changes === undefined));
+});

@@ -25,7 +25,7 @@ export class IngestMonitor extends DurableObject<MonitorEnv> {
   status() {
     const state = this.read();
     return state ? { armed: true, last: state.last, lastSuccess: state.lastSuccess, lastPublication: state.lastPublication,
-      incident: state.incident, pendingNotifications: state.outbox.length, notificationAttempts: state.outbox[0]?.attempts ?? 0 } : { armed: false };
+      lastAddition: state.lastAddition, incident: state.incident, pendingNotifications: state.outbox.length, notificationAttempts: state.outbox[0]?.attempts ?? 0 } : { armed: false };
   }
   async alarm() {
     const state = this.read(); if (!state) return;
@@ -55,6 +55,7 @@ function message(notice: Notice, recipient: string, label: string): string {
     run_stalled: "采集任务已运行超过 2 小时，可能卡住。请检查运行中的任务。",
     schedule_missed: "超过 8 小时没有成功完成采集。请检查电脑、外接磁盘、网络和定时任务。",
     publication_stale: "超过 26 小时没有成功发布。请检查质量审核、发布队列和发布服务。",
+    content_stale: "任务仍在运行，但超过 26 小时没有新增内容完成收录。请检查发现覆盖、质量暂缓队列和预算分配，不要降低质量标准凑数。",
     recovered: "采集已成功完成，之前的告警条件已解除。",
   };
   const subject = `${label === "production" ? "" : "[验收测试] "}Prompix · ${notice.kind === "recovered" ? "采集恢复" : "采集告警"}`;
