@@ -51,6 +51,68 @@ import UIKit
         XCTAssertTrue(app.buttons["copyPrompt"].waitForExistence(timeout: 10))
     }
 
+    func testCreatorDirectoryControlsRemainReachableAtLargestText() throws {
+        guard ProcessInfo.processInfo.environment["PROMPIX_CREATOR_ACCESSIBILITY"] == "1" else { throw XCTSkip("Explicit largest-text acceptance only") }
+        launch()
+        app.buttons["allCreators"].tap()
+        let filter = app.buttons["creatorDirectoryFilter"], sort = app.buttons["creatorDirectorySort"]
+        XCTAssertTrue(filter.waitForExistence(timeout: 10)); XCTAssertTrue(filter.isHittable); XCTAssertTrue(sort.isHittable)
+        filter.tap(); app.buttons["网页"].tap()
+        sort.tap(); app.buttons["作品数量"].tap()
+        XCTAssertTrue(app.buttons["creator-fixture-author-0"].waitForExistence(timeout: 10))
+        capture("creator-directory-largest-text-dark")
+    }
+
+    func testLiveCreatorDiscoveryShowsVisualWorksAndFiltersDirectory() throws {
+        guard ProcessInfo.processInfo.environment["PROMPIX_DATABASE_LIVE_UI"] == "1" else { throw XCTSkip("Explicit live API verification only") }
+        app.launchArguments = ["--feed-live-test", fixtureID, "-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh-Hans"]
+        app.launchPrompix()
+        let first = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'creator-'")).firstMatch
+        XCTAssertTrue(first.waitForExistence(timeout: 25))
+        capture("creator-live-home")
+        first.tap()
+        XCTAssertTrue(app.scrollViews["creatorProfileScroll"].waitForExistence(timeout: 10))
+        capture("creator-live-profile")
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        app.buttons["allCreators"].tap()
+        XCTAssertTrue(app.buttons["creatorDirectoryFilter"].waitForExistence(timeout: 10))
+        app.buttons["creatorDirectoryFilter"].tap(); app.buttons["视频"].tap()
+        XCTAssertTrue(first.waitForExistence(timeout: 20))
+        capture("creator-live-video-directory")
+        app.buttons["creatorDirectorySort"].tap(); app.buttons["最近更新"].tap()
+        XCTAssertTrue(first.waitForExistence(timeout: 20))
+        capture("creator-live-latest-directory")
+        app.swipeDown()
+        XCTAssertTrue(first.waitForExistence(timeout: 20))
+    }
+
+    func testCreatorDirectoryFiltersSortsSearchesAndOpensMatchingWorks() throws {
+        launch(["--feed-detail-preview-test"])
+        app.buttons["allCreators"].tap()
+        XCTAssertTrue(app.buttons["creatorDirectoryFilter"].waitForExistence(timeout: 10))
+        app.buttons["creatorDirectoryFilter"].tap(); app.buttons["视频"].tap()
+        XCTAssertTrue(app.buttons["creator-fixture-author-0"].waitForExistence(timeout: 10))
+        app.buttons["creatorDirectorySort"].tap(); app.buttons["名称"].tap()
+        let field = app.searchFields.firstMatch
+        field.tap(); field.typeText("Database Author 49\n")
+        let author = app.buttons["creator-fixture-author-49"]
+        XCTAssertTrue(author.waitForExistence(timeout: 10))
+        XCTAssertFalse(app.buttons["creator-fixture-author-0"].exists)
+        capture("creator-directory-filtered-search")
+        author.tap()
+        let profile = app.scrollViews["creatorProfileScroll"]
+        XCTAssertTrue(profile.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["creatorContentFilter"].exists)
+        XCTAssertTrue(try requests().contains { $0["operation"] as? String == "creatorWorks" && $0["query"] as? String == "fixture-author-49:video" })
+        capture("creator-profile-filter-retained")
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        XCTAssertTrue(app.buttons["creatorDirectorySort"].waitForExistence(timeout: 5))
+        XCTAssertTrue(try requests().contains { $0["operation"] as? String == "creatorDiscovery" && $0["query"] as? String == "database author 49:video:name" })
+        app.buttons["creatorDirectoryFilter"].tap(); app.buttons["Skill"].tap()
+        XCTAssertTrue(app.staticTexts["未找到结果"].waitForExistence(timeout: 5) || !app.buttons["creator-fixture-author-49"].exists)
+        capture("creator-directory-empty-filter")
+    }
+
     func testCreatorPreviewSurvivesFailureAndFilteringNeverShowsOldResults() throws {
         launch()
         let root = try directory()

@@ -275,6 +275,7 @@ enum CatalogSyncState: Equatable, Sendable {
                 let releaseChanged = previousRelease != nil && previousRelease != feed.state?.release
                 if force || releaseChanged {
                     if feed.browse.value != nil || feed.browse.failure != nil { await feed.browse.load(force: true) }
+                    if feed.creatorDiscovery.query != nil { await feed.creatorDiscovery.load(CreatorQuery(), force: true) }
                     if feed.creators.query != nil { await feed.creators.load("", force: true) }
                 }
             } catch is CancellationError { lastAttempt = nil; syncState = .idle }

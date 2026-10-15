@@ -41,6 +41,7 @@ struct CreatorAvatar: View {
 struct CreatorEntry: Identifiable {
     let creator: Prompt.Creator
     let count: Int
+    var preview: FeedCard? = nil
     var id: String { creator.id }
 }
 
@@ -96,6 +97,36 @@ enum CreatorDirectory {
             }
     }
 
+    static func browse(in items: [Prompt], query: CreatorQuery) -> [CreatorEntry] {
+        let matching = items.filter { item in
+            query.kind == nil || (query.kind == "skill" ? item.isSkill : !item.isSkill && item.kind.rawValue == query.kind)
+        }
+        let entries = entries(in: matching).filter { $0.creator.matchesSearch(query.q) }
+        let works = Dictionary(uniqueKeysWithValues: entries.map { entry in
+            (entry.id, matching.filter { $0.creator.map { Library.creatorsMatch($0, entry.creator, in: items) } ?? false })
+        })
+        func visual(_ entry: CreatorEntry) -> Int { works[entry.id, default: []].filter { $0.kind != .text && !$0.isSkill }.count }
+        func rotation(_ id: String) -> UInt64 {
+            (query.day + ":" + id).utf8.reduce(UInt64(14695981039346656037)) { ($0 ^ UInt64($1)) &* 1099511628211 }
+        }
+        return entries.sorted { left, right in
+            switch query.sort {
+            case .recommended:
+                if (visual(left) > 0) != (visual(right) > 0) { return visual(left) > 0 }
+                if rotation(left.id) != rotation(right.id) { return rotation(left.id) < rotation(right.id) }
+            case .latest:
+                let a = matching.firstIndex { $0.id == works[left.id]?.first?.id } ?? Int.max
+                let b = matching.firstIndex { $0.id == works[right.id]?.first?.id } ?? Int.max
+                if a != b { return a < b }
+            case .count: if left.count != right.count { return left.count > right.count }
+            case .name:
+                let order = left.creator.displayName.localizedStandardCompare(right.creator.displayName)
+                if order != .orderedSame { return order == .orderedAscending }
+            }
+            return left.id < right.id
+        }
+    }
+
     private static func preferredCreator(_ left: Prompt.Creator, _ right: Prompt.Creator) -> Bool {
         if (left.platformIdentity != nil) != (right.platformIdentity != nil) { return left.platformIdentity != nil }
         let leftScore = completeness(left), rightScore = completeness(right)
@@ -118,11 +149,17 @@ struct CreatorRail: View {
     @Environment(\.dynamicTypeSize) private var typeSize
     @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
     private var entries: [CreatorEntry] {
-        if let feed = library.feed { return feed.creators.items.map { CreatorEntry(creator: $0.creator, count: $0.count) } }
-        return CreatorDirectory.entries(in: library.prompts)
+        if let feed = library.feed { return Array(feed.creatorDiscovery.items.prefix(12)).map { CreatorEntry(creator: $0.creator, count: $0.count, preview: feed.creatorPreview($0)) } }
+        return Array(CreatorDirectory.browse(in: library.prompts, query: CreatorQuery()).prefix(12))
     }
 
-    var body: some View { content.task { await library.feed?.creators.load("") } }
+    @Environment(\.scenePhase) private var scenePhase
+    var body: some View {
+        content.task { await library.feed?.creatorDiscovery.load(CreatorQuery()) }
+            .onChange(of: scenePhase) { _, phase in
+                if phase == .active { Task { await library.feed?.creatorDiscovery.load(CreatorQuery()) } }
+            }
+    }
     @ViewBuilder private var content: some View {
         if !entries.isEmpty && !typeSize.isAccessibilitySize && !voiceOverEnabled {
             VStack(alignment: .leading, spacing: 4) {
@@ -138,9 +175,16 @@ struct CreatorRail: View {
                         ForEach(entries) { entry in
                             NavigationLink { CreatorDetail(creator: entry.creator) } label: {
                                 VStack(spacing: 7) {
-                                    CreatorAvatar(creator: entry.creator, size: 44)
+                                    if let preview = entry.preview {
+                                        CreatorWorkPreview(card: preview)
+                                            .frame(width: 104, height: 80).clipShape(RoundedRectangle(cornerRadius: 12))
+                                            .overlay(alignment: .bottomLeading) {
+                                                CreatorAvatar(creator: entry.creator, size: 28)
+                                                    .overlay(Circle().stroke(Palette.paper, lineWidth: 2)).padding(5)
+                                            }
+                                    } else { CreatorAvatar(creator: entry.creator, size: 44) }
                                     Text(entry.creator.displayName).font(.caption).lineLimit(1)
-                                }.frame(width: 72, alignment: .top).contentShape(Rectangle())
+                                }.frame(width: 104, alignment: .top).contentShape(Rectangle())
                             }.buttonStyle(.plain).foregroundStyle(Palette.ink)
                                 .accessibilityLabel(entry.creator.displayName)
                                 .accessibilityValue(String(localized: "\(entry.count) 条内容"))
@@ -159,7 +203,7 @@ struct CreatorRail: View {
                     }.accessibilityIdentifier("allCreators")
                 }
                 if entries.isEmpty {
-                    if let store = library.feed?.creators, store.query == nil || store.isLoading {
+                    if let store = library.feed?.creatorDiscovery, store.query == nil || store.isLoading {
                         CreatorLoadingRows(count: 1)
                     } else { VStack(alignment: .leading, spacing: 8) {
                         Text(String(localized: "作者信息会随内容更新出现。"))
@@ -183,43 +227,60 @@ struct CreatorRail: View {
 struct CreatorsView: View {
     @Environment(Library.self) private var library
     @State private var query: String
+    @State private var filter = CreatorContentFilter.all
+    @State private var sort = CreatorSort.recommended
     init(query: String = "") { _query = State(initialValue: query) }
+    private var selection: CreatorQuery { CreatorQuery(q: query, kind: filter == .all ? nil : filter.rawValue, sort: sort) }
     private var entries: [CreatorEntry] {
-        CreatorDirectory.entries(in: library.prompts).filter { $0.creator.matchesSearch(query) }
+        CreatorDirectory.browse(in: library.prompts, query: selection)
     }
-
     var body: some View {
-        ScrollView {
+        VStack(spacing: 0) {
+            ViewThatFits(in: .horizontal) {
+                HStack { typePicker; Spacer(minLength: 12); sortPicker }
+                VStack(alignment: .leading) { typePicker; sortPicker }
+            }.padding(.horizontal, 20).padding(.vertical, 8)
             if let feed = library.feed {
-                FeedCreatorResults(repository: feed, query: query)
-            } else if entries.isEmpty {
-                if !query.isEmpty {
-                    ContentUnavailableView.search(text: query)
-                } else {
-                    ContentUnavailableView {
-                        Label(String(localized: "暂无创作者"), systemImage: "person.crop.circle")
-                    } description: {
-                        Text(String(localized: "作者信息会随内容更新出现。"))
-                    } actions: {
-                        CreatorUpdateButton(identifier: "loadCreatorsDirectory")
-                    }
-                }
+                FeedCreatorResults(repository: feed, query: selection)
             } else {
-                LazyVStack(spacing: 0) {
-                    ForEach(entries) { entry in
-                        NavigationLink { CreatorDetail(creator: entry.creator) } label: {
-                            CreatorRow(entry: entry).padding(.vertical, 14)
-                        }.buttonStyle(.plain).accessibilityIdentifier("creator-\(entry.id)")
-                        if entry.id != entries.last?.id { Rectangle().fill(Palette.line).frame(height: 0.5).padding(.leading, 64) }
+                ScrollView {
+                    if entries.isEmpty {
+                        ContentUnavailableView(String(localized: "暂无匹配内容"), systemImage: "person.crop.circle",
+                            description: Text(String(localized: "试试其他分类，或清除筛选条件。")))
+                    } else {
+                        LazyVStack(spacing: 0) {
+                            ForEach(entries) { entry in
+                                NavigationLink { CreatorDetail(creator: entry.creator, initialKind: selection.kind) } label: {
+                                    CreatorRow(entry: entry).padding(.vertical, 14)
+                                }.buttonStyle(.plain).accessibilityIdentifier("creator-\(entry.id)")
+                            }
+                        }.padding(.horizontal, 20).padding(.bottom, 24)
                     }
-                }.padding(.horizontal, 20).padding(.bottom, 24)
+                }.refreshable { await library.refresh(force: true) }
             }
         }
         .background(Palette.paper)
         .navigationTitle(String(localized: "创作者"))
-        .refreshable { await library.refresh(force: true) }
         .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always),
                     prompt: String(localized: "搜索姓名或账号"))
+    }
+    private var typePicker: some View {
+        Menu {
+            Picker(String(localized: "内容类型"), selection: $filter) {
+                ForEach(CreatorContentFilter.allCases) { Text($0.title).tag($0) }
+            }
+        } label: { Label(filter.title, systemImage: "line.3.horizontal.decrease").frame(minHeight: 44) }
+            .accessibilityLabel(String(localized: "内容类型"))
+            .accessibilityValue(filter.title).accessibilityIdentifier("creatorDirectoryFilter")
+    }
+    private var sortPicker: some View {
+        Menu {
+            Picker(String(localized: "排序"), selection: $sort) {
+                ForEach(CreatorSort.allCases) { Text($0.title).tag($0) }
+            }
+        } label: { Label(sort.title, systemImage: "arrow.up.arrow.down").frame(minHeight: 44) }
+            .accessibilityLabel(String(localized: "排序"))
+            .accessibilityValue(sort.title).accessibilityIdentifier("creatorDirectorySort")
     }
 }
 
@@ -232,7 +293,7 @@ private struct CreatorUpdateButton: View {
             Button(library.isRefreshing ? String(localized: "正在更新…") : String(localized: "检查内容更新")) {
                 Task {
                     await library.refresh(force: true)
-                    await library.feed?.creators.load("", force: true)
+                    await library.feed?.creatorDiscovery.load(CreatorQuery(), force: true)
                 }
             }
             .buttonStyle(.bordered).controlSize(.regular)
@@ -242,6 +303,20 @@ private struct CreatorUpdateButton: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
+    }
+}
+
+private struct CreatorWorkPreview: View {
+    let card: FeedCard
+    var body: some View {
+        Artwork(preview: ContentPreview(card), compact: true, fillsFrame: true, showsVideoBadge: false)
+            .overlay(alignment: .topTrailing) {
+                if card.kind == .video || card.kind == .web {
+                    Image(systemName: card.kind == .video ? "play.fill" : "globe")
+                        .font(.system(size: 10, weight: .semibold)).foregroundStyle(.white)
+                        .padding(5).background(.black.opacity(0.45), in: Circle()).padding(5)
+                }
+            }.accessibilityHidden(true)
     }
 }
 
@@ -276,8 +351,12 @@ struct CreatorRow: View {
                 if entry.count >= 0 { Text(String(localized: "\(entry.count) 条内容")).font(.footnote).foregroundStyle(Palette.muted) }
             }
             Spacer(minLength: 0)
-            Image(systemName: "chevron.right").font(.caption).foregroundStyle(Palette.muted)
-                .accessibilityHidden(true)
+            if let preview = entry.preview {
+                CreatorWorkPreview(card: preview)
+                    .frame(width: 82, height: 70).clipShape(RoundedRectangle(cornerRadius: 10))
+            } else {
+                Image(systemName: "chevron.right").font(.caption).foregroundStyle(Palette.muted).accessibilityHidden(true)
+            }
         }
     }
 }
@@ -303,7 +382,10 @@ struct CreatorByline: View {
 
 struct CreatorDetail: View {
     private let snapshot: Prompt.Creator
-    init(creator: Prompt.Creator) { snapshot = creator }
+    init(creator: Prompt.Creator, initialKind: String? = nil) {
+        snapshot = creator
+        _filter = State(initialValue: initialKind.flatMap(CreatorContentFilter.init(rawValue:)) ?? .all)
+    }
     @Environment(Library.self) private var library
     @Environment(\.dynamicTypeSize) private var typeSize
     @State private var filter = CreatorContentFilter.all
@@ -395,7 +477,7 @@ struct CreatorDetail: View {
             Text(CreatorIdentity.subtitle(creator)).font(.subheadline).foregroundStyle(Palette.muted)
                 .fixedSize(horizontal: false, vertical: true)
             if let feed = library.feed {
-                if let count = feed.creators.items.first(where: { $0.id == creator.id })?.count {
+                if let count = (feed.creatorDiscovery.items + feed.creators.items).first(where: { $0.id == creator.id })?.count {
                     Text(String(localized: "\(count) 条内容")).font(.footnote).foregroundStyle(Palette.muted)
                 }
             } else { Text(String(localized: "\(allItems.count) 条内容")).font(.footnote).foregroundStyle(Palette.muted) }

@@ -15,6 +15,7 @@ struct FeedCheckpoint: Codable {
 @MainActor @Observable final class FeedRepository {
     let discovery: FeedStore
     let search: FeedStore
+    let creatorDiscovery: CreatorDiscoveryStore
     let creators: FeedCreatorStore
     let browse: FeedBrowseStore
     let service: any FeedServing
@@ -30,11 +31,18 @@ struct FeedCheckpoint: Codable {
          commitRemovals: @escaping (FeedCheckpoint) throws -> Void) {
         self.service = service; self.cache = cache; self.checkpoint = checkpoint; self.commitRemovals = commitRemovals
         removedIDs = Set(checkpoint.removedIDs)
+        creatorDiscovery = CreatorDiscoveryStore(service: service, cache: cache)
         creators = FeedCreatorStore(service: service, cache: cache); browse = FeedBrowseStore(service: service, cache: cache)
         discovery = FeedStore(service: service, cache: cache); search = FeedStore(service: service, cache: cache)
     }
+    func makeCreatorDiscoveryStore() -> CreatorDiscoveryStore { CreatorDiscoveryStore(service: service, cache: cache) }
     func makeCreatorStore() -> FeedCreatorStore { FeedCreatorStore(service: service, cache: cache) }
     func makeStore() -> FeedStore { FeedStore(service: service, cache: cache) }
+
+    func creatorPreview(_ entry: FeedCreatorsPage.Entry) -> FeedCard? {
+        guard let preview = entry.preview, !removedIDs.contains(preview.id) else { return nil }
+        return preview
+    }
 
     /// A few already visible cards can preview an exact scoped query while its
     /// first page arrives. They never become a page, cursor, or result count.

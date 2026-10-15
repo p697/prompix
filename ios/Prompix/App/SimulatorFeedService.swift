@@ -123,6 +123,20 @@ actor SimulatorFeedService: FeedServing {
             .init(creator: creator(index), count: (Self.count - 1 - index) / 75 + 1)
         }, nextCursor: start + indices.count < values.count ? String(start + indices.count) : nil)
     }
+    func creatorDiscovery(query: CreatorQuery, cursor: String?, release: String?) async throws -> FeedCreatorsPage {
+        try record("creatorDiscovery", query: [query.q, query.kind ?? "all", query.sort.rawValue].joined(separator: ":"), cursor: cursor)
+        let base = try await creators(q: query.q, cursor: cursor, release: release)
+        if query.kind == "skill" { return .init(schemaVersion: 3, release: Self.release, items: [], nextCursor: nil) }
+        // Each synthetic creator has works in all four kinds. Preserve the old
+        // unfiltered ordering for existing acceptance journeys.
+        var entries = base.items.map { entry in
+            let index = Int(entry.id.replacingOccurrences(of: "fixture-author-", with: ""))!
+            let matching = (0..<4).map { index + $0 * 75 }.first { query.kind == nil || prompt($0).kind.rawValue == query.kind }!
+            return FeedCreatorsPage.Entry(creator: entry.creator, count: query.kind == nil ? entry.count : entry.count / 4, preview: card(matching))
+        }
+        if query.sort == .name { entries.sort { $0.creator.displayName < $1.creator.displayName } }
+        return .init(schemaVersion: 3, release: base.release, items: entries, nextCursor: base.nextCursor)
+    }
     private func waitForAcceptanceGate(_ name: String) async throws {
         let deadline = Date().addingTimeInterval(60)
         while FileManager.default.fileExists(atPath: directory.appending(path: "hold-" + name).path) {

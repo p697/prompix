@@ -5,6 +5,7 @@ protocol FeedServing: Sendable {
     func detail(id: String, revision: String?, locale: String) async throws -> FeedDetail
     func creators(q: String, cursor: String?, release: String?) async throws -> FeedCreatorsPage
     func browse(locale: String) async throws -> FeedBrowse
+    func creatorDiscovery(query: CreatorQuery, cursor: String?, release: String?) async throws -> FeedCreatorsPage
     func state() async throws -> FeedState
     func removals(after: String) async throws -> FeedRemovals
 }
@@ -48,6 +49,12 @@ struct FeedClient: FeedServing {
         let parameters = try pagination([URLQueryItem(name: "q", value: query.q)], cursor: cursor)
         let page: FeedCreatorsPage = try await fetch("creators", parameters: parameters)
         return try page.validated(limit: Self.pageSize, release: release)
+    }
+    func creatorDiscovery(query: CreatorQuery, cursor: String? = nil, release: String? = nil) async throws -> FeedCreatorsPage {
+        let query = try query.validated()
+        let page: FeedCreatorsPage = try await fetch("creators", parameters: pagination(query.parameters, cursor: cursor))
+        try CreatorDiscoverySource.validate(page, query: query, release: release)
+        return page
     }
     func browse(locale: String) async throws -> FeedBrowse {
         guard FeedValidation.locale(locale) else { throw FeedError.invalidQuery }
