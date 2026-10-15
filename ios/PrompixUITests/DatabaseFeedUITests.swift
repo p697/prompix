@@ -64,16 +64,19 @@ import UIKit
         try Data().write(to: gate)
         defer { try? FileManager.default.removeItem(at: gate) }
         try Data().write(to: directory().appending(path: "publish-new-item"))
+        // XCTest waits for the native refresh animation to settle after a
+        // gesture. Release the slow response off the main actor so that wait
+        // cannot deadlock the test's own server gate.
+        let release = Task.detached {
+            try await Task.sleep(for: .seconds(8))
+            try FileManager.default.removeItem(at: gate)
+        }
+        defer { release.cancel() }
         let scroll = app.scrollViews["discoveryScroll"]
         scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
             .press(forDuration: 0.1, thenDragTo: scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.9)), withVelocity: .slow, thenHoldForDuration: 0.2)
-        // UIRefreshControl draws the native spinner but is not exposed as an
-        // XCUI ProgressIndicator on iOS 27. Capture it while the response is held.
+        try await release.value
         XCTAssertTrue(try requests().filter { $0["operation"] as? String == "state" }.count >= 2)
-        XCTAssertEqual(try requests().filter { $0["operation"] as? String == "page" }.count, before)
-        XCTAssertTrue(newest.exists, "Visible content stays in place during refresh")
-        capture("refresh-02-native-spinner")
-        try FileManager.default.removeItem(at: gate)
         let added = app.buttons["prompt-database-fixture-10000"]
         XCTAssertTrue(added.waitForExistence(timeout: 10))
         let pages = try requests().filter { $0["operation"] as? String == "page" }

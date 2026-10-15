@@ -47,12 +47,14 @@ actor SimulatorFeedService: FeedServing {
             previewLabel: item.previewLabel, creator: item.creator, media: item.media, cover: nil, language: "original", availableLanguages: ["en", "ja"])
     }
     func page(query: FeedQuery, cursor: String?, release: String?) async throws -> FeedPage {
+        try record("page-start", query: query.sort ?? query.q, cursor: cursor)
         let gate = directory.appending(path: "hold-feed-refresh")
         let deadline = Date().addingTimeInterval(30)
         while FileManager.default.fileExists(atPath: gate.path) {
             try Task.checkCancellation()
             guard Date() < deadline else { throw FeedError.unavailable(0) }
-            try await Task.sleep(for: .milliseconds(100))
+            do { try await Task.sleep(for: .milliseconds(100)) }
+            catch { try? record("page-cancelled"); throw error }
         }
         try record("page", query: query.sort == "latest" ? "__latest__" : query.q, cursor: cursor)
         if query.q == "slow" { try? await Task.sleep(for: .seconds(2)) }

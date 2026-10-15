@@ -112,13 +112,16 @@ struct DiscoverView: View {
                     discoveryHeader.background(Palette.paper)
                 }
                 .refreshable {
-                    // Start the visible page immediately. Slower auxiliary shelves
-                    // must not delay it or replay an old filter after it changes.
-                    async let metadata: Void = library.refresh(force: true)
-                    if let feed = library.feed {
-                        await feed.discovery.load(feedQuery, force: true)
-                    }
-                    await metadata
+                    // SwiftUI can cancel the refresh action when lazy sections
+                    // move during overscroll. The user's bounded request owns its
+                    // lifetime; query changes still cancel it inside the store.
+                    await Task { @MainActor in
+                        async let metadata: Void = library.refresh(force: true)
+                        if let feed = library.feed {
+                            await feed.discovery.load(feedQuery, force: true)
+                        }
+                        await metadata
+                    }.value
                 }
                 .onChange(of: kind) { _, _ in model = nil; topic = nil; scroll.scrollTo("discovery-top", anchor: .top) }
                 .onChange(of: skillsOnly) { _, _ in model = nil; topic = nil; scroll.scrollTo("discovery-top", anchor: .top) }
