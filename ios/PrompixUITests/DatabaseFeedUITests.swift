@@ -135,6 +135,39 @@ import UIKit
         XCTAssertEqual(app.searchFields.firstMatch.value as? String, "preview")
     }
 
+    func testDiscoveryHeaderCollapsesRevealsAndResetsAfterFiltering() throws {
+        launch()
+        let scroll = app.scrollViews["discoveryScroll"]
+        let settings = app.buttons["discoverySettings"]
+        XCTAssertTrue(app.buttons["prompt-database-fixture-9999"].waitForExistence(timeout: 15))
+        XCTAssertTrue(settings.isHittable)
+        let expandedSettingsTop = settings.frame.minY
+        scroll.swipeUp(velocity: .slow)
+        scroll.swipeUp(velocity: .slow)
+        capture("header-01-collapsed")
+        XCTAssertFalse(settings.isHittable)
+        XCTAssertLessThan(settings.frame.maxY, expandedSettingsTop, "Forward reading must move the header out of the content area")
+        scroll.swipeDown(velocity: .slow)
+        XCTAssertEqual(settings.frame.minY, expandedSettingsTop, accuracy: 1)
+        // XCTest reports this SwiftUI overlay as non-hittable after scrolling
+        // despite its visible frame. Verify the actual touch and opened sheet.
+        capture("header-02-revealed")
+        settings.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        XCTAssertTrue(app.buttons["replayOnboarding"].waitForExistence(timeout: 5), "Revealed settings must respond to a real tap")
+        app.buttons["完成"].tap()
+        app.buttons["kind-image"].tap()
+        XCTAssertTrue(app.buttons["prompt-database-fixture-9997"].waitForExistence(timeout: 10))
+        XCTAssertTrue(settings.isHittable)
+        capture("header-03-filter-reset")
+        scroll.swipeUp(velocity: .slow)
+        XCTAssertFalse(settings.isHittable)
+        XCTAssertLessThan(settings.frame.maxY, expandedSettingsTop)
+        scroll.swipeDown(velocity: .slow)
+        app.buttons["kind-all"].tap()
+        XCTAssertTrue(app.buttons["creator-fixture-author-0"].waitForExistence(timeout: 5))
+        XCTAssertTrue(settings.isHittable)
+    }
+
     func testHomeUsesLatestOrderWithoutLaunchBannerAndPullRefreshes() async throws {
         launch()
         let newest = app.buttons["prompt-database-fixture-9999"]

@@ -53,6 +53,9 @@ struct DiscoverView: View {
     @State private var topic: String?
     @State private var model: String?
     @State private var settingsPresented = false
+    @State private var chromeCollapsed = false
+    @State private var headerHeight: CGFloat = 112
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private let topics = ["好玩一点", "创作灵感", "日常有用"]
     private var items: [Prompt] { library.prompts.filter { PromptQuery(kind: kind, topic: topic, model: model, skillsOnly: skillsOnly).matches($0) } }
     private var feedQuery: FeedQuery { FeedQuery(kind: skillsOnly ? "skill" : kind?.rawValue, tag: topic, model: model, sort: "latest") }
@@ -66,71 +69,93 @@ struct DiscoverView: View {
     }
     var body: some View {
         NavigationStack {
-            ScrollViewReader { scroll in
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 14) {
-                        Color.clear.frame(height: 0).id("discovery-top")
-                        Group {
-                            if !isFiltered {
-                                CreatorRail()
-                                CollectionRail().padding(.bottom, 6)
-                            }
-                            discoveryContext
-                            if skillsOnly {
-                                Text(String(localized: "可在支持 Agent Skills 的工具中使用，包含完整说明与源文件；具体依赖请查看详情。"))
-                                    .font(.subheadline).foregroundStyle(Palette.muted).padding(.horizontal, 20)
-                            }
-                            if let feed = library.feed {
-                                FeedResults(store: feed.discovery, query: feedQuery, fallback: items)
-                            } else if items.isEmpty {
-                                if needsFirstVideoUpdate {
-                                    ContentUnavailableView {
-                                        Label(String(localized: "视频内容需要联网更新"), systemImage: "play.rectangle")
-                                    } description: {
-                                        Text(String(localized: "首次联网更新后可浏览视频 Prompt。你也可以先查看其他类型的内容。"))
-                                    } actions: {
-                                        Button(library.isRefreshing ? String(localized: "正在更新…") : String(localized: "检查内容更新")) {
-                                            Task { await library.refresh(force: true) }
-                                        }.buttonStyle(.borderedProminent).disabled(library.isRefreshing).accessibilityIdentifier("loadVideoExamples")
-                                        Button(String(localized: "查看其他内容")) { kind = nil; skillsOnly = false; topic = nil; model = nil }
-                                            .buttonStyle(.bordered).accessibilityIdentifier("browseOtherIdeas")
+            ZStack(alignment: .top) {
+                ScrollViewReader { scroll in
+                    ScrollView {
+                        LazyVStack(alignment: .leading, spacing: 14) {
+                            Color.clear.frame(height: 0).id("discovery-top")
+                            Group {
+                                if !isFiltered {
+                                    CreatorRail()
+                                    CollectionRail().padding(.bottom, 6)
+                                }
+                                discoveryContext
+                                if skillsOnly {
+                                    Text(String(localized: "可在支持 Agent Skills 的工具中使用，包含完整说明与源文件；具体依赖请查看详情。"))
+                                        .font(.subheadline).foregroundStyle(Palette.muted).padding(.horizontal, 20)
+                                }
+                                if let feed = library.feed {
+                                    FeedResults(store: feed.discovery, query: feedQuery, fallback: items)
+                                } else if items.isEmpty {
+                                    if needsFirstVideoUpdate {
+                                        ContentUnavailableView {
+                                            Label(String(localized: "视频内容需要联网更新"), systemImage: "play.rectangle")
+                                        } description: {
+                                            Text(String(localized: "首次联网更新后可浏览视频 Prompt。你也可以先查看其他类型的内容。"))
+                                        } actions: {
+                                            Button(library.isRefreshing ? String(localized: "正在更新…") : String(localized: "检查内容更新")) {
+                                                Task { await library.refresh(force: true) }
+                                            }.buttonStyle(.borderedProminent).disabled(library.isRefreshing).accessibilityIdentifier("loadVideoExamples")
+                                            Button(String(localized: "查看其他内容")) { kind = nil; skillsOnly = false; topic = nil; model = nil }
+                                                .buttonStyle(.bordered).accessibilityIdentifier("browseOtherIdeas")
+                                        }
+                                    } else {
+                                        ContentUnavailableView(String(localized: "暂无匹配内容"), systemImage: "sparkle", description: Text(String(localized: "试试其他分类，或清除筛选条件。")))
                                     }
                                 } else {
-                                    ContentUnavailableView(String(localized: "暂无匹配内容"), systemImage: "sparkle", description: Text(String(localized: "试试其他分类，或清除筛选条件。")))
+                                    PromptGrid(items: items).padding(.horizontal, 12)
                                 }
-                            } else {
-                                PromptGrid(items: items).padding(.horizontal, 12)
                             }
-                        }
-                    }.padding(.bottom, 24)
+                        }.padding(.bottom, 24)
+                    }
+                    .accessibilityIdentifier("discoveryScroll")
+                    .plainTopEdge()
+                    .scrollClipDisabled()
+                    .background(Palette.paper).foregroundStyle(Palette.ink)
+                    .readingChrome($chromeCollapsed)
+                    .safeAreaInset(edge: .top, spacing: 0) {
+                        // Reserve space for native refresh without moving content
+                        // when chrome collapses. Controls are overlaid independently
+                        // so their layout is separate from the scrolling cards.
+                        Color.clear.frame(height: headerHeight).allowsHitTesting(false)
+                    }
+                    .refreshable {
+                        // SwiftUI can cancel the refresh action when lazy sections
+                        // move during overscroll. The user's bounded request owns its
+                        // lifetime; query changes still cancel it inside the store.
+                        await Task { @MainActor in
+                            async let metadata: Void = library.refresh(force: true)
+                            if let feed = library.feed {
+                                await feed.discovery.load(feedQuery, force: true)
+                            }
+                            await metadata
+                        }.value
+                    }
+                    .onChange(of: kind) { _, _ in model = nil; topic = nil; chromeCollapsed = false; scroll.scrollTo("discovery-top", anchor: .top) }
+                    .onChange(of: skillsOnly) { _, _ in model = nil; topic = nil; chromeCollapsed = false; scroll.scrollTo("discovery-top", anchor: .top) }
+                    .onChange(of: topic) { _, _ in chromeCollapsed = false; scroll.scrollTo("discovery-top", anchor: .top) }
+                    .onChange(of: model) { _, _ in chromeCollapsed = false; scroll.scrollTo("discovery-top", anchor: .top) }
                 }
-                .accessibilityIdentifier("discoveryScroll")
-                .plainTopEdge()
-                .scrollClipDisabled()
-                .background(Palette.paper).foregroundStyle(Palette.ink)
-                .safeAreaInset(edge: .top, spacing: 0) {
-                    discoveryHeader.background(Palette.paper)
-                }
-                .refreshable {
-                    // SwiftUI can cancel the refresh action when lazy sections
-                    // move during overscroll. The user's bounded request owns its
-                    // lifetime; query changes still cancel it inside the store.
-                    await Task { @MainActor in
-                        async let metadata: Void = library.refresh(force: true)
-                        if let feed = library.feed {
-                            await feed.discovery.load(feedQuery, force: true)
-                        }
-                        await metadata
-                    }.value
-                }
-                .onChange(of: kind) { _, _ in model = nil; topic = nil; scroll.scrollTo("discovery-top", anchor: .top) }
-                .onChange(of: skillsOnly) { _, _ in model = nil; topic = nil; scroll.scrollTo("discovery-top", anchor: .top) }
-                .onChange(of: topic) { _, _ in scroll.scrollTo("discovery-top", anchor: .top) }
-                .onChange(of: model) { _, _ in scroll.scrollTo("discovery-top", anchor: .top) }
+                discoveryChrome.zIndex(1)
             }
             .toolbar(.hidden, for: .navigationBar)
             .sheet(isPresented: $settingsPresented) { SettingsView().promptSheet() }
         }
+    }
+    private var discoveryChrome: some View {
+        discoveryHeader
+            .offset(y: chromeCollapsed ? -headerHeight - 12 : 0)
+            .opacity(chromeCollapsed ? 0 : 1)
+            .allowsHitTesting(!chromeCollapsed)
+            .accessibilityHidden(chromeCollapsed)
+            .background {
+                GeometryReader { proxy in
+                    ReadingTopFade(collapsed: chromeCollapsed)
+                        .frame(height: proxy.safeAreaInsets.top + (chromeCollapsed ? 0 : proxy.size.height) + 48)
+                        .offset(y: -proxy.safeAreaInsets.top)
+                }.allowsHitTesting(false).accessibilityHidden(true)
+            }
+            .animation(reduceMotion ? nil : .smooth(duration: 0.28), value: chromeCollapsed)
     }
     private var discoveryHeader: some View {
         VStack(spacing: 4) {
@@ -143,6 +168,7 @@ struct DiscoverView: View {
             }.font(.title3).padding(.horizontal, 20).padding(.vertical, 6)
             KindPicker(selection: $kind, skillsOnly: $skillsOnly)
         }.foregroundStyle(Palette.ink).padding(.bottom, 4)
+            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { headerHeight = $0 }
             .accessibilityElement(children: .contain).accessibilityIdentifier("discoveryHeader")
     }
     private var discoveryContext: some View {
