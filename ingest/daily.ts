@@ -225,11 +225,6 @@ async function run() {
       const { fingerprint: _, featured: __, reviewStatus: ___, editorialRank: ____, ...prompt } = candidate;
       return { ...prompt, prompt: publicationText(candidate, reviews) };
     });
-    if (publishing && publication.previous?.database) {
-      const quota = await withPublisherDatabase(db => limitNewPublications(db, planned));
-      planned = quota.prompts;
-      report.sources["publication-quota"] = quota.report;
-    }
     const refreshed = await refreshCreatorProfiles(planned, creators, root, {
       enabled: process.env.PROMPIX_CREATOR_LOOKUP_ENABLED === "true", publishing, bearer: process.env.X_BEARER_TOKEN,
     });
@@ -366,6 +361,13 @@ async function run() {
     const xVisible = filterXAvailability(registryVisible.prompts, xAvailability.state);
     report.sources["x-withheld"] = { ids: xVisible.withheldIDs };
     let complete = enrichCreators(xVisible.prompts, creators);
+    // Only publishable records consume a slot. A cached visual deferral or a
+    // failed download must not block all later approvals on every run.
+    if (publishing && publication.previous?.database) {
+      const quota = await withPublisherDatabase(db => limitNewPublications(db, complete));
+      complete = quota.prompts;
+      report.sources["publication-quota"] = quota.report;
+    }
     if (publishing) complete = await mirrorCreatorAvatars(complete, async url => {
       const mirrored = await publishAvatar(url, root, mediaMap, upload);
       await atomic(join(root, "media-map.json"), mediaMap);

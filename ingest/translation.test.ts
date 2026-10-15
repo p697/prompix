@@ -9,6 +9,24 @@ import { TranslationProviderError } from "./translation-provider.ts";
 const fixture = catalogSchema.parse(JSON.parse(await readFile(new URL("../ios/Prompix/Resources/catalog.json", import.meta.url), "utf8"))).prompts[0];
 const item = { ...fixture, title: "Portrait", summary: "Generate a portrait with gentle studio lighting.", prompt: "Create a portrait of {subject}, add https://example.com/reference and --ar 16:9. Keep `field_name`.", example: "Replace {subject} with the person you want to depict.", previewLabel: "Studio example", cover: { text: "Portrait", eyebrow: "IMAGE", tone: "sage" as const } };
 
+test("oversized historical fields split without truncation, broken syntax or blocking other records", () => {
+  const prose = "The scene you create should tell your story with a clear focus. Keep {subject}, https://example.com/reference and `field_name` unchanged. 🌿\n\n".repeat(290);
+  for (const body of [prose, JSON.stringify({ prompt: prose, seed: 42, model: "literal_model" })]) {
+    const source = { ...item, prompt: body };
+    const cache = emptyTranslationCache(), segments = promptSegments(source);
+    assert.ok(segments.length > promptSegments(item).length);
+    assert.ok(segments.every(segment => segment.text.length <= 30000));
+    assert.doesNotThrow(() => translationBatches([source, item], cache, ["en"]));
+    cache.segments.en = Object.fromEntries(segments.map(segment => [segment.id, segment.text]));
+    assert.equal(localizePrompt(source, "en", cache)?.prompt, body, "Reassembly must retain every source byte, including whitespace and JSON formatting");
+    const chunk = segments.find(segment => segment.text.length > 1000)!;
+    delete cache.segments.en[chunk.id];
+    assert.equal(localizePrompt(source, "en", cache), undefined, "Partial chunks cannot become a complete translation");
+    cache.segments.en[chunk.id] = chunk.text.replace(/⟦PP\d+⟧/, "lost placeholder");
+    assert.equal(localizePrompt(source, "en", cache), undefined);
+  }
+});
+
 function fillCache(locale: "en" | "zh-Hans" = "en") {
   const cache = emptyTranslationCache();
   cache.segments[locale] = Object.fromEntries(promptSegments(item).map(segment => [segment.id, locale === "en" ? segment.text : "生成肖像。" + [...segment.text.matchAll(/⟦PP\d+⟧/g)].map(match => match[0]).join(" ")]));

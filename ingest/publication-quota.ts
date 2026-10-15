@@ -1,7 +1,7 @@
 import type { Prompt } from "../packages/schema/catalog.ts";
 import type { Database } from "../services/feed/database.ts";
 import { windowBudget } from "./discovery-budget.ts";
-/** Apply before media/translation work; activation independently rechecks the hard ceiling under a DB lock. */
+/** Apply after quality/media gates and before translation; activation rechecks the hard ceiling under a DB lock. */
 export async function limitNewPublications(db: Database, items: Prompt[], now = new Date()) {
   const start = now.toISOString().slice(0, 10) + "T00:00:00Z";
   const used = (await db.query<{ count: number }>(`select count(*)::integer as count from prompix.content
