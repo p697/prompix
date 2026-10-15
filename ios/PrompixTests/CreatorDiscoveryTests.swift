@@ -12,6 +12,9 @@ import XCTest
                           preview("second", "other"), preview("third", "three")]
         let selected = HomeCoverSelection.select(candidates, avoiding: [candidates[0]])
         XCTAssertEqual(selected.map(\.id), ["second", "third"])
+        let text = ContentPreview(FeedFixture.card())
+        XCTAssertEqual(HomeCoverSelection.select([text] + candidates, avoiding: []).map(\.id), ["first", "second"])
+        XCTAssertEqual(HomeCoverSelection.select([text, text], avoiding: []).count, 1)
         XCTAssertEqual(candidates.map(\.id), ["first", "copy", "second", "second", "third"])
         XCTAssertTrue(HomeCoverSelection.select(candidates, avoiding: candidates).isEmpty)
         XCTAssertTrue(HomeCoverSelection.select(candidates, avoiding: [], limit: 0).isEmpty)

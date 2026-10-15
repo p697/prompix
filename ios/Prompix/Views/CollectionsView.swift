@@ -97,7 +97,15 @@ enum HomeCoverSelection {
         var ids = Set(avoiding.map(\.id))
         var images = Set(avoiding.compactMap { $0.media?.imageURL?.absoluteString ?? $0.media?.image })
         var selected: [ContentPreview] = []
-        for candidate in candidates {
+        let distinct = candidates.filter { candidate in
+            let image = candidate.media?.imageURL?.absoluteString ?? candidate.media?.image
+            return !ids.contains(candidate.id) && (image.map { !images.contains($0) } ?? true)
+        }
+        let visual = distinct.filter { $0.hasSourceImage || WebsiteExamples.files[$0.id] != nil }
+        // A single readable text cover is preferable to narrow text columns;
+        // never mix a typographic Skill into an available visual composition.
+        let pool = visual.isEmpty ? Array(distinct.prefix(1)) : visual
+        for candidate in pool {
             let image = candidate.media?.imageURL?.absoluteString ?? candidate.media?.image
             guard !ids.contains(candidate.id), image.map({ !images.contains($0) }) ?? true else { continue }
             ids.insert(candidate.id)

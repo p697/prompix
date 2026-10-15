@@ -123,7 +123,8 @@ import UIKit
         first.tap()
         XCTAssertTrue(app.scrollViews["creatorProfileScroll"].waitForExistence(timeout: 10))
         capture("creator-live-profile")
-        app.navigationBars.buttons.element(boundBy: 0).tap()
+        if app.buttons["BackButton"].exists { app.buttons["BackButton"].tap() }
+        else { app.navigationBars.buttons.element(boundBy: 0).tap() }
         app.buttons["allCreators"].tap()
         XCTAssertTrue(app.buttons["creatorDirectoryFilter"].waitForExistence(timeout: 10))
         app.buttons["creatorDirectoryFilter"].tap(); app.buttons["视频"].tap()
