@@ -85,7 +85,7 @@ struct DiscoverView: View {
                                         .font(.subheadline).foregroundStyle(Palette.muted).padding(.horizontal, 20)
                                 }
                                 if let feed = library.feed {
-                                    FeedResults(store: feed.discovery, query: feedQuery, fallback: items)
+                                    FeedResults(store: feed.discovery, query: feedQuery, loadsOnAppear: false, fallback: items)
                                 } else if items.isEmpty {
                                     if needsFirstVideoUpdate {
                                         ContentUnavailableView {
@@ -140,6 +140,7 @@ struct DiscoverView: View {
             }
             .toolbar(.hidden, for: .navigationBar)
             .sheet(isPresented: $settingsPresented) { SettingsView().promptSheet() }
+            .task(id: feedQuery) { await library.feed?.discovery.load(feedQuery) }
         }
     }
     private var discoveryChrome: some View {

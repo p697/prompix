@@ -146,8 +146,6 @@ enum CreatorDirectory {
 
 struct CreatorRail: View {
     @Environment(Library.self) private var library
-    @Environment(\.dynamicTypeSize) private var typeSize
-    @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
     private var entries: [CreatorEntry] {
         if let feed = library.feed { return Array(feed.creatorDiscovery.items.prefix(12)).map { CreatorEntry(creator: $0.creator, count: $0.count, preview: feed.creatorPreview($0)) } }
         return Array(CreatorDirectory.browse(in: library.prompts, query: CreatorQuery()).prefix(12))
@@ -160,67 +158,76 @@ struct CreatorRail: View {
                 if phase == .active { Task { await library.feed?.creatorDiscovery.load(CreatorQuery()) } }
             }
     }
-    @ViewBuilder private var content: some View {
-        if !entries.isEmpty && !typeSize.isAccessibilitySize && !voiceOverEnabled {
-            VStack(alignment: .leading, spacing: 4) {
-                HStack {
-                    Text(String(localized: "创作者")).font(.subheadline.weight(.medium)).accessibilityAddTraits(.isHeader)
-                    Spacer()
-                    NavigationLink { CreatorsView() } label: {
-                        Text(String(localized: "查看全部")).font(.footnote).frame(minHeight: 44)
-                    }.foregroundStyle(Palette.muted).accessibilityIdentifier("allCreators")
-                }.padding(.horizontal, 16)
-                ScrollView(.horizontal, showsIndicators: false) {
-                    LazyHStack(alignment: .top, spacing: 12) {
+    private var loading: Bool {
+        guard entries.isEmpty, let store = library.feed?.creatorDiscovery else { return false }
+        return store.failure == nil && (store.query == nil || store.isLoading)
+    }
+    private var content: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text(String(localized: "创作者")).font(.subheadline.weight(.medium)).accessibilityAddTraits(.isHeader)
+                Spacer()
+                NavigationLink { CreatorsView() } label: {
+                    Text(String(localized: "查看全部")).font(.footnote).frame(minHeight: 44)
+                }.foregroundStyle(Palette.muted).accessibilityIdentifier("allCreators")
+            }.padding(.horizontal, 16)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(alignment: .top, spacing: 12) {
+                    if entries.isEmpty {
+                        ForEach(0..<4) { _ in CreatorRailCard(entry: nil) }
+                    } else {
                         ForEach(entries) { entry in
                             NavigationLink { CreatorDetail(creator: entry.creator) } label: {
-                                VStack(spacing: 7) {
-                                    if let preview = entry.preview {
-                                        CreatorWorkPreview(card: preview)
-                                            .frame(width: 104, height: 80).clipShape(RoundedRectangle(cornerRadius: 12))
-                                            .overlay(alignment: .bottomLeading) {
-                                                CreatorAvatar(creator: entry.creator, size: 28)
-                                                    .overlay(Circle().stroke(Palette.paper, lineWidth: 2)).padding(5)
-                                            }
-                                    } else { CreatorAvatar(creator: entry.creator, size: 44) }
-                                    Text(entry.creator.displayName).font(.caption).lineLimit(1)
-                                }.frame(width: 104, alignment: .top).contentShape(Rectangle())
+                                CreatorRailCard(entry: entry)
                             }.buttonStyle(.plain).foregroundStyle(Palette.ink)
                                 .accessibilityLabel(entry.creator.displayName)
                                 .accessibilityValue(String(localized: "\(entry.count) 条内容"))
                                 .accessibilityIdentifier("creator-\(entry.id)")
                         }
-                    }.padding(.horizontal, 16).padding(.bottom, 4)
-                }.accessibilityIdentifier("creatorRail")
+                    }
+                }.padding(.horizontal, 16).padding(.bottom, 4)
             }
-        } else {
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(alignment: .firstTextBaseline) {
-                    Text(String(localized: "创作者")).font(.headline).accessibilityAddTraits(.isHeader)
-                    Spacer(minLength: 12)
-                    NavigationLink { CreatorsView() } label: {
-                        Text(String(localized: "查看全部")).font(.footnote).frame(minHeight: 44)
-                    }.accessibilityIdentifier("allCreators")
+            .scrollDisabled(entries.isEmpty)
+            .accessibilityIdentifier("creatorRail")
+            .overlay {
+                if entries.isEmpty && !loading {
+                    VStack(spacing: 8) {
+                        Text(String(localized: "作者信息会随内容更新出现。")).font(.footnote)
+                        Button { Task { await library.feed?.creatorDiscovery.load(CreatorQuery(), force: true) } } label: {
+                            Text(String(localized: "重试")).font(.footnote).frame(minHeight: 44)
+                        }.accessibilityIdentifier("loadCreators")
+                    }.frame(maxWidth: .infinity, maxHeight: .infinity).background(Palette.paper)
                 }
-                if entries.isEmpty {
-                    if let store = library.feed?.creatorDiscovery, store.query == nil || store.isLoading {
-                        CreatorLoadingRows(count: 1)
-                    } else { VStack(alignment: .leading, spacing: 8) {
-                        Text(String(localized: "作者信息会随内容更新出现。"))
-                            .font(.subheadline).foregroundStyle(Palette.muted)
-                            .fixedSize(horizontal: false, vertical: true)
-                        CreatorUpdateButton(identifier: "loadCreators")
-                    }.frame(maxWidth: .infinity, alignment: .leading).padding(16)
-                        .background(Palette.soft, in: RoundedRectangle(cornerRadius: 14))
-                    }
-                } else {
-                    ForEach(Array(entries.prefix(1))) { entry in
-                        NavigationLink { CreatorDetail(creator: entry.creator) } label: { CreatorRow(entry: entry) }
-                            .buttonStyle(.plain).accessibilityIdentifier("creator-\(entry.id)")
-                    }
-                }
-            }.padding(.horizontal, 20)
+            }
         }
+    }
+}
+
+/// Loading, image, and avatar-only states have identical geometry, including
+/// scaled typography. A missing preview must never shorten the entire rail.
+private struct CreatorRailCard: View {
+    let entry: CreatorEntry?
+    @ScaledMetric(relativeTo: .caption) private var width = 104.0
+    @ScaledMetric(relativeTo: .caption) private var nameHeight = 18.0
+    var body: some View {
+        VStack(spacing: 7) {
+            Group {
+                if let entry {
+                    if let preview = entry.preview { CreatorWorkPreview(card: preview) }
+                    else { Palette.soft.overlay { CreatorAvatar(creator: entry.creator, size: 44) } }
+                } else { LoadingSurface() }
+            }.frame(width: width, height: 80).clipShape(RoundedRectangle(cornerRadius: 12))
+                .overlay(alignment: .bottomLeading) {
+                    if let entry, entry.preview != nil {
+                        CreatorAvatar(creator: entry.creator, size: 28)
+                            .overlay(Circle().stroke(Palette.paper, lineWidth: 2)).padding(5)
+                    }
+                }
+            Text(entry?.creator.displayName ?? "Creator name").font(.caption).lineLimit(1)
+                .frame(maxWidth: .infinity).frame(height: nameHeight)
+                .redacted(reason: entry == nil ? .placeholder : [])
+        }.frame(width: width, alignment: .top).contentShape(Rectangle())
+            .accessibilityHidden(entry == nil)
     }
 }
 
@@ -281,28 +288,6 @@ struct CreatorsView: View {
         } label: { Label(sort.title, systemImage: "arrow.up.arrow.down").frame(minHeight: 44) }
             .accessibilityLabel(String(localized: "排序"))
             .accessibilityValue(sort.title).accessibilityIdentifier("creatorDirectorySort")
-    }
-}
-
-private struct CreatorUpdateButton: View {
-    let identifier: String
-    @Environment(Library.self) private var library
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Button(library.isRefreshing ? String(localized: "正在更新…") : String(localized: "检查内容更新")) {
-                Task {
-                    await library.refresh(force: true)
-                    await library.feed?.creatorDiscovery.load(CreatorQuery(), force: true)
-                }
-            }
-            .buttonStyle(.bordered).controlSize(.regular)
-            .disabled(library.isRefreshing).accessibilityIdentifier(identifier)
-            if let message = library.syncMessage {
-                Text(message).font(.footnote).foregroundStyle(Palette.muted)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
     }
 }
 

@@ -2,6 +2,22 @@ import XCTest
 @testable import Prompix
 
 @MainActor final class CreatorDiscoveryTests: XCTestCase {
+    func testHomeCoversAvoidRepeatedItemsAndImagesWithoutChangingCandidates() {
+        func preview(_ id: String, _ image: String) -> ContentPreview {
+            ContentPreview(FeedCard(id: id, revision: FeedFixture.revision, kind: .image, contentType: "prompt",
+                title: id, summary: "Preview", tags: [], model: "Test", artwork: "test", previewLabel: "",
+                creator: nil, media: .init(image: image, video: nil, demoURL: nil), cover: nil, language: "original", availableLanguages: []))
+        }
+        let candidates = [preview("first", "one"), preview("copy", "one"), preview("second", "two"),
+                          preview("second", "other"), preview("third", "three")]
+        let selected = HomeCoverSelection.select(candidates, avoiding: [candidates[0]])
+        XCTAssertEqual(selected.map(\.id), ["second", "third"])
+        XCTAssertEqual(candidates.map(\.id), ["first", "copy", "second", "second", "third"])
+        XCTAssertTrue(HomeCoverSelection.select(candidates, avoiding: candidates).isEmpty)
+        XCTAssertTrue(HomeCoverSelection.select(candidates, avoiding: [], limit: 0).isEmpty)
+        XCTAssertEqual(HomeCoverSelection.select(candidates, avoiding: [], limit: 1).map(\.id), ["first"])
+    }
+
     func testCacheSeparatesTypeSortSearchAndDayAndNeverResumesCachedCursor() async throws {
         let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }

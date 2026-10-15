@@ -7,7 +7,6 @@ struct FeedLoadingGrid: View {
     @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            ContentActivityLabel()
             HStack(alignment: .top, spacing: 14) {
                 FeedLoadingTile(ratio: 0.85)
                 if !typeSize.isAccessibilitySize && !voiceOverEnabled { FeedLoadingTile(ratio: 1.15) }
@@ -23,11 +22,11 @@ struct FeedLoadingGrid: View {
 struct FeedLoadingTile: View {
     var ratio: CGFloat = 1
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: PromptCardGeometry.titleSpacing) {
             LoadingSurface().aspectRatio(ratio, contentMode: .fit)
                 .clipShape(RoundedRectangle(cornerRadius: 4))
-            Capsule().fill(Palette.line.opacity(0.6)).frame(height: 8).padding(.trailing, 28)
-            Capsule().fill(Palette.line.opacity(0.35)).frame(height: 8).padding(.trailing, 72)
+            Text("Content title").font(.footnote).lineLimit(2, reservesSpace: true)
+                .redacted(reason: .placeholder).padding(.horizontal, 2)
         }.accessibilityHidden(true)
     }
 }

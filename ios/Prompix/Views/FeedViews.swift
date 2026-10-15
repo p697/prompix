@@ -3,6 +3,7 @@ import SwiftUI
 struct FeedResults: View {
     let store: FeedStore
     let query: FeedQuery
+    var loadsOnAppear = true
     var debounce = false
     var fallback: [Prompt] = []
     var previews: [FeedCard] = []
@@ -53,6 +54,7 @@ struct FeedResults: View {
         // the entire store on disappearance: overscroll can hide this lazy child
         // while its parent owns a separate, user-initiated refresh.
         .task(id: query) {
+            guard loadsOnAppear else { return }
             if debounce {
                 do { try await Task.sleep(for: .milliseconds(300)) } catch { return }
             }
