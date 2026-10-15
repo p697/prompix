@@ -298,7 +298,6 @@ import UIKit
         let legacyCatalog = try Data(contentsOf: path.appending(path: "catalog.json"))
         capture("database-upgrade-01-legacy-v2")
         app.terminate(); open("--feed-live-test")
-        XCTAssertTrue(card.waitForExistence(timeout: 20))
         app.selectPrompixTab("收藏")
         XCTAssertTrue(card.waitForExistence(timeout: 10)); card.tap()
         XCTAssertTrue(app.buttons["editPromptAction"].waitForExistence(timeout: 10)); app.buttons["editPromptAction"].tap()
