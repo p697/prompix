@@ -5,8 +5,13 @@ private enum MainTab: Hashable { case discover, saved, search }
 struct RootView: View {
     @State private var showsOnboarding = !UserDefaults.standard.bool(forKey: "hasCompletedOnboarding")
     @State private var tab = MainTab.discover
-    @State private var query = ""
-    @State private var searchFocused = false
+    @State private var searchActivation = 0
+    private var selection: Binding<MainTab> {
+        Binding(get: { tab }, set: { value in
+            tab = value
+            if value == .search { searchActivation &+= 1 }
+        })
+    }
     var body: some View {
         tabs.tint(Palette.accent)
             .fullScreenCover(isPresented: $showsOnboarding) {
@@ -18,7 +23,7 @@ struct RootView: View {
     }
     @ViewBuilder private var tabs: some View {
         if #available(iOS 18, *) {
-            TabView(selection: $tab) {
+            TabView(selection: selection) {
                 Tab(value: MainTab.discover) { DiscoverView() } label: {
                     Label { Text(String(localized: "发现")) } icon: { TabSymbol.image("safari") }
                 }
@@ -26,23 +31,25 @@ struct RootView: View {
                     Label { Text(String(localized: "收藏")) } icon: { TabSymbol.image("heart") }
                 }
                 if #available(iOS 27, *) {
-                    Tab(String(localized: "搜索"), systemImage: "magnifyingglass", value: MainTab.search, role: .prominent) { SearchView(query: $query, focused: $searchFocused) }
+                    Tab(String(localized: "搜索"), systemImage: "magnifyingglass", value: MainTab.search, role: .prominent) { search }
                 } else {
-                    Tab(value: MainTab.search, role: .search) { SearchView(query: $query, focused: $searchFocused) }
+                    Tab(value: MainTab.search, role: .search) { search }
                 }
             }
-            .onChange(of: tab) { _, value in if value == .search { searchFocused = true } }
             .autocorrectionDisabled().textInputAutocapitalization(.never)
         } else {
-            TabView(selection: $tab) {
+            TabView(selection: selection) {
                 DiscoverView().tag(MainTab.discover)
                     .tabItem { Label { Text(String(localized: "发现")) } icon: { TabSymbol.image("safari") } }
                 FavoritesView().tag(MainTab.saved)
                     .tabItem { Label { Text(String(localized: "收藏")) } icon: { TabSymbol.image("heart") } }
-                SearchView(query: $query, focused: $searchFocused).tag(MainTab.search)
+                search.tag(MainTab.search)
                     .tabItem { Label(String(localized: "搜索"), systemImage: "magnifyingglass") }
             }
         }
+    }
+    private var search: some View {
+        SearchView(isSelected: tab == .search, activation: searchActivation)
     }
 }
 

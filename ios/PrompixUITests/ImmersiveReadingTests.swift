@@ -16,6 +16,38 @@ import UIKit
         app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: from))
             .press(forDuration: 0.01, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: to)))
     }
+    func testSearchTabFocusesWithoutTappingField() {
+        let field = app.searchFields["搜索 Prompt、Skills 或创作者"]
+        for index in 0..<4 {
+            app.selectPrompixTab("搜索")
+            XCTAssertTrue(field.waitForExistence(timeout: 3))
+            XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 3), "Search activation \(index) must focus the field automatically")
+            // Typing at the app level proves focus without tapping the field.
+            app.typeText(index == 0 ? "island\n" : "s\n")
+            XCTAssertEqual(field.value as? String, "island" + String(repeating: "s", count: index))
+            app.selectPrompixTab(index.isMultiple(of: 2) ? "收藏" : "发现")
+        }
+        capture("search-autofocus-repeated")
+    }
+
+    func testSelectedSearchTabRefocusesAfterSubmission() {
+        app.selectPrompixTab("搜索")
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 3))
+        app.typeText("island\n")
+        let card = app.buttons["prompt-tiny-island"]
+        XCTAssertTrue(card.waitForExistence(timeout: 3))
+        XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: 3))
+        card.tap()
+        XCTAssertTrue(app.buttons["copyPrompt"].waitForExistence(timeout: 3))
+        app.buttons["closePromptDetail"].tap()
+        XCTAssertTrue(card.waitForExistence(timeout: 3))
+        XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: 3), "Returning from reading must not replay the previous tab activation")
+        app.selectPrompixTab("搜索")
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 3))
+        app.typeText("s")
+        XCTAssertEqual(app.searchFields.firstMatch.value as? String, "islands")
+    }
+
     func testDiscoverChromeAndCollectionsNavigation() {
         XCTAssertTrue(app.buttons["discoverySettings"].waitForExistence(timeout: 10))
         XCTAssertFalse(app.tabBars.buttons["专题"].exists)
@@ -42,7 +74,7 @@ import UIKit
         let card = app.buttons["prompt-tiny-island"]
         XCTAssertTrue(card.waitForExistence(timeout: 5)); card.tap()
         XCTAssertTrue(app.buttons["copyPrompt"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.navigationBars.buttons.firstMatch.isHittable)
+        XCTAssertTrue(app.buttons["closePromptDetail"].isHittable)
         capture("immersive-06-image-detail")
         let expandedWidth = app.buttons["usePrompt"].frame.width
         drag(from: 0.75, to: 0.28)
