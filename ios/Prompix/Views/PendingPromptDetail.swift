@@ -62,10 +62,7 @@ struct PendingPromptDetail: View {
                     .accessibilityHidden(true)
             }
             if failure != nil {
-                VStack(alignment: .leading, spacing: 12) {
-                    Text(String(localized: "内容暂时无法加载")).font(.subheadline).foregroundStyle(Palette.muted)
-                    FeedRetryButton(retryAt: retryAt, action: retry).accessibilityIdentifier("retryDetail")
-                }.frame(maxWidth: .infinity, alignment: .leading).accessibilityElement(children: .contain).accessibilityIdentifier("feedDetailFailure")
+                ContentRecoveryRow(message: String(localized: "内容暂时无法加载"), retryAt: retryAt, retryID: "retryDetail", action: retry).frame(maxWidth: .infinity, alignment: .leading).accessibilityElement(children: .contain).accessibilityIdentifier("feedDetailFailure")
             } else {
                 PromptBodySkeleton()
             }
@@ -107,7 +104,7 @@ private struct PromptBodySkeleton: View {
     @ScaledMetric(relativeTo: .body) private var lineHeight = 12.0
     var body: some View {
         VStack(alignment: .leading, spacing: 24) {
-            ContentActivityLabel().frame(height: 44)
+            ContentActivityLabel(size: 64).frame(height: 76)
             ForEach(0..<2) { _ in
                 VStack(alignment: .leading, spacing: 14) {
                     ForEach([1.0, 0.93, 0.98, 0.62], id: \.self) { fraction in

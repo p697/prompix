@@ -206,12 +206,9 @@ struct CreatorRail: View {
             .accessibilityIdentifier("creatorRail")
             .overlay {
                 if entries.isEmpty && !loading {
-                    VStack(spacing: 8) {
-                        Text(String(localized: "作者信息会随内容更新出现。")).font(.footnote)
-                        Button { Task { await library.feed?.creatorDiscovery.load(CreatorQuery(), force: true) } } label: {
-                            Text(String(localized: "重试")).font(.footnote).frame(minHeight: 44)
-                        }.accessibilityIdentifier("loadCreators")
-                    }.frame(maxWidth: .infinity, maxHeight: .infinity).background(Palette.paper)
+                    ContentRecoveryRow(retryAt: library.feed?.creatorDiscovery.retryAt, retryID: "loadCreators") {
+                        Task { await library.feed?.creatorDiscovery.load(CreatorQuery(), force: true) }
+                    }.padding(.horizontal, 16).frame(maxWidth: .infinity, maxHeight: .infinity).background(Palette.paper)
                 }
             }
         }

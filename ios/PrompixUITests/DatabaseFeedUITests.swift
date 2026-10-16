@@ -157,6 +157,36 @@ import UIKit
         checkAnchors(); capture("home-loading-04-cached-offline")
     }
 
+    func testOfflineRecoveryKeepsCardsVisibleWhileRetrying() throws {
+        launch(["--feed-home-loading-test"])
+        let root = try directory()
+        try Data().write(to: root.appending(path: "fail-feed-refresh"))
+        for gate in ["directory", "browse", "feed-refresh"] {
+            try FileManager.default.removeItem(at: root.appending(path: "hold-" + gate))
+        }
+        let retry = app.buttons["retryFeed"]
+        XCTAssertTrue(retry.waitForExistence(timeout: 12))
+        let scroll = app.scrollViews["discoveryScroll"]
+        for _ in 0..<3 { if retry.isHittable { break }; scroll.swipeUp(velocity: .slow) }
+        XCTAssertTrue(retry.isHittable)
+        let card = app.buttons["prompt-gentle-tarot"]
+        XCTAssertTrue(card.exists, "A failed first page must immediately offer real offline content")
+        XCTAssertFalse(app.staticTexts["内容更新未完成"].exists)
+        XCTAssertFalse(app.progressIndicators.firstMatch.exists)
+        XCTAssertLessThanOrEqual(retry.frame.height, 60)
+        capture("quantum-01-quiet-offline-recovery")
+        try Data().write(to: root.appending(path: "hold-feed-refresh"))
+        try FileManager.default.removeItem(at: root.appending(path: "fail-feed-refresh"))
+        retry.tap()
+        XCTAssertTrue(card.exists, "Retry must not replace usable offline cards with a loading page")
+        XCTAssertFalse(app.buttons["retryFeed"].exists)
+        capture("quantum-02-retry-preserves-offline-cards")
+        try FileManager.default.removeItem(at: root.appending(path: "hold-feed-refresh"))
+        XCTAssertTrue(app.buttons["prompt-database-fixture-9999"].waitForExistence(timeout: 12))
+        XCTAssertFalse(app.buttons["retryFeed"].exists)
+        capture("quantum-03-connected-feed")
+    }
+
     func testHomeFailureAndRetryKeepReservedSpace() throws {
         launch(["--feed-home-loading-test"])
         let root = try directory()

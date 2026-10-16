@@ -63,6 +63,7 @@ actor SimulatorFeedService: FeedServing {
             do { try await Task.sleep(for: .milliseconds(100)) }
             catch { try? record("page-cancelled"); throw error }
         }
+        if FileManager.default.fileExists(atPath: directory.appending(path: "fail-feed-refresh").path) { throw FeedError.unavailable(0) }
         try record("page", query: query.sort == "discovery" ? "__discovery__" : query.sort == "latest" ? "__latest__" : query.q, cursor: cursor)
         if query.creator != nil {
             try record("creatorWorks", query: (query.creator ?? "") + ":" + (query.kind ?? "all"), cursor: cursor)

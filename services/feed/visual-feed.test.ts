@@ -53,7 +53,10 @@ test("visual cursors bind query and snapshot, and removals never renumber either
   const cursor = page.nextCursor!;
   for (const other of [{ ...filters, sort: "latest" as const }, { ...filters, locale: "en" as const }, { ...filters, kind: "text" as const }])
     await assert.rejects(getFeed(reader, { filters: other, limit: 7, cursor }, secret), /invalid_request/);
-  await assert.rejects(getFeed(reader, { filters, limit: 7, cursor: cursor.slice(0, -1) + (cursor.endsWith("a") ? "b" : "a") }, secret), /invalid_request/);
+  // Flip a decoded MAC bit: changing only base64url padding bits can encode the same signature.
+  const [body, mac] = cursor.split(".");
+  const signature = Buffer.from(mac, "base64url"); signature[0] ^= 1;
+  await assert.rejects(getFeed(reader, { filters, limit: 7, cursor: `${body}.${signature.toString("base64url")}` }, secret), /invalid_request/);
   await assert.rejects(getFeed(reader, { filters, limit: 7, cursor }, secret, Date.now() + 25 * 3600000), /invalid_request/);
   const next = await stagePublication(writer, input([item("new-visual", true), ...items])); await activatePublication(writer, next, "1");
   await removeContent(writer, ["image-0", "image-10", "text-5"], "Fixture removal");
