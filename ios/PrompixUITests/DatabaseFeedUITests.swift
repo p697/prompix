@@ -87,6 +87,30 @@ import UIKit
         capture("legacy-published-search-focus-and-latest-results")
     }
 
+    func testLiveHomeShowsVisualCardsAcrossTheFirstTwoFeedScreens() async throws {
+        guard ProcessInfo.processInfo.environment["PROMPIX_DATABASE_LIVE_UI"] == "1" else { throw XCTSkip("Explicit live API verification only") }
+        app.launchArguments = ["--feed-live-test", fixtureID, "-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh-Hans"]
+        app.launchPrompix()
+        let (data, response) = try await URLSession.shared.data(from: URL(string: "https://api.prompix.dev/v3/feed?sort=discovery&locale=zh-Hans")!)
+        XCTAssertEqual((response as? HTTPURLResponse)?.statusCode, 200)
+        let body = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let cards = try XCTUnwrap(body["items"] as? [[String: Any]])
+        let visuals = Set(cards.filter { ($0["media"] as? [String: Any])?["imageURL"] is String || ($0["media"] as? [String: Any])?["image"] is String }
+            .compactMap { $0["id"] as? String })
+        let firstID = try XCTUnwrap(cards.first?["id"] as? String)
+        XCTAssertTrue(visuals.contains(firstID))
+        XCTAssertTrue(app.buttons["prompt-\(firstID)"].waitForExistence(timeout: 25))
+        capture("visual-live-01-home")
+        let scroll = app.scrollViews["discoveryScroll"]
+        for screen in 1...2 {
+            scroll.swipeUp(velocity: .slow)
+            let visible = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'prompt-'"))
+                .allElementsBoundByIndex.filter(\.isHittable).map { String($0.identifier.dropFirst(7)) }
+            XCTAssertGreaterThanOrEqual(visible.filter { visuals.contains($0) }.count, 2, "Each visible feed screen must include real visual cards")
+            capture("visual-live-feed-screen-\(screen)")
+        }
+    }
+
     func testHomeBlendsVisualWorkBeforeNewTextBatchAndCanSwitchToLatest() throws {
         launch(["--feed-visual-mix-test"])
         let firstVisual = app.buttons["prompt-database-fixture-9969"]
