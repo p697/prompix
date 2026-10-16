@@ -149,11 +149,12 @@ struct FeedQuery: Codable, Hashable, Sendable {
 
     func validated() throws -> Self {
         var value = self
-        guard sort == nil || ["curated", "latest"].contains(sort!), FeedValidation.locale(locale), kind == nil || ["text", "image", "video", "web", "skill"].contains(kind!),
+        guard sort == nil || ["curated", "latest", "discovery"].contains(sort!), FeedValidation.locale(locale), kind == nil || ["text", "image", "video", "web", "skill"].contains(kind!),
               [creator, tag, model, q].compactMap({ $0 }).allSatisfy({ !$0.unicodeScalars.contains { $0.value < 32 || $0.value == 127 } }),
               collection == nil || FeedCollections.definitions[collection!] != nil,
               creator == nil || FeedValidation.text(creator!, max: 200),
               tag == nil || FeedValidation.text(tag!, max: 100), model == nil || FeedValidation.text(model!, max: 200) else { throw FeedError.invalidQuery }
+        guard sort != "discovery" || q.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw FeedError.invalidQuery }
         value.q = String(q.decomposedStringWithCompatibilityMapping.unicodeScalars.filter { !(0x300...0x36f).contains($0.value) })
             .precomposedStringWithCompatibilityMapping.lowercased().split(whereSeparator: \.isWhitespace).joined(separator: " ")
         guard value.q.utf16.count <= 120, value.q.split(separator: " ").count <= 8 else { throw FeedError.invalidQuery }

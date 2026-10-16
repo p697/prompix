@@ -58,6 +58,7 @@ struct DiscoverView: View {
     @State private var kind: PromptKind?
     @State private var skillsOnly = false
     @State private var topic: String?
+    @State private var feedSort = "discovery"
     @State private var model: String?
     @State private var settingsPresented = false
     @State private var chromeCollapsed = false
@@ -65,7 +66,7 @@ struct DiscoverView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private let topics = ["好玩一点", "创作灵感", "日常有用"]
     private var items: [Prompt] { library.prompts.filter { PromptQuery(kind: kind, topic: topic, model: model, skillsOnly: skillsOnly).matches($0) } }
-    private var feedQuery: FeedQuery { FeedQuery(kind: skillsOnly ? "skill" : kind?.rawValue, tag: topic, model: model, sort: "latest") }
+    private var feedQuery: FeedQuery { FeedQuery(kind: skillsOnly ? "skill" : kind?.rawValue, tag: topic, model: model, sort: kind == nil && !skillsOnly ? feedSort : "latest") }
     private var models: [String] {
         if let feed = library.feed { return feed.browse.value?.models.map(\.name) ?? [] }
         return Array(Set(library.prompts.filter { PromptQuery(kind: kind, skillsOnly: skillsOnly).matches($0) }.map(\.model))).sorted()
@@ -84,7 +85,7 @@ struct DiscoverView: View {
                             Group {
                                 if !isFiltered {
                                     CreatorRail()
-                                    CollectionRail().padding(.bottom, 6)
+                                    CollectionRail(query: feedQuery).padding(.bottom, 6)
                                 }
                                 discoveryContext
                                 if skillsOnly {
@@ -138,6 +139,7 @@ struct DiscoverView: View {
                             await metadata
                         }.value
                     }
+                    .onChange(of: feedSort) { _, _ in chromeCollapsed = false; scroll.scrollTo("discovery-top", anchor: .top) }
                     .onChange(of: kind) { _, _ in model = nil; topic = nil; chromeCollapsed = false; scroll.scrollTo("discovery-top", anchor: .top) }
                     .onChange(of: skillsOnly) { _, _ in model = nil; topic = nil; chromeCollapsed = false; scroll.scrollTo("discovery-top", anchor: .top) }
                     .onChange(of: topic) { _, _ in chromeCollapsed = false; scroll.scrollTo("discovery-top", anchor: .top) }
@@ -201,6 +203,12 @@ struct DiscoverView: View {
     }
     private var filterPicker: some View {
         Menu {
+            if !isFiltered {
+                Picker(String(localized: "排序"), selection: $feedSort) {
+                    Text(String(localized: "推荐")).tag("discovery")
+                    Text(String(localized: "最新收录")).tag("latest")
+                }
+            }
             Menu(String(localized: "全部用途")) {
                 Button(String(localized: "全部用途")) { topic = nil }
                 ForEach(topics, id: \.self) { value in

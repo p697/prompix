@@ -1,6 +1,6 @@
 import { collectionDefinitions, contentID, feedLocale, revisionID, type FeedCard, type FeedFilters, type FeedLocale, type FeedPage } from "../../packages/schema/feed.ts";
 import type { Prompt } from "../../packages/schema/catalog.ts";
-import { cursorLifetimeSeconds, decodeCursor, encodeCursor, decodeCreatorCursor, encodeCreatorCursor } from "./cursor.ts";
+import { cursorLifetimeSeconds, decodeCursor, encodeCursor, decodeCreatorCursor, encodeCreatorCursor, encodeVisualFeedCursor, decodeVisualFeedCursor } from "./cursor.ts";
 import { FeedError, type Database } from "./database.ts";
 
 type StateRow = { release: string | null; generation: string; removalSequence: string; count: number; publishedAt: string | null };
@@ -17,6 +17,7 @@ export async function getState(db: Database) {
 
 export async function getFeed(db: Database, query: { filters: FeedFilters; limit: number; cursor?: string }, secret: string, now = Date.now()): Promise<FeedPage> {
   const { filters, limit } = query;
+  if (filters.sort === "discovery") return getVisualFeed(db, query, secret, now);
   let release: string, position = -1, rank = 5, expires = Math.floor(now / 1000) + cursorLifetimeSeconds;
   if (query.cursor) {
     try { ({ release, position, rank, expires } = decodeCursor(query.cursor, filters, secret, now)); }
@@ -28,19 +29,7 @@ export async function getFeed(db: Database, query: { filters: FeedFilters; limit
   const parameters: unknown[] = [release, position, filters.locale, rank, filters.q, patterns];
   const where: string[] = [];
   const parameter = (value: unknown) => { parameters.push(value); return `$${parameters.length}`; };
-  if (filters.kind === "skill") where.push("v.content_type='skill'");
-  else if (filters.kind) where.push(`v.kind=${parameter(filters.kind)} and v.content_type<>'skill'`);
-  if (filters.collection) {
-    const collection = collectionDefinitions[filters.collection];
-    if (collection.kind) where.push(`v.kind=${parameter(collection.kind)}`);
-    if (collection.tags.length) where.push(`v.tags && ${parameter(collection.tags)}::text[]`);
-  }
-  if (filters.creator) where.push(`v.creator_id=${parameter(filters.creator)}`);
-  if (filters.model) where.push(`v.model=${parameter(filters.model)}`);
-  if (filters.tag) {
-    const tagged = `v.tags @> array[${parameter(filters.tag)}]::text[]`;
-    where.push(filters.tag === "创作灵感" ? `(v.kind<>'text' or ${tagged})` : tagged);
-  }
+  where.push(...feedConditions(filters, parameter));
   for (const pattern of patterns) where.push(`v.search_text like ${parameter(pattern)}`);
   // Broad ranked searches otherwise underestimate rows and can rescan content for every
   // match. Resolve visibility once before ranking; ordinary keyset pages remain inlined.
@@ -69,6 +58,88 @@ export async function getFeed(db: Database, query: { filters: FeedFilters; limit
     schemaVersion: 3, release, items: page.map(row => row.card),
     nextCursor: rows.length > limit ? encodeCursor({ v: 2, release, position: page.at(-1)!.position, rank: page.at(-1)!.rank, filters, expires }, secret) : null,
   };
+}
+
+
+function feedConditions(filters: FeedFilters, parameter: (value: unknown) => string): string[] {
+  const where: string[] = [];
+  if (filters.kind === "skill") where.push("v.content_type='skill'");
+  else if (filters.kind) where.push(`v.kind=${parameter(filters.kind)} and v.content_type<>'skill'`);
+  if (filters.collection) {
+    const collection = collectionDefinitions[filters.collection];
+    if (collection.kind) where.push(`v.kind=${parameter(collection.kind)}`);
+    if (collection.tags.length) where.push(`v.tags && ${parameter(collection.tags)}::text[]`);
+  }
+  if (filters.creator) where.push(`v.creator_id=${parameter(filters.creator)}`);
+  if (filters.model) where.push(`v.model=${parameter(filters.model)}`);
+  if (filters.tag) {
+    const tagged = `v.tags @> array[${parameter(filters.tag)}]::text[]`;
+    where.push(filters.tag === "创作灵感" ? `(v.kind<>'text' or ${tagged})` : tagged);
+  }
+  return where;
+}
+
+/** Real media determines visual eligibility, not a tag, title or generated cover. */
+async function getVisualFeed(db: Database, query: { filters: FeedFilters; limit: number; cursor?: string }, secret: string, now: number): Promise<FeedPage> {
+  const { filters, limit } = query;
+  if (filters.q) throw new FeedError("invalid_request", 400);
+  let visualRemaining: number | undefined, textRemaining: number | undefined, plainRun = 0;
+  let release: string, visual = -1, text = -1, slot = 0, expires = Math.floor(now / 1000) + cursorLifetimeSeconds;
+  if (query.cursor) {
+    try { ({ release, visual, text, slot, expires, visualRemaining, textRemaining, plainRun } = decodeVisualFeedCursor(query.cursor, filters, secret, now)); }
+    catch { throw new FeedError("invalid_request", 400); }
+    if (!(await db.query("select id from prompix.releases where id=$1 and published_at is not null", [release])).rows.length)
+      throw new FeedError("snapshot_expired", 410);
+  } else release = (await getState(db)).release;
+  const parameters: unknown[] = [release, visual, filters.locale, text];
+  const parameter = (value: unknown) => { parameters.push(value); return `$${parameters.length}`; };
+  const where = feedConditions(filters, parameter);
+  const bound = parameter(limit + 1);
+  const countLanes = visualRemaining === undefined || textRemaining === undefined;
+  const rows = (await db.query<{ position: number; visual: boolean; total: number; card: FeedCard }>(`
+    with candidates as not materialized (
+      select e.latest_position as position,e.revision_id,
+        (coalesce(nullif(v.card#>>'{media,imageURL}',''),nullif(v.card#>>'{media,image}','')) is not null) as visual
+      from prompix.release_entries e join prompix.releases r on r.id=e.release_id
+      join prompix.content c on c.id=e.content_id join prompix.revisions v on v.id=e.revision_id
+      where e.release_id=$1 and r.published_at is not null and c.removed_at is null
+        ${where.length ? `and ${where.join(" and ")}` : ""}
+    ), remaining as not materialized (
+      select * from candidates where (visual and position>$2) or (not visual and position>$4)
+    ), counted as not materialized (
+      select *,${countLanes ? "(count(*) over(partition by visual))::integer" : "0"} as total from remaining
+    ), page as materialized (
+      (select * from counted where visual order by position limit ${bound})
+      union all
+      (select * from counted where not visual order by position limit ${bound})
+    ) select p.position,p.visual,p.total,coalesce(t.card,v.card) as card from page p
+      join prompix.revisions v on v.id=p.revision_id
+      left join prompix.translations t on t.revision_id=p.revision_id and t.locale=$3
+      order by p.visual desc,p.position`, parameters)).rows;
+  const lanes = [rows.filter(row => row.visual), rows.filter(row => !row.visual)];
+  visualRemaining ??= lanes[0][0]?.total ?? 0;
+  textRemaining ??= lanes[1][0]?.total ?? 0;
+  if (!lanes[0].length) visualRemaining = 0;
+  if (!lanes[1].length) textRemaining = 0;
+  const offsets = [0, 0], items: FeedCard[] = [];
+  while (items.length < limit) {
+    let preferred = slot < 4 ? 0 : 1;
+    // Keep enough visual anchors for the historical text backlog instead of
+    // exhausting every image and returning hundreds of text-only tail cards.
+    if (visualRemaining <= Math.ceil(textRemaining / 2) && textRemaining > 0 && plainRun < 2) preferred = 1;
+    if (plainRun >= 2 && visualRemaining > 0) preferred = 0;
+    if (visual === -1 && text === -1 && visualRemaining > 0) preferred = 0;
+    const lane = offsets[preferred] < lanes[preferred].length ? preferred : 1 - preferred;
+    const row = lanes[lane][offsets[lane]];
+    if (!row) break;
+    offsets[lane]++; items.push(row.card);
+    if (lane === 0) { visual = row.position; visualRemaining = Math.max(0, visualRemaining - 1); plainRun = 0; }
+    else { text = row.position; textRemaining = Math.max(0, textRemaining - 1); plainRun = Math.min(2, plainRun + 1); }
+    slot = (slot + 1) % 5;
+  }
+  const hasMore = lanes.some((lane, index) => offsets[index] < lane.length);
+  return { schemaVersion: 3, release, items,
+    nextCursor: hasMore ? encodeVisualFeedCursor({ v: 1, scope: "visual-feed", release, visual, text, slot, visualRemaining, textRemaining, plainRun, filters, expires }, secret) : null };
 }
 
 /** Explicit revision gives stable detail during paging; no revision means current release. */

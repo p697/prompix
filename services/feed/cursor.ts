@@ -67,3 +67,25 @@ export function decodeDiscoveryCursor(token: string, filters: CreatorFilters, se
     throw new Error("Expired or mismatched cursor");
   return cursor;
 }
+
+// Separate lane positions keep the 4:1 blend stable across page sizes, new
+// releases and removals, without recomputing live row-number ordinals.
+const visualFeedCursorSchema = z.object({
+  v: z.literal(1), scope: z.literal("visual-feed"), release: contentID,
+  visual: z.number().int().min(-1).max(1_000_000), text: z.number().int().min(-1).max(1_000_000),
+  slot: z.number().int().min(0).max(4),
+  visualRemaining: z.number().int().min(0).max(1_000_000).optional(),
+  textRemaining: z.number().int().min(0).max(1_000_000).optional(),
+  plainRun: z.number().int().min(0).max(2).default(0),
+  filters: feedFiltersSchema, expires: z.number().int().positive(),
+}).strict();
+export type VisualFeedCursor = z.infer<typeof visualFeedCursorSchema>;
+export function encodeVisualFeedCursor(cursor: VisualFeedCursor, secret: string): string {
+  return signPayload(visualFeedCursorSchema.parse(cursor), secret);
+}
+export function decodeVisualFeedCursor(token: string, filters: FeedFilters, secret: string, now = Date.now()): VisualFeedCursor {
+  const cursor = visualFeedCursorSchema.parse(verifyPayload(token, secret));
+  if (!validExpiry(cursor.expires, now) || JSON.stringify(cursor.filters) !== JSON.stringify(feedFiltersSchema.parse(filters)))
+    throw new Error("Expired or mismatched cursor");
+  return cursor;
+}

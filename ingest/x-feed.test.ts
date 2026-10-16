@@ -40,19 +40,19 @@ test("pagination never advances the high-water mark before older pages are colle
   const first = xFeedRequest(xFeeds[0].query, { limit: 50 }).fingerprint;
   await atomic(join(root, "x-feed-state.json"), { nextFeed: 0, cursors: { [first]: { since: "100" } } });
   let calls = 0;
-  const run = await collectXFeeds(root, { enabled: true, bearer: "secret", now, limits: { requests: 9, posts: 450 }, search: async (_key, request) => {
+  const run = await collectXFeeds(root, { enabled: true, bearer: "secret", now, limits: { requests: xFeeds.length + 1, posts: (xFeeds.length + 1) * 50 }, search: async (_key, request) => {
     calls++;
     if (calls === 1) { assert.equal(request.since, "100"); return response(request, "200", "older-page"); }
-    if (calls === 9) {
+    if (calls === xFeeds.length + 1) {
       assert.equal(request.since, "100"); assert.equal(request.nextToken, "older-page");
       assert.equal((await read(root, "x-feed-state.json")).cursors[first].since, "100");
       return response(request, "150");
     }
     return response(request, String(200 + calls));
   } });
-  assert.equal(run.count, 9); assert.equal((await read(root, "x-feed-state.json")).cursors[first].since, "200");
+  assert.equal(run.count, xFeeds.length + 1); assert.equal((await read(root, "x-feed-state.json")).cursors[first].since, "200");
   assert.equal((await read(root, "x-feed-state.json")).cursors[first].nextToken, undefined);
-  assert.equal((await readXIntake(root)).report.snapshots, 9);
+  assert.equal((await readXIntake(root)).report.snapshots, xFeeds.length + 1);
 }));
 
 test("failed paid read stops the day's loop without leaking credentials or losing its cursor", () => fixture(async root => {
@@ -148,3 +148,11 @@ test("X Retry-After defers collection and three transient failures exhaust the d
   await collectXFeeds(root, later); assert.equal(calls, 3);
   assert.equal((await collectXFeeds(root, later)).status, "daily-limit"); assert.equal(calls, 3);
 }));
+
+test("discovery reserves eight of ten search themes for real visual media without raising paid limits", () => {
+  assert.equal(xFeeds.length, 10);
+  assert.equal(xFeeds.filter(feed => /has:(images|videos)/.test(feed.query)).length, 8);
+  assert.equal(xFeeds.filter(feed => feed.id === "text").length, 1);
+  assert.ok(xFeeds.some(feed => feed.id === "creative-skills"));
+  assert.deepEqual(xFeedLimits({}), { requests: 4, posts: 200 });
+});

@@ -22,7 +22,7 @@ import SwiftUI
             }
             if arguments[index] == "--feed-legacy-test" { service = nil }
             else if arguments[index] == "--feed-live-test" { service = FeedClient() }
-            else { service = SimulatorFeedService(directory: fixtureDirectory, offline: arguments.contains("--feed-fixture-offline"), removed: arguments.contains("--feed-fixture-removal"), progressive: arguments.contains("--feed-detail-preview-test"), imagePrefetch: arguments.contains("--feed-image-prefetch-test")) }
+            else { service = SimulatorFeedService(directory: fixtureDirectory, offline: arguments.contains("--feed-fixture-offline"), removed: arguments.contains("--feed-fixture-removal"), progressive: arguments.contains("--feed-detail-preview-test"), imagePrefetch: arguments.contains("--feed-image-prefetch-test"), visualMix: arguments.contains("--feed-visual-mix-test")) }
         } else {
             service = NSClassFromString("XCTestCase") != nil || arguments.contains("--offline") || arguments.contains("--cached-only") || arguments.contains("--legacy-feed") ? nil : FeedClient()
         }

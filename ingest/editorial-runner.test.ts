@@ -148,7 +148,7 @@ test("full source input is never truncated to fit the character budget", async (
 });
 
 test("published edits lead the queue and source/modality rotation changes the first new shelf", () => {
-  const text = candidate("new-text"), image = { ...candidate("new-image"), kind: "image" as const }, video = { ...candidate("new-video"), kind: "video" as const };
+  const text = candidate("new-text"), image = { ...candidate("new-image"), kind: "image" as const, media: { image: "lake", video: null, demoURL: null } }, video = { ...candidate("new-video"), kind: "video" as const, media: { image: "lake", video: null, demoURL: null } };
   const edited = candidate("published-edit");
   const first = editorialQueue([text, image, video, edited], [edited]);
   const rotated = editorialQueue([text, image, video, edited], [edited], 1);
@@ -430,4 +430,20 @@ test("live editorial responses must classify output even when their old cache re
   } }).success, true);
   const { run } = harness(items, async () => ({ decisions: [old] }));
   assert.equal((await run()).report.status, "failed");
+});
+
+test("plain-text review spending stays bounded across restarts and publication", async () => {
+  const items = Array.from({ length: 30 }, (_, n) => candidate(`plain-${n}`));
+  const { state, run } = harness(items, async input => approve(input));
+  const first = await run(day, items, 64);
+  assert.equal(first.report.attemptedCandidates, 20);
+  assert.equal(first.report.requests, 7);
+  const again = await run(day, items, 64);
+  assert.equal(again.report.requests, 0);
+  assert.equal(state.ledger?.requests, 7);
+  const spent = new Set(state.ledger!.attempts.flatMap(attempt => attempt.candidateIDs));
+  const afterPublication = await runEditorialReview({ candidates: items, previous: items.filter(item => spent.has(item.id)),
+    reviews: state.reviews, cache: state.cache, ledger: state.ledger, day, maxRequests: 64,
+    provider: async input => approve(input), persistCache: async () => {}, persistReviews: async () => {}, persistLedger: async () => {} });
+  assert.equal(afterPublication.report.requests, 0, "Publishing reviewed text must not refund its daily review budget");
 });
