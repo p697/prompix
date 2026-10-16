@@ -8,44 +8,50 @@ struct FeedResults: View {
     var fallback: [Prompt] = []
     var previews: [FeedCard] = []
     var excludingID: String?
+    @State private var fallbackQuery: FeedQuery?
     @Environment(Library.self) private var library
     var body: some View {
         let matches = store.query == ((try? query.validated()) ?? query)
         let waiting = !matches || (store.failure == nil && (store.release == nil || (store.items.isEmpty && store.isLoading)))
         let hasPage = matches && store.release != nil
         let items = (hasPage ? store.items : previews).filter { $0.id != excludingID && !library.isRemoved(id: $0.id) }
-        LazyVStack(spacing: 18) {
+        let offlineItems = fallback.filter { $0.id != excludingID && !library.isRemoved($0) }
+        let showsFallback = items.isEmpty && matches && !offlineItems.isEmpty &&
+            (store.failure != nil || (store.isLoading && fallbackQuery == query))
+        LazyVStack(spacing: 12) {
+            if showsFallback {
+                if store.failure != nil {
+                    recovery(message: String(localized: "离线可用的内容"))
+                } else {
+                    HStack {
+                        Text(String(localized: "离线可用的内容")).font(.footnote).foregroundStyle(Palette.muted)
+                        Spacer()
+                        ContentActivityLabel(size: 40)
+                    }.frame(minHeight: 44).padding(.horizontal, 16)
+                }
+                PromptGrid(items: offlineItems).padding(.horizontal, 12)
+            }
             if !items.isEmpty {
                 PreviewMasonryGrid(items: items, preview: ContentPreview.init) { FeedPromptCard(card: $0) }
                     .padding(.horizontal, 12)
             }
             if waiting {
-                if items.isEmpty { FeedLoadingGrid().padding(.horizontal, 12) }
-                else { Text(String(localized: "正在更新…")).font(.footnote).foregroundStyle(Palette.muted).padding(.vertical, 8) }
+                if items.isEmpty && !showsFallback { FeedLoadingGrid().padding(.horizontal, 12) }
+                else if !showsFallback { ContentActivityLabel(size: 48).frame(maxWidth: .infinity) }
             } else if matches && store.failure != nil {
-                VStack(spacing: 10) {
-                    Text(String(localized: "内容更新未完成")).font(.subheadline)
-                    if !items.isEmpty { Text(String(localized: "已下载内容仍可浏览，轻点重试。")).font(.footnote).foregroundStyle(Palette.muted) }
-                    FeedRetryButton(retryAt: store.retryAt) {
-                        Task {
-                            if !store.failedFirstPage, store.nextCursor != nil, !store.isCached, store.failure as? FeedError != .snapshotExpired { await store.loadMore() }
-                            else { await store.load(query, force: true) }
-                        }
-                    }.accessibilityIdentifier("retryFeed")
-                }.padding(20)
+                if !showsFallback { recovery(message: String(localized: "暂时无法连接")) }
             } else if items.isEmpty && !store.isLoading {
                 ContentUnavailableView(String(localized: "暂无匹配内容"), systemImage: "sparkle",
                                        description: Text(String(localized: "试试其他分类，或清除筛选条件。")))
             }
-            if items.isEmpty, matches, store.failure != nil, !fallback.isEmpty {
-                Text(String(localized: "离线可用的内容")).font(.subheadline).foregroundStyle(Palette.muted)
-                PromptGrid(items: fallback).padding(.horizontal, 12)
-            }
-            if matches && store.nextCursor != nil {
-                FeedNextPageButton(isLoading: store.isLoading, enabled: store.failure == nil) {
+            if matches && store.nextCursor != nil && store.failure == nil {
+                FeedNextPageButton(isLoading: store.isLoading, enabled: true) {
                     Task { await store.loadMore() }
                 }.accessibilityIdentifier("loadMoreFeed")
             }
+        }
+        .onChange(of: matches && store.failure != nil && items.isEmpty) { _, failed in
+            if failed { fallbackQuery = query }
         }
         .feedLookahead(cursor: store.nextCursor, generation: store.firstPageGeneration, enabled: matches && !store.isLoading && store.failure == nil && !store.isCached) {
             Task { await store.loadMore() }
@@ -61,6 +67,14 @@ struct FeedResults: View {
             guard !Task.isCancelled else { return }
             await store.load(query)
         }
+    }
+    private func recovery(message: String) -> some View {
+        ContentRecoveryRow(message: message, retryAt: store.retryAt, retryID: "retryFeed") {
+            Task {
+                if !store.failedFirstPage, store.nextCursor != nil, !store.isCached, store.failure as? FeedError != .snapshotExpired { await store.loadMore() }
+                else { await store.load(query, force: true) }
+            }
+        }.padding(.horizontal, 16)
     }
 }
 
@@ -105,7 +119,7 @@ struct FeedPromptCard: View {
             Button { detailPresented = true } label: {
                 PromptCardFace(preview: ContentPreview(card)).promptTransitionSource(id: card.id, in: transition)
                     .overlay(alignment: .bottomTrailing) {
-                        if actionID != nil { ProgressView().padding(12).background(.regularMaterial, in: Circle()).padding(8) }
+                        if actionID != nil { ContentActivityLabel(size: 40).background(.regularMaterial, in: Circle()).padding(8) }
                     }
             }.buttonStyle(.plain).accessibilityLabel(card.title).accessibilityIdentifier("prompt-\(card.id)")
                 .contextMenu {
@@ -202,13 +216,30 @@ struct FeedReadingPresentation: View {
 }
 
 struct FeedRetryButton: View {
-    let retryAt: Date?
+    var retryAt: Date? = nil
+    var title = String(localized: "重试")
     let action: () -> Void
+    @State private var clock = Date()
     var body: some View {
-        TimelineView(.periodic(from: .now, by: 1)) { context in
-            Button(String(localized: "重试"), action: action).buttonStyle(.bordered)
-                .disabled(retryAt.map { context.date < $0 } ?? false)
-        }
+        button.disabled(retryAt.map { clock < $0 } ?? false)
+            .task(id: retryAt) {
+                clock = Date()
+                guard let retryAt else { return }
+                let delay = retryAt.timeIntervalSince(clock)
+                guard delay > 0 else { return }
+                do { try await Task.sleep(for: .seconds(delay)) } catch { return }
+                clock = Date()
+            }
+    }
+    @ViewBuilder private var button: some View {
+        if #available(iOS 26, *) { control.buttonStyle(.glass) }
+        else { control.buttonStyle(.borderless) }
+    }
+    private var control: some View {
+        Button(action: action) {
+            Label(title, systemImage: "arrow.clockwise")
+                .font(.footnote.weight(.medium)).padding(.horizontal, 4).frame(minHeight: 30)
+        }.tint(Palette.accent)
     }
 }
 
@@ -296,10 +327,8 @@ struct FeedRelatedResults: View {
                 if waiting && cards.isEmpty {
                     FeedLoadingGrid()
                 } else if matches && store.failure != nil {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(String(localized: "内容更新未完成")).font(.footnote).foregroundStyle(Palette.muted)
-                        FeedRetryButton(retryAt: store.retryAt) { Task { await store.load(path.query, force: true) } }
-                            .accessibilityIdentifier("retryExploration")
+                    ContentRecoveryRow(retryAt: store.retryAt, retryID: "retryExploration") {
+                        Task { await store.load(path.query, force: true) }
                     }
                 } else if !waiting && cards.isEmpty && !store.isLoading {
                     Text(String(localized: "暂无匹配内容")).font(.subheadline).foregroundStyle(Palette.muted).padding(.vertical, 12)
@@ -361,9 +390,10 @@ struct FeedNextPageButton: View {
     private var button: some View {
         Button(action: action) {
             HStack(spacing: 8) {
-                if isLoading { SpectralActivity().frame(width: 34, height: 34) }
-                Text(isLoading ? String(localized: "正在加载内容…") : String(localized: "加载更多")).font(.footnote)
+                if isLoading { ContentActivityLabel(size: 64) }
+                else { Image(systemName: "arrow.down").font(.footnote); Text(String(localized: "加载更多")).font(.footnote) }
             }.frame(minHeight: 56).foregroundStyle(Palette.muted)
         }.buttonStyle(.plain).disabled(isLoading || !enabled)
+            .accessibilityLabel(isLoading ? String(localized: "正在加载内容…") : String(localized: "加载更多"))
     }
 }

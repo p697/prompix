@@ -10,23 +10,27 @@ enum Palette {
         })
     }
 
-    static let paper = adaptive(0xFAFAF7, 0x171B19)
-    static let surface = adaptive(0xFFFFFF, 0x242A27)
-    static let soft = adaptive(0xEEEFEA, 0x2D3530)
-    static let ink = adaptive(0x222D28, 0xEEF2ED)
-    static let muted = adaptive(0x646F68, 0xACB9B0)
-    static let accent = adaptive(0x2F3D37, 0xD2E0DA)
-    static let highlight = adaptive(0xE0E9D9, 0xCEDDCC)
-    static let highlightInk = Color(red: 0.16, green: 0.22, blue: 0.18)
-    static let noteMint = adaptive(0xEAF2F1, 0x223433)
-    static let noteRose = adaptive(0xF5EDF3, 0x352937)
-    static let noteLavender = adaptive(0xEFEDFA, 0x2B2B40)
-    static let line = adaptive(0xDDDFD8, 0x424E45)
+    // Neutral reading surfaces; the user's FIELD reference supplies the spectrum.
+    static let paper = adaptive(0xF9F9FC, 0x17161F)
+    static let surface = adaptive(0xFFFFFF, 0x24222F)
+    static let soft = adaptive(0xEEEDF7, 0x302C40)
+    static let ink = adaptive(0x272433, 0xF1EFFA)
+    static let muted = adaptive(0x6C687C, 0xB8B2CA)
+    static let accent = adaptive(0x4B3FD3, 0xC4BCFF)
+    static let highlight = adaptive(0xE4DFFD, 0xA79BE9)
+    static let highlightInk = Color(red: 0.20, green: 0.15, blue: 0.42)
+    static let noteMint = adaptive(0xE8EEFC, 0x252E46)
+    static let noteRose = adaptive(0xF5E8F4, 0x3A2941)
+    static let noteLavender = adaptive(0xEDE9FC, 0x312B49)
+    static let line = adaptive(0xDEDBEA, 0x484157)
 
-    // These decorative colors never carry text or encode a state by themselves.
-    static let spectrumBlue = Color(red: 0.32, green: 0.47, blue: 0.94)
-    static let spectrumIris = Color(red: 0.57, green: 0.49, blue: 0.87)
-    static let spectrumRose = Color(red: 0.87, green: 0.67, blue: 0.80)
+    // Decorative pigments never encode a state or carry body text by themselves.
+    static let spectrumBlue = Color(red: 0.282, green: 0.337, blue: 0.937)
+    static let spectrumIris = Color(red: 0.541, green: 0.471, blue: 0.898)
+    static let spectrumRose = Color(red: 0.804, green: 0.549, blue: 0.894)
+    static let spectrumIce = Color(red: 0.702, green: 0.816, blue: 0.984)
+    static let spectrumPetal = Color(red: 0.933, green: 0.769, blue: 0.906)
+
 }
 
 enum Typography {

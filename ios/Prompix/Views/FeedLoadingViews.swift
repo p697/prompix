@@ -8,7 +8,7 @@ struct FeedLoadingGrid: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .top, spacing: 14) {
-                FeedLoadingTile(ratio: 0.85)
+                FeedLoadingTile(ratio: 0.85, activity: true)
                 if !typeSize.isAccessibilitySize && !voiceOverEnabled { FeedLoadingTile(ratio: 1.15) }
             }
         }
@@ -21,9 +21,11 @@ struct FeedLoadingGrid: View {
 
 struct FeedLoadingTile: View {
     var ratio: CGFloat = 1
+    var activity = false
     var body: some View {
         VStack(alignment: .leading, spacing: PromptCardGeometry.titleSpacing) {
             LoadingSurface().aspectRatio(ratio, contentMode: .fit)
+                .overlay { if activity { SpectralActivity().frame(width: 88, height: 88) } }
                 .clipShape(RoundedRectangle(cornerRadius: 4))
             Text("Content title").font(.footnote).lineLimit(2, reservesSpace: true)
                 .redacted(reason: .placeholder).padding(.horizontal, 2)

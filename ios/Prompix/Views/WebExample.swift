@@ -23,7 +23,7 @@ struct WebExample: View {
         NavigationStack {
             ZStack {
                 BundledWebsite(filename: filename, loading: $loading, failure: $failure).id(attempt)
-                if loading { ProgressView(String(localized: "正在打开作品…")).padding(20).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16)) }
+                if loading { ContentActivityLabel(size: 80).accessibilityLabel(String(localized: "正在打开作品…")) }
                 if let failure {
                     ContentUnavailableView {
                         Label(String(localized: "网页暂不可用"), systemImage: "safari")

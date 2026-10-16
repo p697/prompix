@@ -170,7 +170,7 @@ struct SearchView: View {
     }
     @ViewBuilder private var legacyResults: some View {
         if completedSearch != localSearch {
-            ProgressView().frame(maxWidth: .infinity).padding()
+            ContentActivityLabel().frame(maxWidth: .infinity).padding()
         } else { legacyMatches }
     }
 

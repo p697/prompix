@@ -1,5 +1,7 @@
 # Prompix for iOS
 
+**0.12.0 (43)** unifies the violet spectrum, request-bound particle activity and compact recovery rows. Offline cards remain visible through retry. UI work follows [the current design language](../docs/design-language.md); validation is recorded [here](../docs/quantum-feedback-0.12.0.md).
+
 **0.8.1 (35)** unifies discovery under latest-first ordering, removes the separate latest rail, and keeps startup synchronization silent. Pull-to-refresh uses the native control below the safe-area header and retains cached cards while reloading. See [refresh acceptance](../docs/quiet-refresh-0.8.1.md). The prior 0.8.0 (34) source discovery, monitoring and device acceptance remain documented in [fresh discovery acceptance](../docs/fresh-discovery.md). Historical delivery notes below describe their own releases.
 
 Integrated candidate **0.7.0 (31)** uses bounded v3 card pages, server search and browse metadata, revision-bound details/languages, creator pagination and bounded offline caches. Personal favorites and drafts stay local. The existing v2 cache remains an offline fallback and is no longer downloaded on ordinary launches. See [database acceptance](../docs/database-feed-v3.md) and [operations](../docs/database-operations.md). The 0.6.6 onboarding and use-panel changes are included; this task does not install on physical phones.

@@ -5,6 +5,7 @@ Prompix is built mostly by AI coding agents. These rules apply to every agent an
 ## Start here
 
 - Read [docs/README.md](docs/README.md) before starting any task. Key decisions are in `docs/decisions.md`, milestones and task breakdowns in `docs/roadmap.md`, specs in the other files under `docs/`, and UI mockups in `design/v2/`.
+- Before changing UI, read [docs/design-language.md](docs/design-language.md) for the current palette, particle motion, recovery states and native component rules.
 - When code and docs disagree, the code wins; update the docs in the same PR.
 - Append new key decisions to `docs/decisions.md` instead of rewriting earlier entries.
 

@@ -95,16 +95,19 @@ struct LoadingSurface: View {
     }
 }
 
-/// Three luminous forms gather, orbit and open again. It reports activity,
-/// never a percentage, and exists only while a real request is in flight.
+/// A bounded field of pearl-like particles: a travelling wave changes light,
+/// depth and spacing together. Activity is local to a real request, never a
+/// decorative timer or a promise of measurable progress.
 struct SpectralActivity: View {
+    var active = true
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.scenePhase) private var scenePhase
     @State private var visible = true
     @State private var lowPower = ProcessInfo.processInfo.isLowPowerModeEnabled
     @State private var started = Date()
-    private var animates: Bool { visible && scenePhase == .active && !reduceMotion && !lowPower }
+    private var animates: Bool { active && visible && scenePhase == .active && !reduceMotion && !lowPower }
     var body: some View {
         drawing
             .onAppear { visible = true }
@@ -121,30 +124,44 @@ struct SpectralActivity: View {
     }
     private var timeline: some View {
         TimelineView(.animation(minimumInterval: 1.0 / 30, paused: !animates)) { clock in
-            let phase = animates ? clock.date.timeIntervalSince(started) * .pi / 2 : 0.8
+            let phase = animates ? clock.date.timeIntervalSince(started) * .pi / 2.8 : 0.7
             Canvas { context, size in
                 let unit = min(size.width, size.height)
+                let rings = unit >= 56 ? 3 : 2
                 let center = CGPoint(x: size.width / 2, y: size.height / 2)
-                let expansion = 0.5 + 0.5 * sin(phase)
-                let radius = unit * (0.10 + 0.16 * expansion)
                 let colors = [Palette.spectrumBlue, Palette.spectrumIris, Palette.spectrumRose]
-                for index in 0..<9 {
-                    let angle = Double(index) * .pi * 2 / 9 + phase * 0.45
-                    let r = unit * (0.40 - expansion * 0.05)
-                    let point = CGPoint(x: center.x + cos(angle) * r, y: center.y + sin(angle) * r)
-                    let dot = CGRect(x: point.x - unit * 0.016, y: point.y - unit * 0.016, width: unit * 0.032, height: unit * 0.032)
-                    context.fill(Path(ellipseIn: dot), with: .color(colors[index % 3].opacity(reduceTransparency ? 1 : 0.55)))
-                }
-                for index in 0..<3 {
-                    let angle = Double(index) * .pi * 2 / 3 + phase * 0.65
-                    let point = CGPoint(x: center.x + cos(angle) * radius, y: center.y + sin(angle) * radius)
-                    let diameter = unit * (0.34 - 0.07 * expansion)
-                    let rect = CGRect(x: point.x - diameter / 2, y: point.y - diameter / 2, width: diameter, height: diameter)
-                    let path = Path(ellipseIn: rect)
-                    if reduceTransparency { context.fill(path, with: .color(colors[index])) }
-                    else {
-                        context.fill(path, with: .linearGradient(Gradient(colors: [.white, colors[index], colors[(index + 1) % 3]]),
-                            startPoint: CGPoint(x: rect.minX, y: rect.minY), endPoint: CGPoint(x: rect.maxX, y: rect.maxY)))
+                for ring in 0...rings {
+                    let count = ring == 0 ? 1 : ring * 6
+                    for index in 0..<count {
+                        let angle = Double(index) * .pi * 2 / Double(count) + Double(ring) * 0.14
+                        let wave = sin(phase - Double(ring) * 0.85 + cos(angle) * 0.8)
+                        let energy = 0.5 + 0.5 * wave
+                        let radius = unit * Double(ring) / Double(rings) * (0.36 + 0.014 * wave)
+                        let drift = active ? 0.035 * sin(phase * 0.5) : 0
+                        let point = CGPoint(x: center.x + cos(angle + drift) * radius,
+                                            y: center.y + sin(angle + drift) * radius * (0.93 + 0.035 * cos(phase)))
+                        let diameter = unit * (rings == 3 ? 0.131 : 0.175) * (0.90 + 0.10 * energy)
+                        let rect = CGRect(x: point.x - diameter / 2, y: point.y - diameter / 2, width: diameter, height: diameter)
+                        let path = Path(ellipseIn: rect)
+                        let pigment = colors[(index + ring) % 3]
+                        if reduceTransparency {
+                            context.fill(path, with: .color(pigment))
+                        } else {
+                            let pearl = colorScheme == .dark ? Color(white: 0.43) : Color.white
+                            context.fill(path, with: .radialGradient(Gradient(colors: [pearl, Palette.spectrumIce, pigment]),
+                                center: CGPoint(x: rect.midX - diameter * 0.22, y: rect.midY - diameter * 0.27),
+                                startRadius: 0, endRadius: diameter * 0.9))
+                            var light = context
+                            light.opacity = 0.15 + 0.85 * energy
+                            light.fill(path, with: .linearGradient(Gradient(stops: [
+                                .init(color: pearl, location: 0),
+                                .init(color: Palette.spectrumIce, location: 0.28),
+                                .init(color: pigment, location: 0.58),
+                                .init(color: Palette.spectrumPetal, location: 1)
+                            ]), startPoint: CGPoint(x: rect.minX, y: rect.minY + diameter * (0.3 + wave * 0.5)),
+                                endPoint: CGPoint(x: rect.maxX, y: rect.maxY - diameter * wave * 0.3)))
+                            context.stroke(path, with: .color(.white.opacity(colorScheme == .dark ? 0.15 : 0.55)), lineWidth: 0.4)
+                        }
                     }
                 }
             }
@@ -152,13 +169,38 @@ struct SpectralActivity: View {
     }
 }
 
+/// Visible feedback is purely visual; VoiceOver retains a meaningful status.
 struct ContentActivityLabel: View {
+    var size: CGFloat = 72
     var body: some View {
-        HStack(spacing: 10) {
-            SpectralActivity().frame(width: 32, height: 32)
-            Text(String(localized: "正在加载内容…")).font(.footnote).foregroundStyle(Palette.muted)
-        }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(String(localized: "正在加载内容…"))
+        SpectralActivity().frame(width: size, height: size)
+            .accessibilityElement(children: .ignore)
+            .accessibilityHidden(false)
+            .accessibilityLabel(String(localized: "正在加载内容…"))
     }
+}
+
+/// A single quiet recovery row. Existing content stays in its original place;
+/// failure is static and can never be mistaken for an operation still running.
+struct ContentRecoveryRow: View {
+    var message = String(localized: "暂时无法连接")
+    var retryAt: Date?
+    var retryID = "retryContent"
+    let action: () -> Void
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 10) { status; Spacer(minLength: 8); retry }
+            VStack(alignment: .leading, spacing: 4) { status; retry }
+        }
+        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+        .accessibilityElement(children: .contain)
+    }
+    private var status: some View {
+        HStack(spacing: 10) {
+            SpectralActivity(active: false).frame(width: 28, height: 28)
+            Text(message).font(.footnote).foregroundStyle(Palette.muted)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+    private var retry: some View { FeedRetryButton(retryAt: retryAt, action: action).accessibilityIdentifier(retryID) }
 }

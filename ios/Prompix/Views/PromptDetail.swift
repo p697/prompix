@@ -260,7 +260,7 @@ struct PromptDetail: View {
                     .font(.footnote).foregroundStyle(Palette.muted).fixedSize(horizontal: false, vertical: true)
             } else if let pendingLanguage {
                 HStack(alignment: .top, spacing: 10) {
-                    ProgressView().controlSize(.small)
+                    ContentActivityLabel(size: 32)
                     VStack(alignment: .leading, spacing: 4) {
                         Text(ContentLanguage.name(pendingLanguage)).font(.footnote.weight(.medium))
                         Text(String(localized: "正在下载此语言，当前内容仍可使用。"))
@@ -272,7 +272,7 @@ struct PromptDetail: View {
                     Text(ContentLanguage.name(failedLanguage)).font(.footnote.weight(.medium))
                     Text(String(localized: "此语言暂时无法下载，当前内容已保留。"))
                         .font(.caption).foregroundStyle(Palette.muted).fixedSize(horizontal: false, vertical: true)
-                    Button(String(localized: "重试")) { selectLanguage(failedLanguage) }
+                    FeedRetryButton { selectLanguage(failedLanguage) }
                         .font(.footnote.weight(.medium)).frame(minHeight: 44).accessibilityIdentifier("retryLanguageDownload")
                 }.accessibilityElement(children: .contain).accessibilityIdentifier("languageDownloadFailure")
             }
@@ -627,12 +627,12 @@ struct MovieView: View {
                     } description: {
                         Text(String(localized: "检查网络后再试。完整 Prompt 仍可复制使用。"))
                     } actions: {
-                        Button(String(localized: "重新加载")) { playback.start(url: url) }.buttonStyle(.bordered).accessibilityIdentifier("retryVideo")
+                        FeedRetryButton(title: String(localized: "重新加载")) { playback.start(url: url) }.accessibilityIdentifier("retryVideo")
                     }
                 } else if let player = playback.player {
                     VideoPlayer(player: player).aspectRatio(playback.aspectRatio, contentMode: .fit)
                         .accessibilityIdentifier(playback.hasPlayed ? "playingVideo" : "loadingVideo")
-                        .overlay { if playback.loading { ProgressView(String(localized: "正在加载视频…")).padding(16).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14)).allowsHitTesting(false) } }
+                        .overlay { if playback.loading { ContentActivityLabel(size: 80).background(.regularMaterial, in: Circle()).allowsHitTesting(false) } }
                 }
                 Text(caption).font(.footnote).foregroundStyle(Palette.muted).padding(.horizontal, 20)
             }.frame(maxWidth: .infinity, maxHeight: .infinity).background(.black).navigationTitle(String(localized: "视频预览")).navigationBarTitleDisplayMode(.inline)
@@ -766,12 +766,13 @@ private struct ImagePage: View {
                 ContentUnavailableView {
                     Label(String(localized: "图片暂不可用"), systemImage: "photo")
                 } description: { Text(String(localized: "检查网络后可以重新加载。")) }
-                actions: { Button(String(localized: "重新加载")) { attempt += 1 }.buttonStyle(.bordered).accessibilityIdentifier("retryImage") }
-            } else { ProgressView().tint(.white) }
+                actions: { FeedRetryButton(title: String(localized: "重新加载")) { attempt += 1 }.accessibilityIdentifier("retryImage") }
+            } else { ContentActivityLabel(size: 88) }
         }.promptActionBar {
             if loadingFullImage, remoteImage != nil {
-                ProgressView(String(localized: "正在加载清晰图片…"))
-                    .font(.footnote).tint(.white).padding(12).foregroundStyle(.white)
+                ContentActivityLabel(size: 44)
+                    .accessibilityLabel(String(localized: "正在加载清晰图片…"))
+                    .padding(8)
                     .background(.black.opacity(0.7), in: Capsule()).padding(12)
                     .padding(.bottom, showsPageIndicator ? 28 : 0)
                     .accessibilityIdentifier("loadingFullImage")

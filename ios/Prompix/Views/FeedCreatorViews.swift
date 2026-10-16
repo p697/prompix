@@ -23,13 +23,12 @@ struct FeedCreatorResults: View {
             if waiting && items.isEmpty {
                 CreatorLoadingRows()
             } else if matches && store.failure != nil {
-                Text(String(localized: "内容更新未完成")).font(.footnote).foregroundStyle(Palette.muted)
-                FeedRetryButton(retryAt: store.retryAt) {
+                ContentRecoveryRow(retryAt: store.retryAt, retryID: "retryCreators") {
                     Task {
                         if !store.failedFirstPage, store.nextCursor != nil, !store.isCached, store.failure as? FeedError != .snapshotExpired { await store.loadMore() }
                         else { await store.load(query, force: true) }
                     }
-                }.accessibilityIdentifier("retryCreators")
+                }
             } else if items.isEmpty && !waiting && !store.isLoading {
                 if query.q.isEmpty { ContentUnavailableView(String(localized: "暂无创作者"), systemImage: "person.crop.circle") }
                 else { ContentUnavailableView.search(text: query.q) }
