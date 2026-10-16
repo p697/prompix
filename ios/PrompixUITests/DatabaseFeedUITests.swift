@@ -87,6 +87,26 @@ import UIKit
         capture("legacy-published-search-focus-and-latest-results")
     }
 
+    func testHomeBlendsVisualWorkBeforeNewTextBatchAndCanSwitchToLatest() throws {
+        launch(["--feed-visual-mix-test"])
+        let firstVisual = app.buttons["prompt-database-fixture-9969"]
+        XCTAssertTrue(firstVisual.waitForExistence(timeout: 15))
+        let ids = try XCTUnwrap(requests().first { $0["operation"] as? String == "visual-page-items" }?["query"] as? String)
+        XCTAssertEqual(Array(ids.split(separator: ",").prefix(5)), ["9969", "9967", "9966", "9965", "9999"])
+        XCTAssertTrue(try requests().contains { $0["operation"] as? String == "page" && $0["query"] as? String == "__discovery__" })
+        capture("visual-feed-01-home")
+        let scroll = app.scrollViews["discoveryScroll"]
+        scroll.swipeUp(); capture("visual-feed-02-first-screen")
+        scroll.swipeUp(); capture("visual-feed-03-second-screen")
+        app.terminate(); launch(["--feed-visual-mix-test"])
+        app.buttons["discoveryFilters"].tap(); app.buttons["最新收录"].tap()
+        XCTAssertTrue(app.buttons["prompt-database-fixture-9999"].waitForExistence(timeout: 10))
+        XCTAssertTrue(try requests().contains { $0["operation"] as? String == "page" && $0["query"] as? String == "__latest__" })
+        capture("visual-feed-04-explicit-latest")
+        app.buttons["discoveryFilters"].tap(); app.buttons["推荐"].tap()
+        XCTAssertTrue(firstVisual.waitForExistence(timeout: 10))
+    }
+
     func testHomeSkeletonsKeepSectionAnchorsThroughIndependentResponses() throws {
         launch(["--feed-home-loading-test"])
         let root = try directory()
@@ -319,6 +339,8 @@ import UIKit
 
     func testHomeUsesLatestOrderWithoutLaunchBannerAndPullRefreshes() async throws {
         launch()
+        app.buttons["discoveryFilters"].tap()
+        app.buttons["最新收录"].tap()
         let newest = app.buttons["prompt-database-fixture-9999"]
         XCTAssertTrue(newest.waitForExistence(timeout: 15))
         XCTAssertFalse(app.otherElements["catalogUpdateStatus"].exists)
@@ -347,7 +369,7 @@ import UIKit
         XCTAssertTrue(added.waitForExistence(timeout: 10))
         let pages = try requests().filter { $0["operation"] as? String == "page" }
         XCTAssertEqual(pages.count, before + 1)
-        XCTAssertTrue(pages.allSatisfy { $0["query"] as? String == "__latest__" && $0["cursor"] as? String == "" })
+        XCTAssertTrue(pages.dropFirst(before).allSatisfy { $0["query"] as? String == "__latest__" && $0["cursor"] as? String == "" })
         XCTAssertFalse(app.otherElements["catalogUpdateStatus"].exists)
         XCTAssertTrue(added.exists)
         capture("refresh-03-new-first-item")
@@ -356,6 +378,7 @@ import UIKit
         app.buttons["kind-all"].tap()
         XCTAssertTrue(added.waitForExistence(timeout: 10))
         app.terminate(); launch(["--feed-fixture-offline"])
+        app.buttons["discoveryFilters"].tap(); app.buttons["最新收录"].tap()
         XCTAssertTrue(added.waitForExistence(timeout: 10))
         XCTAssertFalse(app.otherElements["catalogUpdateStatus"].exists)
         capture("refresh-04-offline-cache")

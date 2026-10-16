@@ -10,7 +10,7 @@ const secret = "freshness-test-secret-0000000000000000000000000000";
 const prompt = (id: string): Prompt => ({ id, kind: "text", title: id, summary: "First-party fixture", prompt: "Write an original short story.", example: "A garden.",
   tags: ["fixture"], model: "test", toolURL: null, artwork: "test", previewLabel: "Preview", source: { name: "Prompix", url: null, license: "Original", method: "Test fixture" }, media: null });
 const input = (prompts: Prompt[]) => ({ schemaVersion: 1 as const, version: "fixture", prompts });
-test("unusable media at the front of the queue cannot consume all new-publication slots", async t => {
+test("unusable media and a ready text backlog cannot bypass the visual-publication policy", async t => {
   const { pg, writer } = await createTestDatabase(); t.after(() => pg.close());
   const held = Array.from({ length: 30 }, (_, i) => ({ ...prompt(`held-${i}`), kind: "web" as const }));
   const ready = Array.from({ length: 30 }, (_, i) => prompt(`ready-${i}`));
@@ -19,8 +19,8 @@ test("unusable media at the front of the queue cannot consume all new-publicatio
     prepareMedia: async () => { throw new Error("Unavailable preview"); }, persistCache: async () => {}, persistLedger: async () => {} });
   const result = await limitNewPublications(writer, visual.prompts, new Date("2026-10-15T00:00:00Z"));
   assert.equal(visual.withheldIDs.length, 30);
-  assert.deepEqual(result.prompts.map(item => item.id), ready.slice(0, 25).map(item => item.id));
-  assert.equal(result.report.deferred, 5);
+  assert.deepEqual(result.prompts, []);
+  assert.equal(result.report.deferred, 30);
 });
 test("latest feed sorts by first successful publication, not staging or edits, and pins cursors across releases", async t => {
   const { pg, writer, reader } = await createTestDatabase(); t.after(() => pg.close());
@@ -61,7 +61,7 @@ test("new-publication ceiling survives multiple activations and rollback while e
 });
 test("quota carries unused capacity through the day and never counts staged drafts as already published", async t => {
   const { pg, writer } = await createTestDatabase(); t.after(() => pg.close());
-  const items = Array.from({ length: 110 }, (_, i) => prompt(`draft-${i}`));
+  const items = Array.from({ length: 110 }, (_, i) => ({ ...prompt(`draft-${i}`), kind: "image" as const, media: { image: "lake", video: null, demoURL: null } }));
   await stagePublication(writer, input(items));
   const early = await limitNewPublications(writer, items, new Date("2026-10-15T00:00:00Z"));
   const late = await limitNewPublications(writer, items, new Date("2026-10-15T18:00:00Z"));

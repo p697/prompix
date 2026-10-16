@@ -16,7 +16,7 @@ export const normalizeFeedSearch = (value: string) => value.normalize("NFKD").re
   .normalize("NFKC").toLowerCase().trim().replace(/\s+/gu, " ");
 export const feedFiltersSchema = z.object({
   locale: feedLocale.default("original"),
-  sort: z.enum(["curated", "latest"]).optional(),
+  sort: z.enum(["curated", "latest", "discovery"]).optional(),
   kind: z.enum(["text", "image", "video", "web", "skill"]).optional(),
   collection: z.enum(collectionIDs).optional(),
   creator: z.string().min(1).max(200).optional(),
@@ -64,6 +64,7 @@ export function parseFeedQuery(url: URL): { filters: FeedFilters; limit: number;
   if (Object.values(raw).some(value => /[\u0000-\u001f\u007f]/u.test(value))) throw new Error("Invalid filter text");
   const filters = feedFiltersSchema.parse(raw);
   filters.q = normalizeFeedSearch(filters.q);
+  if (filters.sort === "discovery" && filters.q) throw new Error("Discovery ordering does not rank searches");
   if (filters.q.length > 120 || filters.q.split(" ").length > 8)
     throw new Error("Invalid filter text");
   return { filters, limit: Number(limit), ...(cursor ? { cursor } : {}) };

@@ -1,3 +1,4 @@
+import { hasVisualPreview } from "../packages/schema/visual.ts";
 import { isDiscoveredSkill, discoveredSkillIssue } from "./discovered-skills.ts";
 import { createHash } from "node:crypto";
 import { isPublisherSkill, publisherSkillIssue } from "./publisher-skills.ts";
@@ -105,16 +106,17 @@ export function automaticReviewEligibility(item: Candidate): string | undefined 
   if (JSON.stringify([editorialInput(item)]).length > 36000) return "Complete source exceeds the bounded review input; manual review required";
 }
 
-/** Weighted review capacity: X discovery 50%, creative work 30%, maintenance 10%, technical 10%.
+/** Review capacity: visual work 80% (mostly X), maintenance 10%, creative text 10%.
  * Empty shelves lend capacity; this changes review order, never approval standards. */
 export function editorialQueue(items: readonly Candidate[], previous: readonly Prompt[], rotation = 0): Candidate[] {
   const published = new Set(previous.map(item => item.id));
-  const buckets: Record<string, Candidate[]> = { x: [], creative: [], maintenance: [], technical: [] };
+  const buckets: Record<string, Candidate[]> = { x: [], visual: [], creative: [], maintenance: [], technical: [] };
   for (const item of items) {
     const text = `${item.title} ${item.summary} ${item.tags.join(" ")}`;
     const creative = /image|video|design|illustrat|photograph|story|writing|presentation|animation|图片|视频|设计|写作|海报/i.test(text);
     const technical = !creative && /expo|supabase|database|postgres|backend|debug|typescript|kubernetes|数据库|调试/i.test(text);
-    const bucket = published.has(item.id) ? "maintenance" : item.source.name === "X" || /; discovered via https:\/\/(?:x|twitter)\.com\//.test(item.source.method) ? "x" : technical ? "technical" : "creative";
+    const fromX = item.source.name === "X" || /; discovered via https:\/\/(?:x|twitter)\.com\//.test(item.source.method);
+    const bucket = published.has(item.id) ? "maintenance" : hasVisualPreview(item) ? (fromX ? "x" : "visual") : technical ? "technical" : "creative";
     buckets[bucket].push(item);
   }
   for (const [key, values] of Object.entries(buckets)) {
@@ -129,9 +131,9 @@ export function editorialQueue(items: readonly Candidate[], previous: readonly P
     buckets[key] = [];
     for (let index = 0; rotated.some(group => index < group.length); index++) for (const group of rotated) if (group[index]) buckets[key].push(group[index]);
   }
-  const queue: Candidate[] = [], cycle = ["maintenance", "x", "creative", "x", "creative", "x", "technical", "x", "creative", "x"];
+  const queue: Candidate[] = [], cycle = ["maintenance", "x", "visual", "x", "visual", "x", "creative", "x", "visual", "x"];
   for (let index = 0; queue.length < items.length; index++) {
-    const item = buckets[cycle[index % cycle.length]].shift() ?? buckets.x.shift() ?? buckets.creative.shift() ?? buckets.maintenance.shift() ?? buckets.technical.shift();
+    const item = buckets[cycle[index % cycle.length]].shift() ?? buckets.x.shift() ?? buckets.visual.shift() ?? buckets.creative.shift() ?? buckets.maintenance.shift() ?? buckets.technical.shift();
     if (item) queue.push(item);
   }
   return queue;
@@ -181,7 +183,16 @@ export async function runEditorialReview(options: { candidates: readonly Candida
   // A completed reservation remains spent even if its cache or approvals are later missing.
   const attemptedIDs = new Set(ledger?.attempts.flatMap(attempt => attempt.candidateIDs) ?? []);
   const rotation = Math.floor(Date.parse(options.day + "T00:00:00Z") / 86400000);
-  let queue = editorialQueue(eligible, options.previous, rotation).filter(item => !attemptedIDs.has(item.id));
+  const published = new Set(options.previous.map(item => item.id));
+  const candidatesByID = new Map(options.candidates.map(item => [item.id, item]));
+  // Bound review spending on the huge text backlog, including reserved attempts
+  // on previous invocations today. Unknown old attempts remain conservatively spent.
+  let plainAttempts = [...attemptedIDs].filter(id => !published.has(id) &&
+    (!candidatesByID.has(id) || !hasVisualPreview(candidatesByID.get(id)!))).length;
+  let queue = editorialQueue(eligible, options.previous, rotation).filter(item => {
+    if (attemptedIDs.has(item.id)) return false;
+    return published.has(item.id) || hasVisualPreview(item) || plainAttempts++ < 20;
+  });
   let reviews = options.reviews;
   while (queue.length && (ledger?.requests ?? 0) < maxRequests) {
     const selected: Candidate[] = [];

@@ -10,13 +10,14 @@ actor SimulatorFeedService: FeedServing {
     private let directory: URL
     private let offline: Bool
     private let removed: Bool
+    private let visualMix: Bool
     private let progressive: Bool
     private let imagePrefetch: Bool
     private var failed = Set<String>()
     private var hasNewItem: Bool { FileManager.default.fileExists(atPath: directory.appending(path: "publish-new-item").path) }
     private var activeRelease: String { hasNewItem ? "feed-" + String(repeating: "f", count: 64) : Self.release }
-    init(directory: URL, offline: Bool, removed: Bool, progressive: Bool = false, imagePrefetch: Bool = false) {
-        self.directory = directory; self.offline = offline; self.removed = removed; self.progressive = progressive; self.imagePrefetch = imagePrefetch
+    init(directory: URL, offline: Bool, removed: Bool, progressive: Bool = false, imagePrefetch: Bool = false, visualMix: Bool = false) {
+        self.directory = directory; self.offline = offline; self.removed = removed; self.progressive = progressive; self.imagePrefetch = imagePrefetch; self.visualMix = visualMix
     }
     private func record(_ operation: String, query: String = "", cursor: String? = nil) throws {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -33,10 +34,11 @@ actor SimulatorFeedService: FeedServing {
               profileURL: URL(string: "https://example.com/author/\(index)")!)
     }
     private func prompt(_ index: Int) -> Prompt {
+        let kind: PromptKind = visualMix && index >= 9970 ? .text : [.text, .image, .video, .web][index % 4]
         let media: Prompt.Media? = imagePrefetch
             ? .init(image: nil, video: nil, demoURL: nil, imageURL: URL(string: "https://api.prompix.dev/media/acceptance/\(directory.lastPathComponent)/\(index).png"), aspectRatio: 0.95)
-            : progressive && index % 4 != 0 ? .init(image: "lake", video: nil, demoURL: nil, aspectRatio: 0.95) : nil
-        return Prompt(id: "database-fixture-\(index)", kind: [.text, .image, .video, .web][index % 4],
+            : ((progressive && index % 4 != 0) || (visualMix && kind != .text)) ? .init(image: "lake", video: nil, demoURL: nil, aspectRatio: 0.95) : nil
+        return Prompt(id: "database-fixture-\(index)", kind: kind,
                title: String(format: "Database item %04d", index), summary: "First-party content for database feed acceptance.",
                prompt: "  Original fixture \(index)\nPreserve whitespace and [topic].\n", example: "A synthetic example",
                tags: ["好玩一点", "肖像", "写作"], model: "Model \(index % 4)", toolURL: nil,
@@ -61,7 +63,7 @@ actor SimulatorFeedService: FeedServing {
             do { try await Task.sleep(for: .milliseconds(100)) }
             catch { try? record("page-cancelled"); throw error }
         }
-        try record("page", query: query.sort == "latest" ? "__latest__" : query.q, cursor: cursor)
+        try record("page", query: query.sort == "discovery" ? "__discovery__" : query.sort == "latest" ? "__latest__" : query.q, cursor: cursor)
         if query.creator != nil {
             try record("creatorWorks", query: (query.creator ?? "") + ":" + (query.kind ?? "all"), cursor: cursor)
             try await waitForAcceptanceGate("creator")
@@ -88,9 +90,22 @@ actor SimulatorFeedService: FeedServing {
             if ["tail", "current"].contains(query.q) { return index == 9999 }
             return true
         }
-        let ordered = query.sort == "latest" ? Array(indices.reversed()) : indices
+        let ordered: [Int]
+        if query.sort == "discovery" {
+            let latest = Array(indices.reversed())
+            let visual = latest.filter { prompt($0).media?.image != nil || prompt($0).media?.imageURL != nil }
+            let plain = latest.filter { prompt($0).media?.image == nil && prompt($0).media?.imageURL == nil }
+            var blended: [Int] = [], a = 0, b = 0
+            while a < visual.count || b < plain.count {
+                if (blended.count % 5 < 4 && a < visual.count) || b == plain.count {
+                    blended.append(visual[a]); a += 1
+                } else { blended.append(plain[b]); b += 1 }
+            }
+            ordered = blended
+        } else { ordered = query.sort == "latest" ? Array(indices.reversed()) : indices }
         let start = Int(cursor ?? "0") ?? 0
         let page = Array(ordered.dropFirst(start).prefix(FeedClient.pageSize))
+        if visualMix { try record("visual-page-items", query: page.map(String.init).joined(separator: ","), cursor: cursor) }
         return FeedPage(schemaVersion: 3, release: pageRelease, items: page.map(card),
                         nextCursor: start + page.count < indices.count ? String(start + page.count) : nil)
     }

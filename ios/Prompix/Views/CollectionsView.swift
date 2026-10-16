@@ -118,6 +118,7 @@ enum HomeCoverSelection {
 }
 
 struct CollectionRail: View {
+    var query = FeedQuery(sort: "discovery")
     @Environment(Library.self) private var library
     @Environment(\.dynamicTypeSize) private var typeSize
     @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
@@ -126,13 +127,13 @@ struct CollectionRail: View {
     }
     private var waiting: Bool {
         guard let feed = library.feed else { return false }
-        return feed.discovery.query != FeedQuery(sort: "latest") ||
+        return feed.discovery.query != query ||
             (feed.browse.value == nil && feed.browse.failure == nil) ||
             (feed.discovery.release == nil && feed.discovery.failure == nil)
     }
     private var covers: [String: [ContentPreview]] {
         var result: [String: [ContentPreview]] = [:]
-        let page = Array((library.feed?.discovery.query == FeedQuery(sort: "latest") ? library.feed?.discovery.items ?? [] : []).prefix(30)).filter { !library.isRemoved(id: $0.id) }
+        let page = Array((library.feed?.discovery.query == query ? library.feed?.discovery.items ?? [] : []).prefix(30)).filter { !library.isRemoved(id: $0.id) }
         var excluded = library.feed.map { feed in
             Array(page.prefix(8)).map(ContentPreview.init) + feed.creatorDiscovery.items.prefix(12).compactMap { feed.creatorPreview($0).map(ContentPreview.init) }
         } ?? Array(library.prompts.prefix(8)).map(ContentPreview.init)

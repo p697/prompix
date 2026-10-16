@@ -11,15 +11,19 @@ import { windowBudget } from "./discovery-budget.ts";
 const exclude = "-is:retweet -is:reply -is:quote";
 // Independent discovery: topics span creators and tools, rather than mirroring
 // another curator's contributor list. Keep each stream's progress independent.
+// Eight of ten search slots target visual work. Existing fingerprinted cursors
+// and the global paid ledger survive changes to the rotation.
 export const xFeeds = [
   { id: "image", query: `(prompt OR 提示词 OR プロンプト) ("nano banana" OR "gpt image" OR midjourney OR flux) has:images ${exclude}` },
   { id: "video", query: `(prompt OR 提示词 OR プロンプト) (seedance OR veo OR sora OR kling OR runway) has:videos ${exclude}` },
-  { id: "text", query: `(prompt OR 提示词 OR プロンプト) (ChatGPT OR Claude) (writing OR story OR tarot OR productivity OR 写作 OR 塔罗) ${exclude}` },
-  { id: "web", query: `(prompt OR 提示词) (website OR "landing page" OR "web app" OR 网页) (v0 OR lovable OR bolt OR Claude) ${exclude}` },
-  { id: "skills", query: `("SKILL.md" OR "agent skill" OR "agent skills") (design OR image OR video OR writing OR marketing OR creative OR 设计 OR 图片 OR 视频) ${exclude}` },
   { id: "image-art", query: `(prompt OR 提示词 OR プロンプト) (cinematic OR editorial OR illustration OR poster OR portrait OR 海报 OR 插画) has:images ${exclude}` },
+  { id: "web", query: `(prompt OR 提示词) (website OR "landing page" OR "web app" OR 网页) (v0 OR lovable OR bolt OR Claude) has:images ${exclude}` },
+  { id: "image-photo", query: `(prompt OR 提示词 OR プロンプト) (photography OR fashion OR portrait OR beauty OR 人像 OR 写真) has:images ${exclude}` },
   { id: "video-story", query: `(prompt OR workflow OR 提示词) (animation OR filmmaking OR storyboard OR cinematic OR 动画 OR 短片) has:videos ${exclude}` },
+  { id: "image-design", query: `(prompt OR 提示词 OR プロンプト) ("product photography" OR packaging OR illustration OR typography OR 海报 OR 产品摄影) has:images ${exclude}` },
+  { id: "image-style", query: `(prompt OR 提示词 OR プロンプト) (surreal OR filmgrain OR "film grain" OR collage OR "art direction" OR 拼贴 OR 电影感) has:images ${exclude}` },
   { id: "creative-skills", query: `("skill" OR "skills" OR "工作流") (github OR clawhub) (image OR video OR design OR storytelling OR presentation OR 图片 OR 视频) ${exclude}` },
+  { id: "text", query: `(prompt OR 提示词 OR プロンプト) (ChatGPT OR Claude) (writing OR story OR tarot OR productivity OR 写作 OR 塔罗) ${exclude}` },
 ] as const;
 const id = z.string().regex(/^\d{1,19}$/);
 const cursorSchema = z.object({
