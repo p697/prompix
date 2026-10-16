@@ -187,8 +187,9 @@ export async function runEditorialReview(options: { candidates: readonly Candida
   const candidatesByID = new Map(options.candidates.map(item => [item.id, item]));
   // Bound review spending on the huge text backlog, including reserved attempts
   // on previous invocations today. Unknown old attempts remain conservatively spent.
-  let plainAttempts = [...attemptedIDs].filter(id => !published.has(id) &&
-    (!candidatesByID.has(id) || !hasVisualPreview(candidatesByID.get(id)!))).length;
+  // Publication or later maintenance never refunds a previous text attempt.
+  let plainAttempts = [...attemptedIDs].filter(id =>
+    !candidatesByID.has(id) || !hasVisualPreview(candidatesByID.get(id)!)).length;
   let queue = editorialQueue(eligible, options.previous, rotation).filter(item => {
     if (attemptedIDs.has(item.id)) return false;
     return published.has(item.id) || hasVisualPreview(item) || plainAttempts++ < 20;

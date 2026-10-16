@@ -432,7 +432,7 @@ test("live editorial responses must classify output even when their old cache re
   assert.equal((await run()).report.status, "failed");
 });
 
-test("plain-text review spending stays bounded across restarts while visual candidates keep progressing", async () => {
+test("plain-text review spending stays bounded across restarts and publication", async () => {
   const items = Array.from({ length: 30 }, (_, n) => candidate(`plain-${n}`));
   const { state, run } = harness(items, async input => approve(input));
   const first = await run(day, items, 64);
@@ -441,4 +441,9 @@ test("plain-text review spending stays bounded across restarts while visual cand
   const again = await run(day, items, 64);
   assert.equal(again.report.requests, 0);
   assert.equal(state.ledger?.requests, 7);
+  const spent = new Set(state.ledger!.attempts.flatMap(attempt => attempt.candidateIDs));
+  const afterPublication = await runEditorialReview({ candidates: items, previous: items.filter(item => spent.has(item.id)),
+    reviews: state.reviews, cache: state.cache, ledger: state.ledger, day, maxRequests: 64,
+    provider: async input => approve(input), persistCache: async () => {}, persistReviews: async () => {}, persistLedger: async () => {} });
+  assert.equal(afterPublication.report.requests, 0, "Publishing reviewed text must not refund its daily review budget");
 });
