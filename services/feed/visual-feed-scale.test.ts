@@ -19,14 +19,18 @@ test("10000-item visual feed traverses every item once with bounded, release-pin
   const release = await stagePublication(writer, { schemaVersion: 1, version: "scale", prompts });
   await activatePublication(writer, release, "0");
   const seen = new Set<string>(), elapsed: number[] = [];
-  let cursor: string | undefined;
+  let cursor: string | undefined, plainRun = 0;
   do {
     const start = performance.now();
     const page = await getFeed(reader, { filters: { locale: "original", sort: "discovery", q: "" }, limit: 30, cursor }, "visual-scale-secret-00000000000000000000000000000");
     elapsed.push(performance.now() - start);
     assert.equal(page.release, release); assert.ok(page.items.length <= 30);
-    for (const card of page.items) { assert.ok(!seen.has(card.id)); seen.add(card.id); }
-    if (seen.size <= 8700) {
+    for (const card of page.items) {
+      assert.ok(!seen.has(card.id)); seen.add(card.id);
+      plainRun = card.media?.image ? 0 : plainRun + 1;
+      assert.ok(plainRun <= 2, "The historical tail must retain visual anchors");
+    }
+    if (seen.size <= 7500) {
       assert.equal(page.items.filter(card => card.media?.image).length, 24);
       assert.ok(page.items.slice(0, 4).every(card => card.media?.image));
     }

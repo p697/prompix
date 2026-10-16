@@ -31,10 +31,12 @@ test("visual feed crosses arbitrary page boundaries at 4:1, preserves both lanes
     assert.ok(page.items.every(card => !("prompt" in card) && !("skill" in card)));
   } while (cursor);
   assert.equal(all.length, items.length); assert.equal(new Set(all).size, items.length);
-  for (let n = 0; n < 47; n++) {
+  for (let n = 0; n < 6; n++) {
     assert.ok(all.slice(n * 5, n * 5 + 4).every(id => id.startsWith("image-")));
     assert.ok(all[n * 5 + 4].startsWith("text-"));
   }
+  let plainRun = 0;
+  for (const id of all) { plainRun = id.startsWith("image-") ? 0 : plainRun + 1; assert.ok(plainRun <= 2); }
   assert.deepEqual(all.filter(id => id.startsWith("image-")), items.filter(hasVisualPreview).map(i => i.id));
   assert.deepEqual(all.filter(id => id.startsWith("text-")), items.filter(i => !hasVisualPreview(i)).map(i => i.id));
   assert.equal((await getFeed(reader, { filters: { ...filters, sort: "latest" }, limit: 1 }, secret)).items[0].id, "text-0");

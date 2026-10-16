@@ -95,11 +95,14 @@ actor SimulatorFeedService: FeedServing {
             let latest = Array(indices.reversed())
             let visual = latest.filter { prompt($0).media?.image != nil || prompt($0).media?.imageURL != nil }
             let plain = latest.filter { prompt($0).media?.image == nil && prompt($0).media?.imageURL == nil }
-            var blended: [Int] = [], a = 0, b = 0
+            var blended: [Int] = [], a = 0, b = 0, plainRun = 0
             while a < visual.count || b < plain.count {
-                if (blended.count % 5 < 4 && a < visual.count) || b == plain.count {
-                    blended.append(visual[a]); a += 1
-                } else { blended.append(plain[b]); b += 1 }
+                var prefersVisual = blended.count % 5 < 4
+                if visual.count - a <= (plain.count - b + 1) / 2 && b < plain.count && plainRun < 2 { prefersVisual = false }
+                if (plainRun >= 2 || blended.isEmpty) && a < visual.count { prefersVisual = true }
+                if (prefersVisual && a < visual.count) || b == plain.count {
+                    blended.append(visual[a]); a += 1; plainRun = 0
+                } else { blended.append(plain[b]); b += 1; plainRun += 1 }
             }
             ordered = blended
         } else { ordered = query.sort == "latest" ? Array(indices.reversed()) : indices }

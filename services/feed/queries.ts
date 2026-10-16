@@ -83,9 +83,10 @@ function feedConditions(filters: FeedFilters, parameter: (value: unknown) => str
 async function getVisualFeed(db: Database, query: { filters: FeedFilters; limit: number; cursor?: string }, secret: string, now: number): Promise<FeedPage> {
   const { filters, limit } = query;
   if (filters.q) throw new FeedError("invalid_request", 400);
+  let visualRemaining: number | undefined, textRemaining: number | undefined, plainRun = 0;
   let release: string, visual = -1, text = -1, slot = 0, expires = Math.floor(now / 1000) + cursorLifetimeSeconds;
   if (query.cursor) {
-    try { ({ release, visual, text, slot, expires } = decodeVisualFeedCursor(query.cursor, filters, secret, now)); }
+    try { ({ release, visual, text, slot, expires, visualRemaining, textRemaining, plainRun } = decodeVisualFeedCursor(query.cursor, filters, secret, now)); }
     catch { throw new FeedError("invalid_request", 400); }
     if (!(await db.query("select id from prompix.releases where id=$1 and published_at is not null", [release])).rows.length)
       throw new FeedError("snapshot_expired", 410);
@@ -94,7 +95,8 @@ async function getVisualFeed(db: Database, query: { filters: FeedFilters; limit:
   const parameter = (value: unknown) => { parameters.push(value); return `$${parameters.length}`; };
   const where = feedConditions(filters, parameter);
   const bound = parameter(limit + 1);
-  const rows = (await db.query<{ position: number; visual: boolean; card: FeedCard }>(`
+  const countLanes = visualRemaining === undefined || textRemaining === undefined;
+  const rows = (await db.query<{ position: number; visual: boolean; total: number; card: FeedCard }>(`
     with candidates as not materialized (
       select e.latest_position as position,e.revision_id,
         (coalesce(nullif(v.card#>>'{media,imageURL}',''),nullif(v.card#>>'{media,image}','')) is not null) as visual
@@ -102,28 +104,42 @@ async function getVisualFeed(db: Database, query: { filters: FeedFilters; limit:
       join prompix.content c on c.id=e.content_id join prompix.revisions v on v.id=e.revision_id
       where e.release_id=$1 and r.published_at is not null and c.removed_at is null
         ${where.length ? `and ${where.join(" and ")}` : ""}
+    ), remaining as not materialized (
+      select * from candidates where (visual and position>$2) or (not visual and position>$4)
+    ), counted as not materialized (
+      select *,${countLanes ? "(count(*) over(partition by visual))::integer" : "0"} as total from remaining
     ), page as materialized (
-      (select * from candidates where visual and position>$2 order by position limit ${bound})
+      (select * from counted where visual order by position limit ${bound})
       union all
-      (select * from candidates where not visual and position>$4 order by position limit ${bound})
-    ) select p.position,p.visual,coalesce(t.card,v.card) as card from page p
+      (select * from counted where not visual order by position limit ${bound})
+    ) select p.position,p.visual,p.total,coalesce(t.card,v.card) as card from page p
       join prompix.revisions v on v.id=p.revision_id
       left join prompix.translations t on t.revision_id=p.revision_id and t.locale=$3
       order by p.visual desc,p.position`, parameters)).rows;
   const lanes = [rows.filter(row => row.visual), rows.filter(row => !row.visual)];
+  visualRemaining ??= lanes[0][0]?.total ?? 0;
+  textRemaining ??= lanes[1][0]?.total ?? 0;
+  if (!lanes[0].length) visualRemaining = 0;
+  if (!lanes[1].length) textRemaining = 0;
   const offsets = [0, 0], items: FeedCard[] = [];
   while (items.length < limit) {
-    const preferred = slot < 4 ? 0 : 1;
+    let preferred = slot < 4 ? 0 : 1;
+    // Keep enough visual anchors for the historical text backlog instead of
+    // exhausting every image and returning hundreds of text-only tail cards.
+    if (visualRemaining <= Math.ceil(textRemaining / 2) && textRemaining > 0 && plainRun < 2) preferred = 1;
+    if (plainRun >= 2 && visualRemaining > 0) preferred = 0;
+    if (visual === -1 && text === -1 && visualRemaining > 0) preferred = 0;
     const lane = offsets[preferred] < lanes[preferred].length ? preferred : 1 - preferred;
     const row = lanes[lane][offsets[lane]];
     if (!row) break;
     offsets[lane]++; items.push(row.card);
-    if (lane === 0) visual = row.position; else text = row.position;
+    if (lane === 0) { visual = row.position; visualRemaining = Math.max(0, visualRemaining - 1); plainRun = 0; }
+    else { text = row.position; textRemaining = Math.max(0, textRemaining - 1); plainRun = Math.min(2, plainRun + 1); }
     slot = (slot + 1) % 5;
   }
   const hasMore = lanes.some((lane, index) => offsets[index] < lane.length);
   return { schemaVersion: 3, release, items,
-    nextCursor: hasMore ? encodeVisualFeedCursor({ v: 1, scope: "visual-feed", release, visual, text, slot, filters, expires }, secret) : null };
+    nextCursor: hasMore ? encodeVisualFeedCursor({ v: 1, scope: "visual-feed", release, visual, text, slot, visualRemaining, textRemaining, plainRun, filters, expires }, secret) : null };
 }
 
 /** Explicit revision gives stable detail during paging; no revision means current release. */
