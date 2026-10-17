@@ -63,6 +63,8 @@ struct DiscoverView: View {
     @State private var settingsPresented = false
     @State private var chromeCollapsed = false
     @State private var headerHeight: CGFloat = 112
+    @State private var viewportHeight: CGFloat = 0
+    @State private var feedLayout = PromptGridLayout(width: 0)
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private let topics = ["好玩一点", "创作灵感", "日常有用"]
     private var items: [Prompt] { library.prompts.filter { PromptQuery(kind: kind, topic: topic, model: model, skillsOnly: skillsOnly).matches($0) } }
@@ -81,7 +83,6 @@ struct DiscoverView: View {
                 ScrollViewReader { scroll in
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: 14) {
-                            Color.clear.frame(height: 0).id("discovery-top")
                             Group {
                                 if !isFiltered {
                                     CreatorRail()
@@ -93,7 +94,7 @@ struct DiscoverView: View {
                                         .font(.subheadline).foregroundStyle(Palette.muted).padding(.horizontal, 20)
                                 }
                                 if let feed = library.feed {
-                                    FeedResults(store: feed.discovery, query: feedQuery, loadsOnAppear: false, fallback: items)
+                                    FeedResults(store: feed.discovery, query: feedQuery, loadsOnAppear: false, fallback: items, layout: feedLayout)
                                 } else if items.isEmpty {
                                     if needsFirstVideoUpdate {
                                         ContentUnavailableView {
@@ -114,9 +115,15 @@ struct DiscoverView: View {
                                     PromptGrid(items: items).padding(.horizontal, 12)
                                 }
                             }
-                        }.padding(.bottom, 24)
+                        }.id("discovery-top").padding(.bottom, 24)
+                            .frame(minHeight: viewportHeight, alignment: .top)
+                            .transaction { $0.animation = nil }
                     }
                     .accessibilityIdentifier("discoveryScroll")
+                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { viewportHeight = $0 }
+                    .onGeometryChange(for: PromptGridLayout.self) { proxy in
+                        PromptGridLayout.measured(in: proxy, inset: 12)
+                    } action: { if !$0.widths.isEmpty { feedLayout = $0 } }
                     .plainTopEdge()
                     .scrollClipDisabled()
                     .background(Palette.paper).foregroundStyle(Palette.ink)
@@ -139,11 +146,16 @@ struct DiscoverView: View {
                             await metadata
                         }.value
                     }
-                    .onChange(of: feedSort) { _, _ in chromeCollapsed = false; scroll.scrollTo("discovery-top", anchor: .top) }
-                    .onChange(of: kind) { _, _ in model = nil; topic = nil; chromeCollapsed = false; scroll.scrollTo("discovery-top", anchor: .top) }
-                    .onChange(of: skillsOnly) { _, _ in model = nil; topic = nil; chromeCollapsed = false; scroll.scrollTo("discovery-top", anchor: .top) }
-                    .onChange(of: topic) { _, _ in chromeCollapsed = false; scroll.scrollTo("discovery-top", anchor: .top) }
-                    .onChange(of: model) { _, _ in chromeCollapsed = false; scroll.scrollTo("discovery-top", anchor: .top) }
+                    .onChange(of: feedQuery) { _, query in
+                        // One reset for the complete query; no intermediate kind +
+                        // previous model/tag combinations or animated scroll jump.
+                        var transaction = Transaction(); transaction.disablesAnimations = true
+                        withTransaction(transaction) {
+                            library.feed?.discovery.select(query)
+                            chromeCollapsed = false
+                            scroll.scrollTo("discovery-top", anchor: .top)
+                        }
+                    }
                 }
                 discoveryChrome.zIndex(1)
             }
@@ -151,6 +163,10 @@ struct DiscoverView: View {
             .sheet(isPresented: $settingsPresented) { SettingsView().promptSheet() }
             .task(id: feedQuery) { await library.feed?.discovery.load(feedQuery) }
         }
+    }
+    private func selectKind(_ next: PromptKind?, _ skills: Bool) {
+        kind = next; skillsOnly = skills; topic = nil; model = nil
+        library.feed?.discovery.select(feedQuery)
     }
     private var discoveryChrome: some View {
         discoveryHeader
@@ -170,7 +186,7 @@ struct DiscoverView: View {
     private var discoveryHeader: some View {
         VStack(spacing: 4) {
             RootPageHeader(settingsID: "discoverySettings") { settingsPresented = true }
-            KindPicker(selection: $kind, skillsOnly: $skillsOnly)
+            KindPicker(selection: $kind, skillsOnly: $skillsOnly, onSelect: selectKind)
         }.foregroundStyle(Palette.ink).padding(.bottom, 4)
             .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { headerHeight = $0 }
             .accessibilityElement(children: .contain).accessibilityIdentifier("discoveryHeader")
@@ -195,7 +211,7 @@ struct DiscoverView: View {
     private var resultActions: some View {
         HStack(spacing: 16) {
             if isFiltered {
-                Button(String(localized: "清除筛选")) { kind = nil; skillsOnly = false; topic = nil; model = nil }
+                Button(String(localized: "清除筛选")) { selectKind(nil, false) }
                     .font(.footnote).frame(minHeight: 44)
             }
             if !skillsOnly { filterPicker }
@@ -247,9 +263,11 @@ struct PreviewMasonryGrid<Item: Identifiable, Cell: View>: View {
     let items: [Item]
     let preview: (Item) -> ContentPreview
     @ViewBuilder let cell: (Item) -> Cell
+    var suppliedLayout: PromptGridLayout? = nil
     @Environment(\.dynamicTypeSize) private var typeSize
     @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
-    @State private var layout = PromptGridLayout(width: 0)
+    @State private var measuredLayout = PromptGridLayout(width: 0)
+    private var layout: PromptGridLayout { suppliedLayout.flatMap { $0.widths.isEmpty ? nil : $0 } ?? measuredLayout }
     @State private var viewport = GridViewport()
     @State private var prefetchOwner = UUID()
     @Environment(\.scenePhase) private var scenePhase
@@ -269,11 +287,8 @@ struct PreviewMasonryGrid<Item: Identifiable, Cell: View>: View {
                     }
                 }.frame(minWidth: 0, maxWidth: .infinity)
                     .onGeometryChange(for: PromptGridLayout.self) { proxy in
-                        if #available(iOS 27.1, *) {
-                            PromptGridLayout(width: proxy.size.width, division: proxy.reservedRegions(kind: .division)
-                                .map(\.frame).first { $0.height > $0.width && $0.minX > 0 && $0.maxX < proxy.size.width })
-                        } else { PromptGridLayout(width: proxy.size.width) }
-                    } action: { layout = $0 }
+                        PromptGridLayout.measured(in: proxy)
+                    } action: { if !$0.widths.isEmpty { measuredLayout = $0 } }
             }
         }
         .onGeometryChange(for: GridViewport.self) { proxy in
@@ -322,6 +337,15 @@ struct PromptGridLayout: Equatable {
     let columns: Int
     let widths: [CGFloat]
     let gaps: [CGFloat]
+    static func measured(in proxy: GeometryProxy, inset: CGFloat = 0) -> Self {
+        var division: CGRect?
+        if #available(iOS 27.1, *) {
+            division = proxy.reservedRegions(kind: .division).map(\.frame)
+                .first { $0.height > $0.width && $0.minX > inset && $0.maxX < proxy.size.width - inset }
+                .map { $0.offsetBy(dx: -inset, dy: 0) }
+        }
+        return Self(width: max(0, proxy.size.width - 2 * inset), division: division)
+    }
     init(width: CGFloat, division: CGRect? = nil) {
         // Count depends on this grid's width, including in a narrow detail pane.
         // Even columns keep a card from straddling a vertical division region.

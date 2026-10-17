@@ -8,6 +8,7 @@ struct FeedResults: View {
     var fallback: [Prompt] = []
     var previews: [FeedCard] = []
     var excludingID: String?
+    var layout: PromptGridLayout? = nil
     @State private var fallbackQuery: FeedQuery?
     @Environment(Library.self) private var library
     var body: some View {
@@ -31,13 +32,15 @@ struct FeedResults: View {
                 }
                 PromptGrid(items: offlineItems).padding(.horizontal, 12)
             }
-            if !items.isEmpty {
-                PreviewMasonryGrid(items: items, preview: ContentPreview.init) { FeedPromptCard(card: $0) }
-                    .padding(.horizontal, 12)
+            if !showsFallback {
+                // Keep measured column geometry mounted through cold loads.
+                ZStack(alignment: .top) {
+                    PreviewMasonryGrid(items: items, preview: ContentPreview.init, cell: { FeedPromptCard(card: $0) }, suppliedLayout: layout)
+                    if waiting && items.isEmpty { FeedLoadingGrid() }
+                }.padding(.horizontal, 12)
             }
             if waiting {
-                if items.isEmpty && !showsFallback { FeedLoadingGrid().padding(.horizontal, 12) }
-                else if !showsFallback { ContentActivityLabel(size: 48).frame(maxWidth: .infinity) }
+                if !items.isEmpty && !showsFallback { ContentActivityLabel(size: 48).frame(maxWidth: .infinity) }
             } else if matches && store.failure != nil {
                 if !showsFallback { recovery(message: String(localized: "暂时无法连接")) }
             } else if items.isEmpty && !store.isLoading {

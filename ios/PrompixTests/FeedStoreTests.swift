@@ -6,6 +6,94 @@ import XCTest
     override func setUp() async throws { directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString) }
     override func tearDown() async throws { try? FileManager.default.removeItem(at: directory) }
 
+    func testWarmSelectionRestoresExactFirstPageSynchronouslyWithoutRequest() async throws {
+        let server = FeedStoreServer(), store = FeedStore(service: server, memoryPageLimit: 6)
+        let now = Date(), image = FeedQuery(locale: "original", kind: "image", q: "image")
+        let video = FeedQuery(locale: "original", kind: "video", q: "video")
+        await store.load(image, now: now)
+        await store.loadMore(now: now)
+        await store.load(video, now: now)
+        store.select(image, now: now.addingTimeInterval(2))
+        XCTAssertEqual(store.items.map(\.id), ["image-0", "image-1"])
+        XCTAssertEqual(store.nextCursor, "next")
+        XCTAssertFalse(store.isLoading); XCTAssertFalse(store.isCached)
+        XCTAssertFalse(store.hasLoadedAdditionalPages)
+        await store.load(image, now: now.addingTimeInterval(2))
+        let calls = await server.calls
+        XCTAssertEqual(calls.count, 3, "Returning to a fresh category must not refetch")
+        await store.load(image, force: true, now: now.addingTimeInterval(3))
+        let refreshed = await server.calls
+        XCTAssertEqual(refreshed.count, 4, "Pull refresh remains explicit")
+    }
+
+    func testExpiredMemoryPageStaysVisibleButCannotPageBeforeRevalidation() async throws {
+        let server = FeedStoreServer(), store = FeedStore(service: server, memoryPageLimit: 2)
+        let now = Date(), first = FeedQuery(locale: "original", q: "first"), second = FeedQuery(locale: "original", q: "second")
+        await store.load(first, now: now); await store.load(second, now: now)
+        store.select(first, now: now.addingTimeInterval(301))
+        XCTAssertEqual(store.items.first?.id, "first-0")
+        XCTAssertTrue(store.isCached); XCTAssertNil(store.nextCursor)
+        await store.loadMore(now: now.addingTimeInterval(301))
+        let before = await server.calls; XCTAssertEqual(before.count, 2)
+        await store.load(first, now: now.addingTimeInterval(301))
+        XCTAssertFalse(store.isCached); XCTAssertEqual(store.nextCursor, "next")
+        let after = await server.calls; XCTAssertEqual(after.count, 3)
+    }
+
+    func testServerExpiredCursorInvalidatesWarmPageFreshness() async throws {
+        let server = FeedStoreServer(), store = FeedStore(service: server, memoryPageLimit: 2)
+        let first = FeedQuery(locale: "original", q: "first"), second = FeedQuery(locale: "original", q: "second")
+        await store.load(first)
+        await server.setFailure(.snapshotExpired)
+        await store.loadMore()
+        await server.setFailure(nil)
+        await store.load(second)
+        store.select(first)
+        XCTAssertEqual(store.items.first?.id, "first-0")
+        XCTAssertTrue(store.isCached); XCTAssertNil(store.nextCursor)
+        await store.load(first)
+        XCTAssertFalse(store.isCached)
+        let calls = await server.calls; XCTAssertEqual(calls.count, 4)
+    }
+
+    func testMemoryPagesAreBoundedAndIsolatedByCompleteQuery() async throws {
+        let server = FeedStoreServer(), store = FeedStore(service: server, memoryPageLimit: 2)
+        let a = FeedQuery(locale: "original", kind: "image", sort: "latest")
+        let b = FeedQuery(locale: "original", kind: "video", sort: "latest")
+        let c = FeedQuery(locale: "original", kind: "text", sort: "latest")
+        await store.load(a); await store.load(b)
+        store.select(a) // A is now most recently used.
+        await store.load(c)
+        store.select(b); XCTAssertTrue(store.items.isEmpty)
+        store.select(a); XCTAssertEqual(store.items.count, 2)
+        for query in [FeedQuery(locale: "zh-Hans", kind: "image", sort: "latest"),
+                      FeedQuery(locale: "original", kind: "image", sort: "discovery"),
+                      FeedQuery(locale: "original", kind: "image", model: "other", sort: "latest")] {
+            store.select(query); XCTAssertTrue(store.items.isEmpty, "Never show a different query's cards")
+        }
+        store.discard(["test-0"])
+        store.select(a); XCTAssertEqual(store.items.map(\.id), ["test-1"])
+    }
+
+    func testWarmSelectionRejectsLateTransportAndHonorsSharedCooldown() async throws {
+        let server = FeedStoreServer(), store = FeedStore(service: server, memoryPageLimit: 2)
+        let now = Date(), warm = FeedQuery(locale: "original", q: "warm")
+        await store.load(warm, now: now)
+        await server.setDelay("slow", seconds: 0.15)
+        let old = Task { await store.load(FeedQuery(locale: "original", q: "slow"), now: now) }
+        try await Task.sleep(for: .milliseconds(20))
+        store.select(warm, now: now)
+        await old.value
+        XCTAssertEqual(store.items.first?.id, "warm-0"); XCTAssertFalse(store.isLoading)
+        await server.setFailure(.rateLimited(60))
+        await store.load(FeedQuery(locale: "original", q: "limited"), now: now)
+        store.select(warm, now: now.addingTimeInterval(1))
+        XCTAssertEqual(store.items.first?.id, "warm-0")
+        await store.load(warm, force: true, now: now.addingTimeInterval(1))
+        let calls = await server.calls; XCTAssertEqual(calls.count, 3)
+        XCTAssertEqual(store.failure as? FeedError, .rateLimited(60))
+    }
+
     func testPagingAppendsOnlyRequestedPagesAndStopsAtEnd() async throws {
         let server = FeedStoreServer(), store = FeedStore(service: server)
         await store.load(FeedQuery(locale: "original"))
@@ -130,6 +218,7 @@ import XCTest
         try bytes.write(to: personal)
         await server.setFailure(.unavailable(5))
         let reopened = FeedStore(service: server, cache: cache)
+        reopened.select(query)
         await reopened.load(query)
         XCTAssertEqual(reopened.items.map(\.id), ["test-0", "test-1"])
         XCTAssertTrue(reopened.isCached); XCTAssertNil(reopened.nextCursor)

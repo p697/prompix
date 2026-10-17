@@ -33,7 +33,7 @@ struct FeedCheckpoint: Codable {
         removedIDs = Set(checkpoint.removedIDs)
         creatorDiscovery = CreatorDiscoveryStore(service: service, cache: cache)
         creators = FeedCreatorStore(service: service, cache: cache); browse = FeedBrowseStore(service: service, cache: cache)
-        discovery = FeedStore(service: service, cache: cache); search = FeedStore(service: service, cache: cache)
+        discovery = FeedStore(service: service, cache: cache, memoryPageLimit: 6); search = FeedStore(service: service, cache: cache)
     }
     func makeCreatorDiscoveryStore() -> CreatorDiscoveryStore { CreatorDiscoveryStore(service: service, cache: cache) }
     func makeCreatorStore() -> FeedCreatorStore { FeedCreatorStore(service: service, cache: cache) }

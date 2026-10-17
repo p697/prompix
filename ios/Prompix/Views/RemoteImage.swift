@@ -11,6 +11,9 @@ import Observation
         init(_ image: UIImage, previewOnly: Bool = false) { self.image = image; self.previewOnly = previewOnly }
     }
     private let memory = NSCache<NSURL, CachedImage>()
+    // Tiny decoded previews outlive large bitmap eviction during category changes.
+    // This is a bounded first-frame fallback, never a full-resolution result.
+    private let thumbnails = NSCache<NSURL, UIImage>()
     private let session: URLSession
     private var pending: [URL: Task<UIImage, Error>] = [:]
     private let prepared = NSCache<NSURL, NSData>()
@@ -24,6 +27,7 @@ import Observation
     init(offlineDirectory: URL? = nil, session: URLSession? = nil) {
         self.offlineDirectory = offlineDirectory ?? URL.applicationSupportDirectory.appending(path: "Prompix/OfflineImages", directoryHint: .isDirectory)
         memory.totalCostLimit = 40 * 1024 * 1024
+        thumbnails.totalCostLimit = 8 * 1024 * 1024
         prepared.totalCostLimit = 16 * 1024 * 1024
         let configuration = URLSessionConfiguration.default
         #if DEBUG && targetEnvironment(simulator)
@@ -39,8 +43,8 @@ import Observation
         configuration.httpMaximumConnectionsPerHost = 4
         self.session = session ?? URLSession(configuration: configuration)
     }
-    func cachedImage(for url: URL) -> UIImage? { memory.object(forKey: url as NSURL)?.image }
-    func clear() { memory.removeAllObjects(); prepared.removeAllObjects(); attemptedPrefetch.removeAll(); session.configuration.urlCache?.removeAllCachedResponses() }
+    func cachedImage(for url: URL) -> UIImage? { memory.object(forKey: url as NSURL)?.image ?? thumbnails.object(forKey: url as NSURL) }
+    func clear() { memory.removeAllObjects(); thumbnails.removeAllObjects(); prepared.removeAllObjects(); attemptedPrefetch.removeAll(); session.configuration.urlCache?.removeAllCachedResponses() }
     private func offlineFile(for url: URL) -> URL {
         let key = SHA256.hash(data: Data(url.absoluteString.utf8)).map { String(format: "%02x", $0) }.joined()
         return offlineDirectory.appending(path: key + ".jpg")
@@ -85,11 +89,16 @@ import Observation
         let task = Task { @MainActor in
             let data = try await download(url)
             // ImageIO decoding must not compete with a swipe or presentation on MainActor.
-            return try await Task.detached(priority: .userInitiated) {
+            let decoded = try await Task.detached(priority: .userInitiated) {
                 guard let source = CGImageSourceCreateWithData(data as CFData, nil),
                       let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, [kCGImageSourceCreateThumbnailFromImageAlways: true, kCGImageSourceThumbnailMaxPixelSize: 1600, kCGImageSourceCreateThumbnailWithTransform: true, kCGImageSourceShouldCacheImmediately: true] as CFDictionary) else { throw SyncError.invalidResponse }
-                return UIImage(cgImage: cgImage)
+                let small = CGImageSourceCreateThumbnailAtIndex(source, 0, [kCGImageSourceCreateThumbnailFromImageAlways: true, kCGImageSourceThumbnailMaxPixelSize: 240, kCGImageSourceCreateThumbnailWithTransform: true, kCGImageSourceShouldCacheImmediately: true] as CFDictionary)
+                return (UIImage(cgImage: cgImage), small.map { UIImage(cgImage: $0) })
             }.value
+            if let thumbnail = decoded.1 {
+                thumbnails.setObject(thumbnail, forKey: url as NSURL, cost: Int(thumbnail.size.width * thumbnail.size.height * 4))
+            }
+            return decoded.0
         }
         pending[url] = task
         defer { pending[url] = nil }
