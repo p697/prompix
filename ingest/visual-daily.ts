@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Prompt } from "../packages/schema/catalog.ts";
 import { atomic, json } from "./publication.ts";
-import { runVisualReview, visualCacheSchema, visualLedgerSchema, visualReviewVersion } from "./visual-review.ts";
+import { applyVisualPresentation, runVisualReview, visualCacheSchema, visualLedgerSchema, visualReviewVersion } from "./visual-review.ts";
 import { codexVisualProvider } from "./visual-provider.ts";
 import { prepareVisualMedia } from "./visual-media.ts";
 import { reviewRequestLimit } from "./review-budget.ts";
@@ -45,4 +45,10 @@ export async function prepareDailyVisualReview(prompts: Prompt[], previous: Prom
       persistLedger: async state => { await atomic(ledgerPath, state); requestSequence = state.requests; },
     });
   } finally { if (temporary) await rm(temporary, { recursive: true, force: true }); }
+}
+
+/** Retained snapshots may have a newer presentation review without a new approval. */
+export async function applyDailyVisualPresentation(prompts: readonly Prompt[], root: string): Promise<Prompt[]> {
+  const cache = visualCacheSchema.parse(await json(join(root, "visual-review", "decisions.json"), { version: visualReviewVersion, decisions: {} }));
+  return applyVisualPresentation(prompts, cache);
 }

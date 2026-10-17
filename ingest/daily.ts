@@ -31,7 +31,7 @@ import { inheritPreviousTranslations } from "./translation.ts";
 import { applyEditorialReviews, reviewsSchema } from "./editorial.ts";
 import { prepareDailyEditorial } from "./editorial-daily.ts";
 import type { EditorialReport } from "./editorial-runner.ts";
-import { prepareDailyVisualReview } from "./visual-daily.ts";
+import { applyDailyVisualPresentation, prepareDailyVisualReview } from "./visual-daily.ts";
 import { websiteMediaNeedsMirroring } from "./website-review.ts";
 import type { VisualReport } from "./visual-review.ts";
 import { aspectRatio, prepareJPEG, publishStudioImages } from "./images.ts";
@@ -355,7 +355,8 @@ async function run() {
     // Retained snapshots receive the same creator enrichment and translations
     // as fresh candidates, including older editions without creator metadata.
     // A quality hold removes public discovery only, after retention can restore old snapshots.
-    const visible = applyQualityHolds(retained.prompts, qualityHolds);
+    const labeled = await applyDailyVisualPresentation(retained.prompts, root);
+    const visible = applyQualityHolds(labeled.filter(item => item.presentation !== "explicit"), qualityHolds);
     report.qualityHeldIDs = visible.withheldIDs;
     const registryVisible = filterClawHubAvailability(visible.prompts, communitySkills.state);
     report.registryWithheldIDs = registryVisible.withheldIDs;
