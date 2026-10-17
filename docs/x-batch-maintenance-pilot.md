@@ -1,6 +1,6 @@
 # Batch-priced X maintenance pilot
 
-2026-10-17. This is an isolated **TweetAPI (`tweetapi.com`)** read pilot. It is a different service from the production **TwitterAPI.io** route. Neither the pilot nor its plan enables production maintenance or new-source acquisition.
+2026-10-17. **The user has stopped this candidate after repeated registration problems. Do not resume signup or request payment.** The isolated **TweetAPI (`tweetapi.com`)** pilot remains dormant with zero vendor API calls. It is a different service from the production **TwitterAPI.io** route. Neither the pilot nor its plan enables production maintenance or new-source acquisition.
 
 ## Why test another provider
 
@@ -26,4 +26,19 @@ Capturing 200 objects is insufficient. The report deliberately keeps `production
 - Reconcile small and large-batch calls with dashboard usage. Trial credits are not evidence of ongoing cost, and pricing arithmetic is not an uptime measurement.
 - Test multiple runs, failure/restart handling, production-state replay, shared caps and rollback before switching. Keep new-source acquisition provenance and all review gates intact.
 
-The existing TwitterAPI.io discovery, official supplement and maintenance remain active while registration and fidelity testing are pending. Historical publication continues under its own existing review limits.
+The existing TwitterAPI.io discovery, official supplement and maintenance remain active. Historical publication continues under its own existing review limits. No registration handoff is pending.
+
+## Candidate screening after stopping TweetAPI
+
+Public contracts checked on 2026-10-17; these are preflight estimates, not live provider acceptance. The comparison workload is 10,000 X posts checked twice daily for 30 days, excluding discovery, acquisition, profiles and authoritative fallback. A batch endpoint can reduce round trips without reducing per-post billing.
+
+| Candidate | Documented charge or minimum | Decision within the existing $20 total collection budget |
+|---|---|---|
+| [TwitterAPI.io](https://twitterapi.io/pricing/details) | $0.00015/returned post; about $90 for the comparison workload | Keep the verified route for current inventory; does not solve large-library cost |
+| [SocialData](https://docs.socialdata.tools/getting-started/pricing/) | $0.0002/returned tweet; about $120 | More expensive despite [100-ID batches](https://docs.socialdata.tools/reference/get-multiple-tweets/) |
+| [Desearch](https://www.desearch.ai/pricing) | $0.15/1,000 X posts; about $90 | No demonstrated maintenance saving |
+| [Sorsa](https://api.sorsa.io/pricing) | Flat calls with up to 100 IDs, but minimum $49/month | Minimum subscription exceeds the entire budget |
+| [TwexAPI](https://twexapi.io/pricing) | Typical reads billed per item; recurring plans start at $50/month; the $20 one-time pack lasts one day | Neither the recurring minimum nor expiring pack solves this budget |
+| [Pinlyx](https://pinlyx.com/pricing) | Data API free tier is 100 requests/30 days; paid minimum $69/month | Its [100-ID endpoint](https://pinlyx.com/data-api/reference/x-tweets-batch) does not make the paid minimum affordable; daily rate limits are not included monthly allowance |
+
+None of these alternatives has been registered, funded or enabled as a result of this screening. No replacement is currently validated within budget. The incomplete Google consent flow was observed to stall before a callback; its exact cause is unconfirmed, so it is not evidence that TweetAPI's data API is fraudulent or unavailable. Registration trouble is sufficient to stop this trial without making that unsupported claim.
