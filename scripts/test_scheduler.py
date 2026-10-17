@@ -111,6 +111,18 @@ class SchedulerTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, 'running'):
                 runtime.run_collection(self.base, '/must-not-run')
 
+    def test_packaged_operational_commands_do_not_depend_on_a_development_worktree(self):
+        target = self.home / 'standalone-runtime'
+        target.mkdir()
+        with patch.object(installer.subprocess, 'run') as command:
+            installer.copy_runtime(self.repo, target)
+        command.assert_called_once_with(['npm', 'ci'], cwd=target, check=True)
+        scripts = json.loads((target / 'package.json').read_text())['scripts']
+        for name, value in scripts.items():
+            parts = value.split()
+            if len(parts) > 1 and parts[0] == 'tsx' and not parts[1].startswith('-'):
+                self.assertTrue((target / parts[1]).is_file(), f'Missing packaged command: {name}')
+
     def test_launcher_resolves_runtime_under_guard_and_inherits_lock(self):
         def child(command, *, cwd, pass_fds, env):
             self.assertEqual(cwd, self.current)
