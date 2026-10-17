@@ -9,6 +9,7 @@ import { z } from "zod";
 import { catalogSchema, type Catalog, type Prompt } from "../packages/schema/catalog.ts";
 import { download } from "./network.ts";
 import { assertLibraryDownloadSize, catalogByteLimit } from "./library.ts";
+import { retryMediaUpload } from "./media-upload.ts";
 
 export const repo = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 export const contentRoot = resolve(process.env.PROMPIX_CONTENT_DIR ?? join(homedir(), ".local/share/prompix/content"));
@@ -108,10 +109,10 @@ export async function lockContent(root: string) {
   return () => rm(lock, { recursive: true });
 }
 export async function upload(key: string, path: string, type: string) {
-  await exec(process.env.PROMPIX_WRANGLER ?? "wrangler", [
+  await retryMediaUpload(key, path, () => exec(process.env.PROMPIX_WRANGLER ?? "wrangler", [
     "--config", join(repo, "services/content/wrangler.jsonc"), "r2", "object", "put",
     `prompix-content/${key}`, "--remote", "--file", path, "--content-type", type,
-  ], { cwd: repo, timeout: 120000, maxBuffer: 100000, env: { ...process.env, WRANGLER_SEND_METRICS: "false", CI: "true" } });
+  ], { cwd: repo, timeout: 120000, maxBuffer: 100000, env: { ...process.env, WRANGLER_SEND_METRICS: "false", CI: "true" } }));
 }
 export const manifestSchema = z.object({
   schemaVersion: z.literal(1), version: z.string().regex(/^[a-z0-9-]+$/),
