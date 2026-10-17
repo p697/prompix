@@ -1,8 +1,9 @@
+import { prepareXMaintenanceAdmission } from "./x-maintenance-admission.ts";
 import { limitNewPublications } from "./publication-quota.ts";
 import { withPublisherDatabase } from "./database-publication.ts";
 import { prepareDiscoveredSkills } from "./discovered-skill-daily.ts";
 import { preparePublisherSkills } from "./publisher-skill-daily.ts";
-import { prepareXAvailability, filterXAvailability, assertXAvailability } from "./x-availability.ts";
+import { prepareXAvailability, filterXAvailability, assertXAvailability, adoptFreshXDiscoveries } from "./x-availability.ts";
 import { mkdir, readFile, writeFile, rm } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
@@ -96,7 +97,8 @@ async function run() {
   await withDailyStatus(root, report, async () => {
     const qualityHolds = await readQualityHolds(root);
     // Registry availability must be fresh even when resuming a retained target.
-    const xAvailability = await prepareXAvailability(root, { enabled: publishing, bearer: process.env.X_BEARER_TOKEN });
+    const admission = publishing && process.env.X_BEARER_TOKEN ? await prepareXMaintenanceAdmission(root) : undefined;
+    const xAvailability = await prepareXAvailability(root, { enabled: publishing, bearer: process.env.X_BEARER_TOKEN, admission });
     report.sources["x-availability"] = xAvailability.report;
     if (publishing) {
       const removed = Object.entries(xAvailability.state).filter(([, state]) => state.removed).map(([id]) => id);
@@ -190,8 +192,10 @@ async function run() {
     let reviews = reviewsSchema.parse(await json(join(root, "editorial.json"), {}));
     creators = await json<CreatorCache>(creatorsPath, creators);
     const xIntake = await readXIntake(root, creators);
+    const freshDiscovery = publishing ? await adoptFreshXDiscoveries(root, xIntake.candidates, xAvailability.state) : undefined;
+    if (freshDiscovery) xAvailability.state = freshDiscovery.state;
     xIntake.report.reviewedDrafts = xIntake.candidates.filter(item => reviews[item.id]?.fingerprint === item.fingerprint).length;
-    report.sources["x-intake"] = xIntake.report;
+    report.sources["x-intake"] = { ...xIntake.report, reusedDiscoveryChecks: freshDiscovery?.reused ?? 0 };
     report.sources["x-reply-intake"] = xIntake.threads;
     all.push(...filterXAvailability(xIntake.candidates, xAvailability.state).prompts);
     await atomic(join(root, "candidates", "x-native.json"), xIntake.candidates);
