@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
+import { homedir } from "node:os";
 import { z } from "zod";
 import { atomic, json } from "./publication.ts";
 
@@ -18,7 +19,18 @@ const ledgerSchema = z.object({ version: z.literal(1), month: z.string().regex(/
 export class XBudgetExceeded extends Error {}
 export const xUnitMicroUSD = { official: { post: 5000, user: 10000 }, twitterapi: { post: 150, user: 180 } } as const;
 
-/** Shared account ledger primitive. Only the pilot is wired today. Never stores credentials or source text. */
+/** Explicit opt-in supports importing account spend before enabling the production guard. */
+export function configuredXSpendBudget(environment: NodeJS.ProcessEnv = process.env) {
+  if (environment.PROMPIX_X_MONTHLY_USD === undefined) {
+    if (environment.PROMPIX_X_DAILY_USD !== undefined) throw new Error("Monthly X budget is required with a daily budget");
+    return undefined;
+  }
+  const monthly = Number(environment.PROMPIX_X_MONTHLY_USD);
+  return new XSpendBudget(environment.PROMPIX_X_SPEND_DIR ?? join(homedir(), ".local/share/prompix/x-spend"), monthly,
+    Number(environment.PROMPIX_X_DAILY_USD ?? monthly));
+}
+
+/** Shared account ledger. Never stores credentials or source text. */
 export class XSpendBudget {
   constructor(readonly root: string, readonly monthlyUSD = 20, readonly dailyUSD = 1,
     readonly now: () => Date = () => new Date()) {
