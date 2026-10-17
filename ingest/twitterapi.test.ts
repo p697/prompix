@@ -169,3 +169,21 @@ test("terminal search pages accept null cursors without hiding ambiguous continu
   for (const next_cursor of [null, undefined, ""])
     assert.throws(() => parseTwitterAPI({ tweets: [], has_next_page: true, next_cursor }, { search: true }), /ambiguous pagination/);
 });
+
+
+test("shared video media compares supported MP4 variants without unused HLS CDN aliases", () => {
+  const video = (host: string, file = "same.mp4") => ({ ...photo, type: "video", video_info: { variants: [
+    { content_type: "application/x-mpegURL", url: `https://${host}/playlist.m3u8` },
+    { content_type: "video/mp4", url: `https://video.twimg.com/${file}`, bitrate: 256000 },
+  ] } });
+  const result = parseTwitterAPI(page([
+    { ...tweet, extendedEntities: { media: [video("video.twimg.com")] } },
+    { ...tweet, id: "102", extendedEntities: { media: [video("video-s.twimg.com")] } },
+  ]));
+  assert.equal(result.media.length, 1);
+  assert.equal(result.media[0].variants?.length, 1);
+  assert.throws(() => parseTwitterAPI(page([
+    { ...tweet, extendedEntities: { media: [video("video.twimg.com")] } },
+    { ...tweet, id: "102", extendedEntities: { media: [video("video-s.twimg.com", "different.mp4")] } },
+  ])), /conflicting media/);
+});

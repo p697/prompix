@@ -1,5 +1,7 @@
 # X provider pilot and maintenance costs
 
+Follow-up: [hybrid maintenance implementation and full-library evidence](x-hybrid-maintenance.md).
+
 Status: live pilot completed on 2026-10-17; a full production switch did **not** pass the discovery coverage gate. Production still uses the official X API. The maintenance optimization is independently deployable after CI. The pilot does not publish, translate, mirror media, or change the discovery query mix.
 
 ## Scope and cost boundary
