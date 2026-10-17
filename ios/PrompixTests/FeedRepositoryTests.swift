@@ -16,6 +16,9 @@ import XCTest
         let server = FeedRepositoryServer()
         await server.setCards([FeedFixture.card()])
         let feed = FeedRepository(service: server, cache: FeedCache(directory: directory), checkpoint: FeedCheckpoint(), commitRemovals: { _ in })
+        XCTAssertEqual(feed.previewCards(for: FeedQuery(locale: "original", model: "Test model"), including: [FeedFixture.card()]).map(\.id), ["test-item"], "A directory preview is usable even when the random home pool does not contain its creator")
+        XCTAssertTrue(feed.previewCards(for: FeedQuery(locale: "original", kind: "image", model: "Test model"), including: [FeedFixture.card()]).isEmpty)
+        XCTAssertEqual(feed.previewCards(for: FeedQuery(locale: "zh-Hans", model: "Test model"), including: [FeedFixture.card()]).map(\.id), ["test-item"])
         await feed.discovery.load(FeedQuery(locale: "original"))
         await feed.search.load(FeedQuery(locale: "original", q: "fixture"))
         XCTAssertEqual(feed.previewCards(for: FeedQuery(locale: "original", model: "Test model")).map(\.id), ["test-item"], "Repeated cards across surfaces must not duplicate")
@@ -26,7 +29,7 @@ import XCTest
         XCTAssertTrue(feed.previewCards(for: FeedQuery(locale: "original")).isEmpty)
         XCTAssertTrue(feed.previewCards(for: FeedQuery(locale: "original", creator: "other-creator")).isEmpty)
         await server.setRemoval(true); try await feed.refresh()
-        XCTAssertTrue(feed.previewCards(for: FeedQuery(locale: "original", model: "Test model")).isEmpty)
+        XCTAssertTrue(feed.previewCards(for: FeedQuery(locale: "original", model: "Test model"), including: [FeedFixture.card()]).isEmpty)
     }
 
     func testExplorationUsesExactModelAndDoesNotInventAnUnmatchedTopic() throws {

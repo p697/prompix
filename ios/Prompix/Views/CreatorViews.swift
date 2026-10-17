@@ -192,7 +192,7 @@ struct CreatorRail: View {
                         ForEach(0..<4) { _ in CreatorRailCard(entry: nil) }
                     } else {
                         ForEach(entries) { entry in
-                            NavigationLink { CreatorDetail(creator: entry.creator) } label: {
+                            NavigationLink { CreatorDetail(creator: entry.creator, initialPreview: entry.preview) } label: {
                                 CreatorRailCard(entry: entry)
                             }.buttonStyle(.plain).foregroundStyle(Palette.ink)
                                 .accessibilityLabel(entry.creator.displayName)
@@ -274,7 +274,7 @@ struct CreatorsView: View {
                     } else {
                         LazyVStack(spacing: 0) {
                             ForEach(entries) { entry in
-                                NavigationLink { CreatorDetail(creator: entry.creator, initialKind: selection.kind) } label: {
+                                NavigationLink { CreatorDetail(creator: entry.creator, initialKind: selection.kind, initialPreview: entry.preview) } label: {
                                     CreatorRow(entry: entry).padding(.vertical, 14)
                                 }.buttonStyle(.plain).accessibilityIdentifier("creator-\(entry.id)")
                             }
@@ -384,8 +384,9 @@ struct CreatorByline: View {
 
 struct CreatorDetail: View {
     private let snapshot: Prompt.Creator
-    init(creator: Prompt.Creator, initialKind: String? = nil) {
-        snapshot = creator
+    private let initialPreview: FeedCard?
+    init(creator: Prompt.Creator, initialKind: String? = nil, initialPreview: FeedCard? = nil) {
+        snapshot = creator; self.initialPreview = initialPreview
         _filter = State(initialValue: initialKind.flatMap(CreatorContentFilter.init(rawValue:)) ?? .all)
     }
     @Environment(Library.self) private var library
@@ -439,7 +440,7 @@ struct CreatorDetail: View {
                         VStack(alignment: .leading, spacing: 8) { contentHeading; filterPicker }
                     }.padding(.horizontal, 20)
                     if let feed = library.feed {
-                        OwnedFeedResults(repository: feed, query: FeedQuery(kind: filter == .all ? nil : filter.rawValue, creator: creator.id, sort: "recommended"), fallback: items)
+                        OwnedFeedResults(repository: feed, query: FeedQuery(kind: filter == .all ? nil : filter.rawValue, creator: creator.id, sort: "recommended"), fallback: items, initialPreviews: [initialPreview].compactMap { $0 })
                     } else if items.isEmpty {
                         ContentUnavailableView(String(localized: "暂无匹配内容"), systemImage: "square.grid.2x2",
                             description: Text(String(localized: "试试其他分类，或清除筛选条件。")))

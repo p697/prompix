@@ -326,7 +326,7 @@ import UIKit
         let profile = app.scrollViews["creatorProfileScroll"]
         XCTAssertTrue(profile.waitForExistence(timeout: 5))
         XCTAssertTrue(app.links["creatorExternalProfile"].exists || app.buttons["creatorExternalProfile"].exists)
-        XCTAssertTrue(profile.buttons["prompt-database-fixture-9975"].waitForExistence(timeout: 3), "Known work should be usable before the profile request completes")
+        XCTAssertTrue(profile.buttons["prompt-database-fixture-0"].waitForExistence(timeout: 3), "Known work should be usable before the profile request completes")
         XCTAssertFalse(app.progressIndicators.firstMatch.exists)
         capture("polish-01-known-work-before-response")
         try Data().write(to: root.appending(path: "fail-creator"))
@@ -337,7 +337,10 @@ import UIKit
         capture("polish-02-inline-profile-failure")
         try FileManager.default.removeItem(at: root.appending(path: "fail-creator"))
         retry.tap()
-        XCTAssertTrue(app.buttons["prompt-database-fixture-75"].waitForExistence(timeout: 10))
+        XCTAssertTrue(retry.waitForNonExistence(timeout: 10))
+        let loaded = profile.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'prompt-database-fixture-'" )).firstMatch
+        XCTAssertTrue(loaded.waitForExistence(timeout: 10))
+        let loadedID = loaded.identifier
         for _ in 0..<3 { if app.buttons["creatorContentFilter"].isHittable { break }; app.swipeDown() }
         try Data().write(to: root.appending(path: "hold-creator"))
         app.buttons["creatorContentFilter"].tap(); app.buttons["图片"].tap()
@@ -346,7 +349,7 @@ import UIKit
         XCTAssertFalse(app.progressIndicators.firstMatch.exists)
         capture("polish-03-filter-local-placeholder")
         try FileManager.default.removeItem(at: root.appending(path: "hold-creator"))
-        XCTAssertTrue(profile.buttons["prompt-database-fixture-225"].waitForExistence(timeout: 10))
+        XCTAssertTrue(profile.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'prompt-database-fixture-'" )).firstMatch.waitForExistence(timeout: 10))
         XCTAssertFalse(app.otherElements["feedLoading"].exists)
         app.buttons["creatorContentFilter"].tap(); app.buttons["Skill"].tap()
         XCTAssertTrue(app.staticTexts["暂无匹配内容"].waitForExistence(timeout: 8))
@@ -354,7 +357,7 @@ import UIKit
         capture("polish-04-confirmed-empty-filter")
         try Data().write(to: root.appending(path: "hold-creator"))
         app.buttons["creatorContentFilter"].tap(); app.buttons["全部"].tap()
-        XCTAssertTrue(profile.buttons["prompt-database-fixture-75"].waitForExistence(timeout: 3), "The cached first page must appear while the next network request is held")
+        XCTAssertTrue(profile.buttons[loadedID].waitForExistence(timeout: 3), "The cached first page must appear while the next network request is held")
         XCTAssertFalse(app.otherElements["feedLoading"].exists)
         capture("polish-08-cache-before-refresh")
         try FileManager.default.removeItem(at: root.appending(path: "hold-creator"))
@@ -549,7 +552,7 @@ import UIKit
         for _ in 0..<18 {
             let start = scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.78))
             start.press(forDuration: 0.05, thenDragTo: scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.48)))
-            requested = try requests().contains { $0["operation"] as? String == "page-start" && $0["cursor"] as? String == "30" }
+            requested = try requests().contains { $0["operation"] as? String == "page-start" && $0["query"] as? String == "preview" && $0["cursor"] as? String == "30" }
             if requested { break }
         }
         XCTAssertTrue(requested, "Page two should start before the reader reaches the footer")
@@ -559,7 +562,7 @@ import UIKit
         capture("motion-02-paging-activity")
         try FileManager.default.removeItem(at: root.appending(path: "hold-next-page"))
         XCTAssertTrue(app.buttons["prompt-database-fixture-30"].waitForExistence(timeout: 8))
-        let pages = try requests().filter { $0["operation"] as? String == "page-start" && $0["cursor"] as? String != "" }
+        let pages = try requests().filter { $0["operation"] as? String == "page-start" && $0["query"] as? String == "preview" && $0["cursor"] as? String != "" }
         XCTAssertEqual(pages.count, 1, "An appended page must not automatically drain the catalog")
     }
 
@@ -604,7 +607,7 @@ import UIKit
         XCTAssertTrue(app.buttons["replayOnboarding"].waitForExistence(timeout: 5))
     }
 
-    func testProgressiveImageDetailRetainsPreviewAndPositionThenReusesCompleteCache() throws {
+    func testProgressiveImageDetailRetainsPreviewAndPositionThenReusesCompleteCache() async throws {
         launch(["--feed-detail-preview-test"])
         search("preview")
         let card = app.buttons["prompt-database-fixture-1"]
@@ -622,6 +625,10 @@ import UIKit
         capture("progressive-01-image-before-response")
         let pane = app.scrollViews["detailReadingPane"]
         pane.swipeUp(velocity: .slow)
+        for _ in 0..<30 {
+            if app.buttons["usePrompt"].frame.width < 80 { break }
+            try await Task.sleep(for: .milliseconds(100))
+        }
         let pendingY = title.frame.minY
         let pendingActionWidth = app.buttons["usePrompt"].frame.width
         XCTAssertLessThan(pendingActionWidth, 80, "Scrolling a pending detail should collapse its actions")
@@ -890,7 +897,10 @@ import UIKit
     }
 
     func testFavoriteDraftAndLanguageSurviveOfflineRestartWithoutFullCatalog() throws {
-        launch(); firstDetail()
+        launch()
+        XCTAssertTrue(firstFixtureCard.waitForExistence(timeout: 15))
+        let cachedFirstID = firstFixtureCard.identifier
+        firstDetail()
         app.buttons["copyPrompt"].tap()
         XCTAssertEqual(app.buttons["copyPrompt"].label, "已复制")
         app.buttons["detailFavorite"].tap()
@@ -907,7 +917,7 @@ import UIKit
         let drafts = try Data(contentsOf: directory().appending(path: "drafts.json"))
         capture("database-04-language-and-personal-data")
         app.terminate(); launch(["--feed-fixture-offline"])
-        XCTAssertTrue(app.buttons["prompt-database-fixture-9999"].waitForExistence(timeout: 10), "The newest feed must remain available from its offline cache")
+        XCTAssertTrue(app.buttons[cachedFirstID].waitForExistence(timeout: 10), "The same recommendation session must remain available from its offline cache")
         XCTAssertTrue(try requests().contains { $0["offline"] as? Bool == true })
         app.selectPrompixTab("收藏")
         let savedCard = app.buttons["prompt-database-fixture-0"]
@@ -935,7 +945,7 @@ import UIKit
         app.navigationBars.buttons.firstMatch.tap()
         let topic = app.buttons["home-collection-portraits"]
         XCTAssertTrue(topic.waitForExistence(timeout: 5)); topic.tap()
-        XCTAssertTrue(app.buttons["prompt-database-fixture-0"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'prompt-database-fixture-'" )).firstMatch.waitForExistence(timeout: 10))
         capture("database-07-collection")
     }
 

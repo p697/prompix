@@ -257,14 +257,15 @@ struct OwnedFeedResults: View {
     let repository: FeedRepository
     let query: FeedQuery
     var fallback: [Prompt] = []
+    var initialPreviews: [FeedCard] = []
     var excludingID: String?
-    init(repository: FeedRepository, query: FeedQuery, fallback: [Prompt] = [], excludingID: String? = nil) {
+    init(repository: FeedRepository, query: FeedQuery, fallback: [Prompt] = [], initialPreviews: [FeedCard] = [], excludingID: String? = nil) {
         _store = State(initialValue: repository.makeStore()); self.repository = repository
-        self.query = query; self.fallback = fallback; self.excludingID = excludingID
+        self.query = query; self.fallback = fallback; self.initialPreviews = initialPreviews; self.excludingID = excludingID
     }
     var body: some View {
         FeedResults(store: store, query: query, fallback: fallback,
-                    previews: repository.previewCards(for: query), excludingID: excludingID)
+                    previews: repository.previewCards(for: query, including: initialPreviews), excludingID: excludingID)
     }
 }
 

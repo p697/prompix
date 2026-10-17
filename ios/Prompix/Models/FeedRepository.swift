@@ -48,14 +48,18 @@ struct FeedCheckpoint: Codable {
 
     /// A few already visible cards can preview an exact scoped query while its
     /// first page arrives. They never become a page, cursor, or result count.
-    func previewCards(for value: FeedQuery) -> [FeedCard] {
+    func previewCards(for value: FeedQuery, including provided: [FeedCard] = []) -> [FeedCard] {
         guard let query = try? value.validated(), query.q.isEmpty, query.collection == nil,
               query.creator != nil || query.tag != nil || query.model != nil else { return [] }
         var seen = Set<String>()
         var result: [FeedCard] = []
-        for card in [discovery.items, search.items].joined() {
+        let providedIDs = Set(provided.map(\.id))
+        // Prefer a matching translated card when it is already loaded. A cover
+        // just shown in the creator directory may keep its original caption
+        // until the scoped page supplies the preferred language.
+        for card in [discovery.items, search.items, provided].joined() {
             guard !self.removedIDs.contains(card.id),
-                  card.language == query.locale || (card.language == "original" && !card.availableLanguages.contains(query.locale)),
+                  card.language == query.locale || (card.language == "original" && (providedIDs.contains(card.id) || !card.availableLanguages.contains(query.locale))),
                   query.creator == nil || card.creator?.id == query.creator,
                   query.tag == nil || card.tags.contains(query.tag!),
                   query.model == nil || card.model == query.model,
