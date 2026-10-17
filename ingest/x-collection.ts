@@ -76,7 +76,7 @@ export async function collectXDiscovery(root: string, options: {
   const supplement = await collectXFeeds(root, { enabled: true, bearer: options.bearer, now, search: options.officialSearch,
     sleep: options.sleep, limits: { requests: 3, posts: 30 }, pageSize: 10, replyEvery: 3, feeds: officialSupplementFeeds });
   const statuses = [search.status, admission.status, supplement.status];
-  const report = { status: statuses.some(s => ["failed", "unresolved", "prior-attempt-blocked", "budget-limit"].includes(s)) ? "failed" : "ok",
+  const report = { status: statuses.some(s => ["failed", "unresolved", "prior-attempt-blocked", "budget-limit", "checkpoint-limit"].includes(s)) ? "failed" : "ok",
     mode, search, admission, supplement, rawDailyLimit: 800, officialAcquisitionDailyLimit: 40,
     officialSupplementDailyLimit: 30, globalRecallProven: false };
   await atomic(join(root, "x-hybrid-discovery-status.json"), { at: now().toISOString(), ...report });

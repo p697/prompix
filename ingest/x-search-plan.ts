@@ -121,7 +121,7 @@ export async function runXSearchPlan(directory: string, input: XSearchPlan, opti
   if (run.recovered) await atomic(join(directory, "progress.json"), run.state);
   await atomic(join(directory, "plan.json"), run.plan);
   let calls = 0;
-  while (calls < options.maxRequests) {
+  while (calls < options.maxRequests && run.state.attempts.length < 10000) {
     if (run.pending.size) {
       const retry = run.state.attempts.find(a => a.state === "retryable" && a.retryAfter && Date.parse(a.retryAfter) <= now().getTime()
         && run.state.attempts.filter(other => other.query === a.query && other.cursor === a.cursor && other.state !== "budget-blocked").length < 3);
@@ -167,7 +167,8 @@ export async function runXSearchPlan(directory: string, input: XSearchPlan, opti
       return report;
     }
   }
-  const report = { ...run.report, requestsThisRun: calls };
+  const report = { ...run.report, requestsThisRun: calls,
+    ...(run.state.attempts.length >= 10000 && run.report.status !== "complete" ? { status: "checkpoint-limit" } : {}) };
   await atomic(join(directory, "report.json"), report);
   return report;
 }

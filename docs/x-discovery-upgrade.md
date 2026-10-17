@@ -22,6 +22,8 @@ Set the discovery provider back to `official` to restore the previous discovery 
 
 Resume with `--fetch --max-requests 10`; use `--replay` for offline extraction. Existing plans are immutable. A page cap is reported as incomplete; it never advances a global completeness watermark. All jobs share the same dollar ledger as live collection. This command only stages leads: it cannot publish, lower review standards, or count raw results as library growth.
 
+Prefer weekly history chunks. A checkpoint stops safely at 10,000 recorded attempts, before another paid request; `checkpoint-limit` means split the remaining range into a new bounded plan while retaining the prior evidence and shared spend. It never means the range was exhausted.
+
 The intended gates are: sample historical results and measure actual approval/cost; acquire and review an additional 500 items; verify total 2,000; then continue toward at least 10,000. Deduplication, exact prompt completeness, source permission/attribution, media checks, translations and removals remain required. Normal new-release pacing remains separate from staged historical inventory.
 
 ## Live evidence and limitations

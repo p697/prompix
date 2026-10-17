@@ -133,3 +133,15 @@ test("transient reads retry at most three times, keep every charge, and recover 
   const blocked = await runXSearchPlan(join(root, 'failed'), plan(1), { search: failing.search.bind(failing), maxRequests: 10, now: clock, sleep: wait });
   assert.equal(blocked.status, 'unresolved'); assert.equal(calls, 5);
 }));
+
+test("large history stops before exceeding checkpoint capacity or buying an unrecordable request", async () => fixture(async root => {
+  const directory = join(root, "large-history"), p = plan(1);
+  const state = (await readXSearchPlan(directory, p)).state;
+  state.attempts = Array.from({ length: 10000 }, (_, i) => ({ state: "budget-blocked" as const, at, query: 0,
+    response: `response-${String(i + 1).padStart(5, "0")}.json` }));
+  await atomic(join(directory, "progress.json"), state);
+  const api = client(root, () => { throw new Error("Checkpoint capacity must stop before HTTP"); });
+  const result = await runXSearchPlan(directory, p, { search: api.search.bind(api), maxRequests: 1, now, sleep });
+  assert.equal(result.status, "checkpoint-limit"); assert.equal(result.requestsThisRun, 0);
+  assert.equal((await readXSearchPlan(directory, p)).state.attempts.length, 10000);
+}));
