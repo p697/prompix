@@ -64,9 +64,13 @@ export type XFeedReport = {
 export async function collectXFeeds(root: string, options: {
   enabled: boolean; bearer?: string; now?: () => Date;
   limits?: ReturnType<typeof xFeedLimits>; search?: typeof searchXFeed; replyOnly?: boolean; sleep?: (ms: number) => Promise<void>;
+  pageSize?: number; replyEvery?: number; feeds?: readonly { id: string; query: string }[];
 }) {
   const now = options.now ?? (() => new Date()), day = now().toISOString().slice(0, 10);
   const limits = options.limits ?? xFeedLimits();
+  const pageSize = options.pageSize ?? 50, replyEvery = options.replyEvery ?? 6, feeds = options.feeds ?? xFeeds;
+  if (!Number.isInteger(pageSize) || pageSize < 10 || pageSize > 50 || !Number.isInteger(replyEvery) || replyEvery < 1 ||
+      replyEvery > 20 || !feeds.length || feeds.some(feed => !feed.id || !feed.query)) throw new Error("Invalid X feed routing");
   if (!Number.isInteger(limits.requests) || limits.requests < 0 || limits.requests > 20 ||
       !Number.isInteger(limits.posts) || limits.posts < 0 || limits.posts > 1000) throw new Error("Invalid X collection limits");
   const report: XFeedReport = { status: "dry-run", requests: 0, count: 0, creators: 0,
@@ -98,8 +102,8 @@ export async function collectXFeeds(root: string, options: {
   let replyCursors = await readXReplyCursors(root);
   while (report.dailyRequests < requestAllowance && postAllowance - report.reservedPosts >= 10) {
     if (now().toISOString().slice(0, 10) !== day) break;
-    const feed = xFeeds[state.nextFeed % xFeeds.length];
-    const limit = Math.min(50, postAllowance - report.reservedPosts);
+    const feed = feeds[state.nextFeed % feeds.length];
+    const limit = Math.min(pageSize, postAllowance - report.reservedPosts);
     const fingerprint = xFeedRequest(feed.query, { limit }).fingerprint;
     let cursor = state.cursors[fingerprint] ?? {};
     // Pagination cursors are ephemeral. Restart an old window from its committed
@@ -107,9 +111,9 @@ export async function collectXFeeds(root: string, options: {
     if (cursor.nextToken && (!cursor.startedAt || now().getTime() - Date.parse(cursor.startedAt) > 48 * 3600_000)) {
       cursor = { since: cursor.since };
     }
-    // Reserve at most one in six reads for reply recovery. Repeated invocations preserve this
+    // Reserve the configured fraction of reads for reply recovery. Repeated invocations preserve this
     // choice through the same daily ledger, rather than resetting an extra budget.
-    const reply = options.replyOnly || ledger.attempts.length % 6 === 5 ? nextXReply(leads, replyCursors, now().toISOString()) : undefined;
+    const reply = options.replyOnly || ledger.attempts.length % replyEvery === replyEvery - 1 ? nextXReply(leads, replyCursors, now().toISOString()) : undefined;
     if (options.replyOnly && !reply) { report.status = "no-pending"; break; }
     const request = reply ? xReplyRequest(reply, replyWindow(reply, replyCursors, now().toISOString()).nextToken, limit)
       : xFeedRequest(feed.query, { limit, since: cursor.since, nextToken: cursor.nextToken });
@@ -139,7 +143,7 @@ export async function collectXFeeds(root: string, options: {
         state.cursors[fingerprint] = result.nextToken
           ? { ...cursor, nextToken: result.nextToken, newest, startedAt: cursor.startedAt ?? now().toISOString() }
           : { since: newest ?? cursor.since };
-        state.nextFeed = (state.nextFeed + 1) % xFeeds.length;
+        state.nextFeed = (state.nextFeed + 1) % feeds.length;
         await atomic(path, state);
       }
       attempt.state = "completed"; attempt.count = result.posts.length;

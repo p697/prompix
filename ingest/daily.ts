@@ -19,7 +19,7 @@ import {
 } from "./sources.ts";
 import { download } from "./network.ts";
 import { discoverX } from "./x-discovery.ts";
-import { collectXFeeds } from "./x-feed.ts";
+import { collectXDiscovery } from "./x-collection.ts";
 import { readAllXIntake as readXIntake } from "./x-thread-intake.ts";
 import { collectSkill, skillRepositoryRevision, skillSources } from "./skills.ts";
 import { prepareClawHub, filterClawHubAvailability, assertClawHubAvailability } from "./clawhub-daily.ts";
@@ -183,7 +183,7 @@ async function run() {
         await atomic(creatorsPath, creators);
       }
     } else {
-      report.sources.x = await collectXFeeds(root, { enabled: publishing, bearer: process.env.X_BEARER_TOKEN });
+      report.sources.x = await collectXDiscovery(root, { enabled: publishing, bearer: process.env.X_BEARER_TOKEN });
     }
     // Cached discoveries still enter intake when today's paid search is disabled.
     // Marked source bodies are drafts; incomplete posts keep an explicit reason.
