@@ -828,3 +828,10 @@ Evaluate TweetAPI's documented 200-ID, one-unit lookup as an isolated read pilot
 - Request protected/withheld author fields in official discovery, hydration and maintenance. A third-party restriction must not be lost when the same post falls back to the official API.
 - Keep regional withholding and not-authorized results distinct from explicit resource-not-found. Withhold without a persistent deletion marker; only fresh valid evidence can restore availability, and operator holds still require explicit review.
 - Validate response counts/cursors before filtering restricted discovery results, and retain existing global request budgets when the added fields change request fingerprints.
+
+
+## 2026-10-18：付费周期请求额度与日历月现金账本分别保护
+
+- RapidAPI Basic 的请求额度按核实的订阅起止时间计算，不能借日历月切换补出额外1,000次；首月试用、失败、未决请求全部计入，现金仍统一进入既有月度账本。
+- 保存不可变的收据边界与单调增加的用量记录，跨月读取旧账本；后台用量低于本地尝试数不能返还额度，异常或过期状态拒绝请求。增长读取预留每天两次、每批200个独立来源的复查次数；官方依赖继续独立受现金预算约束。
+- 当前仅落地并测试额度基础层，不启用生产适配器、不自动续订、不修改采集配置。按原计划完成真实间隔复测、完整接入和回滚验证后再切换。
