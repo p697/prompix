@@ -822,3 +822,9 @@ Evaluate TweetAPI's documented 200-ID, one-unit lookup as an isolated read pilot
 - Accept an omitted nested tweet typename only inside a known visibility wrapper; reject contradictory types and identities. Reuse saved100-ID evidence rather than retrying a billed call, and preserve its uncertain ledger entry.
 - Normalize the pilot's full source fields through existing strict validators, then run actual extraction and revision comparison. Protected/withheld authors, unavailable media and malformed privacy/reference metadata cannot refresh source validity.
 - The first200-ID call and dashboard reconciliation establish initial batch capacity and one-call billing. They do not authorize a production switch, renew the subscription, or replace delayed reliability and fallback tests.
+
+### 2026-10-17 — Preserve reversible author restrictions in official reads
+
+- Request protected/withheld author fields in official discovery, hydration and maintenance. A third-party restriction must not be lost when the same post falls back to the official API.
+- Keep regional withholding and not-authorized results distinct from explicit resource-not-found. Withhold without a persistent deletion marker; only fresh valid evidence can restore availability, and operator holds still require explicit review.
+- Validate response counts/cursors before filtering restricted discovery results, and retain existing global request budgets when the added fields change request fingerprints.

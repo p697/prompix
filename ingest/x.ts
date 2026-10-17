@@ -8,13 +8,20 @@ const userSchema = z.object({
   id: z.string().regex(/^\d+$/), name: z.string().trim().min(1).max(200),
   username: z.string().regex(/^[a-z0-9_]{1,15}$/i),
   profile_image_url: z.string().optional(), description: z.string().optional(),
+  protected: z.boolean().optional(), withheld: z.unknown().optional(),
 });
+const restrictedUser = (user: z.infer<typeof userSchema>) => user.protected === true || user.withheld !== undefined;
+function publicSourcePosts<T extends { author_id?: string; withheld?: unknown }>(posts: T[], users: z.infer<typeof userSchema>[]) {
+  const restricted = new Set(users.filter(restrictedUser).map(user => user.id));
+  return posts.filter(post => post.withheld === undefined && !restricted.has(post.author_id ?? ""));
+}
 export function parseXUsers(users: unknown): Creator[] {
   if (!Array.isArray(users)) return [];
   return users.flatMap(value => {
     const parsed = userSchema.safeParse(value);
     if (!parsed.success) return [];
     const user = parsed.data;
+    if (restrictedUser(user)) return [];
     let avatarURL: string | undefined;
     if (user.profile_image_url) {
       try {
@@ -34,7 +41,7 @@ export function xUserLookupURL(usernames: readonly string[]): URL {
   if (!usernames.length || usernames.length > 100 || usernames.some(name => !/^[a-z0-9_]{1,15}$/i.test(name))) throw new Error("X lookup requires 1–100 valid usernames");
   const url = new URL("https://api.x.com/2/users/by");
   url.searchParams.set("usernames", [...new Set(usernames.map(name => name.toLowerCase()))].join(","));
-  url.searchParams.set("user.fields", "id,name,username,profile_image_url,description,url");
+  url.searchParams.set("user.fields", "id,name,username,profile_image_url,description,url,protected,withheld");
   return url;
 }
 
@@ -58,7 +65,7 @@ const searchConfiguration = Object.freeze({
   fields: Object.freeze({
     "tweet.fields": "created_at,author_id,public_metrics,lang,entities,note_tweet,attachments",
     expansions: "author_id,attachments.media_keys",
-    "user.fields": "id,name,username,profile_image_url,description,url",
+    "user.fields": "id,name,username,profile_image_url,description,url,protected,withheld",
     "media.fields": "media_key,type,url,preview_image_url,variants",
   }),
 });
@@ -197,7 +204,8 @@ export function parseXSearchResponse(value: unknown, since?: string, limit = 10)
   } else if (body.meta.newest_id !== undefined || body.meta.oldest_id !== undefined || body.meta.next_token !== undefined) {
     throw new Error("X search returned an inconsistent empty page; cursor unchanged");
   }
-  return { posts, creators: parseXUsers(users), media, newest: body.meta.newest_id, ...(body.meta.next_token ? { nextToken: body.meta.next_token } : {}), coverage: searchCoverage(body) };
+  return { posts: publicSourcePosts(posts, users), creators: parseXUsers(users), media, newest: body.meta.newest_id,
+    ...(body.meta.next_token ? { nextToken: body.meta.next_token } : {}), coverage: searchCoverage(body) };
 }
 
 const lookupResponseSchema = z.object({
@@ -218,6 +226,8 @@ export function parseXLookupResponse(value: unknown, ids: readonly string[]) {
   const users = body.includes?.users ?? [], media = body.includes?.media ?? [];
   if (new Set(users.map(user => user.id)).size !== users.length || new Set(media.map(item => item.media_key)).size !== media.length)
     throw new Error("X lookup returned duplicate expansions; cached posts unchanged");
+  if (publicSourcePosts(posts, users).length !== posts.length)
+    throw new Error("X lookup returned restricted sources; cached posts unchanged");
   return { posts, creators: parseXUsers(users), media,
     coverage: searchCoverage({ ...body, meta: { result_count: posts.length } }) };
 }
@@ -334,9 +344,14 @@ export function parseXAvailability(value: unknown, ids: readonly string[]) {
   const users = body.includes?.users ?? [], media = body.includes?.media ?? [];
   if (new Set(users.map(user => user.id)).size !== users.length || new Set(media.map(item => item.media_key)).size !== media.length)
     throw new Error("X availability returned duplicate expansions");
-  return { posts: posts.filter(post => post.withheld === undefined),
-    unavailable: [...errors.map(error => error.resource_id), ...posts.filter(post => post.withheld !== undefined).map(post => post.id)],
-    creators: parseXUsers(users), media };
+  const publicPosts = publicSourcePosts(posts, users);
+  const restricted = [...errors.filter(error => error.type.endsWith("/not-authorized-for-resource")).map(error => error.resource_id),
+    ...posts.filter(post => !publicPosts.includes(post)).map(post => post.id)];
+  // Protection/withholding may be reversible or regional. They must not create
+  // the persistent removal marker used for explicit resource-not-found results.
+  return { posts: publicPosts,
+    unavailable: errors.filter(error => error.type.endsWith("/resource-not-found")).map(error => error.resource_id),
+    ...(restricted.length ? { restricted } : {}), creators: parseXUsers(users), media };
 }
 export async function checkXAvailability(bearer: string, ids: readonly string[], purpose: XSpendPurpose = "growth") {
   const url = new URL("https://api.x.com/2/tweets");

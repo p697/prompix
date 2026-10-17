@@ -49,7 +49,8 @@ test("X lookup accepts accounted-for deletions, rejects ambiguous partial errors
   assert.throws(() => parseXAvailability({ data: [post] }, ["123", "789"]), /inconsistent/);
   assert.throws(() => parseXAvailability({ errors: [{ ...error, type: "rate-limit" }] }, ["789"]), /unresolved/);
   assert.throws(() => parseXAvailability({ data: [post] }, ["789"]), /inconsistent/);
-  assert.deepEqual(parseXAvailability({ data: [{ ...post, withheld: {} }] }, ["123"]).unavailable, ["123"]);
+  const withheld = parseXAvailability({ data: [{ ...post, withheld: {} }] }, ["123"]);
+  assert.deepEqual(withheld.unavailable, []); assert.deepEqual(withheld.restricted, ["123"]);
 });
 
 test("maintenance reserves before paid reads and does not retry an uncertain result", async () => {
