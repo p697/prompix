@@ -747,3 +747,7 @@ TwitterAPI.io 已完成免费账户注册和真实读取测试。45 个已知帖
 ## 2026-10-17：官方 X 读取也接入统一美元预算
 
 第三方搜索尚未满足切换条件时，官方发现、ID读取、旧帖复查和作者资料查询仍须遵守预算。用外部 `PROMPIX_X_MONTHLY_USD` 显式启用统一账本，UTC月上限最多20美元，启用前先导入已发生的账户费用。请求先预留最大可能金额，确定的返回数用于结算；错误或数量不确定时保留上限，不依赖官方日内去重的软保证。预算耗尽时在网络请求前停止，保留现有告警、下架证据和来源时效要求。此安全上限不等于原有官方读取量已能持续满足10–20美元月预算；第三方加官方补漏的路由仍需独立验证。
+
+## 2026-10-17 — Separate low-cost X verification from acquisition
+
+Use an explicit, budgeted hybrid option for existing standalone X sources: exact extractor/revision/attribution matches can refresh availability using TwitterAPI.io; missing or changed sources are withheld and sent to official verification. Only official unavailable responses persist removal. Reply chains stay on joint official lookups. Preserve original official acquisition files and store third-party verification evidence separately. Keep the 12-hour maintenance target and 24-hour publication gate. Search remains official while third-party recall gaps are unresolved; do not represent this maintenance change as a complete $10–20/month migration. See [implementation and evidence](x-hybrid-maintenance.md).

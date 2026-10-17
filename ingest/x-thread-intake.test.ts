@@ -158,3 +158,17 @@ test("a partial root refresh withholds dependent approvals without erasing draft
   assert.equal(filterXAvailability([item], checked.state).prompts.length, 0);
   assert.ok((await readAllXIntake(directory)).candidates.some(value => value.id === item.id));
 }));
+
+test("hybrid maintenance keeps whole reply chains and their standalone roots on the official path", () => fixture(async directory => {
+  const markedRoot = { ...root, text: "Video prompt:\nAnimate an original watercolor garden with a slow camera move and a clear beginning, middle and end." };
+  await atomic(join(directory, "x-discovery", `${now.slice(0, 10)}-feed-001.json`), { ...snapshot, posts: [markedRoot] });
+  const checkTime = new Date(Date.parse(now) + 13 * 3600_000).toISOString();
+  const checked: string[][] = [];
+  const result = await prepareXAvailability(directory, { enabled: true, bearer: "fixture", now: checkTime,
+    recheck: { maxRequests: 16, sleep: async () => {}, lookup: async () => { throw new Error("Thread dependencies must never use standalone rechecks"); } },
+    lookup: async (_, ids) => { checked.push([...ids]); return { posts: [markedRoot, reply], creators: [creator], media, unavailable: [] }; } });
+  assert.equal(result.report.recheck?.requests, 0);
+  assert.equal(checked.length, 1); assert.deepEqual(new Set(checked[0]), new Set(["100", "101"]));
+  assert.equal(result.state["x-post-101"].checkedBy, "official");
+  assert.equal(result.state["x-post-100"].checkedBy, "official");
+}));

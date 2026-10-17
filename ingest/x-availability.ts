@@ -12,8 +12,12 @@ import { reviewsSchema } from "./editorial.ts";
 import { editorialCacheSchema, editorialDecisionKey } from "./editorial-runner.ts";
 import { readQualityHolds } from "./quality-holds.ts";
 import { moderationSchema } from "./publication.ts";
+import { TwitterAPIClient } from "./twitterapi.ts";
+import { configuredXSpendBudget } from "./x-spend.ts";
+import { recheckXStandalone, type XRecheckOptions } from "./x-recheck.ts";
 
 const recordSchema = z.object({ checkedAt: z.iso.datetime(), status: z.enum(["ready", "withheld"]),
+  checkedBy: z.enum(["official", "twitterapi"]).optional(),
   removed: z.boolean().optional(), revision: z.string().regex(/^[a-f0-9]{64}$/).optional() }).strict();
 const stateSchema = z.record(z.string().regex(/^x-post-\d{1,19}$/), recordSchema);
 const ledgerSchema = z.array(z.object({ ids: z.array(z.string().regex(/^\d{1,19}$/)).min(1).max(100),
@@ -41,15 +45,25 @@ export async function assertXAvailability(root: string, catalog: Pick<Catalog, "
   const result = filterXAvailability(catalog.prompts, await readXAvailability(root));
   if (result.withheldIDs.length) throw new Error(`X posts need a current source check: ${result.withheldIDs.join(", ")}`);
 }
+function configuredRecheck(): XRecheckOptions | undefined {
+  const provider = process.env.PROMPIX_X_RECHECK_PROVIDER ?? "official";
+  if (provider === "official") return;
+  if (provider !== "twitterapi") throw new Error("Invalid X recheck provider");
+  const budget = configuredXSpendBudget(), key = process.env.TWITTERAPI_IO_KEY;
+  if (!budget || !key) throw new Error("Third-party rechecks require a shared dollar budget and key");
+  const client = new TwitterAPIClient(key, budget);
+  return { lookup: client.lookup.bind(client), maxRequests: Number(process.env.PROMPIX_X_RECHECK_MAX_REQUESTS ?? 16) };
+}
 /** Separate maintenance budget: default two requests, bounded to four / 400 posts per UTC day. No automatic retries. Caller holds daily.lock. */
 export async function prepareXAvailability(root: string, options: { enabled: boolean; bearer?: string; now?: string;
-  lookup?: typeof checkXAvailability; maxRequests?: number } ) {
+  lookup?: typeof checkXAvailability; maxRequests?: number; recheck?: XRecheckOptions } ) {
   const now = options.now ?? new Date().toISOString(), nowMS = Date.parse(now), day = now.slice(0, 10);
   if (!Number.isFinite(nowMS)) throw new Error("Invalid X availability time");
   const maxRequests = options.maxRequests ?? Number(process.env.PROMPIX_X_AVAILABILITY_MAX_REQUESTS ?? 2);
   if (!Number.isInteger(maxRequests) || maxRequests < 0 || maxRequests > 4) throw new Error("Invalid X availability budget");
   const state = await readXAvailability(root);
-  const report = { status: "cached", requests: 0, checked: 0, withheld: 0, skippedInactive: 0, reusedDiscovery: 0 };
+  const report = { status: "cached", requests: 0, checked: 0, withheld: 0, skippedInactive: 0, reusedDiscovery: 0,
+    recheck: undefined as Awaited<ReturnType<typeof recheckXStandalone>> | undefined };
   if (!options.enabled || !options.bearer) return { state, report };
   const ledgerPath = join(root, "x-availability", `${day}.json`);
   const ledger = ledgerSchema.parse(await json(ledgerPath, []));
@@ -64,7 +78,7 @@ export async function prepareXAvailability(root: string, options: { enabled: boo
     .map(source => Date.parse(source?.checkedAt ?? "") || 0));
   const checkedAt = (item: typeof intake.candidates[number]) => Math.max(sourceCheckedAt(item),
     Date.parse(state[item.id]?.checkedAt ?? "") || 0);
-  const due = intake.candidates.filter(item => {
+  let due = intake.candidates.filter(item => {
     const decision = decisions[editorialDecisionKey(item)];
     // A previous approval may still back a published edition. Keep checking it even if a later revision was rejected.
     if (removed.has(item.id) || holds.holds[item.id] || (!reviews[item.id] && decision && decision.decision !== "approve")) {
@@ -78,12 +92,30 @@ export async function prepareXAvailability(root: string, options: { enabled: boo
     // lookup: refreshing one dependency must invalidate affected older chains.
     if (!threadIDs.has(item.source.post?.id ?? "") && (!record || sourceChecked > Date.parse(record.checkedAt)) && sourceChecked <= nowMS &&
         nowMS - sourceChecked < 12 * 3600_000 && !nativeXSourceIssue(item, nowMS)) {
-      state[item.id] = { checkedAt: new Date(sourceChecked).toISOString(), status: "ready", revision: item.source.revision };
+      state[item.id] = { checkedAt: new Date(sourceChecked).toISOString(), status: "ready", revision: item.source.revision, checkedBy: "official" };
       report.reusedDiscovery++; return false;
     }
     return !record || (record.status === "ready" && record.revision !== item.source.revision) || nowMS - checked >= 12 * 3600_000;
   }).sort((a, b) => Number(!!reviews[b.id]) - Number(!!reviews[a.id]) || checkedAt(a) - checkedAt(b) || a.id.localeCompare(b.id));
   if (report.reusedDiscovery) await atomic(join(root, "x-availability", "state.json"), stateSchema.parse(state));
+  const recheck = options.recheck ?? configuredRecheck();
+  if (recheck) {
+    const verified = new Set<string>();
+    report.recheck = await recheckXStandalone(root, due.filter(item => !threadIDs.has(item.source.post!.id)), {
+      ...recheck, now, excerpts, apply: async (matched, unresolved) => {
+        for (const item of matched) {
+          verified.add(item.id);
+          state[item.id] = { checkedAt: now, status: "ready", revision: item.source.revision, checkedBy: "twitterapi" };
+        }
+        // A changed or unknown source cannot keep an older ready record if the
+        // official fallback is unavailable or over budget. Omission never deletes it.
+        for (const item of unresolved) state[item.id] = { checkedAt: now, status: "withheld", checkedBy: "twitterapi" };
+        await atomic(join(root, "x-availability", "state.json"), stateSchema.parse(state));
+      },
+    });
+    due = due.filter(item => !verified.has(item.id));
+    if (report.recheck.requests) report.status = report.recheck.status;
+  }
   if (ledger.some(attempt => attempt.state !== "completed") || ledger.length >= maxRequests)
     return { state, report: { ...report, status: "daily-limit" } };
   while (due.length && ledger.length < maxRequests) {
@@ -111,7 +143,7 @@ export async function prepareXAvailability(root: string, options: { enabled: boo
         const complete = nativeXPostIDs(item).every(id => ids.includes(id));
         const candidate = missing || !complete ? undefined : rootID ? convertXThread(snapshot, rootID).candidates.find(value => value.id === item.id)
           : refreshed.find(value => value.id === item.id);
-        state[item.id] = { checkedAt: now, status: candidate?.source.revision ? "ready" : "withheld",
+        state[item.id] = { checkedAt: now, status: candidate?.source.revision ? "ready" : "withheld", checkedBy: "official",
           ...(nativeXPostIDs(item).some(id => result.unavailable.includes(id)) ? { removed: true } : {}),
           ...(candidate?.source.revision ? { revision: candidate.source.revision } : {}) };
       }

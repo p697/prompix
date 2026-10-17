@@ -40,3 +40,13 @@ test("search audits reject out-of-window dates and missing media even when the A
   assert.deepEqual(auditPilotSearch(`prompt since_time:${start} until_time:${start + 1}`, result), []);
   assert.equal(auditPilotSearch(`prompt since_time:${start + 1}`, result)[0].issues[0], "before-window");
 });
+
+
+test("full-library extraction comparisons respect bounded snapshot sizes", () => {
+  const posts = Array.from({ length: 201 }, (_, index) => ({ ...post, id: String(1000 + index) }));
+  const candidates = posts.flatMap(post => convertXDiscovery([{ name: post.id, data: { ...snapshot, posts: [post] } }]).candidates);
+  const result: TwitterAPIResult = { posts, media: [], creators: [creator], provider: "twitterapi", unknownIDs: [] };
+  const checks = comparePilotExtraction(candidates, result, now);
+  assert.equal(checks.length, 201);
+  assert.ok(checks.every(check => check.matched));
+});

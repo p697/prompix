@@ -81,7 +81,8 @@ export function parseTwitterAPI(value: unknown, options: { ids?: readonly string
       attachments.push(key);
       const item = xMediaSchema.parse({ media_key: key, type: source.type,
         ...(source.type === "photo" ? { url: source.media_url_https } : { preview_image_url: source.media_url_https,
-          variants: source.video_info?.variants.map(v => ({ content_type: v.content_type, url: canonicalTwitterVideoURL(v.url), bit_rate: v.bitrate })) }) });
+          // HLS is not consumed by the MP4-only publication path; keep its source form in raw evidence.
+          variants: source.video_info?.variants.filter(v => v.content_type === "video/mp4").map(v => ({ content_type: v.content_type, url: canonicalTwitterVideoURL(v.url), bit_rate: v.bitrate })) }) });
       const existing = media.find(m => m.media_key === key);
       if (existing && JSON.stringify(existing) !== JSON.stringify(item)) throw new Error("TwitterAPI returned conflicting media");
       if (!existing) media.push(item);

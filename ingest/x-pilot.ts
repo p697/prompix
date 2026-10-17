@@ -3,12 +3,12 @@ import type { Candidate } from "./sources.ts";
 import { fullXText, convertXDiscovery } from "./x-intake.ts";
 import { convertXThread } from "./x-thread-intake.ts";
 import type { XExcerptReviews } from "./x-excerpts.ts";
-import type { TwitterAPIResult } from "./twitterapi.ts";
+import { canonicalTwitterVideoURL, type TwitterAPIResult } from "./twitterapi.ts";
 import { nativeXPostIDs } from "./x-source.ts";
 
 const body = (text: string) => text.replace(/\r\n/g, "\n").trim();
 const asset = (url: string) => {
-  try { const value = new URL(url); value.searchParams.delete("name"); return value.toString(); }
+  try { const value = new URL(canonicalTwitterVideoURL(url)); value.searchParams.delete("name"); return value.toString(); }
   catch { return url; }
 };
 /** Sample distinct visual, long-text and reply cases; never choose only easy standalone text. */
@@ -55,7 +55,16 @@ export function comparePilotSources(candidates: readonly Candidate[], result: Tw
 /** Exercise the real extractor in memory; these provisional drafts are never published. */
 export function comparePilotExtraction(candidates: readonly Candidate[], result: TwitterAPIResult, capturedAt: string, excerpts: XExcerptReviews = {}) {
   const snapshot = { capturedAt, ...result };
-  const singles = convertXDiscovery([{ name: "pilot", data: snapshot }], {}, excerpts).candidates;
+  const snapshots = [];
+  for (let offset = 0; offset < result.posts.length; offset += 100) {
+    const posts = result.posts.slice(offset, offset + 100);
+    const authors = new Set(posts.map(post => post.author_id));
+    const mediaKeys = new Set(posts.flatMap(post => post.attachments?.media_keys ?? []));
+    snapshots.push({ name: `pilot-${offset}`, data: { capturedAt, posts,
+      creators: result.creators.filter(creator => authors.has(creator.externalID ?? "")),
+      media: result.media.filter(media => mediaKeys.has(media.media_key)) } });
+  }
+  const singles = convertXDiscovery(snapshots, {}, excerpts).candidates;
   const roots = new Set(candidates.flatMap(c => c.source.context?.[0]?.id ?? []));
   const threads = [...roots].flatMap(root => convertXThread(snapshot, root).candidates);
   const converted = new Map([...singles, ...threads].map(item => [item.id, item]));
