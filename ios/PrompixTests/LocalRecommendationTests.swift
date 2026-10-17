@@ -19,6 +19,26 @@ import XCTest
         XCTAssertTrue(InterestCatalog.classify(tags: ["Illustration"], kind: "text", isSkill: true).contains("skills"))
         XCTAssertEqual(InterestCatalog.classify(tags: [], kind: "image", isSkill: false), [])
     }
+    func testPreviouslyUnclassifiedTagsParticipateInLocalInterestRanking() {
+        XCTAssertEqual(InterestCatalog.classify(tags: ["时装编辑", "合照构图"], kind: "image", isSkill: false), ["portrait", "fashion"])
+        XCTAssertEqual(InterestCatalog.classify(tags: ["信息图", "平面设计"], kind: "image", isSkill: false), ["illustration"])
+        XCTAssertEqual(InterestCatalog.classify(tags: ["菜谱生成", "食材利用"], kind: "text", isSkill: false), ["lifestyle"])
+        XCTAssertEqual(InterestCatalog.classify(tags: ["项目规划", "客户支持"], kind: "text", isSkill: false), ["business"])
+        XCTAssertEqual(InterestCatalog.classify(tags: ["ＷｅｂＧＬ", "着色器"], kind: "text", isSkill: false), ["coding"])
+        XCTAssertEqual(InterestCatalog.classify(tags: ["创作灵感", "对话助手"], kind: "image", isSkill: false), [])
+        XCTAssertEqual(InterestCatalog.classify(tags: ["菜谱生成"], kind: "text", isSkill: true), ["lifestyle", "skills"])
+        XCTAssertEqual(InterestCatalog.classify(tags: ["运动"], kind: "image", isSkill: false), ["lifestyle"])
+        XCTAssertEqual(InterestCatalog.classify(tags: ["镜头运动", "3D运动"], kind: "image", isSkill: false), [])
+        let profile = LocalRecommendations(now: now)
+        profile.setInterests(["fashion"])
+        let original = card(1)
+        let fashion = FeedCard(id: original.id, revision: original.revision, kind: original.kind, contentType: original.contentType,
+                              title: original.title, summary: original.summary, tags: ["时装编辑"], model: original.model,
+                              artwork: original.artwork, previewLabel: original.previewLabel, creator: original.creator,
+                              media: original.media, cover: original.cover, language: original.language, availableLanguages: [])
+        XCTAssertEqual(profile.rank([card(0, topic: "illustration"), fashion], now: now).first?.id, fashion.id)
+        XCTAssertNil(fashion.presentation, "An interest tag is not a visual safety assessment")
+    }
     func testExplicitInterestsAndLearnedSignalsImproveRankingWithoutDestroyingVisualMix() {
         let profile = LocalRecommendations(now: now)
         let cards = (0..<90).map { card($0, topic: $0 % 3 == 0 ? "product" : "portrait", visual: $0 % 5 != 4) }

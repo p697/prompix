@@ -5,6 +5,7 @@ struct InterestTopic: Decodable, Identifiable, Sendable {
     let id: String
     let symbol: String
     let aliases: [String]
+    let exactAliases: [String]?
     let kinds: [String]?
     var title: String { NSLocalizedString("interest.\(id)", tableName: "Recommendations", comment: "Content interest") }
 }
@@ -21,6 +22,7 @@ enum InterestCatalog {
         let normalized = tags.map { $0.precomposedStringWithCompatibilityMapping.lowercased() }
         return topics.filter { topic in
             (topic.id == "skills" && isSkill) || topic.kinds?.contains(kind) == true ||
+            topic.exactAliases?.contains(where: normalized.contains) == true ||
             topic.aliases.contains { alias in normalized.contains { $0.contains(alias) } }
         }.map(\.id)
     }

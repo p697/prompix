@@ -6,5 +6,6 @@ export function contentTopics(item: { tags: string[]; kind: string; contentType?
   const tags = item.tags.map(tag => tag.normalize("NFKC").toLowerCase());
   return definitions.filter(topic => (topic.id === "skills" && item.contentType === "skill")
     || topic.kinds?.includes(item.kind)
+    || topic.exactAliases?.some(alias => tags.includes(alias))
     || topic.aliases.some(alias => tags.some(tag => tag.includes(alias)))).map(topic => topic.id);
 }
