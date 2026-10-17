@@ -1,14 +1,14 @@
 [
-  {"id":"portrait","symbol":"person.crop.square","aliases":["人物","肖像","人像","角色","portrait","character","headshot"]},
-  {"id":"fashion","symbol":"tshirt","aliases":["时尚","服装","服饰","穿搭","fashion","outfit","clothing","editorial photography"]},
-  {"id":"illustration","symbol":"paintbrush.pointed","aliases":["插画","海报","艺术","绘画","动漫","图标","漫画","illustration","poster","painting","anime","graphic","icon","comic"]},
+  {"id":"portrait","symbol":"person.crop.square","aliases":["人物","肖像","人像","角色","portrait","character","headshot","合照","家庭摄影"]},
+  {"id":"fashion","symbol":"tshirt","aliases":["时尚","服装","服饰","穿搭","fashion","outfit","clothing","editorial photography","时装"]},
+  {"id":"illustration","symbol":"paintbrush.pointed","aliases":["插画","海报","艺术","绘画","动漫","图标","漫画","illustration","poster","painting","anime","graphic","icon","comic","平面设计","概念设计","场景设计","信息图","3d渲染","色彩构成","色彩","剪影","徽章设计","排版","复古设计"]},
   {"id":"product","symbol":"cube","aliases":["产品","品牌","商品","美食","静物","product","brand","food","still life","packaging"]},
-  {"id":"cinema","symbol":"film","kinds":["video"],"aliases":["视频","电影","动画","分镜","video","cinema","film","animation","storyboard"]},
+  {"id":"cinema","symbol":"film","kinds":["video"],"aliases":["视频","电影","动画","分镜","video","cinema","film","animation","storyboard","动作镜头"]},
   {"id":"web","symbol":"safari","kinds":["web"],"aliases":["网页","网站","界面","交互设计","web design","website","landing page","interface","ui design"]},
-  {"id":"writing","symbol":"text.quote","aliases":["写作","故事","文案","表达","翻译","writing","story","copywriting","translation","narrative","poetry"]},
-  {"id":"learning","symbol":"book","aliases":["学习","教学","知识","思考","研究","learning","study","education","research","tutor"]},
-  {"id":"lifestyle","symbol":"leaf","aliases":["生活","旅行","风景","自然","建筑","家居","健康","趣味","日常","lifestyle","travel","landscape","nature","architecture","interior","wellness","fun"]},
-  {"id":"business","symbol":"briefcase","aliases":["工作","效率","营销","商业","职业","求职","会议","增长","business","productivity","marketing","career","meeting","seo"]},
-  {"id":"coding","symbol":"chevron.left.forwardslash.chevron.right","aliases":["开发","代码","编程","技术","数据库","测试","coding","code review","programming","developer","react","expo","supabase","python","engineering"]},
+  {"id":"writing","symbol":"text.quote","aliases":["写作","故事","文案","表达","翻译","writing","story","copywriting","translation","narrative","poetry","文章摘要","语言识别","文本分析","播客策划","采访提问"]},
+  {"id":"learning","symbol":"book","aliases":["学习","教学","知识","思考","研究","learning","study","education","research","tutor","论文","学术","文献","复习","考试","批判性思维","推理框架","事实核验","决策支持","科学可视化","数据分析"]},
+  {"id":"lifestyle","symbol":"leaf","aliases":["生活","旅行","风景","自然","建筑","家居","健康","趣味","日常","lifestyle","travel","landscape","nature","architecture","interior","wellness","fun","好玩一点","幽默","塔罗","自我探索","烹饪","菜谱","食谱","营养","食材","料理","星空摄影","雪山营地","城市街景","体育","足球","游戏评论","创意对话","聊天风格","房产","购房","运动摄影","运动人像","运动短片","滑板","舞蹈"],"exactAliases":["运动"]},
+  {"id":"business","symbol":"briefcase","aliases":["工作","效率","营销","商业","职业","求职","会议","增长","business","productivity","marketing","career","meeting","seo","项目管理","项目规划","信息整理","信息归档","项目交接","客户支持","客服","财务","发票","转化率","电商","报表","报告设计","敏捷交付","生产排程","制造业优化"]},
+  {"id":"coding","symbol":"chevron.left.forwardslash.chevron.right","aliases":["开发","代码","编程","技术","数据库","测试","coding","code review","programming","developer","react","expo","supabase","python","engineering","系统架构","网络安全","软件工程","调试","故障排查","系统部署","网络管理","three.js","webgl","gpgpu","着色器","angular","or-tools",".net","fastapi","postgresql"]},
   {"id":"skills","symbol":"sparkles.rectangle.stack","aliases":["自动化","工作流","automation","workflow"]}
 ]

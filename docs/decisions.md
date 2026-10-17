@@ -793,3 +793,9 @@ Reuse a new standalone official acquisition as source availability in the same c
 ### 2026-10-17 — Test batch-priced maintenance without granting source approval
 
 Evaluate TweetAPI's documented 200-ID, one-unit lookup as an isolated read pilot. Reserve each request in the same $20 ledger as existing collection, including free-credit usage and uncertain failures. Capture immutable raw evidence before parsing and never automatically retry a paid attempt. Identity/envelope validation cannot establish fidelity, extend source freshness or change production routing. Deploy ledger-reader support before trial entries exist; a rollback must preserve support rather than delete spend history. Keep current acquisition and display provenance until real source, failure and billing comparisons pass.
+
+## 2026-10-17 — Improve topic coverage without forcing ambiguous content into interests
+
+- Extend the existing shared twelve-topic catalog using audited editorial tags for visual design and everyday tasks. Keep ambiguous tags unclassified instead of treating a coverage percentage as semantic accuracy.
+- Support exact tag aliases where substring matching changes meaning: sports/exercise tags must not match camera or simulated motion. Apply the same definition in cloud cards and native fallback learning.
+- Topic labels remain independent of visual presentation review; this update does not mark any image as checked, publish new content, or relax ingestion limits.

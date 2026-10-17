@@ -5,6 +5,7 @@ import { parseFeedQuery, type FeedFilters } from "../../packages/schema/feed.ts"
 import { createTestDatabase } from "./test-database.ts";
 import { activatePublication, preparePublication, removeContent, stagePublication } from "./publication.ts";
 import { getFeed } from "./queries.ts";
+import { contentTopics } from "../../packages/schema/interests.ts";
 
 const secret = "recommendation-test-secret-000000000000000000000";
 const filters: FeedFilters = { locale: "original", q: "", sort: "recommended", seed: "a".repeat(32) };
@@ -16,6 +17,28 @@ const item = (n: number): Prompt => ({
   media: n % 5 === 4 ? null : { image: "lake", video: null, demoURL: null },
 });
 const input = (prompts: Prompt[]) => ({ schemaVersion: 1 as const, version: "fixture", prompts });
+
+test("editorial topic coverage includes visual design and everyday tasks without guessing ambiguous interests", () => {
+  assert.deepEqual(contentTopics({ tags: ["时装编辑", "合照构图"], kind: "image" }), ["portrait", "fashion"]);
+  assert.deepEqual(contentTopics({ tags: ["信息图", "平面设计"], kind: "image" }), ["illustration"]);
+  assert.deepEqual(contentTopics({ tags: ["菜谱生成", "食材利用"], kind: "text" }), ["lifestyle"]);
+  assert.deepEqual(contentTopics({ tags: ["项目规划", "客户支持"], kind: "text" }), ["business"]);
+  assert.deepEqual(contentTopics({ tags: ["ＷｅｂＧＬ", "着色器"], kind: "text" }), ["coding"]);
+  assert.deepEqual(contentTopics({ tags: ["创作灵感", "对话助手"], kind: "image" }), []);
+  assert.deepEqual(contentTopics({ tags: ["菜谱生成"], kind: "text", contentType: "skill" }), ["lifestyle", "skills"]);
+  assert.deepEqual(contentTopics({ tags: ["运动"], kind: "image" }), ["lifestyle"]);
+  assert.deepEqual(contentTopics({ tags: ["镜头运动", "3D运动"], kind: "image" }), []);
+});
+
+test("published cards expose newly covered interests without changing their media or presentation evidence", async t => {
+  const { pg, reader, writer } = await createTestDatabase(); t.after(() => pg.close());
+  const prompt = { ...item(0), tags: ["时装编辑"], presentation: "unknown" as const };
+  const release = await stagePublication(writer, input([prompt])); await activatePublication(writer, release, "0");
+  const page = await getFeed(reader, { filters, limit: 30 }, secret);
+  assert.deepEqual(page.items[0].topics, ["fashion"]);
+  assert.equal(page.items[0].presentation, "unknown");
+  assert.deepEqual(page.items[0].media, prompt.media);
+});
 
 test("recommended requests require an ephemeral seed and refuse behavior or arbitrary extra fields", () => {
   const valid = `https://example.com/v3/feed?sort=recommended&seed=${filters.seed}`;
