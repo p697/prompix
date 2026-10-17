@@ -29,7 +29,8 @@ export async function saveMaintenanceCensus(items: readonly Candidate[], protect
   hasPublishedHistory: boolean, environment: NodeJS.ProcessEnv = process.env) {
   const budget = configuredXSpendBudget(environment);
   if (!budget?.protectMaintenance) return;
-  const result = maintenanceCensus(items, protectedIDs, inactiveIDs, now, environment.PROMPIX_X_RECHECK_PROVIDER === "twitterapi");
+  const hybrid = ["twitterapi", "rapidapi"].includes(environment.PROMPIX_X_RECHECK_PROVIDER ?? "");
+  const result = maintenanceCensus(items, protectedIDs, inactiveIDs, now, hybrid);
   result.plan.complete &&= hasPublishedHistory;
   // Atomic replacement cannot expose a partial census to another guarded reader.
   // Spending stays serialized by the original ledger lock and format.

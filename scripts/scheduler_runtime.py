@@ -106,6 +106,7 @@ def run_collection(base, node):
         return subprocess.run([
             node, '--env-file-if-exists=' + str(Path.home() / '.config/prompix/x.env'),
             '--env-file-if-exists=' + str(Path.home() / '.config/prompix/twitterapi.env'),
+            '--env-file-if-exists=' + str(Path.home() / '.config/prompix/rapidapi.env'),
             '--env-file-if-exists=' + str(Path.home() / '.config/prompix/translation.env'),
             '--env-file-if-exists=' + str(Path.home() / '.config/prompix/editorial.env'),
             '--env-file-if-exists=' + str(Path.home() / '.config/prompix/publication.env'),

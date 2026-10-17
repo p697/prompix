@@ -3,10 +3,11 @@ import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { atomic } from "./publication.ts";
+import { createHash } from "node:crypto";
+import { atomic, json } from "./publication.ts";
 import { promptSchema } from "../packages/schema/catalog.ts";
 import { convertXThread, readAllXIntake } from "./x-thread-intake.ts";
-import { saveXReplyPage, xReplyRequest } from "./x-replies.ts";
+import { saveXReplyPage, xReplyRequest, replyWindow } from "./x-replies.ts";
 import { nativeXSourceDigest, nativeXSourceIssue } from "./x-source.ts";
 import { prepareXAvailability, filterXAvailability } from "./x-availability.ts";
 import { extractMarkedXPrompt } from "./x-intake.ts";
@@ -114,6 +115,32 @@ test("recorded pages replay into drafts and fresh lookups bind every required po
   assert.equal((await readAllXIntake(directory)).candidates.length, 0);
 }));
 
+for (const mutation of ["known", "missing-media", "wrong-author", "wrong-cursor"] as const)
+  test(`historical reply capture contract: ${mutation}`, () => fixture(async directory => {
+    const path = join(directory, "x-replies", "100", now.replace(/[:.]/g, "-"), "001.json");
+    const page = await json<any>(path, null), cursors = await json<any>(join(directory, "x-replies", "cursors.json"), null);
+    const url = new URL(page.request.url), digest = (text: string) => createHash("sha256").update(text).digest("hex");
+    url.searchParams.set("user.fields", "id,name,username,profile_image_url,description,url");
+    if (mutation === "missing-media") url.searchParams.set("media.fields", "media_key,type,url");
+    if (mutation === "wrong-author") url.searchParams.set("query", url.searchParams.get("query")!.replace(/from:\w+/, "from:wrong"));
+    const fields = Object.fromEntries(["tweet.fields", "expansions", "user.fields", "media.fields"].map(key => [key, url.searchParams.get(key)]));
+    page.request = { ...page.request, url: url.toString(), requestFingerprint: digest(url.toString()),
+      fingerprint: digest(JSON.stringify([`${url.origin}${url.pathname}`, url.searchParams.get("query"), fields])) };
+    cursors["100"].requestIdentity = mutation === "wrong-cursor" ? "0".repeat(64) : page.request.fingerprint;
+    await atomic(path, page); await atomic(join(directory, "x-replies", "cursors.json"), cursors);
+    const intake = await readAllXIntake(directory);
+    assert.equal(intake.candidates.length, mutation === "known" ? 1 : 0);
+    if (mutation === "known") {
+      assert.equal(intake.candidates[0].source.post?.checkedAt, now);
+      assert.equal(intake.candidates[0].source.revision, candidate().source.revision);
+      const fresh = xReplyRequest(page.root);
+      assert.match(new URL(fresh.url).searchParams.get("user.fields")!, /protected,withheld/);
+      assert.notEqual(fresh.fingerprint, page.request.fingerprint);
+      const window = replyWindow(page.root, cursors, new Date(Date.parse(now) + 1000).toISOString());
+      assert.equal(window.pages, 0); assert.equal(window.requestIdentity, fresh.fingerprint);
+    }
+  }));
+
 test("source edits refresh the candidate and invalidate the former revision", () => fixture(async directory => {
   const old = candidate(), changed = { ...reply, text: reply.text + " Use a night palette." };
   const check = await prepareXAvailability(directory, { enabled: true, bearer: "fixture", now, lookup: async () => ({ posts: [root, changed], creators: [creator], media, unavailable: [] }) });
@@ -159,13 +186,13 @@ test("a partial root refresh withholds dependent approvals without erasing draft
   assert.ok((await readAllXIntake(directory)).candidates.some(value => value.id === item.id));
 }));
 
-test("hybrid maintenance keeps whole reply chains and their standalone roots on the official path", () => fixture(async directory => {
+for (const provider of ["twitterapi", "rapidapi"] as const) test(`${provider} maintenance keeps whole reply chains and their standalone roots on the official path`, () => fixture(async directory => {
   const markedRoot = { ...root, text: "Video prompt:\nAnimate an original watercolor garden with a slow camera move and a clear beginning, middle and end." };
   await atomic(join(directory, "x-discovery", `${now.slice(0, 10)}-feed-001.json`), { ...snapshot, posts: [markedRoot] });
   const checkTime = new Date(Date.parse(now) + 13 * 3600_000).toISOString();
   const checked: string[][] = [];
   const result = await prepareXAvailability(directory, { enabled: true, bearer: "fixture", now: checkTime,
-    recheck: { maxRequests: 16, sleep: async () => {}, lookup: async () => { throw new Error("Thread dependencies must never use standalone rechecks"); } },
+    recheck: { provider, maxRequests: 16, sleep: async () => {}, lookup: async () => { throw new Error("Thread dependencies must never use standalone rechecks"); } },
     lookup: async (_, ids) => { checked.push([...ids]); return { posts: [markedRoot, reply], creators: [creator], media, unavailable: [] }; } });
   assert.equal(result.report.recheck?.requests, 0);
   assert.equal(checked.length, 1); assert.deepEqual(new Set(checked[0]), new Set(["100", "101"]));

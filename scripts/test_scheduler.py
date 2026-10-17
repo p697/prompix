@@ -143,7 +143,7 @@ class SchedulerTests(unittest.TestCase):
         def child(command, *, cwd, pass_fds, env):
             self.assertEqual(cwd, self.current)
             self.assertEqual(command[-2:], ['ingest/daily.ts', '--publish'])
-            for name in ['x', 'twitterapi', 'translation', 'editorial', 'publication', 'database', 'alerts']:
+            for name in ['x', 'twitterapi', 'rapidapi', 'translation', 'editorial', 'publication', 'database', 'alerts']:
                 self.assertIn('--env-file-if-exists=' + str(Path.home() / f'.config/prompix/{name}.env'), command)
             self.assertEqual(len(pass_fds), 1)
             self.assertEqual(env, runtime.collection_environment())

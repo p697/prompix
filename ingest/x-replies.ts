@@ -1,4 +1,5 @@
 import { readFile, stat } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { z } from "zod";
 import { atomic, json } from "./publication.ts";
@@ -21,6 +22,18 @@ export function xReplyRequest(lead: XReplyLead, nextToken?: string, limit = 50) 
     throw new Error("Invalid X reply source identity");
   return xFeedRequest(`conversation_id:${lead.post.id} from:${lead.creator.username} -is:retweet -is:quote`,
     { nextToken, limit, conversation: true });
+}
+/** Replay the two known capture contracts only. Never send the older request or
+ * grant it a new check time; live reads always use current author restrictions. */
+export function recordedXReplyRequests(lead: XReplyLead, nextToken?: string, limit = 50) {
+  const current = xReplyRequest(lead, nextToken, limit), url = new URL(current.url);
+  const olderUserFields = "id,name,username,profile_image_url,description,url";
+  if (url.searchParams.get("user.fields") !== `${olderUserFields},protected,withheld`) return [current];
+  url.searchParams.set("user.fields", olderUserFields);
+  const fields = Object.fromEntries(["tweet.fields", "expansions", "user.fields", "media.fields"].map(key => [key, url.searchParams.get(key)]));
+  const digest = (value: string) => createHash("sha256").update(value).digest("hex");
+  return [current, { ...current, url: url.toString(), requestFingerprint: digest(url.toString()),
+    fingerprint: digest(JSON.stringify([`${url.origin}${url.pathname}`, current.query, fields])) }];
 }
 /** Oldest unchecked roots first. Completed roots may gain replies; rescan after 24 hours. */
 export function nextXReply(roots: readonly XReplyLead[], cursors: XReplyCursors, now: string) {
