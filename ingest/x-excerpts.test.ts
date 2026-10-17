@@ -103,7 +103,8 @@ test("source rechecks keep unchanged excerpts available and withhold edited orig
     await writeFile(join(root, "x-excerpt-reviews.json"), JSON.stringify({ "123": review() }));
     const original = (await readXIntake(root)).candidates[0];
     const first = await prepareXAvailability(root, { enabled: true, bearer: "fixture", now, lookup: async () => ({ ...snapshot, unavailable: [] }) });
-    assert.equal(first.report.requests, 1);
+    assert.equal(first.report.requests, 0);
+    assert.equal(first.report.reusedDiscovery, 1);
     assert.equal(filterXAvailability([original], first.state).prompts.length, 1);
     const later = new Date(Date.parse(now) + 13 * 3600_000).toISOString();
     const second = await prepareXAvailability(root, { enabled: true, bearer: "fixture", now: later,

@@ -125,6 +125,7 @@ test("source edits refresh the candidate and invalidate the former revision", ()
 
 
 test("dependency batches stay below one hundred IDs and an expanded budget preserves prior reservations", () => fixture(async directory => {
+  const checkTime = new Date(Date.parse(now) + 13 * 3600_000).toISOString();
   const posts = Array.from({ length: 99 }, (_, index) => ({ id: String(1000 + index), author_id: "9", created_at: earlier,
     text: `Text prompt:\nWrite an original story about creative discovery number ${index}. Ask me for the subject, audience and tone first, then offer three distinct directions.` }));
   await atomic(join(directory, "x-discovery", `${now.slice(0, 10)}-feed-001.json`), { capturedAt: earlier, posts, creators: [creator], media: [] });
@@ -133,16 +134,16 @@ test("dependency batches stay below one hundred IDs and an expanded budget prese
     calls.push([...ids]); assert.ok(ids.length <= 100);
     return { posts: [...posts, root, reply].filter(post => ids.includes(post.id)), creators: [creator], media, unavailable: [] };
   };
-  const first = await prepareXAvailability(directory, { enabled: true, bearer: "fixture", now, lookup, maxRequests: 2 });
+  const first = await prepareXAvailability(directory, { enabled: true, bearer: "fixture", now: checkTime, lookup, maxRequests: 2 });
   assert.equal(first.report.requests, 2); assert.deepEqual(calls.map(ids => ids.length), [99, 2]);
   const extra = { ...posts[0], id: "2000" }; posts.push(extra);
   await atomic(join(directory, "x-discovery", `${now.slice(0, 10)}-feed-002.json`), { capturedAt: now, posts: [extra], creators: [creator], media: [] });
-  const limited = await prepareXAvailability(directory, { enabled: true, bearer: "fixture", now, lookup, maxRequests: 2 });
+  const limited = await prepareXAvailability(directory, { enabled: true, bearer: "fixture", now: checkTime, lookup, maxRequests: 2 });
   assert.equal(limited.report.status, "daily-limit"); assert.equal(calls.length, 2);
-  const expanded = await prepareXAvailability(directory, { enabled: true, bearer: "fixture", now, lookup, maxRequests: 3 });
+  const expanded = await prepareXAvailability(directory, { enabled: true, bearer: "fixture", now: checkTime, lookup, maxRequests: 3 });
   assert.equal(expanded.report.requests, 1); assert.deepEqual(calls[2], ["2000"]);
-  assert.equal((await prepareXAvailability(directory, { enabled: true, bearer: "fixture", now, lookup, maxRequests: 3 })).report.status, "daily-limit");
-  await assert.rejects(() => prepareXAvailability(directory, { enabled: true, bearer: "fixture", now, lookup, maxRequests: 5 }));
+  assert.equal((await prepareXAvailability(directory, { enabled: true, bearer: "fixture", now: checkTime, lookup, maxRequests: 3 })).report.status, "daily-limit");
+  await assert.rejects(() => prepareXAvailability(directory, { enabled: true, bearer: "fixture", now: checkTime, lookup, maxRequests: 5 }));
 }));
 
 test("a partial root refresh withholds dependent approvals without erasing drafts needed for a full recheck", () => fixture(async directory => {
