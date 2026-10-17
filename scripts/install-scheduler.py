@@ -35,8 +35,8 @@ def write_atomic(path, data, mode=0o600):
 
 
 def copy_runtime(repo, runtime):
-    for name in ['ingest', 'packages', 'services']:
-        shutil.copytree(repo / name, runtime / name, ignore=shutil.ignore_patterns('node_modules', '.wrangler', 'dist'))
+    for name in ['ingest', 'packages', 'services', 'scripts']:
+        shutil.copytree(repo / name, runtime / name, ignore=shutil.ignore_patterns('node_modules', '.wrangler', 'dist', '__pycache__'))
     (runtime / 'ios/Prompix/Resources').mkdir(parents=True)
     catalog_path = Path('ios/Prompix/Resources/catalog.json')
     shutil.copy2(repo / catalog_path, runtime / catalog_path)

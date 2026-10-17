@@ -22,6 +22,8 @@ Set the discovery provider back to `official` to restore the previous discovery 
 
 Resume with `--fetch --max-requests 10`; use `--replay` for offline extraction. Existing plans are immutable. A page cap is reported as incomplete; it never advances a global completeness watermark. All jobs share the same dollar ledger as live collection. This command only stages leads: it cannot publish, lower review standards, or count raw results as library growth.
 
+Prefer weekly history chunks. A checkpoint stops safely at 10,000 recorded attempts, before another paid request; `checkpoint-limit` means split the remaining range into a new bounded plan while retaining the prior evidence and shared spend. It never means the range was exhausted.
+
 The intended gates are: sample historical results and measure actual approval/cost; acquire and review an additional 500 items; verify total 2,000; then continue toward at least 10,000. Deduplication, exact prompt completeness, source permission/attribution, media checks, translations and removals remain required. Normal new-release pacing remains separate from staged historical inventory.
 
 ## Live evidence and limitations
@@ -56,3 +58,15 @@ The isolated live run was resumed after preserving its original failed checkpoin
 The repaired July/August captures were replayed through the new staging engine without new search charges: 80 distinct results yielded 42 visual candidate leads. Five selected historical originals were then acquired with one real official lookup; all five returned and produced complete draft candidates. These are **five drafts, zero newly published items**, pending editorial and media checks. This pilot is a start toward the staged backfill, not completion of the additional-500 milestone.
 
 Local validation for this implementation: type checking passed; the full suite passed 596 tests with the opt-in scale test skipped. The separate 10,000-item SQL acceptance passed: all items appeared once across 334 pages, with a local median of 155 ms and p95 of 173 ms per page. These are embedded local SQL measurements, not production-network latency. Scheduler safety tests also passed. CI and runtime activation remain separately recorded gates.
+
+## Production cutover and durable lead queue
+
+PR 125 passed content CI and the native suite (254 tests, four environment skips, zero failures), then merged as `39b102c`. The guarded runtime was activated at 2026-10-17 07:39 UTC with hybrid discovery, the existing hybrid rechecks, three official supplement calls and the shared $20 cap. Thirty-one state files and all credential values survived installation unchanged. A deployed-runtime budget smoke test made zero HTTP requests at a full budget. A real publication run started at 07:40 UTC; its final result must be verified separately, not inferred from installation.
+
+The follow-up queue removes a gap in the first cutover: previously, a new search window selected only its own leads. `x-lead-queue.json` now records deduplicated candidate metadata and exact immutable evidence references across all windows. Replaying unchanged checkpoints does not renew age or buy another search. Within each media pool, admission alternates three fresh candidates with one oldest pending candidate. Existing visual quotas and all official acquisition, editorial, preview and publication gates remain unchanged.
+
+Official acquisition ledgers are read across UTC days. Completed unavailable IDs and ambiguous paid attempts cannot silently be purchased again after midnight. A confirmed dollar-budget rejection remains pending because no request was sent. Uncertain attempts require operator reconciliation before their identities can be retried; other candidates can proceed on a subsequent day.
+
+Historical leads are explicitly staged with `npm run collect:x-leads -- --directory /external/verified-plan --scope history`. This is a dry run and makes no acquisition request. After reviewing remaining shared budget, use `--acquire --max-posts N`, with at most 60 historical originals per day. The normal live route keeps its separate 40-original allowance. Both lanes share the same monetary ledger and global source deduplication; separate post allowances are **not** extra dollar budgets. The command emits drafts only. The scheduled daily pipeline still supplies editorial, media, translation and publication checks.
+
+Historical acquisition is operator-driven while the large-library maintenance and budget gates remain unresolved. Do not enable an unattended 10,000-item import or spend the routine collection runway without an explicit allocation. If rolling back to a runtime predating the queue ledger's `lane` field, set discovery to `official` first; never erase or rewrite paid reservations to make an older parser accept the state.
