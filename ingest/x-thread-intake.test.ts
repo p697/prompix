@@ -199,3 +199,29 @@ for (const provider of ["twitterapi", "rapidapi"] as const) test(`${provider} ma
   assert.equal(result.state["x-post-101"].checkedBy, "official");
   assert.equal(result.state["x-post-100"].checkedBy, "official");
 }));
+
+for (const provider of ["twitterapi", "rapidapi"] as const) for (const status of ["ready", "withheld"] as const)
+  test(`${provider} ${status} standalone observation cannot delay a restored reply past the official quota reset`, () => fixture(async directory => {
+    const item = candidate(), day = now.slice(0, 10), recent = `${day}T23:50:00.000Z`;
+    const next = new Date(Date.parse(`${day}T00:00:00Z`) + 86400_000 + 60_000).toISOString();
+    const state = { [item.id]: { checkedAt: recent, status, checkedBy: provider, revision: item.source.revision } };
+    await atomic(join(directory, "x-availability", "state.json"), state);
+    // The source's full thread revision still cannot authorize a standalone check.
+    assert.equal(filterXAvailability([item], state, Date.parse(recent)).prompts.length, 0);
+    const priorAttempt = [{ ids: ["900"], state: "completed", at: recent }];
+    await atomic(join(directory, "x-availability", `${day}.json`), priorAttempt);
+    let calls = 0;
+    const options = { enabled: true, bearer: "fixture", maxRequests: 1,
+      recheck: { provider, maxRequests: 16, sleep: async () => {}, lookup: async () => { throw new Error("Must check whole chain officially"); } },
+      lookup: async (_: string, ids: readonly string[]) => {
+        calls++; assert.deepEqual(ids, ["100", "101"]); return { ...snapshot, unavailable: [] };
+      } };
+    const blocked = await prepareXAvailability(directory, { ...options, now: recent });
+    assert.equal(blocked.report.status, "daily-limit"); assert.equal(calls, 0);
+    assert.deepEqual(blocked.state, state);
+    const recovered = await prepareXAvailability(directory, { ...options, now: next });
+    assert.equal(calls, 1); assert.equal(recovered.state[item.id].checkedBy, "official");
+    assert.equal(recovered.state[item.id].checkedAt, next);
+    assert.equal(filterXAvailability([item], recovered.state, Date.parse(next)).prompts.length, 1);
+    assert.deepEqual(await json(join(directory, "x-availability", `${day}.json`), []), priorAttempt);
+  }));
