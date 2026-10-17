@@ -115,3 +115,11 @@ test("malformed identities cannot become matched or removed source records", () 
   const result = inspectRapidAPILookup(raw, ["1", "2"]);
   assert.deepEqual(result.returnedIDs, ["1"]); assert.deepEqual(result.missingIDs, ["2"]); assert.equal(result.unavailablePlaceholders, 1);
 }));
+
+test("visibility wrappers may omit nested typename but cannot hide conflicting identities or types", () => {
+  const wrapped = (tweet: unknown) => ({ result: { tweetResult: [{ result: { __typename: "TweetWithVisibilityResults", tweet } }] } });
+  assert.deepEqual(inspectRapidAPILookup(wrapped({ rest_id: "1" }), ["1"]).returnedIDs, ["1"]);
+  for (const tweet of [{}, { rest_id: "2" }, { rest_id: "1", __typename: "User" }])
+    assert.throws(() => inspectRapidAPILookup(wrapped(tweet), ["1"]));
+  assert.throws(() => inspectRapidAPILookup({ result: { tweetResult: [{ result: { rest_id: "1" } }] } }, ["1"]));
+});

@@ -19,7 +19,7 @@ export type XRecheckOptions = { lookup: TwitterAPIClient["lookup"]; maxRequests:
  * This is a verification signal for an already acquired official source, never a new acquisition.
  * Reply chains deliberately stay on joint official lookups.
  */
-export function unchangedXStandalone(item: Candidate, result: TwitterAPIResult, capturedAt: string, excerpts: XExcerptReviews = {}) {
+export function unchangedXStandalone(item: Candidate, result: Pick<TwitterAPIResult, "posts" | "creators" | "media">, capturedAt: string, excerpts: XExcerptReviews = {}) {
   if (item.source.context || !item.source.post || item.source.post.parentID || item.source.mediaPostID) return false;
   const post = result.posts.find(post => post.id === item.source.post!.id);
   if (!post || post.referenced_tweets?.length) return false;

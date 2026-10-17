@@ -6,6 +6,8 @@ import type { XExcerptReviews } from "./x-excerpts.ts";
 import { canonicalTwitterVideoURL, type TwitterAPIResult } from "./twitterapi.ts";
 import { nativeXPostIDs } from "./x-source.ts";
 
+type SourceResult = Pick<TwitterAPIResult, "posts" | "creators" | "media">;
+
 const body = (text: string) => text.replace(/\r\n/g, "\n").trim();
 const asset = (url: string) => {
   try { const value = new URL(canonicalTwitterVideoURL(url)); value.searchParams.delete("name"); return value.toString(); }
@@ -28,7 +30,7 @@ export function pilotSample(candidates: readonly Candidate[], maximum = 45) {
   return { candidates: [...selected.values()], ids: [...ids] };
 }
 /** Compare actual source bodies and media, not generated metadata. Different is unresolved, never automatically approved. */
-export function comparePilotSources(candidates: readonly Candidate[], result: TwitterAPIResult) {
+export function comparePilotSources(candidates: readonly Candidate[], result: SourceResult) {
   return candidates.map(candidate => {
     const issues: string[] = [];
     for (const original of [...(candidate.source.context ?? []), ...(candidate.source.post ? [candidate.source.post] : [])]) {
@@ -53,7 +55,7 @@ export function comparePilotSources(candidates: readonly Candidate[], result: Tw
   });
 }
 /** Exercise the real extractor in memory; these provisional drafts are never published. */
-export function comparePilotExtraction(candidates: readonly Candidate[], result: TwitterAPIResult, capturedAt: string, excerpts: XExcerptReviews = {}) {
+export function comparePilotExtraction(candidates: readonly Candidate[], result: SourceResult, capturedAt: string, excerpts: XExcerptReviews = {}) {
   const snapshot = { capturedAt, ...result };
   const snapshots = [];
   for (let offset = 0; offset < result.posts.length; offset += 100) {
