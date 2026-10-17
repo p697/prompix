@@ -7,7 +7,7 @@ import { atomic, json } from "./publication.ts";
 
 const amount = z.number().int().nonnegative().max(20_000_000);
 const entrySchema = z.object({
-  id: z.string().uuid(), at: z.iso.datetime(), provider: z.enum(["official", "twitterapi"]),
+  id: z.string().uuid(), at: z.iso.datetime(), provider: z.enum(["official", "twitterapi", "tweetapi"]),
   operation: z.enum(["search", "lookup", "users"]), request: z.string().regex(/^[a-f0-9]{64}$/),
   reserved: amount, accounted: amount, state: z.enum(["reserved", "completed", "uncertain"]),
 }).strict().refine(entry => entry.state === "completed" ? entry.accounted <= entry.reserved : entry.accounted === entry.reserved,
@@ -18,6 +18,8 @@ const ledgerSchema = z.object({ version: z.literal(1), month: z.string().regex(/
     ledger.entries.every(e => e.at.startsWith(`${ledger.month}-`)), "Invalid X ledger entries");
 export class XBudgetExceeded extends Error {}
 export const xUnitMicroUSD = { official: { post: 5000, user: 10000 }, twitterapi: { post: 150, user: 180 } } as const;
+// TweetAPI's bulk lookup bills one call, including empty results, at the PAYG rate.
+export const tweetAPICallMicroUSD = 500;
 
 /** Explicit opt-in supports importing account spend before enabling the production guard. */
 export function configuredXSpendBudget(environment: NodeJS.ProcessEnv = process.env) {
@@ -44,10 +46,12 @@ export class XSpendBudget {
     catch { throw new Error("X spend ledger is busy; no request sent"); }
     try { return await operation(); } finally { await rm(lock, { recursive: true }); }
   }
-  async reserve(provider: "official" | "twitterapi", operation: "search" | "lookup" | "users", request: string, units: number) {
+  async reserve(provider: "official" | "twitterapi" | "tweetapi", operation: "search" | "lookup" | "users", request: string, units: number) {
     if (!Number.isSafeInteger(units) || units < 1 || units > 1000) throw new Error("Invalid X billable units");
+    if (provider === "tweetapi" && (operation !== "lookup" || units !== 1)) throw new Error("TweetAPI pilot reserves one lookup call");
     const at = this.now().toISOString(), month = at.slice(0, 7), day = at.slice(0, 10);
-    const reserved = units * xUnitMicroUSD[provider][operation === "users" ? "user" : "post"];
+    const unitCost = provider === "tweetapi" ? tweetAPICallMicroUSD : xUnitMicroUSD[provider][operation === "users" ? "user" : "post"];
+    const reserved = units * unitCost;
     const path = join(this.root, `${month}.json`), id = randomUUID();
     await this.transaction(async () => {
       const ledger = ledgerSchema.parse(await json(path, { version: 1, month, opening: 0, entries: [] }));
@@ -70,8 +74,7 @@ export class XSpendBudget {
         const entry = ledger.entries.find(e => e.id === id);
         if (!entry || entry.state !== "reserved") throw new Error("Missing or settled X reservation");
         // Unknown outcomes keep their entire reservation. Even empty third-party reads have a minimum charge.
-        entry.accounted = returnedUnits === undefined ? reserved : Math.max(provider === "twitterapi" ? 1 : 0, returnedUnits)
-          * xUnitMicroUSD[provider][operation === "users" ? "user" : "post"];
+        entry.accounted = returnedUnits === undefined ? reserved : Math.max(provider === "official" ? 0 : 1, returnedUnits) * unitCost;
         entry.state = returnedUnits === undefined ? "uncertain" : "completed";
         await atomic(path, ledger);
       });
