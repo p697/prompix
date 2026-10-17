@@ -632,7 +632,7 @@ struct MovieView: View {
                 } else if let player = playback.player {
                     VideoPlayer(player: player).aspectRatio(playback.aspectRatio, contentMode: .fit)
                         .accessibilityIdentifier(playback.hasPlayed ? "playingVideo" : "loadingVideo")
-                        .overlay { if playback.loading { ContentActivityLabel(size: 80).background(.regularMaterial, in: Circle()).allowsHitTesting(false) } }
+                        .overlay { if playback.loading { ContentActivityLabel(size: 80).padding(8).background(.regularMaterial, in: Capsule()).allowsHitTesting(false) } }
                 }
                 Text(caption).font(.footnote).foregroundStyle(Palette.muted).padding(.horizontal, 20)
             }.frame(maxWidth: .infinity, maxHeight: .infinity).background(.black).navigationTitle(String(localized: "视频预览")).navigationBarTitleDisplayMode(.inline)

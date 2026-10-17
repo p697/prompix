@@ -104,7 +104,6 @@ private struct PromptBodySkeleton: View {
     @ScaledMetric(relativeTo: .body) private var lineHeight = 12.0
     var body: some View {
         VStack(alignment: .leading, spacing: 24) {
-            ContentActivityLabel(size: 64).frame(height: 76)
             ForEach(0..<2) { _ in
                 VStack(alignment: .leading, spacing: 14) {
                     ForEach([1.0, 0.93, 0.98, 0.62], id: \.self) { fraction in

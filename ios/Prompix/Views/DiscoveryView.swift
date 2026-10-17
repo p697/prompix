@@ -127,7 +127,7 @@ struct DiscoverView: View {
                         // so their layout is separate from the scrolling cards.
                         Color.clear.frame(height: headerHeight).allowsHitTesting(false)
                     }
-                    .refreshable {
+                    .pageRefreshable {
                         // SwiftUI can cancel the refresh action when lazy sections
                         // move during overscroll. The user's bounded request owns its
                         // lifetime; query changes still cancel it inside the store.

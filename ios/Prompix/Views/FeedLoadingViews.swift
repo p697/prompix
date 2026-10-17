@@ -1,14 +1,14 @@
 import SwiftUI
 
 /// Noninteractive placeholders retain the content layout and known work.
-/// A single light pass settles into a quiet surface; it never indicates progress.
+/// All tiles use the same surface; no tile gets an activity illustration.
 struct FeedLoadingGrid: View {
     @Environment(\.dynamicTypeSize) private var typeSize
     @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .top, spacing: 14) {
-                FeedLoadingTile(ratio: 0.85, activity: true)
+                FeedLoadingTile(ratio: 0.85)
                 if !typeSize.isAccessibilitySize && !voiceOverEnabled { FeedLoadingTile(ratio: 1.15) }
             }
         }
@@ -21,11 +21,9 @@ struct FeedLoadingGrid: View {
 
 struct FeedLoadingTile: View {
     var ratio: CGFloat = 1
-    var activity = false
     var body: some View {
         VStack(alignment: .leading, spacing: PromptCardGeometry.titleSpacing) {
             LoadingSurface().aspectRatio(ratio, contentMode: .fit)
-                .overlay { if activity { SpectralActivity().frame(width: 88, height: 88) } }
                 .clipShape(RoundedRectangle(cornerRadius: 4))
             Text("Content title").font(.footnote).lineLimit(2, reservesSpace: true)
                 .redacted(reason: .placeholder).padding(.horizontal, 2)
@@ -37,7 +35,6 @@ struct CreatorLoadingRows: View {
     var count = 4
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            ContentActivityLabel().padding(.vertical, 6)
             ForEach(0..<count, id: \.self) { index in
                 HStack(spacing: 14) {
                     LoadingSurface().frame(width: 50, height: 50).clipShape(Circle())

@@ -86,7 +86,7 @@ struct CollectionsDirectory: View {
             }.padding(.horizontal, 16).padding(.top, 12).padding(.bottom, 28)
         }.background(Palette.paper).navigationTitle(String(localized: "专题"))
             .task { await library.feed?.browse.load() }
-            .refreshable { await library.feed?.browse.load(force: true) }
+            .pageRefreshable { await library.feed?.browse.load(force: true) }
     }
 }
 /// Deduplicate by item identity AND source image: different cards can reuse one

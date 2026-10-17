@@ -119,7 +119,7 @@ struct FeedPromptCard: View {
             Button { detailPresented = true } label: {
                 PromptCardFace(preview: ContentPreview(card)).promptTransitionSource(id: card.id, in: transition)
                     .overlay(alignment: .bottomTrailing) {
-                        if actionID != nil { ContentActivityLabel(size: 40).background(.regularMaterial, in: Circle()).padding(8) }
+                        if actionID != nil { ContentActivityLabel(size: 40).padding(8).background(.regularMaterial, in: Capsule()).padding(8) }
                     }
             }.buttonStyle(.plain).accessibilityLabel(card.title).accessibilityIdentifier("prompt-\(card.id)")
                 .contextMenu {

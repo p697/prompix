@@ -280,7 +280,7 @@ struct CreatorsView: View {
                             }
                         }.padding(.horizontal, 20).padding(.bottom, 24)
                     }
-                }.refreshable { await library.refresh(force: true) }
+                }.pageRefreshable { await library.refresh(force: true) }
             }
         }
         .background(Palette.paper)

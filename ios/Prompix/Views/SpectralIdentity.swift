@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// An original family of unfolding pages: one prompt, many possible outcomes.
 /// Pure vector artwork, independent of downloaded content and its colors.
@@ -65,44 +66,18 @@ struct PrompixWordmark: View {
     }
 }
 
-/// A single light pass when a placeholder appears, not a perpetual shimmer or
-/// a simulated progress bar. Network completion removes it without waiting.
+/// Every skeleton uses the same quiet surface, without an activity overlay.
 struct LoadingSurface: View {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
-    @Environment(\.scenePhase) private var scenePhase
-    @State private var arrived = false
-    private var canAnimate: Bool { !reduceMotion && !reduceTransparency && scenePhase == .active }
-
     var body: some View {
-        Rectangle().fill(Palette.soft)
-            .overlay {
-                if canAnimate {
-                    GeometryReader { geometry in
-                        LinearGradient(colors: [.clear, Palette.spectrumBlue.opacity(0.10), Palette.spectrumIris.opacity(0.12), .clear], startPoint: .leading, endPoint: .trailing)
-                            .frame(width: geometry.size.width * 0.8)
-                            .offset(x: arrived ? geometry.size.width : -geometry.size.width * 0.8)
-                    }
-                }
-            }
-            .clipped()
-            .task(id: canAnimate) {
-                guard canAnimate, !arrived else { return }
-                withAnimation(.easeInOut(duration: 1.4)) { arrived = true }
-            }
-            .accessibilityHidden(true)
-            .allowsHitTesting(false)
+        Rectangle().fill(Palette.soft).accessibilityHidden(true).allowsHitTesting(false)
     }
 }
 
-/// A bounded field of pearl-like particles: a travelling wave changes light,
-/// depth and spacing together. Activity is local to a real request, never a
-/// decorative timer or a promise of measurable progress.
-struct SpectralActivity: View {
+/// Three small pages lift in sequence, matching the approved loading study.
+/// The footprint stays fixed; the activity never gates a network completion.
+struct PageActivity: View {
     var active = true
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
-    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.scenePhase) private var scenePhase
     @State private var visible = true
     @State private var lowPower = ProcessInfo.processInfo.isLowPowerModeEnabled
@@ -124,45 +99,17 @@ struct SpectralActivity: View {
     }
     private var timeline: some View {
         TimelineView(.animation(minimumInterval: 1.0 / 30, paused: !animates)) { clock in
-            let phase = animates ? clock.date.timeIntervalSince(started) * .pi / 2.8 : 0.7
+            let elapsed = animates ? clock.date.timeIntervalSince(started) : 0.45
             Canvas { context, size in
-                let unit = min(size.width, size.height)
-                let rings = unit >= 56 ? 3 : 2
-                let center = CGPoint(x: size.width / 2, y: size.height / 2)
-                let colors = [Palette.spectrumBlue, Palette.spectrumIris, Palette.spectrumRose]
-                for ring in 0...rings {
-                    let count = ring == 0 ? 1 : ring * 6
-                    for index in 0..<count {
-                        let angle = Double(index) * .pi * 2 / Double(count) + Double(ring) * 0.14
-                        let wave = sin(phase - Double(ring) * 0.85 + cos(angle) * 0.8)
-                        let energy = 0.5 + 0.5 * wave
-                        let radius = unit * Double(ring) / Double(rings) * (0.36 + 0.014 * wave)
-                        let drift = active ? 0.035 * sin(phase * 0.5) : 0
-                        let point = CGPoint(x: center.x + cos(angle + drift) * radius,
-                                            y: center.y + sin(angle + drift) * radius * (0.93 + 0.035 * cos(phase)))
-                        let diameter = unit * (rings == 3 ? 0.131 : 0.175) * (0.90 + 0.10 * energy)
-                        let rect = CGRect(x: point.x - diameter / 2, y: point.y - diameter / 2, width: diameter, height: diameter)
-                        let path = Path(ellipseIn: rect)
-                        let pigment = colors[(index + ring) % 3]
-                        if reduceTransparency {
-                            context.fill(path, with: .color(pigment))
-                        } else {
-                            let pearl = colorScheme == .dark ? Color(white: 0.43) : Color.white
-                            context.fill(path, with: .radialGradient(Gradient(colors: [pearl, Palette.spectrumIce, pigment]),
-                                center: CGPoint(x: rect.midX - diameter * 0.22, y: rect.midY - diameter * 0.27),
-                                startRadius: 0, endRadius: diameter * 0.9))
-                            var light = context
-                            light.opacity = 0.15 + 0.85 * energy
-                            light.fill(path, with: .linearGradient(Gradient(stops: [
-                                .init(color: pearl, location: 0),
-                                .init(color: Palette.spectrumIce, location: 0.28),
-                                .init(color: pigment, location: 0.58),
-                                .init(color: Palette.spectrumPetal, location: 1)
-                            ]), startPoint: CGPoint(x: rect.minX, y: rect.minY + diameter * (0.3 + wave * 0.5)),
-                                endPoint: CGPoint(x: rect.maxX, y: rect.maxY - diameter * wave * 0.3)))
-                            context.stroke(path, with: .color(.white.opacity(colorScheme == .dark ? 0.15 : 0.55)), lineWidth: 0.4)
-                        }
-                    }
+                let colors = [Palette.accent, Palette.spectrumIris, Palette.spectrumRose]
+                for index in 0..<3 {
+                    let phase = (elapsed / 1.8 - Double(index) / 6 + 1).truncatingRemainder(dividingBy: 1)
+                    let lift = pow(max(0, sin(phase * .pi * 2)), 2)
+                    let height = 14 + 3 * lift
+                    let rect = CGRect(x: size.width / 2 - 15 + Double(index) * 11,
+                                      y: size.height / 2 + 8 - height - 3 * lift,
+                                      width: 8, height: height)
+                    context.fill(Path(roundedRect: rect, cornerRadius: 2), with: .color(colors[index].opacity(0.45 + 0.55 * lift)))
                 }
             }
         }
@@ -171,9 +118,9 @@ struct SpectralActivity: View {
 
 /// Visible feedback is purely visual; VoiceOver retains a meaningful status.
 struct ContentActivityLabel: View {
-    var size: CGFloat = 72
+    var size: CGFloat = 40
     var body: some View {
-        SpectralActivity().frame(width: size, height: size)
+        PageActivity().frame(width: min(size, 48), height: 28)
             .accessibilityElement(children: .ignore)
             .accessibilityHidden(false)
             .accessibilityLabel(String(localized: "正在加载内容…"))
@@ -197,10 +144,129 @@ struct ContentRecoveryRow: View {
     }
     private var status: some View {
         HStack(spacing: 10) {
-            SpectralActivity(active: false).frame(width: 28, height: 28)
             Text(message).font(.footnote).foregroundStyle(Palette.muted)
                 .fixedSize(horizontal: false, vertical: true)
         }
     }
     private var retry: some View { FeedRetryButton(retryAt: retryAt, action: action).accessibilityIdentifier(retryID) }
+}
+
+/// Keep UIKit's refresh gesture, accessibility action and inset lifecycle.
+/// Only the refresh control's visible indicator is replaced.
+extension View {
+    func pageRefreshable(action: @escaping @Sendable () async -> Void) -> some View {
+        modifier(PageRefreshModifier(action: action))
+    }
+}
+
+private struct PageRefreshModifier: ViewModifier {
+    let action: @Sendable () async -> Void
+    @State private var refreshing = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.scenePhase) private var scenePhase
+    func body(content: Content) -> some View {
+        content.refreshable {
+            refreshing = true
+            defer { refreshing = false }
+            await action()
+        }
+        .background(RefreshPageAppearance(active: refreshing && scenePhase == .active, reduceMotion: reduceMotion)
+            .allowsHitTesting(false).accessibilityHidden(true))
+    }
+}
+
+private struct RefreshPageAppearance: UIViewRepresentable {
+    let active: Bool
+    let reduceMotion: Bool
+    func makeUIView(context: Context) -> RefreshPageAnchor { RefreshPageAnchor() }
+    func updateUIView(_ view: RefreshPageAnchor, context: Context) {
+        view.active = active
+        view.reduceMotion = reduceMotion
+        view.attach()
+    }
+    static func dismantleUIView(_ view: RefreshPageAnchor, coordinator: ()) { view.detach() }
+}
+
+/// No delegate replacement, private class names, swizzling or new gestures.
+/// When a native refresh control cannot be found, its system appearance remains.
+private final class RefreshPageAnchor: UIView {
+    var active = false
+    var reduceMotion = false
+    private weak var refresh: UIRefreshControl?
+    private var originalTint: UIColor?
+    private var host: UIHostingController<PageActivity>?
+    private var retry: Task<Void, Never>?
+    private var attempts = 0
+    private var renderedActive: Bool?
+
+    init() { super.init(frame: .zero); isUserInteractionEnabled = false }
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        if window == nil { detach() } else { attempts = 0; attach() }
+    }
+    override func layoutSubviews() { super.layoutSubviews(); attach() }
+
+    func attach() {
+        guard window != nil else { return }
+        if let refresh, refresh.window != nil {
+            updateAppearance()
+            return
+        }
+        var ancestor = superview
+        while let node = ancestor {
+            let controls = refreshControls(in: node)
+            if controls.count == 1, let control = controls.first {
+                detach()
+                refresh = control
+                originalTint = control.tintColor
+                let controller = UIHostingController(rootView: PageActivity(active: active && !reduceMotion))
+                controller.view.backgroundColor = .clear
+                controller.view.isUserInteractionEnabled = false
+                controller.view.accessibilityElementsHidden = true
+                controller.view.translatesAutoresizingMaskIntoConstraints = false
+                control.addSubview(controller.view)
+                NSLayoutConstraint.activate([
+                    controller.view.centerXAnchor.constraint(equalTo: control.centerXAnchor),
+                    controller.view.centerYAnchor.constraint(equalTo: control.centerYAnchor),
+                    controller.view.widthAnchor.constraint(equalToConstant: 44),
+                    controller.view.heightAnchor.constraint(equalToConstant: 28)
+                ])
+                host = controller
+                control.tintColor = .clear
+                updateAppearance()
+                return
+            }
+            if controls.count > 1 { break }
+            ancestor = node.superview
+        }
+        // SwiftUI may install UIRefreshControl after the background mounts.
+        guard retry == nil, attempts < 12 else { return }
+        attempts += 1
+        retry = Task { @MainActor [weak self] in
+            do { try await Task.sleep(for: .milliseconds(100)) } catch { return }
+            guard let self else { return }
+            self.retry = nil
+            self.attach()
+        }
+    }
+    private func updateAppearance() {
+        let next = active && !reduceMotion
+        if renderedActive != next {
+            host?.rootView = PageActivity(active: next)
+            renderedActive = next
+        }
+        // Expose one semantic refresh status, not both native and custom labels.
+        refresh?.accessibilityIdentifier = "pageRefreshControl"
+    }
+    private func refreshControls(in node: UIView) -> [UIRefreshControl] {
+        if let scroll = node as? UIScrollView, let control = scroll.refreshControl { return [control] }
+        return node.subviews.flatMap { refreshControls(in: $0) }
+    }
+    func detach() {
+        retry?.cancel(); retry = nil
+        if let refresh { refresh.tintColor = originalTint }
+        host?.view.removeFromSuperview()
+        host = nil; refresh = nil; originalTint = nil; renderedActive = nil
+    }
 }

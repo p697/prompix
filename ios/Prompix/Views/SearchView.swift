@@ -70,7 +70,7 @@ struct SearchView: View {
             .searchable(text: searchText, isPresented: $searchPresented, prompt: String(localized: "搜索 Prompt、Skills 或创作者"))
             .autocorrectionDisabled().textInputAutocapitalization(.never)
             .onSubmit(of: .search) { rememberQuery() }
-            .refreshable {
+            .pageRefreshable {
                 await library.refresh(force: true)
                 await library.feed?.search.load(FeedQuery(kind: skillsOnly ? "skill" : kind?.rawValue, q: query), force: true)
             }

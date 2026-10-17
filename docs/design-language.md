@@ -1,12 +1,12 @@
-# Prompix：光、粒子与原生玻璃
+# Prompix：光谱、轻翻页与原生玻璃
 
-2026-10-16，0.12.0（43）。这是后续 UI 开发必须遵循的当前设计语言，替代早期绿色主题和 0.9.1 的石墨绿操作色。页面结构仍是轻盈发现、内容优先；本轮不改变现有 icon、App Icon 资产、导航和内容服务架构。
+2026-10-17，0.12.1（44）。这是后续 UI 开发必须遵循的当前设计语言，替代早期绿色主题和 0.9.1 的石墨绿操作色。页面结构仍是轻盈发现、内容优先；本轮不改变现有 icon、App Icon 资产、导航和内容服务架构。
 
 ## 参考如何转成产品
 
-FIELD 官方 [Quantum Brand Ecosystem](https://field.io/work/ibm-quantum)、[Quantum Brand Visuals](https://field.io/work/ibm-quantum-brand-visuals) 和 [Quantum Safe](https://field.io/work/ibm-quantum-safe) 的可借鉴之处是：球面光感、重复几何形成的秩序、波在阵列中传播，以及连续的蓝／紫／粉色。用户提供的色板和粒子截图是本轮的直接视觉依据。网站部分视频在本机浏览器显示无法播放，静态案例观察不能冒充完整影片复刻。
+FIELD 官方 [Quantum Brand Ecosystem](https://field.io/work/ibm-quantum)、[Quantum Brand Visuals](https://field.io/work/ibm-quantum-brand-visuals) 和 [Quantum Safe](https://field.io/work/ibm-quantum-safe) 的可借鉴之处是：连续的蓝／紫／粉色与克制的动态节奏。2026-10-17 用户否定圆圈粒子，明确选择「轻翻页」；参考不是复制其图形。网站部分视频在本机浏览器显示无法播放，静态案例观察不能冒充完整影片复刻。
 
-Prompix 使用原创 SwiftUI Canvas 球体阵列，不搬运参考站的图片、视频、品牌标志或量子功能概念。Apple 的 [Motion](https://developer.apple.com/design/human-interface-guidelines/motion) 和 [Progress indicators](https://developer.apple.com/design/human-interface-guidelines/progress-indicators) 约束反馈的时机和可访问性；Liquid Glass 的交互、高亮、菜单和导航继续由系统实现。
+Prompix 使用三个小页片依次轻抬的 SwiftUI Canvas 动效，不搬运参考站的图片、视频、品牌标志或量子功能概念。Apple 的 [Motion](https://developer.apple.com/design/human-interface-guidelines/motion) 和 [Progress indicators](https://developer.apple.com/design/human-interface-guidelines/progress-indicators) 约束反馈的时机和可访问性；Liquid Glass 的交互、高亮、菜单和导航继续由系统实现。
 
 ## 配色契约
 
@@ -20,7 +20,7 @@ Prompix 使用原创 SwiftUI Canvas 球体阵列，不搬运参考站的图片�
 | ink | `#272433` | `#F1EFFA` | 正文、标题 |
 | muted | `#6C687C` | `#B8B2CA` | 辅助文字 |
 | accent | `#4B3FD3` | `#C4BCFF` | 主操作、选中态、链接 |
-| spectrum | 蓝 `#4856EF`、鸢尾 `#8A78E5`、紫粉 `#CD8CE4`、冰蓝 `#B3D0FB`、浅粉 `#EEC4E7` | 同一色谱 | 粒子、光、局部品牌表现 |
+| spectrum | 蓝 `#4856EF`、鸢尾 `#8A78E5`、紫粉 `#CD8CE4`、冰蓝 `#B3D0FB`、浅粉 `#EEC4E7` | 同一色谱 | 页片、光、局部品牌表现 |
 
 照片和 Prompt 正文保持原色。光谱不是一整页的彩色背景，不给每个文字、图标或控件套渐变。浅色色谱不用于小字；文字色与底色需要按实际配对检查对比度。既有 icon 和 App Icon 本轮保留，不能随意换一套符号或重画标记。
 
@@ -28,17 +28,20 @@ Prompix 使用原创 SwiftUI Canvas 球体阵列，不搬运参考站的图片�
 
 | 场景 | 当前组件与行为 |
 |---|---|
-| 第一页尚无内容 | 原位置、原比例骨架；一处 88pt 粒子场，避免每张骨架都持续动画 |
-| 正文尚未到达 | 先显示封面、标题和已有操作区，再显示局部粒子与文字骨架 |
-| 作者目录等待 | 保留头像与姓名占位，单一局部粒子场；已知作品保持可用 |
-| 加载下一页 | 64pt 粒子场，不显示重复的“正在加载”文字；手动加载仍有明确标签 |
-| 图片、视频、网页、语言包 | 仅请求所在区域出现反馈；清晰图加载时保持已有预览 |
-| 请求失败 | 粒子静止；一行说明和原生玻璃重试，不继续转圈，不显示成功语气 |
-| 减少动态效果／低电量 | 使用静止构图，保留 VoiceOver 状态描述 |
+| 第一页尚无内容 | 所有卡片一致的原比例静态骨架，不叠加任何 Loading 图形 |
+| 正文尚未到达 | 先呈现封面、标题和已有操作区；正文仅文字骨架 |
+| 作者目录等待 | 头像／姓名同尺寸骨架；已知作品保持可用，不附加加载图 |
+| 下拉刷新 | 保留系统 UIRefreshControl 的手势、回弹与生命周期；可见反馈为轻翻页 |
+| 加载下一页 | 局部轻翻页，不显示重复的“正在加载”文字 |
+| 图片、视频、网页、语言包 | 应用自己的等待统一轻翻页；已有媒体预览不清空 |
+| 请求失败 | 移除加载图形，保留短说明与原生玻璃重试 |
+| 减少动态效果／低电量 | 静止页片，保留 VoiceOver 状态描述 |
 
-`SpectralActivity` 最多 37 个球体，小尺寸为 19 个，30fps 上限。波相位同时影响球面的光、微小位移与体积；周期约 5.6 秒。不伪造百分比、不设最短等待、不等动画演完才显示数据。请求结束、离开页面、不可见或进入后台后不继续更新；错误提示使用 `active: false`。大字号允许恢复行改为纵向排布。
+`PageActivity` 是三个 8pt × 14–17pt 页片，相邻错开约 0.3 秒，周期 1.8 秒，最大抬升 3pt。固定 28pt 高的区域，30fps 上限。无球体、圆环、轨道、弹跳或全屏装饰。请求结束不等动画演完；离屏、后台、减少动态效果和低电量停止更新。不要为视觉效果设置最短请求时长或伪造进度。
 
-`LoadingSurface` 仅保留一次光线掠过。系统下拉刷新和 AVKit 自带的反馈仍然采用系统表现，不替换系统组件内部的动画。
+`LoadingSurface` 是一致的静态占位。不要在第一张卡片、创作者骨架头部或正文骨架加页片。对于有骨架的区域，骨架本身就是等待反馈。
+
+`pageRefreshable` 复用系统刷新任务，仅通过公开 UIView／UIRefreshControl 属性替换可见样式：原生控件 tint 透明，附加局部 SwiftUI 页片。禁止替换滚动 delegate、使用私有类名或另加竞争手势。若当前系统视图结构不提供唯一可定位的刷新控件，保留系统反馈作为安全回退。AVKit 内部系统控件不是应用自定义 UI；不通过私有接口篡改它们。
 
 ## 异常与内容连续性
 
