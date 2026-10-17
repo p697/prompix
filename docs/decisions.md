@@ -810,3 +810,9 @@ Evaluate TweetAPI's documented 200-ID, one-unit lookup as an isolated read pilot
 - Add an opt-in daily/monthly maintenance floor inside the shared $20 cap, derived from authoritative publication history and previous approvals. Preserve published-source checks before spending on searches, unpublished drafts or vendor trials.
 - Separate protected and draft batches. Incomplete/stale census blocks growth; only a typed pre-HTTP budget refusal may release its local unsent attempt. Paid/uncertain history is never cleared.
 - Keep reply verification, quality checks and source expiry unchanged. This does not solve the per-item maintenance cost at 10,000 X sources; continue vendor screening only when new cost/capability evidence warrants a trial.
+
+### 2026-10-17 — Bound the approved RapidAPI trial by its full subscription cost
+
+- Test Twttr API (`twitter241`) separately from the stopped TweetAPI trial. The user's approval covers one $1 Basic month and at most eight requests inside the existing $20 cap; it does not cover Pro, renewal or a production switch.
+- Reserve the whole fixed fee before checkout. Confirm actual payment separately, count every included request and uncertain attempt, and keep protected maintenance headroom. Immutable captures allow offline replay; failed controls stop batch expansion.
+- Treat 200 IDs as an experimental bound until actual responses prove capacity and fidelity. A 1,000-call plan does not cover 10,000 X originals at two checks per day even at that batch size; use the real X population and fallback costs before claiming large-library feasibility.

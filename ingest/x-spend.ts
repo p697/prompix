@@ -7,8 +7,8 @@ import { atomic, json } from "./publication.ts";
 
 const amount = z.number().int().nonnegative().max(20_000_000);
 const entrySchema = z.object({
-  id: z.string().uuid(), at: z.iso.datetime(), provider: z.enum(["official", "twitterapi", "tweetapi"]),
-  operation: z.enum(["search", "lookup", "users"]), request: z.string().regex(/^[a-f0-9]{64}$/),
+  id: z.string().uuid(), at: z.iso.datetime(), provider: z.enum(["official", "twitterapi", "tweetapi", "rapidapi"]),
+  operation: z.enum(["search", "lookup", "users", "subscription"]), request: z.string().regex(/^[a-f0-9]{64}$/),
   reserved: amount, accounted: amount, state: z.enum(["reserved", "completed", "uncertain"]),
 }).strict().refine(entry => entry.state === "completed" ? entry.accounted <= entry.reserved : entry.accounted === entry.reserved,
   "Invalid X reservation accounting");
@@ -20,6 +20,9 @@ export class XBudgetExceeded extends Error {}
 export const xUnitMicroUSD = { official: { post: 5000, user: 10000 }, twitterapi: { post: 150, user: 180 } } as const;
 // TweetAPI's bulk lookup bills one call, including empty results, at the PAYG rate.
 export const tweetAPICallMicroUSD = 500;
+// One explicitly approved Basic month; this is NOT a production provider tariff.
+export const rapidAPIPilotFeeMicroUSD = 1_000_000;
+export const rapidAPIPilotMaxCalls = 8;
 export type XSpendPurpose = "growth" | "maintenance";
 export const maintenanceReserveSchema = z.object({
   version: z.literal(1), checkedAt: z.iso.datetime(), complete: z.boolean(),
@@ -62,19 +65,40 @@ export class XSpendBudget {
     catch { throw new Error("X spend ledger is busy; no request sent"); }
     try { return await operation(); } finally { await rm(lock, { recursive: true }); }
   }
-  async reserve(provider: "official" | "twitterapi" | "tweetapi", operation: "search" | "lookup" | "users", request: string, units: number,
+  async reserve(provider: "official" | "twitterapi" | "tweetapi" | "rapidapi", operation: "search" | "lookup" | "users" | "subscription", request: string, units: number,
     purpose: XSpendPurpose = "growth") {
     if (!Number.isSafeInteger(units) || units < 1 || units > 1000) throw new Error("Invalid X billable units");
-    if (!["growth", "maintenance"].includes(purpose) || (purpose === "maintenance" && (operation !== "lookup" || provider === "tweetapi")))
+    if (!["growth", "maintenance"].includes(purpose) || (purpose === "maintenance" && (operation !== "lookup" || !["official", "twitterapi"].includes(provider))))
       throw new Error("Only verified source lookups may use X maintenance headroom");
     if (provider === "tweetapi" && (operation !== "lookup" || units !== 1)) throw new Error("TweetAPI pilot reserves one lookup call");
+    if (operation === "subscription" && provider !== "rapidapi") throw new Error("Only the RapidAPI pilot has a fixed fee");
+    if (provider === "rapidapi" && (units !== 1 || !["lookup", "subscription"].includes(operation)))
+      throw new Error("RapidAPI pilot reserves one fixed fee or one included lookup");
     const at = this.now().toISOString(), month = at.slice(0, 7), day = at.slice(0, 10);
-    const unitCost = provider === "tweetapi" ? tweetAPICallMicroUSD : xUnitMicroUSD[provider][operation === "users" ? "user" : "post"];
+    const unitCost = provider === "rapidapi" ? (operation === "subscription" ? rapidAPIPilotFeeMicroUSD : 0)
+      : provider === "tweetapi" ? tweetAPICallMicroUSD : xUnitMicroUSD[provider][operation === "users" ? "user" : "post"];
     const reserved = units * unitCost;
-    const path = join(this.root, `${month}.json`), id = randomUUID();
+    const path = join(this.root, `${month}.json`);
+    let id: string = randomUUID();
     await this.transaction(async () => {
       const ledger = ledgerSchema.parse(await json(path, { version: 1, month, opening: 0, entries: [] }));
       if (ledger.month !== month) throw new Error("X spend ledger month mismatch");
+      if (provider === "rapidapi") {
+        const fees = ledger.entries.filter(e => e.provider === "rapidapi" && e.operation === "subscription");
+        if (operation === "subscription" && fees.length) {
+          if (fees.length === 1 && fees[0].request === createHash("sha256").update(request).digest("hex")) {
+            id = fees[0].id; return; // Recover the same reservation after an interrupted operator handoff.
+          }
+          throw new Error("RapidAPI pilot fee already reserved; inspect the existing entry");
+        }
+        if (operation === "lookup") {
+          const age = fees.length === 1 ? Date.parse(at) - Date.parse(fees[0].at) : Infinity;
+          if (fees.length !== 1 || fees[0].state !== "completed" || fees[0].accounted !== rapidAPIPilotFeeMicroUSD || age < 0 || age >= 72 * 3600_000)
+            throw new Error("RapidAPI pilot requires a confirmed fee in this UTC month within 72 hours");
+          if (ledger.entries.filter(e => e.provider === "rapidapi" && e.operation === "lookup").length >= rapidAPIPilotMaxCalls)
+            throw new Error("RapidAPI pilot request allowance exhausted");
+        }
+      }
       const monthly = ledger.opening + ledger.entries.reduce((sum, e) => sum + e.accounted, 0);
       const daily = ledger.entries.filter(e => e.at.startsWith(day)).reduce((sum, e) => sum + e.accounted, 0);
       if (monthly + reserved > Math.round(this.monthlyUSD * 1e6) || daily + reserved > Math.round(this.dailyUSD * 1e6))
@@ -94,7 +118,7 @@ export class XSpendBudget {
       await atomic(path, ledger);
     });
     let finished = false;
-    return { finish: async (returnedUnits?: number) => {
+    return { id, finish: async (returnedUnits?: number) => {
       if (finished) throw new Error("X reservation already settled");
       if (returnedUnits !== undefined && (!Number.isSafeInteger(returnedUnits) || returnedUnits < 0 || returnedUnits > units))
         throw new Error("X provider exceeded reserved result bound");
@@ -109,5 +133,22 @@ export class XSpendBudget {
       });
       finished = true;
     } };
+  }
+
+  /** Operator-only receipt confirmation after checking the actual paid subscription.
+   * This records no payment, never refunds a charge, and cannot renew the pilot. */
+  async confirmRapidAPIPilotFee(id: string) {
+    z.string().uuid().parse(id);
+    const month = this.now().toISOString().slice(0, 7), path = join(this.root, `${month}.json`);
+    await this.transaction(async () => {
+      const ledger = ledgerSchema.parse(await json(path, null));
+      if (ledger.month !== month) throw new Error("X spend ledger month mismatch");
+      const entry = ledger.entries.find(e => e.id === id);
+      if (!entry || entry.provider !== "rapidapi" || entry.operation !== "subscription" ||
+          entry.reserved !== rapidAPIPilotFeeMicroUSD || entry.accounted !== rapidAPIPilotFeeMicroUSD)
+        throw new Error("Missing RapidAPI pilot fee reservation");
+      entry.state = "completed";
+      await atomic(path, ledger);
+    });
   }
 }
