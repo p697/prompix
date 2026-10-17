@@ -4,6 +4,7 @@ import { atomic, json } from "./publication.ts";
 import { collectXFeeds, xFeeds } from "./x-feed.ts";
 import { buildXSearchPlan, runXSearchPlan, searchPlanSchema, type XSearchPlan } from "./x-search-plan.ts";
 import { admitXSearchLeads } from "./x-search-admission.ts";
+import { syncLiveXLeadQueue, acquireXLeadQueue } from "./x-lead-queue.ts";
 import { configuredXSpendBudget } from "./x-spend.ts";
 import { TwitterAPIClient } from "./twitterapi.ts";
 import { windowBudget } from "./discovery-budget.ts";
@@ -68,9 +69,10 @@ export async function collectXDiscovery(root: string, options: {
   }
   let admission: Awaited<ReturnType<typeof admitXSearchLeads>>;
   try {
-    admission = await admitXSearchLeads(root, directory, plan, { enabled: options.enabled, bearer: options.bearer,
+    await syncLiveXLeadQueue(root, at.toISOString());
+    admission = await acquireXLeadQueue(root, { enabled: options.enabled, bearer: options.bearer,
       maxPosts: windowBudget(40, at), now: at.toISOString(), lookup: options.lookup });
-  } catch { admission = { status: "failed", requests: 0, acquired: 0, unavailable: 0, known: 0, pending: 0 }; }
+  } catch { admission = { status: "failed", requests: 0, acquired: 0, unavailable: 0, known: 0, pending: 0, needsInspection: 0 }; }
   const supplement = await collectXFeeds(root, { enabled: true, bearer: options.bearer, now, search: options.officialSearch,
     sleep: options.sleep, limits: { requests: 3, posts: 30 }, pageSize: 10, replyEvery: 3, feeds: officialSupplementFeeds });
   const statuses = [search.status, admission.status, supplement.status];
