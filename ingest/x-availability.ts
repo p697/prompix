@@ -29,6 +29,9 @@ export type XAvailabilityState = z.infer<typeof stateSchema>;
 export async function readXAvailability(root: string): Promise<XAvailabilityState> {
   return stateSchema.parse(await json(join(root, "x-availability", "state.json"), {}));
 }
+function thirdPartyCheck(record: XAvailabilityState[string] | undefined) {
+  return record?.checkedBy === "twitterapi" || record?.checkedBy === "rapidapi";
+}
 /** Only exact official intake snapshots can supply a free, non-renewing availability check. */
 function freshDiscoveryRecord(item: Prompt, record: XAvailabilityState[string] | undefined, threadIDs: ReadonlySet<string>, now: number) {
   const post = item.source.post, checked = Date.parse(post?.checkedAt ?? "");
@@ -57,7 +60,10 @@ export function filterXAvailability<T extends Prompt>(items: readonly T[], state
   const prompts = items.flatMap(item => {
     if (!isNativeXDraft(item)) return [item];
     const record = state[item.id], post = item.source.post;
-    if (!post || record?.status !== "ready" || record.revision !== item.source.revision) { withheldIDs.push(item.id); return []; }
+    const needsJointCheck = !!(item.source.context || post?.parentID || item.source.mediaPostID);
+    if (!post || record?.status !== "ready" || record.revision !== item.source.revision || (needsJointCheck && thirdPartyCheck(record))) {
+      withheldIDs.push(item.id); return [];
+    }
     item = { ...item, source: { ...item.source, post: { ...post, checkedAt: record.checkedAt },
       ...(item.source.context ? { context: item.source.context.map(source => ({ ...source, checkedAt: record.checkedAt })) } : {}) } };
     if (nativeXSourceIssue(item, now)) { withheldIDs.push(item.id); return []; }
@@ -129,7 +135,10 @@ export async function prepareXAvailability(root: string, options: { enabled: boo
     if (discovery) {
       state[item.id] = discovery; report.reusedDiscovery++; return false;
     }
-    const needsCheck = !record || (record.status === "ready" && record.revision !== item.source.revision) || nowMS - checked >= 12 * 3600_000;
+    // A recently recorded standalone result cannot defer a now-known joint
+    // dependency check. Keep the daily official quota; retry at its next window.
+    const incompleteScope = threadIDs.has(item.source.post!.id) && thirdPartyCheck(record);
+    const needsCheck = incompleteScope || !record || (record.status === "ready" && record.revision !== item.source.revision) || nowMS - checked >= 12 * 3600_000;
     if (needsCheck && admitted && !protectedIDs.has(item.id) && !admitted.has(item.id)) {
       report.deferredDrafts++; return false;
     }
