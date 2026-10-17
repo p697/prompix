@@ -185,6 +185,23 @@ function deferredReason(decision: Pick<VisualDecision, "verdict" | "reason" | "a
 }
 const errorText = (error: unknown) => (error instanceof Error ? error.message : "Visual review failed").slice(0, 500);
 
+/** Presentation is evidence about the actual media, not a relevance approval.
+ * Reapply after snapshot retention, using that snapshot's exact media identity. */
+export function applyVisualPresentation(items: readonly Prompt[], cache: VisualCache): Prompt[] {
+  return items.map(item => {
+    let presentation: Prompt["presentation"] = "unknown";
+    const decision = cache.decisions[visualReviewIdentity(item)];
+    if (!hasVisualMedia(item) && item.kind === "text") presentation = "general";
+    else if (decision && decision.id === item.id) {
+      try {
+        validateAttachments(item, decision.attachments, decision.coverage);
+        presentation = decision.presentation ?? "unknown";
+      } catch { /* Incomplete or changed media cannot inherit a rating. */ }
+    }
+    return { ...item, presentation };
+  });
+}
+
 export async function runVisualReview(options: {
   prompts: readonly Prompt[]; previous: readonly Prompt[]; cache: VisualCache; ledger?: VisualLedger | VisualAttempt; day: string; now?: string;
   maxRequests?: unknown; classifyPublished?: boolean;
@@ -219,15 +236,7 @@ export async function runVisualReview(options: {
     report.items = options.prompts.map(item => records.get(item.id)!);
     report.deferred = report.items.filter(item => item.status === "deferred").length;
     const blockedIDs = options.prompts.filter(item => cache.decisions[visualReviewIdentity(item)]?.presentation === "explicit").map(item => item.id);
-    const prompts = options.prompts.filter(item => accepted.has(item.id) && !blockedIDs.includes(item.id)).map(item => {
-      let presentation: Prompt["presentation"] = "unknown";
-      const decision = cache.decisions[visualReviewIdentity(item)];
-      if (!hasVisualMedia(item) && item.kind === "text") presentation = "general";
-      else if (decision && matches(decision)) {
-        try { validateAttachments(item, decision.attachments, decision.coverage); presentation = decision.presentation ?? "unknown"; } catch { /* Keep unknown; never invent inspection. */ }
-      }
-      return { ...item, presentation };
-    });
+    const prompts = applyVisualPresentation(options.prompts.filter(item => accepted.has(item.id) && !blockedIDs.includes(item.id)), cache);
     return { prompts, blockedIDs,
       withheldIDs: options.prompts.filter(item => !accepted.has(item.id)).map(item => item.id), report };
   };

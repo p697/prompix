@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import type { Prompt } from "../packages/schema/catalog.ts";
-import { runVisualReview, visualCacheSchema, visualLedgerSchema, visualInputCharacters, visualProviderInput, visualReviewIdentity,
+import { applyVisualPresentation, runVisualReview, visualCacheSchema, visualLedgerSchema, visualInputCharacters, visualProviderInput, visualReviewIdentity,
   visualReviewModel, type PreparedVisualMedia, type VisualAttachment, type VisualCache, type VisualInput,
   type VisualLedger, type VisualAttempt, type VisualProvider } from "./visual-review.ts";
 
@@ -498,4 +498,22 @@ test("published presentation backfill uses only spare budget and never outranks 
   assert.equal(result.report.previousSnapshots, 0);
   const repeated = await run({ classifyPublished: true, maxRequests: 1 });
   assert.equal(repeated.report.requests, 0); assert.equal(repeated.report.dailyRequests, 1);
+});
+
+
+test("retained media keeps a presentation rating independently of relevance and never crosses identities", async () => {
+  const item = prompt("retained-suggestive", "image", 2), {run, state} = harness([item]);
+  const reviewed = await run({provider: async items => ({decisions: approve(items).decisions.map(d => ({
+    ...d, presentation: "suggestive", verdict: "mismatch", attachments: d.attachments.map(a => ({...a, verdict: "mismatch"})),
+  }))})});
+  assert.equal(reviewed.prompts.length, 0, "A rating must not grant relevance approval");
+  assert.equal(applyVisualPresentation([item], state.cache)[0].presentation, "suggestive");
+  const changed = {...item, media: {...item.media!, imageURLs: item.media!.imageURLs!.slice(0, 1)}};
+  assert.equal(applyVisualPresentation([changed], state.cache)[0].presentation, "unknown");
+  const corrupt = structuredClone(state.cache);
+  corrupt.decisions[visualReviewIdentity(item)].attachments.pop();
+  assert.equal(applyVisualPresentation([item], corrupt)[0].presentation, "unknown");
+  const foreign = structuredClone(state.cache);
+  foreign.decisions[visualReviewIdentity(item)].id = "other-source";
+  assert.equal(applyVisualPresentation([item], foreign)[0].presentation, "unknown");
 });
