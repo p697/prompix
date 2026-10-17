@@ -9,12 +9,13 @@ import { readXExcerptReviews } from "./x-excerpts.ts";
 import { isNativeXDraft, nativeXSourceIssue, nativeXPostIDs } from "./x-source.ts";
 import { mergeCreatorCache, type CreatorCache } from "./creators.ts";
 import { reviewsSchema } from "./editorial.ts";
-import { editorialCacheSchema, editorialDecisionKey } from "./editorial-runner.ts";
+import { editorialCacheSchema, editorialDecisionKey, editorialQueue } from "./editorial-runner.ts";
 import { readQualityHolds } from "./quality-holds.ts";
 import { moderationSchema } from "./publication.ts";
 import { TwitterAPIClient } from "./twitterapi.ts";
 import { configuredXSpendBudget } from "./x-spend.ts";
 import { recheckXStandalone, type XRecheckOptions } from "./x-recheck.ts";
+import type { XMaintenanceAdmission } from "./x-maintenance-admission.ts";
 
 const recordSchema = z.object({ checkedAt: z.iso.datetime(), status: z.enum(["ready", "withheld"]),
   checkedBy: z.enum(["official", "twitterapi"]).optional(),
@@ -56,13 +57,15 @@ function configuredRecheck(): XRecheckOptions | undefined {
 }
 /** Separate maintenance budget: default two requests, bounded to four / 400 posts per UTC day. No automatic retries. Caller holds daily.lock. */
 export async function prepareXAvailability(root: string, options: { enabled: boolean; bearer?: string; now?: string;
-  lookup?: typeof checkXAvailability; maxRequests?: number; recheck?: XRecheckOptions } ) {
+  lookup?: typeof checkXAvailability; maxRequests?: number; recheck?: XRecheckOptions; admission?: XMaintenanceAdmission } ) {
   const now = options.now ?? new Date().toISOString(), nowMS = Date.parse(now), day = now.slice(0, 10);
   if (!Number.isFinite(nowMS)) throw new Error("Invalid X availability time");
   const maxRequests = options.maxRequests ?? Number(process.env.PROMPIX_X_AVAILABILITY_MAX_REQUESTS ?? 2);
   if (!Number.isInteger(maxRequests) || maxRequests < 0 || maxRequests > 4) throw new Error("Invalid X availability budget");
+  if (options.admission && (!Number.isInteger(options.admission.maxDrafts) || options.admission.maxDrafts < 0 || options.admission.maxDrafts > 192))
+    throw new Error("Invalid X draft maintenance allowance");
   const state = await readXAvailability(root);
-  const report = { status: "cached", requests: 0, checked: 0, withheld: 0, skippedInactive: 0, reusedDiscovery: 0,
+  const report = { status: "cached", requests: 0, checked: 0, withheld: 0, skippedInactive: 0, reusedDiscovery: 0, deferredDrafts: 0,
     recheck: undefined as Awaited<ReturnType<typeof recheckXStandalone>> | undefined };
   if (!options.enabled || !options.bearer) return { state, report };
   const ledgerPath = join(root, "x-availability", `${day}.json`);
@@ -73,15 +76,22 @@ export async function prepareXAvailability(root: string, options: { enabled: boo
   const decisions = editorialCacheSchema.parse(await json(join(root, "editorial", "decisions.json"), { version: 1, decisions: {} })).decisions;
   const removed = new Set(moderationSchema.parse(await json(join(root, "moderation.json"), { removedIDs: [] })).removedIDs);
   const holds = await readQualityHolds(root);
+  const protectedIDs = new Set([...Object.keys(reviews), ...(options.admission?.publishedIDs ?? []),
+    ...Object.values(decisions).filter(decision => decision.decision === "approve").map(decision => decision.id)]);
+  const isInactive = (item: typeof intake.candidates[number]) => removed.has(item.id) || !!holds.holds[item.id] ||
+    (!protectedIDs.has(item.id) && !!decisions[editorialDecisionKey(item)] && decisions[editorialDecisionKey(item)].decision !== "approve");
+  // Include fresh drafts in the queue: they already occupy upcoming review slots and cost no recheck.
+  const admitted = options.admission ? new Set(editorialQueue(intake.candidates.filter(item =>
+    !isInactive(item) && !protectedIDs.has(item.id) && !options.admission!.attemptedIDs.has(item.id)), [],
+    Math.floor(nowMS / 86400000)).slice(0, options.admission.maxDrafts).map(item => item.id)) : undefined;
   const threadIDs = new Set(intake.candidates.filter(item => item.source.context).flatMap(nativeXPostIDs));
   const sourceCheckedAt = (item: typeof intake.candidates[number]) => Math.min(...[...(item.source.context ?? []), item.source.post]
     .map(source => Date.parse(source?.checkedAt ?? "") || 0));
   const checkedAt = (item: typeof intake.candidates[number]) => Math.max(sourceCheckedAt(item),
     Date.parse(state[item.id]?.checkedAt ?? "") || 0);
   let due = intake.candidates.filter(item => {
-    const decision = decisions[editorialDecisionKey(item)];
-    // A previous approval may still back a published edition. Keep checking it even if a later revision was rejected.
-    if (removed.has(item.id) || holds.holds[item.id] || (!reviews[item.id] && decision && decision.decision !== "approve")) {
+    // A previous approval or publication may still back a retained edition.
+    if (isInactive(item)) {
       report.skippedInactive++; return false;
     }
     const checked = checkedAt(item);
@@ -95,7 +105,11 @@ export async function prepareXAvailability(root: string, options: { enabled: boo
       state[item.id] = { checkedAt: new Date(sourceChecked).toISOString(), status: "ready", revision: item.source.revision, checkedBy: "official" };
       report.reusedDiscovery++; return false;
     }
-    return !record || (record.status === "ready" && record.revision !== item.source.revision) || nowMS - checked >= 12 * 3600_000;
+    const needsCheck = !record || (record.status === "ready" && record.revision !== item.source.revision) || nowMS - checked >= 12 * 3600_000;
+    if (needsCheck && admitted && !protectedIDs.has(item.id) && !admitted.has(item.id)) {
+      report.deferredDrafts++; return false;
+    }
+    return needsCheck;
   }).sort((a, b) => Number(!!reviews[b.id]) - Number(!!reviews[a.id]) || checkedAt(a) - checkedAt(b) || a.id.localeCompare(b.id));
   if (report.reusedDiscovery) await atomic(join(root, "x-availability", "state.json"), stateSchema.parse(state));
   const recheck = options.recheck ?? configuredRecheck();

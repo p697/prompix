@@ -1,3 +1,4 @@
+import { prepareXMaintenanceAdmission } from "./x-maintenance-admission.ts";
 import { limitNewPublications } from "./publication-quota.ts";
 import { withPublisherDatabase } from "./database-publication.ts";
 import { prepareDiscoveredSkills } from "./discovered-skill-daily.ts";
@@ -96,7 +97,8 @@ async function run() {
   await withDailyStatus(root, report, async () => {
     const qualityHolds = await readQualityHolds(root);
     // Registry availability must be fresh even when resuming a retained target.
-    const xAvailability = await prepareXAvailability(root, { enabled: publishing, bearer: process.env.X_BEARER_TOKEN });
+    const admission = publishing && process.env.X_BEARER_TOKEN ? await prepareXMaintenanceAdmission(root) : undefined;
+    const xAvailability = await prepareXAvailability(root, { enabled: publishing, bearer: process.env.X_BEARER_TOKEN, admission });
     report.sources["x-availability"] = xAvailability.report;
     if (publishing) {
       const removed = Object.entries(xAvailability.state).filter(([, state]) => state.removed).map(([id]) => id);

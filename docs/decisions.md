@@ -783,3 +783,7 @@ Use an explicit, budgeted hybrid option for existing standalone X sources: exact
 ### 2026-10-17：旧快照尺度标记与相关性批准分离
 
 真实补标样本暴露出“相关性mismatch使尺度标记消失”的问题。尺度描述实际已检查媒体，不能依赖图文是否匹配；保留旧版本后必须按该版本完整媒体身份重新附加标签，不能把新版本标签套给旧图库。该补标不产生新相关性批准，未知证据不标为general，explicit不发布。
+
+### 2026-10-17 — Bound draft maintenance by editorial capacity
+
+Use authoritative first-publication history to distinguish a never-approved X draft from an identity that may still support a released edition. Previously published or approved sources keep full availability maintenance; only the untouched draft queue is bounded by the remaining editorial review window. Fresh acquisitions reuse their original check time, and blocked review attempts cannot buy another round of draft checks. This avoids paying for an expanding review backlog without weakening the live catalog's source gates. At the measured current inventory the saving is small; large published-library maintenance remains unresolved within the $20 collection cap.
