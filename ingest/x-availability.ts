@@ -8,6 +8,10 @@ import { convertXDiscovery } from "./x-intake.ts";
 import { readXExcerptReviews } from "./x-excerpts.ts";
 import { isNativeXDraft, nativeXSourceIssue, nativeXPostIDs } from "./x-source.ts";
 import { mergeCreatorCache, type CreatorCache } from "./creators.ts";
+import { reviewsSchema } from "./editorial.ts";
+import { editorialCacheSchema, editorialDecisionKey } from "./editorial-runner.ts";
+import { readQualityHolds } from "./quality-holds.ts";
+import { moderationSchema } from "./publication.ts";
 
 const recordSchema = z.object({ checkedAt: z.iso.datetime(), status: z.enum(["ready", "withheld"]),
   removed: z.boolean().optional(), revision: z.string().regex(/^[a-f0-9]{64}$/).optional() }).strict();
@@ -45,19 +49,43 @@ export async function prepareXAvailability(root: string, options: { enabled: boo
   const maxRequests = options.maxRequests ?? Number(process.env.PROMPIX_X_AVAILABILITY_MAX_REQUESTS ?? 2);
   if (!Number.isInteger(maxRequests) || maxRequests < 0 || maxRequests > 4) throw new Error("Invalid X availability budget");
   const state = await readXAvailability(root);
-  const report = { status: "cached", requests: 0, checked: 0, withheld: 0 };
+  const report = { status: "cached", requests: 0, checked: 0, withheld: 0, skippedInactive: 0, reusedDiscovery: 0 };
   if (!options.enabled || !options.bearer) return { state, report };
   const ledgerPath = join(root, "x-availability", `${day}.json`);
   const ledger = ledgerSchema.parse(await json(ledgerPath, []));
-  if (ledger.some(attempt => attempt.state !== "completed") || ledger.length >= maxRequests) return { state, report: { ...report, status: "daily-limit" } };
   const intake = await readAllXIntake(root);
   const excerpts = await readXExcerptReviews(root);
+  const reviews = reviewsSchema.parse(await json(join(root, "editorial.json"), {}));
+  const decisions = editorialCacheSchema.parse(await json(join(root, "editorial", "decisions.json"), { version: 1, decisions: {} })).decisions;
+  const removed = new Set(moderationSchema.parse(await json(join(root, "moderation.json"), { removedIDs: [] })).removedIDs);
+  const holds = await readQualityHolds(root);
+  const threadIDs = new Set(intake.candidates.filter(item => item.source.context).flatMap(nativeXPostIDs));
+  const sourceCheckedAt = (item: typeof intake.candidates[number]) => Math.min(...[...(item.source.context ?? []), item.source.post]
+    .map(source => Date.parse(source?.checkedAt ?? "") || 0));
+  const checkedAt = (item: typeof intake.candidates[number]) => Math.max(sourceCheckedAt(item),
+    Date.parse(state[item.id]?.checkedAt ?? "") || 0);
   const due = intake.candidates.filter(item => {
-    const checked = Math.max(Date.parse(item.source.post?.checkedAt ?? "") || 0, Date.parse(state[item.id]?.checkedAt ?? "") || 0);
+    const decision = decisions[editorialDecisionKey(item)];
+    // A previous approval may still back a published edition. Keep checking it even if a later revision was rejected.
+    if (removed.has(item.id) || holds.holds[item.id] || (!reviews[item.id] && decision && decision.decision !== "approve")) {
+      report.skippedInactive++; return false;
+    }
+    const checked = checkedAt(item);
     const record = state[item.id];
     if (record?.removed) return false;
+    const sourceChecked = sourceCheckedAt(item);
+    // Standalone discovery is already a source check. Threads still use a joint
+    // lookup: refreshing one dependency must invalidate affected older chains.
+    if (!threadIDs.has(item.source.post?.id ?? "") && (!record || sourceChecked > Date.parse(record.checkedAt)) && sourceChecked <= nowMS &&
+        nowMS - sourceChecked < 12 * 3600_000 && !nativeXSourceIssue(item, nowMS)) {
+      state[item.id] = { checkedAt: new Date(sourceChecked).toISOString(), status: "ready", revision: item.source.revision };
+      report.reusedDiscovery++; return false;
+    }
     return !record || (record.status === "ready" && record.revision !== item.source.revision) || nowMS - checked >= 12 * 3600_000;
-  }).sort((a, b) => Date.parse(a.source.post?.checkedAt ?? "1970-01-01") - Date.parse(b.source.post?.checkedAt ?? "1970-01-01"));
+  }).sort((a, b) => Number(!!reviews[b.id]) - Number(!!reviews[a.id]) || checkedAt(a) - checkedAt(b) || a.id.localeCompare(b.id));
+  if (report.reusedDiscovery) await atomic(join(root, "x-availability", "state.json"), stateSchema.parse(state));
+  if (ledger.some(attempt => attempt.state !== "completed") || ledger.length >= maxRequests)
+    return { state, report: { ...report, status: "daily-limit" } };
   while (due.length && ledger.length < maxRequests) {
     const batch: typeof due = [], required = new Set<string>();
     while (due.length) {
