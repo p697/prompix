@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Install a guarded, versioned daily runtime. No credentials in the launchd job."""
+import argparse
 import json
 import os
 from pathlib import Path
@@ -140,8 +141,15 @@ exec ''' + shlex.quote(sys.executable) + ' ' + shlex.quote(str(helper)) + ' ' + 
         print('Installed collection at 02:00, 08:00, 14:00 and 20:00; paid daily budgets remain shared.')
 
 
-if __name__ == '__main__':
+def main(argv=None):
+    # Parse before touching the filesystem or launchd. Help and invalid arguments
+    # must never activate a runtime.
+    argparse.ArgumentParser(description=__doc__).parse_args(argv)
     try:
         install(Path(__file__).resolve().parent.parent, Path.home())
     except (OSError, RuntimeError, subprocess.CalledProcessError) as error:
         raise SystemExit(str(error))
+
+
+if __name__ == '__main__':
+    main()

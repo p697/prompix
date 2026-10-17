@@ -1,5 +1,7 @@
 """Scheduler safety checks use temporary homes; no real npm or launchd calls."""
+from contextlib import redirect_stderr, redirect_stdout
 import importlib.util
+import io
 import json
 from pathlib import Path
 import subprocess
@@ -24,6 +26,20 @@ def fixture(path):
 
 
 class SchedulerTests(unittest.TestCase):
+    def test_cli_help_and_invalid_arguments_never_install(self):
+        for arguments, code in [(['--help'], 0), (['--unknown-option'], 2)]:
+            with self.subTest(arguments=arguments), patch.object(installer, 'install') as install, \
+                 redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                with self.assertRaises(SystemExit) as result:
+                    installer.main(arguments)
+                self.assertEqual(result.exception.code, code)
+                install.assert_not_called()
+
+    def test_cli_without_arguments_installs_once(self):
+        with patch.object(installer, 'install') as install:
+            installer.main([])
+            install.assert_called_once_with(self.repo, Path.home())
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
