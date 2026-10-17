@@ -1,6 +1,6 @@
 # X provider pilot and maintenance costs
 
-Status: live pilot completed on 2026-10-17; a full production switch did **not** pass the discovery coverage gate. Production still uses the official X API. The independent maintenance optimization is ready for deployment after CI. The pilot does not publish, translate, mirror media, or change the discovery query mix.
+Status: live pilot completed on 2026-10-17; a full production switch did **not** pass the discovery coverage gate. Production still uses the official X API. The maintenance optimization is independently deployable after CI. The pilot does not publish, translate, mirror media, or change the discovery query mix.
 
 ## Scope and cost boundary
 
@@ -54,7 +54,7 @@ The 12-hour recheck target, 24-hour publication freshness gate, full thread depe
 
 Automated tests cover budget persistence, concurrent reservation, monthly boundaries, opening spend, empty-result billing, key redaction, redirect/HTTP/JSON failures, long text and media normalization, ambiguous omissions, immutable source comparisons, maintenance prioritization, rejection skipping, fresh-source reuse and withdrawal protection. Live lookup fidelity and trial billing were checked as described below; search equivalence failed its initial gate.
 
-Local validation on 2026-10-17: type checking passed; the full TypeScript suite passed 560 tests with one explicitly opt-in 10,000-item SQL acceptance test skipped. After the final UTC query conversion, all 17 provider/pilot tests passed. The scheduler safety suite passed 13 tests. Final CI results and maintenance deployment are recorded separately below. No mobile build is required for these ingestion-only changes.
+Local validation on 2026-10-17: type checking passed; the full TypeScript suite passed 560 tests with one explicitly opt-in 10,000-item SQL acceptance test skipped. After the final UTC query conversion, all 17 provider/pilot tests passed. The scheduler safety suite passed 13 tests. Final CI results are attached to PR #121; runtime activation evidence is kept in the external pilot directory. No mobile build is required for these ingestion-only changes.
 
 ## Live evidence, 2026-10-17
 

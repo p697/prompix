@@ -42,18 +42,20 @@ try {
     const { planID: savedID, ...savedPlan } = saved ?? {};
     if (pilotIdentity(savedPlan) !== savedID) throw new Error("Pilot plan checksum mismatch");
     plan = savedPlan; planID = savedID; directory = replay; queryPlan = plan.queries;
-    // Legacy pilot evidence predates frozen baselines. Identify that limitation explicitly.
-    const oldReport = await json<any>(join(directory, "report.json"), null);
-    const selected = new Set<string>(oldReport?.checks?.map((check: any) => check.id) ?? []);
-    sample = { ids: plan.ids, candidates: candidates.filter(item => selected.has(item.id)) };
-    if (sample.candidates.length !== selected.size) throw new Error("Legacy replay baseline is incomplete");
-    baselineKind = "current-revision-of-original-sample";
   }
   const baselinePath = join(directory, "baseline.json");
   const baseline = await json<any>(baselinePath, null);
   if (baseline) {
     if (baseline.planID !== planID || baseline.digest !== pilotIdentity([baseline.sample, baseline.excerpts])) throw new Error("Pilot baseline checksum mismatch");
     sample = baseline.sample; excerpts = baseline.excerpts; baselineKind = baseline.kind;
+    if (JSON.stringify(sample.ids) !== JSON.stringify(plan.ids)) throw new Error("Pilot baseline IDs differ from its request plan");
+  } else if (replay) {
+    // Legacy pilot evidence predates frozen baselines. Identify that limitation explicitly.
+    const oldReport = await json<any>(join(directory, "report.json"), null);
+    const selected = new Set<string>(oldReport?.checks?.map((check: any) => check.id) ?? []);
+    sample = { ids: plan.ids, candidates: candidates.filter(item => selected.has(item.id)) };
+    if (!selected.size && plan.ids.length || sample.candidates.length !== selected.size) throw new Error("Legacy replay baseline is incomplete");
+    baselineKind = "current-revision-of-original-sample";
   } else if (enabled) {
     await atomic(baselinePath, { planID, kind: baselineKind, sample, excerpts, digest: pilotIdentity([sample, excerpts]) });
   }
