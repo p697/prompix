@@ -234,7 +234,7 @@ struct PromptDetail: View {
     }
     private var readingActions: some View {
         ReadingActionBar(isSkill: item.isSkill, collapsed: actionsCollapsed, copied: copied,
-                         edit: openEditor, copy: { UIPasteboard.general.string = content.prompt; copied = true },
+                         edit: openEditor, copy: { UIPasteboard.general.string = content.prompt; library.recommendations.record(.use, prompt: item); copied = true },
                          use: openUseSheet)
     }
     private func openUseSheet() {
@@ -522,6 +522,7 @@ struct PromptEditor: View {
     }
     private func copyEdits() {
         UIPasteboard.general.string = text
+        library.recommendations.record(.use, prompt: item)
         copied = true
         save()
     }

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { interestIDs } from "./interests.ts";
 import collectionDefinitions from "./collections.json" with { type: "json" };
 export { collectionDefinitions };
 export const collectionIDs = Object.keys(collectionDefinitions) as [keyof typeof collectionDefinitions, ...(keyof typeof collectionDefinitions)[]];
@@ -16,7 +17,8 @@ export const normalizeFeedSearch = (value: string) => value.normalize("NFKD").re
   .normalize("NFKC").toLowerCase().trim().replace(/\s+/gu, " ");
 export const feedFiltersSchema = z.object({
   locale: feedLocale.default("original"),
-  sort: z.enum(["curated", "latest", "discovery"]).optional(),
+  sort: z.enum(["curated", "latest", "discovery", "recommended"]).optional(),
+  seed: z.string().regex(/^[a-f0-9]{32}$/).optional(),
   kind: z.enum(["text", "image", "video", "web", "skill"]).optional(),
   collection: z.enum(collectionIDs).optional(),
   creator: z.string().min(1).max(200).optional(),
@@ -33,6 +35,8 @@ export const feedCardSchema = z.object({
   contentType: z.enum(["prompt", "skill"]),
   title: z.string().min(1).max(250), summary: z.string().min(1).max(4000),
   tags: z.array(z.string().min(1).max(100)).max(50), model: z.string().min(1).max(200),
+  presentation: z.enum(["general", "suggestive", "unknown"]).optional(),
+  topics: z.array(z.string().refine(value => interestIDs.includes(value))).max(12).optional(),
   artwork: contentID, previewLabel: z.string().max(500),
   creator: creatorSchema.optional(), media: promptSchema.shape.media,
   cover: promptSchema.shape.cover,
@@ -52,7 +56,7 @@ export const feedDetailSchema = z.object({
 }).strict();
 
 export function parseFeedQuery(url: URL): { filters: FeedFilters; limit: number; cursor?: string } {
-  const allowed = new Set(["locale", "kind", "collection", "creator", "tag", "model", "q", "sort", "limit", "cursor"]);
+  const allowed = new Set(["locale", "kind", "collection", "creator", "tag", "model", "q", "sort", "seed", "limit", "cursor"]);
   const values: Record<string, string> = {};
   for (const [key, value] of url.searchParams) {
     if (!allowed.has(key) || Object.hasOwn(values, key)) throw new Error("Invalid query parameters");
@@ -64,7 +68,8 @@ export function parseFeedQuery(url: URL): { filters: FeedFilters; limit: number;
   if (Object.values(raw).some(value => /[\u0000-\u001f\u007f]/u.test(value))) throw new Error("Invalid filter text");
   const filters = feedFiltersSchema.parse(raw);
   filters.q = normalizeFeedSearch(filters.q);
-  if (filters.sort === "discovery" && filters.q) throw new Error("Discovery ordering does not rank searches");
+  if ((filters.sort === "recommended") !== (filters.seed !== undefined)) throw new Error("Recommendation session seed is required only for recommendations");
+  if (["discovery", "recommended"].includes(filters.sort ?? "") && filters.q) throw new Error("Discovery ordering does not rank searches");
   if (filters.q.length > 120 || filters.q.split(" ").length > 8)
     throw new Error("Invalid filter text");
   return { filters, limit: Number(limit), ...(cursor ? { cursor } : {}) };

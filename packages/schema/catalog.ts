@@ -73,6 +73,7 @@ export const promptSchema = z.object({
     })
     .refine(media => !media.imageURLs || media.imageURL === media.imageURLs[0], "Gallery must start with its cover")
     .nullable(),
+  presentation: z.enum(["general", "suggestive", "unknown", "explicit"]).optional(),
   publishedAt: z.string().optional(),
 }).superRefine((item, validation) => {
   const { post, context, mediaPostID } = item.source;

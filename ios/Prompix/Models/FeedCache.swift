@@ -27,12 +27,12 @@ actor FeedCache {
         guard let data = try read(key, maximum: 1_010_000) else { return nil }
         let record = try JSONDecoder().decode(PageRecord.self, from: data)
         guard record.query == query else { throw FeedError.invalidResponse }
-        _ = try record.page.validated(locale: query.locale, limit: FeedClient.pageSize)
+        _ = try record.page.validated(locale: query.locale, limit: query.sort == "recommended" ? 90 : FeedClient.pageSize)
         return record
     }
     func store(_ page: FeedPage, query: FeedQuery, now: Date = Date()) throws {
         let query = try query.validated()
-        _ = try page.validated(locale: query.locale, limit: FeedClient.pageSize)
+        _ = try page.validated(locale: query.locale, limit: query.sort == "recommended" ? 90 : FeedClient.pageSize)
         try write(JSONEncoder().encode(PageRecord(query: query, savedAt: now, page: page)), key: pageKey(query), maximum: 1_010_000)
         try prune(prefix: "page-", count: pageLimit, bytes: 12_120_000)
     }

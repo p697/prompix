@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import { performance } from "node:perf_hooks";
 import { feedPageSchema, feedDetailSchema } from "../packages/schema/feed.ts";
 import { preparePublication, type PublicationInput } from "../services/feed/publication.ts";
+import { contentTopics } from "../packages/schema/interests.ts";
 import { publicationIdentity } from "../ingest/release-publication.ts";
 import { validateArtifact } from "../ingest/language-packs.ts";
 
@@ -34,7 +35,7 @@ for (const locale of ["original", "zh-Hans"] as const) for (const sort of ["cura
     for (const card of page.items) {
       const row = sort === "curated" ? expected.records[ids.length] : byID.get(card.id); assert.ok(row, "Unexpected feed row");
       const expectedCard = row.translations.find(item => item.locale === locale)?.card ?? row.card;
-      assert.equal(publicationIdentity(card), publicationIdentity(expectedCard)); ids.push(card.id);
+      assert.equal(publicationIdentity(card), publicationIdentity({ ...expectedCard, topics: contentTopics(expectedCard) })); ids.push(card.id);
     }
     assert.notEqual(page.nextCursor, cursor || "never-a-cursor"); cursor = page.nextCursor;
     assert.ok(++pages <= 2001, "Pagination did not terminate");

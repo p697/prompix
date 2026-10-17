@@ -177,7 +177,7 @@ test("daily website acceptance spends no image budget; stale hosted bytes cannot
     await store(root, f); t.mock.method(globalThis, "fetch", f.fetcher);
     const env = { PROMPIX_VISUAL_PROVIDER: "codex", PROMPIX_VISUAL_MAX_REQUESTS: "0", PROMPIX_CODEX: "/must-not-run" };
     const result = await prepareDailyVisualReview([f.item], [], root, true, env);
-    assert.deepEqual(result.prompts, [f.item]); assert.equal(result.report.websitesReviewed, 1);
+    assert.deepEqual(result.prompts, [{ ...f.item, presentation: "unknown" }]); assert.equal(result.report.websitesReviewed, 1);
     assert.equal(result.report.requests, 0); assert.equal(result.report.prepared, 0);
     assert.deepEqual(await readdir(root), ["web-review"]);
     t.mock.method(globalThis, "fetch", async () => new Response("changed", { headers: { "Content-Type": "text/html", "Content-Security-Policy": websiteContentSecurityPolicy } }));
@@ -205,7 +205,7 @@ test("recollection restores durable editorial media overrides before exact websi
     assert.deepEqual(planned.media, f.item.media);
     assert.equal(websiteMediaNeedsMirroring(planned), false);
     const result = await prepareDailyVisualReview([planned], [], root, true, {});
-    assert.equal(result.report.websitesReviewed, 1); assert.deepEqual(result.prompts, [planned]);
+    assert.equal(result.report.websitesReviewed, 1); assert.deepEqual(result.prompts, [{ ...planned, presentation: "unknown" }]);
     assert.equal(result.report.requests, 0); assert.equal(fresh.media, null, "Review must not mutate the replaceable discovery snapshot");
     assert.deepEqual(selectLibrary(applyEditorialReviews([fresh], {}), new Set()), [], "Website evidence does not grant metadata approval");
     assert.deepEqual(selectLibrary(reviewed, new Set([fresh.id])), [], "Tombstones still exclude the item");

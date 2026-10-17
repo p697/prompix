@@ -26,9 +26,20 @@ struct PrompixOnboarding: View {
             navigation
             GeometryReader { viewport in
                 TabView(selection: $page) {
-                    ForEach(0..<3) { index in
-                        pageContent(index, viewport: viewport.size)
-                            .tag(index)
+                    ForEach(0..<4) { index in
+                        Group {
+                            if index == 3 {
+                                ScrollView {
+                                    VStack(alignment: .leading, spacing: 20) {
+                                        Text(RecommendationCopy.text("interests.title")).font(.title)
+                                            .accessibilityIdentifier("onboarding-title-3")
+                                            .accessibilityAddTraits(.isHeader)
+                                            .accessibilityFocused($focusedPage, equals: 3)
+                                        InterestSelection()
+                                    }.padding(24).frame(maxWidth: 560).frame(maxWidth: .infinity)
+                                }.accessibilityIdentifier("onboarding-page-3")
+                            } else { pageContent(index, viewport: viewport.size) }
+                        }.tag(index)
                     }
                 }
                 .tabViewStyle(.page(indexDisplayMode: .never))
@@ -252,9 +263,9 @@ struct PrompixOnboarding: View {
     private var controls: some View {
         VStack(spacing: 12) {
             Button {
-                if page == 2 { onComplete() } else { move(to: page + 1) }
+                if page == 3 { onComplete() } else { move(to: page + 1) }
             } label: {
-                Text(page == 2 ? String(localized: "onboarding.complete", table: "Onboarding") : String(localized: "onboarding.next", table: "Onboarding"))
+                Text(page == 3 ? String(localized: "onboarding.complete", table: "Onboarding") : String(localized: "onboarding.next", table: "Onboarding"))
                     .font(.body.weight(.medium))
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
@@ -264,9 +275,9 @@ struct PrompixOnboarding: View {
                     .background(Palette.accent, in: Capsule())
             }
             .buttonStyle(.plain)
-            .accessibilityIdentifier(page == 2 ? "onboardingComplete" : "onboardingNext")
+            .accessibilityIdentifier(page == 3 ? "onboardingComplete" : "onboardingNext")
             HStack(spacing: 6) {
-                ForEach(0..<3) { index in
+                ForEach(0..<4) { index in
                     Capsule().fill(index == page ? Palette.accent : Palette.line)
                         .frame(width: index == page ? 22 : 10, height: 4)
                 }
@@ -274,7 +285,7 @@ struct PrompixOnboarding: View {
             .frame(height: 16)
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(String(localized: "onboarding.progress", table: "Onboarding"))
-            .accessibilityValue(String(format: String(localized: "onboarding.progress.format", table: "Onboarding"), locale: .current, page + 1, 3))
+            .accessibilityValue(String(format: String(localized: "onboarding.progress.format", table: "Onboarding"), locale: .current, page + 1, 4))
             .accessibilityAdjustableAction { direction in
                 switch direction {
                 case .increment: move(to: page + 1)
@@ -289,7 +300,7 @@ struct PrompixOnboarding: View {
     }
 
     private func move(to destination: Int) {
-        guard (0..<3).contains(destination) else { return }
+        guard (0..<4).contains(destination) else { return }
         withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) { page = destination }
     }
 

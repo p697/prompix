@@ -60,7 +60,7 @@ test("unchanged published snapshot stays available without inventing a visual ap
   try {
     const item = picture();
     const result = await prepareDailyVisualReview([item], [item], root, true, {});
-    assert.deepEqual(result.prompts, [item]);
+    assert.deepEqual(result.prompts, [{ ...item, presentation: "unknown" }]);
     assert.equal(result.report.previousSnapshots, 1);
     assert.equal(result.report.approved, 0);
     assert.deepEqual(await readdir(root), []);
@@ -113,7 +113,7 @@ process.stdin.on("data", chunk => input += chunk);
 process.stdin.on("end", () => {
   const { candidates } = JSON.parse(input.trim().split("\\n").at(-1));
   fs.appendFileSync(${JSON.stringify(calls)}, JSON.stringify(candidates.map(item => item.id)) + "\\n");
-  const decisions = candidates.map(item => ({ id: item.id, identity: item.identity, verdict: "match", reason: "Synthetic wrapper response.",
+  const decisions = candidates.map(item => ({ id: item.id, identity: item.identity, presentation: "general", verdict: "match", reason: "Synthetic wrapper response.",
     attachments: item.attachments.map(attachment => ({ id: attachment.id, sha256: attachment.sha256, verdict: "match", reason: "Synthetic attachment response." })) }));
   fs.writeFileSync(process.argv[process.argv.indexOf("--output-last-message") + 1], JSON.stringify({ decisions }));
 });

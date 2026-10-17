@@ -13,6 +13,7 @@ struct FeedCheckpoint: Codable {
 }
 
 @MainActor @Observable final class FeedRepository {
+    let recommendations: LocalRecommendations
     let discovery: FeedStore
     let search: FeedStore
     let creatorDiscovery: CreatorDiscoveryStore
@@ -27,17 +28,18 @@ struct FeedCheckpoint: Codable {
     private var detailSizes: [String: Int] = [:]
     private var checkpoint: FeedCheckpoint
     private let commitRemovals: (FeedCheckpoint) throws -> Void
-    init(service: any FeedServing, cache: FeedCache, checkpoint: FeedCheckpoint,
+    init(service: any FeedServing, cache: FeedCache, checkpoint: FeedCheckpoint, recommendations: LocalRecommendations? = nil,
          commitRemovals: @escaping (FeedCheckpoint) throws -> Void) {
+        self.recommendations = recommendations ?? LocalRecommendations()
         self.service = service; self.cache = cache; self.checkpoint = checkpoint; self.commitRemovals = commitRemovals
         removedIDs = Set(checkpoint.removedIDs)
         creatorDiscovery = CreatorDiscoveryStore(service: service, cache: cache)
         creators = FeedCreatorStore(service: service, cache: cache); browse = FeedBrowseStore(service: service, cache: cache)
-        discovery = FeedStore(service: service, cache: cache, memoryPageLimit: 6); search = FeedStore(service: service, cache: cache)
+        discovery = FeedStore(service: service, cache: cache, memoryPageLimit: 6, recommendations: self.recommendations); search = FeedStore(service: service, cache: cache)
     }
     func makeCreatorDiscoveryStore() -> CreatorDiscoveryStore { CreatorDiscoveryStore(service: service, cache: cache) }
     func makeCreatorStore() -> FeedCreatorStore { FeedCreatorStore(service: service, cache: cache) }
-    func makeStore() -> FeedStore { FeedStore(service: service, cache: cache) }
+    func makeStore() -> FeedStore { FeedStore(service: service, cache: cache, recommendations: recommendations) }
 
     func creatorPreview(_ entry: FeedCreatorsPage.Entry) -> FeedCard? {
         guard let preview = entry.preview, !removedIDs.contains(preview.id) else { return nil }
@@ -149,6 +151,7 @@ struct FeedCheckpoint: Codable {
         let ids = Set(next.removedIDs)
         guard removedIDs.isSubset(of: ids) else { throw FeedError.invalidResponse }
         // A known takedown blocks use immediately, even if durable storage fails.
+        recommendations.forget(ids)
         removedIDs = ids; details = details.filter { !ids.contains($0.key) }
         detailSizes = detailSizes.filter { !ids.contains($0.key) }
         detailOrder.removeAll { ids.contains($0) }; discovery.discard(ids); search.discard(ids)

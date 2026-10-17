@@ -34,7 +34,7 @@ function prepare(item: Prompt): PreparedVisualMedia {
       videoSourceURL: item.media!.videoURL!, hasAudio: false } };
 }
 function approve(items: readonly VisualInput[]) {
-  return { decisions: items.map(item => ({ id: item.id, identity: item.identity, verdict: "match" as const,
+  return { decisions: items.map(item => ({ id: item.id, identity: item.identity, presentation: "general" as const, verdict: "match" as const,
     reason: "The visible content corresponds to the supplied instructions.",
     attachments: item.attachments.map(attachment => ({ id: attachment.id, sha256: attachment.sha256, verdict: "match" as const,
       reason: "This supplied image corresponds to the described scene." })) })) };
@@ -45,10 +45,10 @@ function harness(items: Prompt[], previous: Prompt[] = []) {
     cache: { version: 1, decisions: {} }, events: [], preparedIDs: [], inputs: [], batches: [],
   };
   const run = (settings: { prompts?: Prompt[]; previous?: Prompt[]; provider?: VisualProvider | null;
-    prepareMedia?: (item: Prompt) => Promise<PreparedVisualMedia>; day?: string; maxRequests?: unknown; ledger?: VisualLedger | VisualAttempt;
+    prepareMedia?: (item: Prompt) => Promise<PreparedVisualMedia>; day?: string; maxRequests?: unknown; classifyPublished?: boolean; ledger?: VisualLedger | VisualAttempt;
     persistCache?: (cache: VisualCache) => Promise<void>; persistLedger?: (ledger: VisualLedger) => Promise<void> } = {}) => runVisualReview({
     prompts: settings.prompts ?? items, previous: settings.previous ?? previous, cache: state.cache, ledger: settings.ledger ?? state.ledger,
-    day: settings.day ?? day, now, maxRequests: settings.maxRequests,
+    day: settings.day ?? day, now, maxRequests: settings.maxRequests, classifyPublished: settings.classifyPublished,
     provider: settings.provider === null ? undefined : async input => {
       state.events.push("provider"); state.inputs = input; state.batches.push(input);
       return (settings.provider ?? (async items => approve(items)))(input);
@@ -79,7 +79,7 @@ test("unchanged published semantics reuse a previous snapshot without fabricatin
   assert.equal(visualReviewIdentity(old), visualReviewIdentity(changedMetadata));
   const { run, state } = harness([changedMetadata], [old]);
   const result = await run({ provider: null });
-  assert.deepEqual(result.prompts, [changedMetadata]); assert.equal(result.report.previousSnapshots, 1);
+  assert.deepEqual(result.prompts, [{ ...changedMetadata, presentation: "unknown" }]); assert.equal(result.report.previousSnapshots, 1);
   assert.equal(result.report.items[0].status, "previous-snapshot"); assert.deepEqual(state.events, []);
   assert.deepEqual(state.cache.decisions, {}); assert.deepEqual(state.preparedIDs, []);
 });
@@ -128,7 +128,7 @@ test("new web previews stay deferred until real webpage inspection exists", asyn
 test("real prepared image and sampled video inputs reserve before the provider and persist independent evidence", async () => {
   const items = [prompt("image", "image", 2), prompt("video", "video")], { run, state } = harness(items);
   const result = await run();
-  assert.equal(result.report.approved, 2); assert.deepEqual(result.prompts, items);
+  assert.equal(result.report.approved, 2); assert.deepEqual(result.prompts, items.map(item => ({ ...item, presentation: "general" })));
   assert.deepEqual(state.events, ["reserved", "provider", "cache", "completed"]);
   assert.equal(state.ledger?.attempts[0].attachments, 9); assert.equal(state.ledger?.attempts[0].attachmentBytes, 900);
   assert.equal(state.ledger?.attempts[0].inputCharacters, visualInputCharacters(state.inputs));
@@ -462,4 +462,40 @@ test("video policy migration preserves old evidence without reinterpreting it as
   assert.equal(result.report.cachedApproved, 0);
   assert.equal(result.report.pending, 1);
   assert.ok(state.cache.decisions[legacyIdentity], "Historical evidence is retained for audit");
+});
+
+test("presentation is independent of relevance; explicit content cannot survive a previous snapshot", async () => {
+  for (const presentation of ["general", "suggestive", "unknown", "explicit"] as const) {
+    const item = prompt(`presentation-${presentation}`), { run } = harness([item]);
+    const result = await run({ provider: async items => ({ decisions: approve(items).decisions.map(decision => ({ ...decision, presentation })) }) });
+    if (presentation === "explicit") {
+      assert.deepEqual(result.prompts, []); assert.deepEqual(result.blockedIDs, [item.id]);
+      const cached = await run({ previous: [item], provider: null });
+      assert.deepEqual(cached.prompts, []); assert.deepEqual(cached.blockedIDs, [item.id]);
+    } else {
+      assert.equal(result.prompts[0].presentation, presentation); assert.deepEqual(result.blockedIDs, []);
+    }
+  }
+});
+
+test("legacy relevance evidence never fabricates a general presentation rating", async () => {
+  const item = prompt("legacy-relevance"), { run } = harness([item]);
+  const result = await run({ provider: async items => ({ decisions: approve(items).decisions.map(({ presentation: _, ...decision }) => decision) }) });
+  assert.equal(result.prompts[0].presentation, "unknown");
+  const cached = await run({ previous: [item], provider: null });
+  assert.equal(cached.prompts[0].presentation, "unknown");
+});
+
+
+test("published presentation backfill uses only spare budget and never outranks new media", async () => {
+  const old = Array.from({ length: 8 }, (_, n) => prompt(`old-${n}`));
+  const fresh = [prompt("new-a"), prompt("new-b")];
+  const { run, state } = harness([...old, ...fresh], old);
+  const result = await run({ classifyPublished: true, maxRequests: 1 });
+  assert.equal(result.report.requests, 1); assert.equal(state.inputs.length, 3);
+  assert.deepEqual(new Set(state.inputs.slice(0, 2).map(item => item.id)), new Set(fresh.map(item => item.id)));
+  assert.ok(state.inputs[2].id.startsWith("old-"));
+  assert.equal(result.report.previousSnapshots, 0);
+  const repeated = await run({ classifyPublished: true, maxRequests: 1 });
+  assert.equal(repeated.report.requests, 0); assert.equal(repeated.report.dailyRequests, 1);
 });

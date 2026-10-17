@@ -89,3 +89,20 @@ export function decodeVisualFeedCursor(token: string, filters: FeedFilters, secr
     throw new Error("Expired or mismatched cursor");
   return cursor;
 }
+
+// The session changes on explicit refresh, never within a page chain. Keys use
+// a seeded hash and a unique snapshot position; removals cannot renumber them.
+const recommendedCursorSchema = visualFeedCursorSchema.extend({
+  scope: z.literal("recommended-feed"),
+  visual: z.string().regex(/^(?:[01][a-f0-9]{32}[0-9]{7})?$/),
+  text: z.string().regex(/^(?:[01][a-f0-9]{32}[0-9]{7})?$/),
+}).strict();
+export function encodeRecommendedCursor(cursor: z.infer<typeof recommendedCursorSchema>, secret: string): string {
+  return signPayload(recommendedCursorSchema.parse(cursor), secret);
+}
+export function decodeRecommendedCursor(token: string, filters: FeedFilters, secret: string, now = Date.now()) {
+  const cursor = recommendedCursorSchema.parse(verifyPayload(token, secret));
+  if (!validExpiry(cursor.expires, now) || JSON.stringify(cursor.filters) !== JSON.stringify(feedFiltersSchema.parse(filters)))
+    throw new Error("Expired or mismatched cursor");
+  return cursor;
+}

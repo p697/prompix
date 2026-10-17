@@ -14,6 +14,7 @@ struct RootView: View {
     }
     var body: some View {
         tabs.tint(Palette.accent)
+            .environment(\.recommendationSurfaceVisible, !showsOnboarding)
             .fullScreenCover(isPresented: $showsOnboarding) {
                 PrompixOnboarding {
                     UserDefaults.standard.set(true, forKey: "hasCompletedOnboarding")
@@ -58,7 +59,9 @@ struct DiscoverView: View {
     @State private var kind: PromptKind?
     @State private var skillsOnly = false
     @State private var topic: String?
-    @State private var feedSort = "discovery"
+    @State private var feedSort = "recommended"
+    @Environment(\.recommendationSurfaceVisible) private var recommendationSurfaceVisible
+    @State private var appliedPreferenceRevision = 0
     @State private var model: String?
     @State private var settingsPresented = false
     @State private var chromeCollapsed = false
@@ -68,7 +71,7 @@ struct DiscoverView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private let topics = ["好玩一点", "创作灵感", "日常有用"]
     private var items: [Prompt] { library.prompts.filter { PromptQuery(kind: kind, topic: topic, model: model, skillsOnly: skillsOnly).matches($0) } }
-    private var feedQuery: FeedQuery { FeedQuery(kind: skillsOnly ? "skill" : kind?.rawValue, tag: topic, model: model, sort: kind == nil && !skillsOnly ? feedSort : "latest") }
+    private var feedQuery: FeedQuery { FeedQuery(kind: skillsOnly ? "skill" : kind?.rawValue, tag: topic, model: model, sort: feedSort) }
     private var models: [String] {
         if let feed = library.feed { return feed.browse.value?.models.map(\.name) ?? [] }
         return Array(Set(library.prompts.filter { PromptQuery(kind: kind, skillsOnly: skillsOnly).matches($0) }.map(\.model))).sorted()
@@ -162,6 +165,13 @@ struct DiscoverView: View {
             .toolbar(.hidden, for: .navigationBar)
             .sheet(isPresented: $settingsPresented) { SettingsView().promptSheet() }
             .task(id: feedQuery) { await library.feed?.discovery.load(feedQuery) }
+            .task(id: "\(library.recommendations.preferenceRevision)-\(settingsPresented)-\(recommendationSurfaceVisible)") {
+                let revision = library.recommendations.preferenceRevision
+                guard recommendationSurfaceVisible, !settingsPresented, revision != appliedPreferenceRevision else { return }
+                appliedPreferenceRevision = revision
+                library.feed?.discovery.invalidateCachedPages()
+                if feedSort == "recommended" { await library.feed?.discovery.load(feedQuery, force: true) }
+            }
         }
     }
     private func selectKind(_ next: PromptKind?, _ skills: Bool) {
@@ -201,11 +211,7 @@ struct DiscoverView: View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             Text(skillsOnly ? String(localized: "Agent Skills") : isFiltered ? String(localized: "筛选结果") : String(localized: "全部内容"))
                 .font(.subheadline.weight(.medium))
-            if library.feed == nil {
-                Text(items.count.formatted()).font(.caption.monospacedDigit()).foregroundStyle(Palette.muted)
-            } else if !isFiltered, let count = library.feed?.state?.count {
-                Text(count.formatted()).font(.caption.monospacedDigit()).foregroundStyle(Palette.muted)
-            }
+
         }
     }
     private var resultActions: some View {
@@ -214,14 +220,14 @@ struct DiscoverView: View {
                 Button(String(localized: "清除筛选")) { selectKind(nil, false) }
                     .font(.footnote).frame(minHeight: 44)
             }
-            if !skillsOnly { filterPicker }
+            filterPicker
         }
     }
     private var filterPicker: some View {
         Menu {
-            if !isFiltered {
+            Group {
                 Picker(String(localized: "排序"), selection: $feedSort) {
-                    Text(String(localized: "推荐")).tag("discovery")
+                    Text(String(localized: "推荐")).tag("recommended")
                     Text(String(localized: "最新收录")).tag("latest")
                 }
             }

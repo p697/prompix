@@ -328,6 +328,7 @@ async function run() {
     }
     const visual = await prepareDailyVisualReview(published, previous?.prompts ?? [], root, publishing);
     report.visualReview = visual.report;
+    for (const id of visual.blockedIDs) excluded.add(id);
     const mediaAwaitingReview = new Set(visual.withheldIDs);
     if (publishing) {
       bundled = await publishStudioImages(bundled, join(repo, "ios/Prompix/Resources/Assets.xcassets"), mediaMap, async input => {

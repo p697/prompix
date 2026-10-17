@@ -439,7 +439,7 @@ struct CreatorDetail: View {
                         VStack(alignment: .leading, spacing: 8) { contentHeading; filterPicker }
                     }.padding(.horizontal, 20)
                     if let feed = library.feed {
-                        OwnedFeedResults(repository: feed, query: FeedQuery(kind: filter == .all ? nil : filter.rawValue, creator: creator.id), fallback: items)
+                        OwnedFeedResults(repository: feed, query: FeedQuery(kind: filter == .all ? nil : filter.rawValue, creator: creator.id, sort: "recommended"), fallback: items)
                     } else if items.isEmpty {
                         ContentUnavailableView(String(localized: "暂无匹配内容"), systemImage: "square.grid.2x2",
                             description: Text(String(localized: "试试其他分类，或清除筛选条件。")))

@@ -30,6 +30,7 @@ struct Prompt: Codable, Identifiable, Hashable {
     var creator: Creator? = nil
     var skill: Skill? = nil
     var localization: Localization? = nil
+    var presentation: String? = nil
     var publishedAt: String? = nil
     // Local snapshot metadata; never sent to the content service or included in
     // source fingerprints. It keeps saved and open details on their own revision.

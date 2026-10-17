@@ -23,12 +23,16 @@ struct FeedCard: Codable, Identifiable, Hashable, Sendable {
     let cover: Prompt.Cover?
     let language: String
     let availableLanguages: [String]
+    var topics: [String]? = nil
+    var presentation: String? = nil
 
     func validated(locale: String) throws -> Self {
         guard FeedValidation.id(id), FeedValidation.revision(revision), ["prompt", "skill"].contains(contentType),
               contentType != "skill" || kind == .text,
               FeedValidation.text(title, max: 250), FeedValidation.text(summary, max: 4000),
               FeedValidation.text(model, max: 200), FeedValidation.id(artwork), previewLabel.utf16.count <= 500,
+              presentation == nil || ["general", "suggestive", "unknown"].contains(presentation!),
+              topics == nil || (topics!.count <= 12 && topics!.allSatisfy(InterestCatalog.ids.contains)),
               tags.count <= 50, tags.allSatisfy({ FeedValidation.text($0, max: 100) }),
               FeedValidation.languages(availableLanguages),
               language == "original" || (language == locale && availableLanguages.contains(language)) else { throw FeedError.invalidResponse }
@@ -146,15 +150,17 @@ struct FeedQuery: Codable, Hashable, Sendable {
     var model: String?
     var q = ""
     var sort: String?
+    var seed: String?
 
     func validated() throws -> Self {
         var value = self
-        guard sort == nil || ["curated", "latest", "discovery"].contains(sort!), FeedValidation.locale(locale), kind == nil || ["text", "image", "video", "web", "skill"].contains(kind!),
+        guard sort == nil || ["curated", "latest", "discovery", "recommended"].contains(sort!), FeedValidation.locale(locale), kind == nil || ["text", "image", "video", "web", "skill"].contains(kind!),
               [creator, tag, model, q].compactMap({ $0 }).allSatisfy({ !$0.unicodeScalars.contains { $0.value < 32 || $0.value == 127 } }),
               collection == nil || FeedCollections.definitions[collection!] != nil,
               creator == nil || FeedValidation.text(creator!, max: 200),
               tag == nil || FeedValidation.text(tag!, max: 100), model == nil || FeedValidation.text(model!, max: 200) else { throw FeedError.invalidQuery }
-        guard sort != "discovery" || q.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw FeedError.invalidQuery }
+        guard !["discovery", "recommended"].contains(sort ?? "") || q.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw FeedError.invalidQuery }
+        guard seed == nil || (sort == "recommended" && seed!.count == 32 && seed!.utf8.allSatisfy { (48...57).contains($0) || (97...102).contains($0) }) else { throw FeedError.invalidQuery }
         value.q = String(q.decomposedStringWithCompatibilityMapping.unicodeScalars.filter { !(0x300...0x36f).contains($0.value) })
             .precomposedStringWithCompatibilityMapping.lowercased().split(whereSeparator: \.isWhitespace).joined(separator: " ")
         guard value.q.utf16.count <= 120, value.q.split(separator: " ").count <= 8 else { throw FeedError.invalidQuery }
@@ -162,7 +168,7 @@ struct FeedQuery: Codable, Hashable, Sendable {
     }
     var parameters: [URLQueryItem] {
         var values = [URLQueryItem(name: "locale", value: locale)]
-        for (name, value) in [("sort", sort), ("kind", kind), ("collection", collection), ("creator", creator), ("tag", tag), ("model", model), ("q", q.isEmpty ? nil : q)] {
+        for (name, value) in [("sort", sort), ("seed", seed), ("kind", kind), ("collection", collection), ("creator", creator), ("tag", tag), ("model", model), ("q", q.isEmpty ? nil : q)] {
             if let value { values.append(URLQueryItem(name: name, value: value)) }
         }
         return values

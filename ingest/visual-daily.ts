@@ -21,13 +21,15 @@ export async function prepareDailyVisualReview(prompts: Prompt[], previous: Prom
   const configured = environment.PROMPIX_VISUAL_PROVIDER;
   if (configured && configured !== "codex") throw new Error("Unsupported visual provider; publication stopped");
   const maxRequests = reviewRequestLimit(environment.PROMPIX_VISUAL_MAX_REQUESTS);
+  const classify = environment.PROMPIX_VISUAL_CLASSIFY_PUBLISHED;
+  if (classify !== undefined && classify !== "0" && classify !== "1") throw new Error("Invalid published presentation review switch");
   // Dry-run remains offline for review media. Trusted website reviews never use
   // a model or spend the image-review request budget.
   const reviewWebsite = publishing && prompts.some(item => item.kind === "web") ? await websiteReviewer(root) : undefined;
   let requestSequence = ledger?.requests ?? 0;
   let temporary: string | undefined;
   try {
-    return await runVisualReview({ prompts, previous, cache, ledger, day, maxRequests, reviewWebsite,
+    return await runVisualReview({ prompts, previous, cache, ledger, day, maxRequests, reviewWebsite, classifyPublished: classify === "1",
       provider: publishing && configured === "codex" ? async items => {
         if (clock().toISOString().slice(0, 10) !== day) throw new Error("UTC visual review day changed; reserved attempt remains consumed");
         const sequence = requestSequence;

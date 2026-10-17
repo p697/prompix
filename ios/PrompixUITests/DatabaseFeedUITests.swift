@@ -13,6 +13,9 @@ import UIKit
         app.launchPrompix()
         XCTAssertTrue(app.buttons["discoverySettings"].waitForExistence(timeout: 15))
     }
+    private var firstFixtureCard: XCUIElement {
+        app.scrollViews["discoveryScroll"].buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'prompt-database-fixture-'" )).firstMatch
+    }
     private func capture(_ name: String) {
         let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         attachment.name = name; attachment.lifetime = .keepAlways; add(attachment)
@@ -49,6 +52,41 @@ import UIKit
         if !card.isHittable { app.swipeUp() }
         card.tap()
         XCTAssertTrue(app.buttons["copyPrompt"].waitForExistence(timeout: 10))
+    }
+
+    func testRecommendedRefreshRotatesSessionAndOffersLocalInterests() async throws {
+        launch(["--feed-visual-mix-test"])
+        func seeds() -> [String] {
+            (try? requests().filter { $0["operation"] as? String == "recommendation-session" }.compactMap { $0["query"] as? String }) ?? []
+        }
+        for _ in 0..<60 {
+            if seeds().count >= 3 { break }
+            try await Task.sleep(for: .milliseconds(200))
+        }
+        let first = try XCTUnwrap(seeds().first)
+        XCTAssertEqual(Set(seeds()), [first])
+        XCTAssertFalse(app.staticTexts["10,000"].exists)
+        capture("recommendations-home")
+        let scroll = app.scrollViews["discoveryScroll"]
+        scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+            .press(forDuration: 0.1, thenDragTo: scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.93)), withVelocity: .slow, thenHoldForDuration: 0.2)
+        for _ in 0..<60 {
+            if Set(seeds()).count >= 2 { break }
+            try await Task.sleep(for: .milliseconds(200))
+        }
+        XCTAssertGreaterThanOrEqual(Set(seeds()).count, 2, "Pull refresh must create a new candidate session")
+        scroll.swipeUp(); capture("recommendations-refreshed-feed")
+        scroll.swipeDown()
+        let settings = app.buttons["discoverySettings"]
+        if !settings.isHittable { scroll.swipeDown() }
+        settings.tap()
+        let preferences = app.buttons["recommendationPreferences"]
+        for _ in 0..<4 { if preferences.isHittable { break }; app.swipeUp() }
+        XCTAssertTrue(preferences.waitForExistence(timeout: 5)); preferences.tap()
+        XCTAssertTrue(app.buttons["interest-portrait"].waitForExistence(timeout: 5))
+        for id in ["portrait", "product", "illustration"] { app.buttons["interest-\(id)"].tap() }
+        XCTAssertTrue(app.buttons["interest-portrait"].isSelected)
+        capture("recommendations-local-interests")
     }
 
     func testSearchTabFocusAndTextSurviveRepeatedSwitches() {
@@ -91,32 +129,37 @@ import UIKit
         guard ProcessInfo.processInfo.environment["PROMPIX_DATABASE_LIVE_UI"] == "1" else { throw XCTSkip("Explicit live API verification only") }
         app.launchArguments = ["--feed-live-test", fixtureID, "-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh-Hans"]
         app.launchPrompix()
-        let (data, response) = try await URLSession.shared.data(from: URL(string: "https://api.prompix.dev/v3/feed?sort=discovery&locale=zh-Hans")!)
-        XCTAssertEqual((response as? HTTPURLResponse)?.statusCode, 200)
-        let body = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
-        let cards = try XCTUnwrap(body["items"] as? [[String: Any]])
-        let visuals = Set(cards.filter { ($0["media"] as? [String: Any])?["imageURL"] is String || ($0["media"] as? [String: Any])?["image"] is String }
-            .compactMap { $0["id"] as? String })
-        let firstID = try XCTUnwrap(cards.first?["id"] as? String)
-        XCTAssertTrue(visuals.contains(firstID))
-        XCTAssertTrue(app.buttons["prompt-\(firstID)"].waitForExistence(timeout: 25))
+        let first = app.scrollViews["discoveryScroll"].buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'prompt-'" )).firstMatch
+        XCTAssertTrue(first.waitForExistence(timeout: 30))
         capture("visual-live-01-home")
         let scroll = app.scrollViews["discoveryScroll"]
         for screen in 1...2 {
             scroll.swipeUp(velocity: .slow)
             let visible = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'prompt-'"))
                 .allElementsBoundByIndex.filter(\.isHittable).map { String($0.identifier.dropFirst(7)) }
-            XCTAssertGreaterThanOrEqual(visible.filter { visuals.contains($0) }.count, 2, "Each visible feed screen must include real visual cards")
+            var visualCount = 0
+            for id in Set(visible) {
+                let (bytes, response) = try await URLSession.shared.data(from: URL(string: "https://api.prompix.dev/v3/contents/\(id)?locale=zh-Hans")!)
+                XCTAssertEqual((response as? HTTPURLResponse)?.statusCode, 200)
+                let detail = try XCTUnwrap(JSONSerialization.jsonObject(with: bytes) as? [String: Any])
+                let item = try XCTUnwrap(detail["item"] as? [String: Any])
+                let media = item["media"] as? [String: Any]
+                if media?["imageURL"] is String || media?["image"] is String { visualCount += 1 }
+            }
+            XCTAssertGreaterThanOrEqual(visualCount, 2, "Each visible feed screen must include real visual cards")
             capture("visual-live-feed-screen-\(screen)")
         }
     }
 
     func testHomeBlendsVisualWorkBeforeNewTextBatchAndCanSwitchToLatest() throws {
         launch(["--feed-visual-mix-test"])
-        let firstVisual = app.buttons["prompt-database-fixture-9969"]
+        let firstVisual = firstFixtureCard
         XCTAssertTrue(firstVisual.waitForExistence(timeout: 15))
         let ids = try XCTUnwrap(requests().first { $0["operation"] as? String == "visual-page-items" }?["query"] as? String)
-        XCTAssertEqual(Array(ids.split(separator: ",").prefix(5)), ["9969", "9967", "9966", "9965", "9999"])
+        let firstIDs = ids.split(separator: ",").compactMap { Int($0) }
+        XCTAssertEqual(firstIDs.count, 30)
+        XCTAssertTrue(firstIDs.prefix(4).allSatisfy { $0 < 9970 && $0 % 4 != 0 })
+        XCTAssertEqual(firstIDs.filter { $0 < 9970 && $0 % 4 != 0 }.count, 24)
         XCTAssertTrue(try requests().contains { $0["operation"] as? String == "page" && $0["query"] as? String == "__discovery__" })
         capture("visual-feed-01-home")
         let scroll = app.scrollViews["discoveryScroll"]
@@ -150,7 +193,7 @@ import UIKit
         checkAnchors(); capture("home-loading-02-creators-ready")
         try FileManager.default.removeItem(at: root.appending(path: "hold-browse"))
         try FileManager.default.removeItem(at: root.appending(path: "hold-feed-refresh"))
-        XCTAssertTrue(app.buttons["prompt-database-fixture-9999"].waitForExistence(timeout: 15))
+        XCTAssertTrue(firstFixtureCard.waitForExistence(timeout: 15))
         checkAnchors(); capture("home-loading-03-loaded")
         app.terminate(); launch(["--feed-fixture-offline"])
         XCTAssertTrue(app.buttons["creator-fixture-author-0"].waitForExistence(timeout: 8))
@@ -182,7 +225,7 @@ import UIKit
         XCTAssertFalse(app.buttons["retryFeed"].exists)
         capture("quantum-02-retry-preserves-offline-cards")
         try FileManager.default.removeItem(at: root.appending(path: "hold-feed-refresh"))
-        XCTAssertTrue(app.buttons["prompt-database-fixture-9999"].waitForExistence(timeout: 12))
+        XCTAssertTrue(firstFixtureCard.waitForExistence(timeout: 12))
         XCTAssertFalse(app.buttons["retryFeed"].exists)
         capture("quantum-03-connected-feed")
     }
@@ -199,7 +242,7 @@ import UIKit
         }
         try FileManager.default.removeItem(at: root.appending(path: "hold-feed-refresh"))
         XCTAssertTrue(app.buttons["loadCreators"].waitForExistence(timeout: 10))
-        XCTAssertTrue(app.buttons["prompt-database-fixture-9999"].waitForExistence(timeout: 10))
+        XCTAssertTrue(firstFixtureCard.waitForExistence(timeout: 10))
         XCTAssertEqual(collections.frame.minY, positions[0], accuracy: 1)
         XCTAssertEqual(heading.frame.minY, positions[1], accuracy: 1)
         capture("home-loading-failed")
@@ -360,20 +403,23 @@ import UIKit
 
     func testCategorySwitchUsesWarmPagesAndCancelsColdRequest() throws {
         launch()
-        XCTAssertTrue(app.buttons["prompt-database-fixture-9999"].waitForExistence(timeout: 15))
+        XCTAssertTrue(firstFixtureCard.waitForExistence(timeout: 15))
+        let allID = firstFixtureCard.identifier
         let settings = app.buttons["discoverySettings"], top = settings.frame.minY
         app.buttons["kind-image"].tap()
-        XCTAssertTrue(app.buttons["prompt-database-fixture-9997"].waitForExistence(timeout: 10))
+        XCTAssertTrue(firstFixtureCard.waitForExistence(timeout: 10))
+        let imageID = firstFixtureCard.identifier
         app.buttons["kind-video"].tap()
-        XCTAssertTrue(app.buttons["prompt-database-fixture-9998"].waitForExistence(timeout: 10))
+        XCTAssertTrue(firstFixtureCard.waitForExistence(timeout: 10))
+        let videoID = firstFixtureCard.identifier
         let before = try requests().filter { $0["operation"] as? String == "page-start" && ($0["cursor"] as? String ?? "").isEmpty }.count
         let gate = try directory().appending(path: "hold-feed-refresh")
         try Data().write(to: gate)
         defer { try? FileManager.default.removeItem(at: gate) }
         for _ in 0..<3 {
-            for (kind, id) in [("image", 9997), ("video", 9998), ("all", 9999)] {
+            for (kind, id) in [("image", imageID), ("video", videoID), ("all", allID)] {
                 app.buttons["kind-" + kind].tap()
-                XCTAssertTrue(app.buttons["prompt-database-fixture-\(id)"].exists)
+                XCTAssertTrue(app.buttons[id].exists)
                 XCTAssertEqual(settings.frame.minY, top, accuracy: 1)
                 XCTAssertFalse(app.descendants(matching: .any)["feedLoading"].exists)
             }
@@ -382,17 +428,17 @@ import UIKit
         XCTAssertEqual(after, before, "Warm category switches must not clear/refetch their pages")
         capture("filter-warm-all")
         app.buttons["kind-text"].tap()
-        XCTAssertFalse(app.buttons["prompt-database-fixture-9998"].exists)
-        XCTAssertFalse(app.buttons["prompt-database-fixture-9997"].exists)
+        XCTAssertFalse(app.buttons[videoID].exists)
+        XCTAssertFalse(app.buttons[imageID].exists)
         XCTAssertEqual(settings.frame.minY, top, accuracy: 1)
         XCTAssertTrue(app.descendants(matching: .any)["feedLoading"].exists)
         capture("filter-cold-placeholder")
         app.buttons["kind-image"].tap()
-        XCTAssertTrue(app.buttons["prompt-database-fixture-9997"].exists)
+        XCTAssertTrue(app.buttons[imageID].exists)
         try FileManager.default.removeItem(at: gate)
         app.buttons["kind-image"].tap() // Repeated selection is a no-op.
-        XCTAssertTrue(app.buttons["prompt-database-fixture-9997"].exists)
-        XCTAssertFalse(app.buttons["prompt-database-fixture-9996"].exists)
+        XCTAssertTrue(app.buttons[imageID].exists)
+        XCTAssertEqual(firstFixtureCard.identifier, imageID)
         capture("filter-warm-image-after-cancellation")
     }
 
@@ -400,7 +446,7 @@ import UIKit
         launch()
         let scroll = app.scrollViews["discoveryScroll"]
         let settings = app.buttons["discoverySettings"]
-        XCTAssertTrue(app.buttons["prompt-database-fixture-9999"].waitForExistence(timeout: 15))
+        XCTAssertTrue(firstFixtureCard.waitForExistence(timeout: 15))
         XCTAssertTrue(settings.isHittable)
         let expandedSettingsTop = settings.frame.minY
         scroll.swipeUp(velocity: .slow)
@@ -417,7 +463,7 @@ import UIKit
         XCTAssertTrue(app.buttons["replayOnboarding"].waitForExistence(timeout: 5), "Revealed settings must respond to a real tap")
         app.buttons["完成"].tap()
         app.buttons["kind-image"].tap()
-        XCTAssertTrue(app.buttons["prompt-database-fixture-9997"].waitForExistence(timeout: 10))
+        XCTAssertTrue(firstFixtureCard.waitForExistence(timeout: 10))
         XCTAssertTrue(settings.isHittable)
         capture("header-03-filter-reset")
         scroll.swipeUp(velocity: .slow)
@@ -771,23 +817,23 @@ import UIKit
 
     func testTenThousandItemFeedOnlyFetchesVisiblePagesAndSearchesBeyondLoadedItems() async throws {
         launch()
-        XCTAssertTrue(app.buttons["prompt-database-fixture-9999"].waitForExistence(timeout: 15))
+        XCTAssertTrue(firstFixtureCard.waitForExistence(timeout: 15))
         try await Task.sleep(for: .seconds(1))
         let initial = try requests()
         let initialPages = initial.filter { $0["operation"] as? String == "page" }
-        XCTAssertGreaterThanOrEqual(initialPages.count, 1)
-        XCTAssertTrue(initialPages.allSatisfy { $0["query"] as? String == "__latest__" })
-        XCTAssertLessThanOrEqual(initialPages.count, 2,
+        XCTAssertEqual(initialPages.count, 3)
+        XCTAssertTrue(initialPages.allSatisfy { $0["query"] as? String == "__discovery__" })
+        XCTAssertLessThanOrEqual(initialPages.count, 3,
                                  "Layout may cancel an offscreen request, but cannot repeatedly refetch")
-        XCTAssertTrue(initialPages.allSatisfy { $0["cursor"] as? String == "" }, "Initial layout must not fetch subsequent pages")
+        XCTAssertEqual(initialPages.compactMap { $0["cursor"] as? String }, ["", "30", "60"], "First layout gets one bounded candidate pool")
         XCTAssertFalse(initial.contains { $0["operation"] as? String == "detail" })
         capture("database-01-bounded-first-page")
-        for _ in 0..<14 {
+        for _ in 0..<42 {
             app.swipeUp()
-            if try requests().contains(where: { $0["operation"] as? String == "page" && $0["cursor"] as? String == "30" }) { break }
+            if try requests().contains(where: { $0["operation"] as? String == "page" && $0["cursor"] as? String == "90" }) { break }
         }
         let pages = try requests().filter { $0["operation"] as? String == "page" }
-        XCTAssertTrue(pages.contains { $0["cursor"] as? String == "30" }); XCTAssertLessThan(pages.count, 6)
+        XCTAssertTrue(pages.contains { $0["cursor"] as? String == "90" }); XCTAssertLessThanOrEqual(pages.count, 6)
         capture("database-02-next-page")
         search("tail")
         XCTAssertTrue(app.buttons["prompt-database-fixture-9999"].waitForExistence(timeout: 10))
