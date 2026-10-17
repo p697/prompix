@@ -751,3 +751,11 @@ TwitterAPI.io 已完成免费账户注册和真实读取测试。45 个已知帖
 ## 2026-10-17 — Separate low-cost X verification from acquisition
 
 Use an explicit, budgeted hybrid option for existing standalone X sources: exact extractor/revision/attribution matches can refresh availability using TwitterAPI.io; missing or changed sources are withheld and sent to official verification. Only official unavailable responses persist removal. Reply chains stay on joint official lookups. Preserve original official acquisition files and store third-party verification evidence separately. Keep the 12-hour maintenance target and 24-hour publication gate. Search remains official while third-party recall gaps are unresolved; do not represent this maintenance change as a complete $10–20/month migration. See [implementation and evidence](x-hybrid-maintenance.md).
+
+
+## 2026-10-17：低价多路发现与官方获取分离
+
+- 采用可恢复的第三方时间窗口搜索作为线索层，保留原有十个主题并增加宽查询视觉补召回；预算、失败记录和原始响应在仓库外持久化。
+- 实测证明第三方搜索有不可由分页修复的盲区，因此保留独立官方补充搜索与公开回复恢复；有效线索再走官方获取，编辑、媒体、翻译和来源要求不降级。
+- 历史补库采用同一采集预算和审核链路，按新增500条、总量2000条、10000条设关口；抓到的原始结果不计作已收录。
+- 未通过负例验证的批量合规结果不得替代旧内容可用性核验；大库维护成本是继续扩量前的实际关口。实现、限制和实测见 [X发现升级](x-discovery-upgrade.md)。
