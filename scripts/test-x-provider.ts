@@ -6,7 +6,7 @@ import { atomic, contentRoot, lockContent, repo, json } from "../ingest/publicat
 import { readAllXIntake } from "../ingest/x-thread-intake.ts";
 import { xFeeds } from "../ingest/x-feed.ts";
 import { TwitterAPIClient, parseTwitterAPI, type TwitterAPIResult } from "../ingest/twitterapi.ts";
-import { XSpendBudget } from "../ingest/x-spend.ts";
+import { configuredXSpendBudget } from "../ingest/x-spend.ts";
 import { pilotSample, comparePilotSources, comparePilotExtraction, pilotIdentity, auditPilotSearch } from "../ingest/x-pilot.ts";
 import { readXExcerptReviews } from "../ingest/x-excerpts.ts";
 
@@ -64,8 +64,9 @@ try {
     console.log(JSON.stringify({ status: "dry-run", output: directory, knownPosts: sample.ids.length, queries: queryPlan.length,
       maxThirdPartyUSD: Number(((sample.ids.length + queryPlan.length * 40) * 0.00015).toFixed(5)) }));
   } else {
-    const client = enabled ? new TwitterAPIClient(process.env.TWITTERAPI_IO_KEY ?? "", new XSpendBudget(
-      process.env.PROMPIX_X_SPEND_DIR ?? join(homedir(), ".local/share/prompix/x-spend"), 20, 0.25)) : undefined;
+    const budget = configuredXSpendBudget({ ...process.env, PROMPIX_X_MONTHLY_USD: process.env.PROMPIX_X_MONTHLY_USD ?? "20",
+      PROMPIX_X_DAILY_USD: String(Math.min(0.25, Number(process.env.PROMPIX_X_DAILY_USD ?? 0.25), Number(process.env.PROMPIX_X_MONTHLY_USD ?? 20))) });
+    const client = enabled ? new TwitterAPIClient(process.env.TWITTERAPI_IO_KEY ?? "", budget!) : undefined;
     const checks: unknown[] = [], searches: unknown[] = [], extraction: unknown[] = [];
     const activePath = join(output, day, "active-plan.json");
     const active = await json<{ planID: string } | null>(activePath, null);

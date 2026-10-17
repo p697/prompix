@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { atomic, json } from "./publication.ts";
@@ -53,4 +53,54 @@ test("a corrupt ledger blocks paid calls, and concurrent reservations cannot ove
   await assert.rejects(budget.reserve("twitterapi", "lookup", "corrupt", 1), /accounting/);
   await atomic(join(root, "2026-10.json"), { version: 1, month: "2026-09", opening: 0, entries: [] });
   await assert.rejects(budget.reserve("twitterapi", "lookup", "c", 1), /month mismatch/);
+}));
+
+test("growth preserves maintenance runway across restarts while maintenance still obeys the shared cap", () => fixture(async root => {
+  await atomic(join(root, "maintenance-reserve.json"), { version: 1, checkedAt: time().toISOString(), complete: true,
+    standalone: 100, officialPosts: 0, sourceSetSHA256: "a".repeat(64) }); // $0.03/day, $0.45 remaining month.
+  await atomic(join(root, "2026-10.json"), { version: 1, month: "2026-10", opening: 19_540_000, entries: [] });
+  await (await new XSpendBudget(root, 20, 1, time, true).reserve("official", "lookup", "new-source", 2)).finish(2);
+  const budget = new XSpendBudget(root, 20, 1, time, true);
+  const before = await json(join(root, "2026-10.json"), null);
+  await assert.rejects(budget.reserve("twitterapi", "search", "growth", 1), /runway/);
+  assert.deepEqual(await json(join(root, "2026-10.json"), null), before);
+  await (await budget.reserve("official", "lookup", "published", 90, "maintenance")).finish(90);
+  await assert.rejects(budget.reserve("twitterapi", "lookup", "published", 1, "maintenance"), XBudgetExceeded);
+}));
+
+test("daily headroom also applies when the monthly budget has room", () => fixture(async root => {
+  await atomic(join(root, "maintenance-reserve.json"), { version: 1, checkedAt: time().toISOString(), complete: true,
+    standalone: 100, officialPosts: 0, sourceSetSHA256: "a".repeat(64) });
+  const budget = new XSpendBudget(root, 20, 0.033, time, true);
+  await (await budget.reserve("twitterapi", "search", "growth", 20)).finish(20);
+  await assert.rejects(budget.reserve("twitterapi", "lookup", "draft", 1), /runway/);
+  await (await budget.reserve("twitterapi", "lookup", "published", 1, "maintenance")).finish(1);
+}));
+
+test("missing, incomplete, corrupt, future and stale census block growth without blocking maintenance", () => fixture(async root => {
+  const plan = { version: 1, checkedAt: time().toISOString(), complete: true, standalone: 1, officialPosts: 0, sourceSetSHA256: "a".repeat(64) };
+  const budget = new XSpendBudget(root, 20, 1, time, true);
+  for (const value of [null, {}, { ...plan, complete: false }, { ...plan, checkedAt: "2026-10-17T01:00:01Z" },
+    { ...plan, checkedAt: "2026-10-16T01:00:00Z" }]) {
+    await atomic(join(root, "maintenance-reserve.json"), value);
+    await assert.rejects(budget.reserve("twitterapi", "search", "growth", 1), XBudgetExceeded);
+    await (await budget.reserve("official", "lookup", "protected", 1, "maintenance")).finish(1);
+  }
+  assert.equal((await json<any>(join(root, "2026-10.json"), null)).entries.length, 5);
+}));
+
+test("unverified providers, searches and profiles cannot consume protected headroom", () => fixture(async root => {
+  const budget = new XSpendBudget(root, 20, 1, time, true);
+  for (const provider of ["official", "twitterapi"] as const) for (const operation of ["search", "users"] as const)
+    await assert.rejects(budget.reserve(provider, operation, "request", 1, "maintenance"), /Only verified/);
+  await assert.rejects(budget.reserve("tweetapi", "lookup", "pilot", 1, "maintenance"), /Only verified/);
+  await assert.rejects(budget.reserve("official", "lookup", "request", 1, "invalid" as any), /Only verified/);
+  assert.equal(await json(join(root, "2026-10.json"), null), null);
+}));
+
+
+test("unparseable census is a preflight refusal and never creates a charge", () => fixture(async root => {
+  await writeFile(join(root, "maintenance-reserve.json"), "{broken");
+  await assert.rejects(new XSpendBudget(root, 20, 1, time, true).reserve("twitterapi", "search", "growth", 1), XBudgetExceeded);
+  assert.equal(await json(join(root, "2026-10.json"), null), null);
 }));

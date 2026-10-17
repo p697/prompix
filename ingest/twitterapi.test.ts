@@ -4,8 +4,8 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parseTwitterAPI, TwitterAPIClient, twitterAPIQuery, canonicalTwitterVideoURL } from "./twitterapi.ts";
-import { XSpendBudget } from "./x-spend.ts";
-import { json } from "./publication.ts";
+import { XSpendBudget, XBudgetExceeded } from "./x-spend.ts";
+import { json, atomic } from "./publication.ts";
 import { fullXText, extractMarkedXPrompt } from "./x-intake.ts";
 import { TransientXReadError } from "./x.ts";
 const tweet = { id: "101", text: "Original instructions", createdAt: "Fri Oct 16 10:00:00 +0000 2026", isReply: false,
@@ -186,4 +186,23 @@ test("shared video media compares supported MP4 variants without unused HLS CDN 
     { ...tweet, extendedEntities: { media: [video("video.twimg.com")] } },
     { ...tweet, id: "102", extendedEntities: { media: [video("video-s.twimg.com", "different.mp4")] } },
   ])), /conflicting media/);
+});
+
+
+test("client respects reserve for discovery and passes published maintenance purpose before HTTP", async () => {
+  const root = await mkdtemp(join(tmpdir(), "prompix-twitterapi-reserve-"));
+  try {
+    const now = new Date("2026-10-17T01:00:00Z");
+    await atomic(join(root, "maintenance-reserve.json"), { version: 1, checkedAt: now.toISOString(), complete: true,
+      standalone: 10000, officialPosts: 0, sourceSetSHA256: "a".repeat(64) });
+    const budget = new XSpendBudget(root, 20, 1, () => now, true);
+    let calls = 0;
+    const client = new TwitterAPIClient("secret-fixture", budget, (async () => { calls++; return Response.json(page([tweet])); }) as typeof fetch);
+    await assert.rejects(client.search("prompt"), XBudgetExceeded);
+    await assert.rejects(client.lookup(["101"]), XBudgetExceeded);
+    assert.equal(calls, 0);
+    const result = await client.lookup(["101"], undefined, "maintenance");
+    assert.equal(result.result.posts.length, 1); assert.equal(calls, 1);
+    assert.deepEqual((await json<any>(join(root, "2026-10.json"), null)).entries.map((e: any) => e.accounted), [150]);
+  } finally { await rm(root, { recursive: true, force: true }); }
 });

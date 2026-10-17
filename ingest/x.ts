@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { readResponseBytes } from "./network.ts";
 import { z } from "zod";
 import type { Creator } from "./creators.ts";
-import { configuredXSpendBudget } from "./x-spend.ts";
+import { configuredXSpendBudget, type XSpendPurpose } from "./x-spend.ts";
 
 const userSchema = z.object({
   id: z.string().regex(/^\d+$/), name: z.string().trim().min(1).max(200),
@@ -227,14 +227,14 @@ export class TransientXReadError extends Error {
   constructor(message: string, public readonly retryAfterMS = 1000) { super(message); }
 }
 /** One bounded request. Retry policy belongs to the persistent, budgeted caller. */
-async function requestX(url: string, bearer: string, operation: "search" | "lookup" | "users", maxBytes = 500_000) {
+async function requestX(url: string, bearer: string, operation: "search" | "lookup" | "users", maxBytes = 500_000, purpose: XSpendPurpose = "growth") {
   const budget = configuredXSpendBudget();
   if (!budget) return requestXResponse(url, bearer, operation, maxBytes);
   const query = new URL(url).searchParams;
   const units = operation === "search" ? Number(query.get("max_results"))
     : (query.get(operation === "users" ? "usernames" : "ids") ?? "").split(",").filter(Boolean).length;
   if (!Number.isInteger(units) || units < 1 || units > 100) throw new Error("Invalid official X result bound");
-  const reservation = await budget.reserve("official", operation, url, units);
+  const reservation = await budget.reserve("official", operation, url, units, purpose);
   try {
     const raw = await requestXResponse(url, bearer, operation, maxBytes);
     const body = z.object({ data: z.array(z.unknown()).max(units).optional(), errors: z.array(z.unknown()).optional(),
@@ -338,10 +338,10 @@ export function parseXAvailability(value: unknown, ids: readonly string[]) {
     unavailable: [...errors.map(error => error.resource_id), ...posts.filter(post => post.withheld !== undefined).map(post => post.id)],
     creators: parseXUsers(users), media };
 }
-export async function checkXAvailability(bearer: string, ids: readonly string[]) {
+export async function checkXAvailability(bearer: string, ids: readonly string[], purpose: XSpendPurpose = "growth") {
   const url = new URL("https://api.x.com/2/tweets");
   url.searchParams.set("ids", availabilityIDs(ids).join(","));
   for (const [field, value] of Object.entries(lookupFields)) url.searchParams.set(field, value);
   url.searchParams.set("tweet.fields", `${lookupFields["tweet.fields"]},withheld`);
-  return parseXAvailability(await requestX(url.toString(), bearer, "lookup", 8_000_000), ids);
+  return parseXAvailability(await requestX(url.toString(), bearer, "lookup", 8_000_000, purpose), ids);
 }

@@ -20,22 +20,38 @@ export class XBudgetExceeded extends Error {}
 export const xUnitMicroUSD = { official: { post: 5000, user: 10000 }, twitterapi: { post: 150, user: 180 } } as const;
 // TweetAPI's bulk lookup bills one call, including empty results, at the PAYG rate.
 export const tweetAPICallMicroUSD = 500;
+export type XSpendPurpose = "growth" | "maintenance";
+export const maintenanceReserveSchema = z.object({
+  version: z.literal(1), checkedAt: z.iso.datetime(), complete: z.boolean(),
+  standalone: z.number().int().min(0).max(100000), officialPosts: z.number().int().min(0).max(2000000),
+  sourceSetSHA256: z.string().regex(/^[a-f0-9]{64}$/),
+}).strict();
+
+/** Nominal two-scan runway, not an estimate of unpredictable official fallbacks.
+ * Keep the entire current day as headroom even if its first scan already ran. */
+export function maintenanceRunway(plan: z.infer<typeof maintenanceReserveSchema>, now: Date) {
+  const daily = 2 * (plan.standalone * xUnitMicroUSD.twitterapi.post + plan.officialPosts * xUnitMicroUSD.official.post);
+  const days = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0)).getUTCDate() - now.getUTCDate() + 1;
+  return { daily, monthly: daily * days, days };
+}
 
 /** Explicit opt-in supports importing account spend before enabling the production guard. */
 export function configuredXSpendBudget(environment: NodeJS.ProcessEnv = process.env) {
+  const reserve = environment.PROMPIX_X_MAINTENANCE_RESERVE;
+  if (reserve !== undefined && reserve !== "1" && reserve !== "0") throw new Error("Invalid X maintenance reserve switch");
   if (environment.PROMPIX_X_MONTHLY_USD === undefined) {
-    if (environment.PROMPIX_X_DAILY_USD !== undefined) throw new Error("Monthly X budget is required with a daily budget");
+    if (environment.PROMPIX_X_DAILY_USD !== undefined || reserve === "1") throw new Error("Monthly X budget is required with a daily budget or maintenance reserve");
     return undefined;
   }
   const monthly = Number(environment.PROMPIX_X_MONTHLY_USD);
   return new XSpendBudget(environment.PROMPIX_X_SPEND_DIR ?? join(homedir(), ".local/share/prompix/x-spend"), monthly,
-    Number(environment.PROMPIX_X_DAILY_USD ?? monthly));
+    Number(environment.PROMPIX_X_DAILY_USD ?? monthly), () => new Date(), reserve === "1");
 }
 
 /** Shared account ledger. Never stores credentials or source text. */
 export class XSpendBudget {
   constructor(readonly root: string, readonly monthlyUSD = 20, readonly dailyUSD = 1,
-    readonly now: () => Date = () => new Date()) {
+    readonly now: () => Date = () => new Date(), readonly protectMaintenance = false) {
     if (!Number.isFinite(monthlyUSD) || monthlyUSD <= 0 || monthlyUSD > 20 ||
         !Number.isFinite(dailyUSD) || dailyUSD <= 0 || dailyUSD > monthlyUSD) throw new Error("Invalid X dollar budget");
   }
@@ -46,8 +62,11 @@ export class XSpendBudget {
     catch { throw new Error("X spend ledger is busy; no request sent"); }
     try { return await operation(); } finally { await rm(lock, { recursive: true }); }
   }
-  async reserve(provider: "official" | "twitterapi" | "tweetapi", operation: "search" | "lookup" | "users", request: string, units: number) {
+  async reserve(provider: "official" | "twitterapi" | "tweetapi", operation: "search" | "lookup" | "users", request: string, units: number,
+    purpose: XSpendPurpose = "growth") {
     if (!Number.isSafeInteger(units) || units < 1 || units > 1000) throw new Error("Invalid X billable units");
+    if (!["growth", "maintenance"].includes(purpose) || (purpose === "maintenance" && (operation !== "lookup" || provider === "tweetapi")))
+      throw new Error("Only verified source lookups may use X maintenance headroom");
     if (provider === "tweetapi" && (operation !== "lookup" || units !== 1)) throw new Error("TweetAPI pilot reserves one lookup call");
     const at = this.now().toISOString(), month = at.slice(0, 7), day = at.slice(0, 10);
     const unitCost = provider === "tweetapi" ? tweetAPICallMicroUSD : xUnitMicroUSD[provider][operation === "users" ? "user" : "post"];
@@ -60,6 +79,16 @@ export class XSpendBudget {
       const daily = ledger.entries.filter(e => e.at.startsWith(day)).reduce((sum, e) => sum + e.accounted, 0);
       if (monthly + reserved > Math.round(this.monthlyUSD * 1e6) || daily + reserved > Math.round(this.dailyUSD * 1e6))
         throw new XBudgetExceeded("X dollar budget reached; no request sent");
+      if (this.protectMaintenance && purpose === "growth") {
+        const plan = maintenanceReserveSchema.safeParse(await json(join(this.root, "maintenance-reserve.json"), null).catch(() => null));
+        const age = plan.success ? Date.parse(at) - Date.parse(plan.data.checkedAt) : Infinity;
+        if (!plan.success || !plan.data.complete || age < 0 || age >= 24 * 3600_000)
+          throw new XBudgetExceeded("Current complete X maintenance census is required; no request sent");
+        const runway = maintenanceRunway(plan.data, new Date(at));
+        if (monthly + reserved + runway.monthly > Math.round(this.monthlyUSD * 1e6) ||
+          daily + reserved + runway.daily > Math.round(this.dailyUSD * 1e6))
+          throw new XBudgetExceeded("X maintenance runway is protected; no request sent");
+      }
       ledger.entries.push({ id, at, provider, operation, request: createHash("sha256").update(request).digest("hex"),
         reserved, accounted: reserved, state: "reserved" });
       await atomic(path, ledger);

@@ -2,7 +2,7 @@ import { z } from "zod";
 import { readResponseBytes } from "./network.ts";
 import { parseXUsers, TransientXReadError } from "./x.ts";
 import { xMediaSchema, xPostSchema, type XMedia, type XPost } from "./x-intake.ts";
-import { XSpendBudget } from "./x-spend.ts";
+import { XSpendBudget, type XSpendPurpose } from "./x-spend.ts";
 
 const id = z.string().regex(/^\d{1,19}$/);
 const optionalReplyID = z.union([id, z.literal("")]).nullish();
@@ -126,8 +126,8 @@ export class TwitterAPIClient {
     private readonly fetcher: typeof fetch = fetch) {
     if (!key.trim() || /\s/.test(key)) throw new Error("Missing or invalid TwitterAPI key");
   }
-  private async read(url: URL, operation: "search" | "lookup", units: number, capture?: CaptureResponse) {
-    const reservation = await this.budget.reserve("twitterapi", operation, url.toString(), units);
+  private async read(url: URL, operation: "search" | "lookup", units: number, capture?: CaptureResponse, purpose: XSpendPurpose = "growth") {
+    const reservation = await this.budget.reserve("twitterapi", operation, url.toString(), units, purpose);
     try {
       let response: Response;
       try { response = await this.fetcher(url, { headers: { "X-API-Key": this.key }, redirect: "manual", signal: AbortSignal.timeout(60_000) }); }
@@ -172,11 +172,11 @@ export class TwitterAPIClient {
     if (result.nextToken && result.nextToken === cursor) throw new Error("TwitterAPI pagination did not advance");
     return { raw, result };
   }
-  async lookup(ids: readonly string[], capture?: CaptureResponse) {
+  async lookup(ids: readonly string[], capture?: CaptureResponse, purpose: XSpendPurpose = "growth") {
     if (!ids.length || ids.length > 50 || new Set(ids).size !== ids.length || ids.some(value => !id.safeParse(value).success))
       throw new Error("TwitterAPI lookup requires 1–50 unique numeric IDs");
     const url = new URL("https://api.twitterapi.io/twitter/tweets"); url.searchParams.set("tweet_ids", ids.join(","));
-    const raw = await this.read(url, "lookup", ids.length, capture);
+    const raw = await this.read(url, "lookup", ids.length, capture, purpose);
     return { raw, result: parseTwitterAPI(raw, { ids }) };
   }
 }

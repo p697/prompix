@@ -13,7 +13,8 @@ import { editorialCacheSchema, editorialDecisionKey, editorialQueue } from "./ed
 import { readQualityHolds } from "./quality-holds.ts";
 import { moderationSchema } from "./publication.ts";
 import { TwitterAPIClient } from "./twitterapi.ts";
-import { configuredXSpendBudget } from "./x-spend.ts";
+import { configuredXSpendBudget, XBudgetExceeded } from "./x-spend.ts";
+import { saveMaintenanceCensus } from "./x-maintenance-reserve.ts";
 import { recheckXStandalone, type XRecheckOptions } from "./x-recheck.ts";
 import type { XMaintenanceAdmission } from "./x-maintenance-admission.ts";
 
@@ -88,6 +89,7 @@ export async function prepareXAvailability(root: string, options: { enabled: boo
     throw new Error("Invalid X draft maintenance allowance");
   const state = await readXAvailability(root);
   const report = { status: "cached", requests: 0, checked: 0, withheld: 0, skippedInactive: 0, reusedDiscovery: 0, deferredDrafts: 0,
+    maintenanceReserve: undefined as Awaited<ReturnType<typeof saveMaintenanceCensus>>,
     recheck: undefined as Awaited<ReturnType<typeof recheckXStandalone>> | undefined };
   if (!options.enabled || !options.bearer) return { state, report };
   const ledgerPath = join(root, "x-availability", `${day}.json`);
@@ -102,6 +104,8 @@ export async function prepareXAvailability(root: string, options: { enabled: boo
     ...Object.values(decisions).filter(decision => decision.decision === "approve").map(decision => decision.id)]);
   const isInactive = (item: typeof intake.candidates[number]) => removed.has(item.id) || !!holds.holds[item.id] ||
     (!protectedIDs.has(item.id) && !!decisions[editorialDecisionKey(item)] && decisions[editorialDecisionKey(item)].decision !== "approve");
+  report.maintenanceReserve = await saveMaintenanceCensus(intake.candidates, protectedIDs,
+    new Set([...removed, ...Object.keys(holds.holds), ...Object.entries(state).filter(([, value]) => value.removed).map(([id]) => id)]), new Date(now), !!options.admission);
   // Include fresh drafts in the queue: they already occupy upcoming review slots and cost no recheck.
   const admitted = options.admission ? new Set(editorialQueue(intake.candidates.filter(item =>
     !isInactive(item) && !protectedIDs.has(item.id) && !options.admission!.attemptedIDs.has(item.id)), [],
@@ -129,13 +133,13 @@ export async function prepareXAvailability(root: string, options: { enabled: boo
       report.deferredDrafts++; return false;
     }
     return needsCheck;
-  }).sort((a, b) => Number(!!reviews[b.id]) - Number(!!reviews[a.id]) || checkedAt(a) - checkedAt(b) || a.id.localeCompare(b.id));
+  }).sort((a, b) => Number(protectedIDs.has(b.id)) - Number(protectedIDs.has(a.id)) || checkedAt(a) - checkedAt(b) || a.id.localeCompare(b.id));
   if (report.reusedDiscovery) await atomic(join(root, "x-availability", "state.json"), stateSchema.parse(state));
   const recheck = options.recheck ?? configuredRecheck();
   if (recheck) {
     const verified = new Set<string>();
     report.recheck = await recheckXStandalone(root, due.filter(item => !threadIDs.has(item.source.post!.id)), {
-      ...recheck, now, excerpts, apply: async (matched, unresolved) => {
+      ...recheck, protectedIDs, now, excerpts, apply: async (matched, unresolved) => {
         for (const item of matched) {
           verified.add(item.id);
           state[item.id] = { checkedAt: now, status: "ready", revision: item.source.revision, checkedBy: "twitterapi" };
@@ -153,7 +157,9 @@ export async function prepareXAvailability(root: string, options: { enabled: boo
     return { state, report: { ...report, status: "daily-limit" } };
   while (due.length && ledger.length < maxRequests) {
     const batch: typeof due = [], required = new Set<string>();
+    const protectedBatch = protectedIDs.has(due[0].id);
     while (due.length) {
+      if (protectedIDs.has(due[0].id) !== protectedBatch) break;
       const next = nativeXPostIDs(due[0]);
       if (new Set([...required, ...next]).size > 100) break;
       const item = due.shift()!; batch.push(item); next.forEach(id => required.add(id));
@@ -162,7 +168,7 @@ export async function prepareXAvailability(root: string, options: { enabled: boo
     const attempt: z.infer<typeof ledgerSchema>[number] = { ids, state: "reserved", at: now };
     ledger.push(attempt); await atomic(ledgerPath, ledger); report.requests++;
     try {
-      const result = await (options.lookup ?? checkXAvailability)(options.bearer, ids);
+      const result = await (options.lookup ?? checkXAvailability)(options.bearer, ids, protectedBatch ? "maintenance" : "growth");
       const name = `${day}-check-${String(ledger.length).padStart(3, "0")}.json`;
       const snapshot = { capturedAt: now, ...result };
       const refreshed = convertXDiscovery([{ name, data: snapshot }], {}, excerpts).candidates;
@@ -190,7 +196,10 @@ export async function prepareXAvailability(root: string, options: { enabled: boo
       await atomic(creatorsPath, mergeCreatorCache(await json<CreatorCache>(creatorsPath, {}), result.creators));
       attempt.state = "completed"; report.status = "checked"; report.checked += ids.length; report.withheld += batch.filter(item => state[item.id].status === "withheld").length;
       await atomic(ledgerPath, ledger);
-    } catch {
+    } catch (error) {
+      if (error instanceof XBudgetExceeded) {
+        ledger.pop(); await atomic(ledgerPath, ledger); report.requests--; report.status = "budget-limited"; break;
+      }
       attempt.state = "failed"; await atomic(ledgerPath, ledger); report.status = "failed"; break;
     }
   }
