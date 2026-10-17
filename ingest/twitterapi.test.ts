@@ -158,3 +158,14 @@ test("historical search uses exact UTC boundaries instead of vendor date-only wi
     `prompt since_time:${Date.parse("2026-07-01T00:00:00Z") / 1000} until_time:${Date.parse("2026-08-01T00:00:00Z") / 1000}`);
   assert.throws(() => twitterAPIQuery("prompt since:2026-02-30"), /Invalid.*boundary/);
 });
+
+
+test("terminal search pages accept null cursors without hiding ambiguous continuation", () => {
+  for (const tweets of [[], [tweet]]) {
+    const result = parseTwitterAPI({ tweets, has_next_page: false, next_cursor: null }, { search: true });
+    assert.equal(result.posts.length, tweets.length);
+    assert.equal(result.nextToken, undefined);
+  }
+  for (const next_cursor of [null, undefined, ""])
+    assert.throws(() => parseTwitterAPI({ tweets: [], has_next_page: true, next_cursor }, { search: true }), /ambiguous pagination/);
+});
