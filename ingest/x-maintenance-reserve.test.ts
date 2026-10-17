@@ -38,15 +38,21 @@ test("runway uses inclusive UTC month days including leap years and year rollove
     const result = maintenanceRunway(plan, new Date(date)); assert.equal(result.days, days); assert.equal(result.monthly, days * 300);
   }
 });
-test("saved census requires authoritative publication history and persists no source text or identities", async () => {
+for (const provider of ["twitterapi", "rapidapi"]) test(`saved ${provider} census requires publication history and preserves standalone/thread routing`, async () => {
   const root = await mkdtemp(join(tmpdir(), "prompix-maintenance-census-"));
   try {
-    const item = candidate("101"), env = { PROMPIX_X_SPEND_DIR: root, PROMPIX_X_MONTHLY_USD: "20", PROMPIX_X_MAINTENANCE_RESERVE: "1", PROMPIX_X_RECHECK_PROVIDER: "twitterapi" };
+    const item = candidate("101"), env = { PROMPIX_X_SPEND_DIR: root, PROMPIX_X_MONTHLY_USD: "20", PROMPIX_X_MAINTENANCE_RESERVE: "1", PROMPIX_X_RECHECK_PROVIDER: provider };
     assert.equal((await saveMaintenanceCensus([item], new Set([item.id]), new Set(), now, false, env))?.complete, false);
     const result = await saveMaintenanceCensus([item], new Set([item.id]), new Set(), now, true, env);
     assert.equal(result?.complete, true); assert.equal(result?.dailyHeadroomUSD, 0.0003);
     const serialized = JSON.stringify(await json(join(root, "maintenance-reserve.json"), null));
     assert.equal(serialized.includes(item.id), false); assert.equal(serialized.includes("watercolor"), false);
+    const thread = candidate("102"), reply = candidate("103");
+    reply.source.context = [thread.source.post!]; reply.source.post!.parentID = "102";
+    const routed = await saveMaintenanceCensus([item, thread, reply], new Set([item.id, thread.id, reply.id]), new Set(), now, true, env);
+    assert.equal(routed?.standalone, 1); assert.equal(routed?.officialPosts, 2);
+    // Cash reserve remains conservative until separately validated activation.
+    assert.equal(routed?.dailyHeadroomUSD, 0.0203);
     assert.equal(await saveMaintenanceCensus([], new Set(), new Set(), now, false, {}), undefined);
   } finally { await rm(root, { recursive: true, force: true }); }
 });

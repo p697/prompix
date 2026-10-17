@@ -153,7 +153,7 @@ export class XSpendBudget {
     } };
   }
 
-  private async rapidAPICycleAttempts(terms: RapidAPICycleTerms) {
+  private async rapidAPICycleEntries(terms: RapidAPICycleTerms) {
     const ledgers = await Promise.all(rapidAPICycleMonths(terms).map(async month => {
       const ledger = ledgerSchema.parse(await json(join(this.root, `${month}.json`),
         { version: 1, month, opening: 0, entries: [] }));
@@ -169,7 +169,7 @@ export class XSpendBudget {
         Date.parse(fee.at) > this.now().getTime() || Date.parse(fee.at) >= Date.parse(terms.endsAt))
       throw new Error("RapidAPI cycle requires its original confirmed fee");
     return entries.filter(e => e.provider === "rapidapi" && e.operation === "lookup" &&
-      Date.parse(e.at) >= Date.parse(fee.at) && Date.parse(e.at) < Date.parse(terms.endsAt)).map(e => e.id);
+      Date.parse(e.at) >= Date.parse(fee.at) && Date.parse(e.at) < Date.parse(terms.endsAt));
   }
 
   private async admitRapidAPICycle(raw: unknown, purpose: XSpendPurpose, now: Date) {
@@ -177,7 +177,7 @@ export class XSpendBudget {
     const cycle = rapidAPICycleSchema.parse(raw);
     if (now.getTime() < Date.parse(cycle.terms.startsAt) || now.getTime() >= Date.parse(cycle.terms.stopAt))
       throw new Error("RapidAPI authorized subscription cycle is inactive; no renewal inferred");
-    const usage = rapidAPICycleUsage(cycle, await this.rapidAPICycleAttempts(cycle.terms), now);
+    const usage = rapidAPICycleUsage(cycle, (await this.rapidAPICycleEntries(cycle.terms)).map(e => e.id), now);
     if (usage.remaining < 1) throw new XBudgetExceeded("RapidAPI subscription request quota exhausted; no request sent");
     if (purpose === "growth") {
       const census = maintenanceReserveSchema.safeParse(await json(join(this.root, "maintenance-reserve.json"), null));
@@ -187,6 +187,26 @@ export class XSpendBudget {
       if (usage.remaining - 1 < rapidAPIRequestRunway(census.data.standalone, cycle.terms.stopAt, now))
         throw new XBudgetExceeded("RapidAPI maintenance request runway is protected; no request sent");
     }
+  }
+
+  /** Response headers can only consume credits, never grant a new cycle. Other
+   * unresolved attempts are conservatively added to remote usage, so concurrent
+   * or uncertain requests cannot be hidden by an out-of-order response. */
+  async observeRapidAPICycleQuota(reservationID: string, remaining: number) {
+    z.string().uuid().parse(reservationID);
+    z.number().int().min(0).max(1000).parse(remaining);
+    return this.transaction(async () => {
+      const path = join(this.root, "rapidapi-cycle.json");
+      const prior = rapidAPICycleSchema.parse(await json(path, null));
+      const entries = await this.rapidAPICycleEntries(prior.terms), ids = entries.map(e => e.id);
+      if (!ids.includes(reservationID)) throw new Error("Unknown RapidAPI quota observation");
+      const now = this.now(), previous = rapidAPICycleUsage(prior, ids, now).used;
+      const uncertain = entries.filter(e => e.id !== reservationID && e.state !== "completed").length;
+      const cycle = rapidAPICycleSchema.parse({ ...prior, observedAt: now.toISOString(),
+        usedFloor: Math.max(previous, 1000 - remaining + uncertain), anchoredAttemptIDs: ids });
+      await atomic(path, cycle);
+      return rapidAPICycleUsage(cycle, ids, now);
+    });
   }
 
   /** Operator reconciliation while provider callers are idle. Dashboard usage
@@ -200,7 +220,7 @@ export class XSpendBudget {
       const now = this.now(), at = now.toISOString(), path = join(this.root, "rapidapi-cycle.json");
       if (now.getTime() < Date.parse(terms.startsAt) || now.getTime() >= Date.parse(terms.stopAt))
         throw new Error("RapidAPI reconciliation requires an active authorized cycle");
-      const existing = await json(path, null), ids = await this.rapidAPICycleAttempts(terms);
+      const existing = await json(path, null), ids = (await this.rapidAPICycleEntries(terms)).map(e => e.id);
       let previousUsed = ids.length;
       if (existing !== null) {
         const prior = rapidAPICycleSchema.parse(existing);

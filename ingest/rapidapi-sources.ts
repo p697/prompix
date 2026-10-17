@@ -19,7 +19,7 @@ const userSchema = z.object({ __typename: z.literal("User"), rest_id: id,
 
 export type RapidAPISources = Omit<TwitterAPIResult, "provider" | "nextToken"> & { provider: "rapidapi" };
 
-/** Offline normalization of captured pilot responses. Never updates availability,
+/** Normalize captured source responses. Never updates availability,
  * approves content, or routes production traffic. Unknown/protected sources stay
  * unresolved. The existing source validator handles media, links and references.
  */

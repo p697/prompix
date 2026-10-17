@@ -13,13 +13,14 @@ import { editorialCacheSchema, editorialDecisionKey, editorialQueue } from "./ed
 import { readQualityHolds } from "./quality-holds.ts";
 import { moderationSchema } from "./publication.ts";
 import { TwitterAPIClient } from "./twitterapi.ts";
+import { RapidAPIClient } from "./rapidapi.ts";
 import { configuredXSpendBudget, XBudgetExceeded } from "./x-spend.ts";
 import { saveMaintenanceCensus } from "./x-maintenance-reserve.ts";
 import { recheckXStandalone, type XRecheckOptions } from "./x-recheck.ts";
 import type { XMaintenanceAdmission } from "./x-maintenance-admission.ts";
 
 const recordSchema = z.object({ checkedAt: z.iso.datetime(), status: z.enum(["ready", "withheld"]),
-  checkedBy: z.enum(["official", "twitterapi"]).optional(),
+  checkedBy: z.enum(["official", "twitterapi", "rapidapi"]).optional(),
   removed: z.boolean().optional(), revision: z.string().regex(/^[a-f0-9]{64}$/).optional() }).strict();
 const stateSchema = z.record(z.string().regex(/^x-post-\d{1,19}$/), recordSchema);
 const ledgerSchema = z.array(z.object({ ids: z.array(z.string().regex(/^\d{1,19}$/)).min(1).max(100),
@@ -69,14 +70,14 @@ export async function assertXAvailability(root: string, catalog: Pick<Catalog, "
   const result = filterXAvailability(catalog.prompts, await readXAvailability(root));
   if (result.withheldIDs.length) throw new Error(`X posts need a current source check: ${result.withheldIDs.join(", ")}`);
 }
-function configuredRecheck(): XRecheckOptions | undefined {
+export function configuredRecheck(): XRecheckOptions | undefined {
   const provider = process.env.PROMPIX_X_RECHECK_PROVIDER ?? "official";
   if (provider === "official") return;
-  if (provider !== "twitterapi") throw new Error("Invalid X recheck provider");
-  const budget = configuredXSpendBudget(), key = process.env.TWITTERAPI_IO_KEY;
+  if (provider !== "twitterapi" && provider !== "rapidapi") throw new Error("Invalid X recheck provider");
+  const budget = configuredXSpendBudget(), key = provider === "rapidapi" ? process.env.RAPIDAPI_KEY : process.env.TWITTERAPI_IO_KEY;
   if (!budget || !key) throw new Error("Third-party rechecks require a shared dollar budget and key");
-  const client = new TwitterAPIClient(key, budget);
-  return { lookup: client.lookup.bind(client), maxRequests: Number(process.env.PROMPIX_X_RECHECK_MAX_REQUESTS ?? 16) };
+  const client = provider === "rapidapi" ? new RapidAPIClient(key, budget) : new TwitterAPIClient(key, budget);
+  return { provider, lookup: client.lookup.bind(client), maxRequests: Number(process.env.PROMPIX_X_RECHECK_MAX_REQUESTS ?? 16) };
 }
 /** Separate maintenance budget: default two requests, bounded to four / 400 posts per UTC day. No automatic retries. Caller holds daily.lock. */
 export async function prepareXAvailability(root: string, options: { enabled: boolean; bearer?: string; now?: string;
@@ -142,11 +143,11 @@ export async function prepareXAvailability(root: string, options: { enabled: boo
       ...recheck, protectedIDs, now, excerpts, apply: async (matched, unresolved) => {
         for (const item of matched) {
           verified.add(item.id);
-          state[item.id] = { checkedAt: now, status: "ready", revision: item.source.revision, checkedBy: "twitterapi" };
+          state[item.id] = { checkedAt: now, status: "ready", revision: item.source.revision, checkedBy: recheck.provider ?? "twitterapi" };
         }
         // A changed or unknown source cannot keep an older ready record if the
         // official fallback is unavailable or over budget. Omission never deletes it.
-        for (const item of unresolved) state[item.id] = { checkedAt: now, status: "withheld", checkedBy: "twitterapi" };
+        for (const item of unresolved) state[item.id] = { checkedAt: now, status: "withheld", checkedBy: recheck.provider ?? "twitterapi" };
         await atomic(join(root, "x-availability", "state.json"), stateSchema.parse(state));
       },
     });

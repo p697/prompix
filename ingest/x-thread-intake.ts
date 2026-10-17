@@ -5,7 +5,7 @@ import { z } from "zod";
 import { creatorSchema } from "../packages/schema/catalog.ts";
 import { type CreatorCache } from "./creators.ts";
 import { readXIntake, xPostSchema, xMediaSchema, fullXText, extractMarkedXPrompt, buildXCandidate, attachedMedia, type XPost, type XMedia } from "./x-intake.ts";
-import { analyzeXReplyThread, readXReplyCursors, xReplyRequest } from "./x-replies.ts";
+import { analyzeXReplyThread, readXReplyCursors, recordedXReplyRequests } from "./x-replies.ts";
 import { nativeXSourceDigest, nativeXSourceIssue } from "./x-source.ts";
 import type { Candidate } from "./sources.ts";
 
@@ -68,9 +68,9 @@ export async function readXThreads(root: string) {
         const path = join(directory, `${String(index).padStart(3, "0")}.json`);
         if ((await stat(path)).size > 9_000_000) throw new Error("Oversized reply snapshot");
         const page = pageSchema.parse(JSON.parse(await readFile(path, "utf8")));
-        const expected = xReplyRequest(page.root, nextToken, page.request.limit);
-        if (page.root.post.id !== rootID || page.request.requestFingerprint !== expected.requestFingerprint ||
-            page.request.fingerprint !== cursor.requestIdentity || expected.fingerprint !== cursor.requestIdentity ||
+        const expected = recordedXReplyRequests(page.root, nextToken, page.request.limit)
+          .find(request => request.fingerprint === cursor.requestIdentity && request.requestFingerprint === page.request.requestFingerprint);
+        if (!expected || page.root.post.id !== rootID || page.request.fingerprint !== cursor.requestIdentity ||
             Date.parse(page.capturedAt) < Date.parse(cursor.startedAt) || Date.parse(page.capturedAt) > Date.parse(cursor.completedAt) ||
             (index < cursor.pages && !page.nextToken) || (index === cursor.pages && page.nextToken)) throw new Error("Reply window identity mismatch");
         checkedAt = Date.parse(page.capturedAt) < Date.parse(checkedAt) ? page.capturedAt : checkedAt;
