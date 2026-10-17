@@ -6,7 +6,7 @@ import { atomic, json } from "./publication.ts";
 import { checkXAvailability } from "./x.ts";
 import { convertXDiscovery } from "./x-intake.ts";
 import { readXExcerptReviews } from "./x-excerpts.ts";
-import { isNativeXDraft, nativeXSourceIssue, nativeXPostIDs } from "./x-source.ts";
+import { isNativeXDraft, nativeXSourceIssue, nativeXPostIDs, nativeXSourceDigest } from "./x-source.ts";
 import { mergeCreatorCache, type CreatorCache } from "./creators.ts";
 import { reviewsSchema } from "./editorial.ts";
 import { editorialCacheSchema, editorialDecisionKey, editorialQueue } from "./editorial-runner.ts";
@@ -27,6 +27,28 @@ export type XAvailabilityState = z.infer<typeof stateSchema>;
 export async function readXAvailability(root: string): Promise<XAvailabilityState> {
   return stateSchema.parse(await json(join(root, "x-availability", "state.json"), {}));
 }
+/** Only exact official intake snapshots can supply a free, non-renewing availability check. */
+function freshDiscoveryRecord(item: Prompt, record: XAvailabilityState[string] | undefined, threadIDs: ReadonlySet<string>, now: number) {
+  const post = item.source.post, checked = Date.parse(post?.checkedAt ?? "");
+  if (!isNativeXDraft(item) || !post || record?.removed || threadIDs.has(post.id) || !Number.isFinite(checked) || checked > now ||
+      now - checked >= 12 * 3600_000 || (record && checked <= Date.parse(record.checkedAt)) || nativeXSourceIssue(item, now) ||
+      nativeXSourceDigest(item) !== item.source.revision) return;
+  return { checkedAt: new Date(checked).toISOString(), status: "ready" as const, revision: item.source.revision, checkedBy: "official" as const };
+}
+
+/** Called under daily.lock after collection, before editorial. Never fetches or grants approval. */
+export async function adoptFreshXDiscoveries(root: string, items: readonly Prompt[], state: XAvailabilityState, now = Date.now()) {
+  if (!Number.isFinite(now)) throw new Error("Invalid X discovery adoption time");
+  const next = { ...state }, threadIDs = new Set(items.filter(item => item.source.context).flatMap(nativeXPostIDs));
+  let reused = 0;
+  for (const item of items) {
+    const record = freshDiscoveryRecord(item, state[item.id], threadIDs, now);
+    if (record) { next[item.id] = record; reused++; }
+  }
+  if (reused) await atomic(join(root, "x-availability", "state.json"), stateSchema.parse(next));
+  return { state: next, reused };
+}
+
 /** Rechecks refresh a matching source only; changed or withdrawn posts cannot be resurrected by retention. */
 export function filterXAvailability<T extends Prompt>(items: readonly T[], state: XAvailabilityState, now = Date.now()) {
   const withheldIDs: string[] = [];
@@ -97,13 +119,10 @@ export async function prepareXAvailability(root: string, options: { enabled: boo
     const checked = checkedAt(item);
     const record = state[item.id];
     if (record?.removed) return false;
-    const sourceChecked = sourceCheckedAt(item);
-    // Standalone discovery is already a source check. Threads still use a joint
-    // lookup: refreshing one dependency must invalidate affected older chains.
-    if (!threadIDs.has(item.source.post?.id ?? "") && (!record || sourceChecked > Date.parse(record.checkedAt)) && sourceChecked <= nowMS &&
-        nowMS - sourceChecked < 12 * 3600_000 && !nativeXSourceIssue(item, nowMS)) {
-      state[item.id] = { checkedAt: new Date(sourceChecked).toISOString(), status: "ready", revision: item.source.revision, checkedBy: "official" };
-      report.reusedDiscovery++; return false;
+    // Threads still need a joint lookup even when one dependency was freshly acquired.
+    const discovery = freshDiscoveryRecord(item, record, threadIDs, nowMS);
+    if (discovery) {
+      state[item.id] = discovery; report.reusedDiscovery++; return false;
     }
     const needsCheck = !record || (record.status === "ready" && record.revision !== item.source.revision) || nowMS - checked >= 12 * 3600_000;
     if (needsCheck && admitted && !protectedIDs.has(item.id) && !admitted.has(item.id)) {

@@ -101,3 +101,39 @@ test("published-history query excludes staging and keeps retired/removed identit
   await activatePublication(writer, b, "1"); await removeContent(writer, ["x-post-102"], "Fixture withdrawal");
   assert.deepEqual([...await publishedXIdentities(writer)], ["x-post-101", "x-post-102"]);
 });
+
+test("new same-run discoveries enter the review pipeline without buying a second source read or approving content", async t => {
+  const { adoptFreshXDiscoveries } = await import("./x-availability.ts");
+  const { applyEditorialReviews } = await import("./editorial.ts");
+  const root = await fixture(t);
+  const stamp = new Date().toISOString(), data = capture(["101"], stamp);
+  const candidate = convertXDiscovery([{ name: "fixture", data }]).candidates[0];
+  assert.equal(filterXAvailability([candidate], {}).prompts.length, 0);
+  const adopted = await adoptFreshXDiscoveries(root, [candidate], {}, Date.parse(stamp) + 60_000);
+  assert.equal(adopted.reused, 1); assert.equal(adopted.state[candidate.id].checkedAt, stamp);
+  assert.equal(filterXAvailability([candidate], adopted.state, Date.parse(stamp) + 60_000).prompts.length, 1);
+  assert.equal(applyEditorialReviews([candidate], {})[0].reviewStatus, "draft");
+  const again = await adoptFreshXDiscoveries(root, [candidate], adopted.state, Date.parse(stamp) + 120_000);
+  assert.equal(again.reused, 0); assert.deepEqual(again.state, adopted.state);
+  assert.equal(filterXAvailability([candidate], adopted.state, Date.parse(stamp) + 24 * 3600_000).prompts.length, 0);
+});
+
+test("discovery adoption preserves withdrawals, newer withheld checks, source identity and joint thread checking", async t => {
+  const { adoptFreshXDiscoveries } = await import("./x-availability.ts");
+  const root = await fixture(t), data = capture(["101", "102"], now);
+  const [item, dependency] = convertXDiscovery([{ name: "fixture", data }]).candidates;
+  const stamp = Date.parse(now) + 60_000;
+  for (const record of [
+    { checkedAt: capturedAt, status: "withheld" as const, removed: true },
+    { checkedAt: new Date(stamp).toISOString(), status: "withheld" as const },
+  ]) {
+    const state = { [item.id]: record };
+    assert.deepEqual((await adoptFreshXDiscoveries(root, [item], state, stamp)).state, state);
+  }
+  const altered = { ...item, prompt: item.prompt + " Changed prompt." };
+  assert.equal((await adoptFreshXDiscoveries(root, [altered], {}, stamp)).reused, 0);
+  assert.equal((await adoptFreshXDiscoveries(root, [item], {}, Date.parse(now) - 60_000)).reused, 0);
+  assert.equal((await adoptFreshXDiscoveries(root, [item], {}, Date.parse(now) + 12 * 3600_000)).reused, 0);
+  const thread = { ...item, source: { ...item.source, context: [dependency.source.post!] } };
+  assert.equal((await adoptFreshXDiscoveries(root, [thread, dependency], {}, stamp)).reused, 0);
+});

@@ -787,3 +787,5 @@ Use an explicit, budgeted hybrid option for existing standalone X sources: exact
 ### 2026-10-17 — Bound draft maintenance by editorial capacity
 
 Use authoritative first-publication history to distinguish a never-approved X draft from an identity that may still support a released edition. Previously published or approved sources keep full availability maintenance; only the untouched draft queue is bounded by the remaining editorial review window. Fresh acquisitions reuse their original check time, and blocked review attempts cannot buy another round of draft checks. This avoids paying for an expanding review backlog without weakening the live catalog's source gates. At the measured current inventory the saving is small; large published-library maintenance remains unresolved within the $20 collection cap.
+
+Reuse a new standalone official acquisition as source availability in the same collection run, before editorial filtering. Do not wait another six-hour schedule for an identical check. Keep the acquisition timestamp and exact source digest, with withdrawals and joint thread checks taking precedence; this changes timing, never quality approval.
