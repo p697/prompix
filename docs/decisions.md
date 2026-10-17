@@ -804,3 +804,9 @@ Evaluate TweetAPI's documented 200-ID, one-unit lookup as an isolated read pilot
 
 - The user chose to stop TweetAPI after repeated signup failures. Cancel the registration handoff and keep its isolated pilot dormant; no vendor API request or production switch occurred. Preserve the existing TwitterAPI.io route, frozen comparison plan and shared accounting. Do not request another account or payment until an alternative passes endpoint-specific cost and capability preflight.
 - Count historical acquisition, text approval, media preparation and actual publication separately. A previous image/prompt match without the newly required presentation label does not pass the configured classification gate. Spare publication slots do not authorize resetting visual review limits; prepare reusable media while waiting for the next review window.
+
+### 2026-10-17: Reserve existing X maintenance before new acquisition
+
+- Add an opt-in daily/monthly maintenance floor inside the shared $20 cap, derived from authoritative publication history and previous approvals. Preserve published-source checks before spending on searches, unpublished drafts or vendor trials.
+- Separate protected and draft batches. Incomplete/stale census blocks growth; only a typed pre-HTTP budget refusal may release its local unsent attempt. Paid/uncertain history is never cleared.
+- Keep reply verification, quality checks and source expiry unchanged. This does not solve the per-item maintenance cost at 10,000 X sources; continue vendor screening only when new cost/capability evidence warrants a trial.

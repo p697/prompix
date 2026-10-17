@@ -1,11 +1,10 @@
 import { mkdir, realpath } from "node:fs/promises";
 import { isAbsolute, join, relative, resolve } from "node:path";
-import { homedir } from "node:os";
 import { atomic, json, lockContent, repo } from "../ingest/publication.ts";
 import { buildXSearchPlan, runXSearchPlan, searchPlanSchema } from "../ingest/x-search-plan.ts";
 import { selectXSearchLeads } from "../ingest/x-search-admission.ts";
 import { TwitterAPIClient } from "../ingest/twitterapi.ts";
-import { XSpendBudget } from "../ingest/x-spend.ts";
+import { configuredXSpendBudget } from "../ingest/x-spend.ts";
 
 process.umask(0o077);
 const args = process.argv.slice(2);
@@ -33,8 +32,8 @@ try {
   } else {
     if (args.includes("--fetch") && args.includes("--replay")) throw new Error("Choose fetch or offline replay");
     const enabled = args.includes("--fetch");
-    const budget = new XSpendBudget(process.env.PROMPIX_X_SPEND_DIR ?? join(homedir(), ".local/share/prompix/x-spend"),
-      Number(process.env.PROMPIX_X_MONTHLY_USD ?? 20), Number(process.env.PROMPIX_X_DAILY_USD ?? 1));
+    const budget = configuredXSpendBudget({ ...process.env, PROMPIX_X_MONTHLY_USD: process.env.PROMPIX_X_MONTHLY_USD ?? "20",
+      PROMPIX_X_DAILY_USD: process.env.PROMPIX_X_DAILY_USD ?? "1" })!;
     const client = enabled ? new TwitterAPIClient(process.env.TWITTERAPI_IO_KEY ?? "", budget) : undefined;
     const result = await runXSearchPlan(directory, parsed, { maxRequests: enabled ? Number(value("--max-requests", "10")) : 0,
       search: client ? client.search.bind(client) : async () => { throw new Error("Offline replay cannot send requests"); } });

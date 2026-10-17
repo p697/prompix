@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { atomic, json } from "./publication.ts";
 import { convertXDiscovery } from "./x-intake.ts";
+import { XBudgetExceeded } from "./x-spend.ts";
 import { unchangedXStandalone } from "./x-recheck.ts";
 import { filterXAvailability, prepareXAvailability } from "./x-availability.ts";
 import type { TwitterAPIResult } from "./twitterapi.ts";
@@ -118,4 +119,39 @@ test("batches stay at fifty and a daily allowance cannot be reset by a second in
   assert.equal(first.report.recheck?.verified, 50);
   const repeat = await prepareXAvailability(root, { enabled: true, bearer: "fixture", now, maxRequests: 0, recheck });
   assert.equal(repeat.report.recheck?.requests, 0); assert.deepEqual(calls, [50]);
+}));
+
+test("protected sources precede drafts in separate batches; preflight refusal never poisons maintenance ledger", () => fixture(async root => {
+  const posts = [post, { ...post, id: "102" }];
+  await atomic(join(root, "x-discovery", "2026-10-16.json"), { ...snapshot, posts });
+  const calls: { ids: readonly string[]; purpose: unknown }[] = [];
+  const admission = { publishedIDs: new Set(["x-post-102"]), attemptedIDs: new Set<string>(), maxDrafts: 10 };
+  const recheck = { maxRequests: 4, sleep, lookup: async (ids: readonly string[], _capture?: unknown, purpose?: "growth" | "maintenance") => {
+    calls.push({ ids, purpose });
+    if (purpose === "growth") throw new XBudgetExceeded("fixture preflight: no HTTP sent");
+    return { raw: {}, result: { ...response(), posts: posts.filter(p => ids.includes(p.id)) } };
+  } };
+  const first = await prepareXAvailability(root, { enabled: true, bearer: "fixture", now, maxRequests: 4, admission, recheck,
+    lookup: async (_, ids, purpose) => { assert.deepEqual(ids, ["101"]); assert.equal(purpose, "growth"); throw new XBudgetExceeded("fixture"); } });
+  assert.equal(first.report.recheck?.status, "budget-limited"); assert.equal(first.report.recheck?.requests, 1);
+  assert.equal(first.report.requests, 0); assert.equal(first.report.status, "budget-limited");
+  assert.deepEqual(calls, [{ ids: ["102"], purpose: "maintenance" }, { ids: ["101"], purpose: "growth" }]);
+  assert.deepEqual(await json(join(root, "x-availability", "2026-10-17.json"), null), []);
+  const ledger = await json<any[]>(join(root, "x-rechecks", "2026-10-17.json"), []);
+  assert.equal(ledger.length, 1); assert.equal(ledger[0].state, "completed");
+  const second = await prepareXAvailability(root, { enabled: true, bearer: "fixture", now: "2026-10-17T14:00:00Z", maxRequests: 0, admission, recheck });
+  assert.equal(second.report.recheck?.verified, 1);
+  assert.equal((await json<any[]>(join(root, "x-rechecks", "2026-10-17.json"), [])).length, 2);
+}));
+
+test("official fallback retains maintenance purpose while drafts never share its batch", () => fixture(async root => {
+  const posts = [post, { ...post, id: "102" }];
+  await atomic(join(root, "x-discovery", "2026-10-16.json"), { ...snapshot, posts });
+  const calls: { ids: readonly string[]; purpose: unknown }[] = [];
+  const result = await prepareXAvailability(root, { enabled: true, bearer: "fixture", now, maxRequests: 4,
+    admission: { publishedIDs: new Set(["x-post-102"]), attemptedIDs: new Set(), maxDrafts: 10 },
+    recheck: { maxRequests: 4, sleep, lookup: async ids => ({ raw: {}, result: { ...response(), posts: [], unknownIDs: [...ids] } }) },
+    lookup: async (_, ids, purpose) => { calls.push({ ids, purpose }); return { ...snapshot, posts: posts.filter(p => ids.includes(p.id)), unavailable: [] }; } });
+  assert.deepEqual(calls, [{ ids: ["102"], purpose: "maintenance" }, { ids: ["101"], purpose: "growth" }]);
+  assert.equal(result.report.checked, 2); assert.equal(result.report.requests, 2);
 }));

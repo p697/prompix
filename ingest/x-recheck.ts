@@ -6,11 +6,13 @@ import { convertXDiscovery } from "./x-intake.ts";
 import type { XExcerptReviews } from "./x-excerpts.ts";
 import { nativeXSourceDigest, nativeXSourceIssue } from "./x-source.ts";
 import { canonicalTwitterVideoURL, type TwitterAPIClient, type TwitterAPIResult } from "./twitterapi.ts";
+import { XBudgetExceeded } from "./x-spend.ts";
 
 const attemptSchema = z.object({ ids: z.array(z.string().regex(/^\d{1,19}$/)).min(1).max(50),
   at: z.iso.datetime(), state: z.enum(["reserved", "completed", "failed"]) }).strict();
 const ledgerSchema = z.array(attemptSchema).max(40);
 export type XRecheckOptions = { lookup: TwitterAPIClient["lookup"]; maxRequests: number;
+  protectedIDs?: ReadonlySet<string>;
   sleep?: (ms: number) => Promise<void> };
 
 /** Compare the exact publishable revision and current attribution, not only text or a subset of media.
@@ -47,8 +49,12 @@ export async function recheckXStandalone(root: string, candidates: readonly Cand
   const report = { status: "cached", requests: 0, checked: 0, verified: 0, unresolved: 0 };
   if (ledger.some(attempt => attempt.state !== "completed") || ledger.length >= options.maxRequests)
     return { ...report, status: "daily-limit" };
-  for (let offset = 0; offset < candidates.length && ledger.length < options.maxRequests; offset += 50) {
-    const batch = candidates.slice(offset, offset + 50), ids = batch.map(item => item.source.post!.id);
+  for (let offset = 0; offset < candidates.length && ledger.length < options.maxRequests;) {
+    const protectedBatch = options.protectedIDs?.has(candidates[offset].id) ?? false;
+    const batch: Candidate[] = [];
+    while (offset < candidates.length && batch.length < 50 && (options.protectedIDs?.has(candidates[offset].id) ?? false) === protectedBatch)
+      batch.push(candidates[offset++]);
+    const ids = batch.map(item => item.source.post!.id);
     if (new Set(ids).size !== ids.length) throw new Error("Duplicate recheck identities");
     // A free trial permits 0.2 QPS. Wait after completion, including the first call
     // of a new collector invocation, so consecutive processes cannot burst.
@@ -57,7 +63,8 @@ export async function recheckXStandalone(root: string, candidates: readonly Cand
     ledger.push(attempt); await atomic(path, ledger); report.requests++;
     try {
       const evidence = join(root, "x-rechecks", "responses", `${day}-${String(ledger.length).padStart(3, "0")}.json`);
-      const { result } = await options.lookup(ids, raw => atomic(evidence, { provider: "twitterapi", capturedAt: options.now, ids, raw }));
+      const { result } = await options.lookup(ids, raw => atomic(evidence, { provider: "twitterapi", capturedAt: options.now, ids, raw }),
+        protectedBatch ? "maintenance" : "growth");
       if (result.posts.some(post => !ids.includes(post.id)) || new Set(result.posts.map(post => post.id)).size !== result.posts.length)
         throw new Error("Unrequested recheck identity");
       const matched = batch.filter(item => unchangedXStandalone(item, result, options.now, options.excerpts));
@@ -67,7 +74,11 @@ export async function recheckXStandalone(root: string, candidates: readonly Cand
       await options.apply(matched, unresolved);
       attempt.state = "completed"; await atomic(path, ledger);
       report.status = "checked"; report.checked += ids.length; report.verified += matched.length; report.unresolved += unresolved.length;
-    } catch {
+    } catch (error) {
+      if (error instanceof XBudgetExceeded) {
+        // The spend guard rejected before HTTP. No paid/uncertain attempt is reset.
+        ledger.pop(); await atomic(path, ledger); report.requests--; report.status = "budget-limited"; break;
+      }
       attempt.state = "failed"; await atomic(path, ledger); report.status = "failed"; break;
     }
   }

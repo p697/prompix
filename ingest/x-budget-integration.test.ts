@@ -12,9 +12,9 @@ const user = { id: "42", username: "fixture", name: "Fixture" };
 const payload = { data: [post], includes: { users: [user] }, meta: { result_count: 1, newest_id: "101", oldest_id: "101" } };
 async function fixture(t: TestContext, run: (root: string, ledgerPath: string) => Promise<void>) {
   const root = await mkdtemp(join(tmpdir(), "prompix-official-budget-"));
-  const names = ["PROMPIX_X_SPEND_DIR", "PROMPIX_X_MONTHLY_USD", "PROMPIX_X_DAILY_USD"];
+  const names = ["PROMPIX_X_SPEND_DIR", "PROMPIX_X_MONTHLY_USD", "PROMPIX_X_DAILY_USD", "PROMPIX_X_MAINTENANCE_RESERVE"];
   const previous = names.map(name => process.env[name]);
-  Object.assign(process.env, { PROMPIX_X_SPEND_DIR: root, PROMPIX_X_MONTHLY_USD: "1", PROMPIX_X_DAILY_USD: "1" });
+  Object.assign(process.env, { PROMPIX_X_SPEND_DIR: root, PROMPIX_X_MONTHLY_USD: "1", PROMPIX_X_DAILY_USD: "1", PROMPIX_X_MAINTENANCE_RESERVE: "0" });
   try { await run(root, join(root, `${new Date().toISOString().slice(0, 7)}.json`)); }
   finally {
     names.forEach((name, index) => { if (previous[index] === undefined) delete process.env[name]; else process.env[name] = previous[index]; });
@@ -96,4 +96,24 @@ test("production budget configuration must explicitly opt in and cannot exceed t
   assert.throws(() => configuredXSpendBudget({ PROMPIX_X_DAILY_USD: "1" }), /Monthly/);
   for (const limit of ["21", "NaN", "0", "-1", ""]) assert.throws(() => configuredXSpendBudget({ PROMPIX_X_MONTHLY_USD: limit }), /Invalid/);
   assert.equal(configuredXSpendBudget({ PROMPIX_X_MONTHLY_USD: "20" })?.monthlyUSD, 20);
+});
+
+test("protected runway stops real official search and draft acquisition before HTTP but allows published checks", t => fixture(t, async (root, path) => {
+  process.env.PROMPIX_X_MAINTENANCE_RESERVE = "1";
+  await atomic(join(root, "maintenance-reserve.json"), { version: 1, checkedAt: new Date().toISOString(), complete: true,
+    standalone: 10000, officialPosts: 0, sourceSetSHA256: "a".repeat(64) });
+  let calls = 0;
+  t.mock.method(globalThis, "fetch", async () => { calls++; return Response.json(payload); });
+  for (const action of [() => searchX("secret"), () => lookupX("secret", ["101"]), () => checkXAvailability("secret", ["101"]),
+    () => lookupXUsers("secret", ["fixture"])]) await assert.rejects(action(), XBudgetExceeded);
+  assert.equal(calls, 0);
+  await checkXAvailability("secret", ["101"], "maintenance");
+  assert.equal(calls, 1);
+  assert.deepEqual((await json<any>(path, null)).entries.map((e: any) => e.accounted), [5000]);
+}));
+
+test("maintenance protection requires a configured budget and an explicit valid switch", () => {
+  assert.throws(() => configuredXSpendBudget({ PROMPIX_X_MAINTENANCE_RESERVE: "1" }), /Monthly/);
+  assert.throws(() => configuredXSpendBudget({ PROMPIX_X_MONTHLY_USD: "20", PROMPIX_X_MAINTENANCE_RESERVE: "yes" }), /switch/);
+  assert.equal(configuredXSpendBudget({ PROMPIX_X_MONTHLY_USD: "20", PROMPIX_X_MAINTENANCE_RESERVE: "1" })?.protectMaintenance, true);
 });
