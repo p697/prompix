@@ -37,6 +37,7 @@ enum CatalogSyncState: Equatable, Sendable {
     private var languagePackBase: LanguagePackCatalog.Base?
     private(set) var feed: FeedRepository?
     private var databaseFeedRequested = false
+    let recommendations: LocalRecommendations
     private let directory: URL
     private let installFileWriter: (Data, URL) throws -> Void
     private var storageRecoveryPending = false
@@ -51,6 +52,7 @@ enum CatalogSyncState: Equatable, Sendable {
          feedService: (any FeedServing)? = nil,
          installFileWriter: @escaping (Data, URL) throws -> Void = { try $0.write(to: $1, options: .atomic) }) {
         self.directory = directory ?? URL.applicationSupportDirectory.appending(path: "Prompix", directoryHint: .isDirectory)
+        self.recommendations = LocalRecommendations(directory: self.directory)
         self.installFileWriter = installFileWriter
         databaseFeedRequested = feedService != nil
         var checkpoint = FeedCheckpoint()
@@ -123,7 +125,7 @@ enum CatalogSyncState: Equatable, Sendable {
         if let feedService {
             checkpoint.removedIDs = removedIDs.sorted()
             feed = FeedRepository(service: feedService, cache: FeedCache(directory: self.directory.appending(path: "feed-cache")),
-                                  checkpoint: checkpoint) { [weak self] value in
+                                  checkpoint: checkpoint, recommendations: recommendations) { [weak self] value in
                 guard let self else { throw CancellationError() }
                 try self.commitFeedRemovals(value)
             }
@@ -641,6 +643,7 @@ enum CatalogSyncState: Equatable, Sendable {
             let data = try JSONEncoder().encode(updated)
             try data.write(to: directory.appending(path: "favorites.json"), options: .atomic)
             favorites = updated
+            recommendations.record(updated.contains { $0.id == item.id } ? .save : .unsave, prompt: item)
             return true
         } catch { self.error = String(localized: "未能保存收藏，请检查设备存储空间后重试。"); return false }
     }

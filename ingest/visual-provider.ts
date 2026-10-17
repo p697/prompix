@@ -57,7 +57,7 @@ export function visualResponseSchema(items: readonly VisualInput[]) {
       id: z.literal(attachment.id), sha256: z.literal(attachment.sha256),
     }));
     const attachment = attachments.length === 1 ? attachments[0] : z.union(attachments as [typeof attachments[0], typeof attachments[0], ...typeof attachments]);
-    return visualDecisionSchema.extend({ id: z.literal(item.id), identity: z.literal(item.identity), attachments: z.array(attachment).length(attachments.length) });
+    return visualDecisionSchema.extend({ presentation: z.enum(["general", "suggestive", "explicit", "unknown"]), id: z.literal(item.id), identity: z.literal(item.identity), attachments: z.array(attachment).length(attachments.length) });
   });
   const decision = variants.length === 1 ? variants[0] : z.union(variants as [typeof variants[0], typeof variants[0], ...typeof variants]);
   return z.object({ decisions: z.array(decision).length(values.length) }).strict();

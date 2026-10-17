@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct PromptUseSheet: View {
+    @Environment(Library.self) private var library
     let item: Prompt
     let language: String?
     private let sourceText: String?
@@ -127,6 +128,7 @@ struct PromptUseSheet: View {
             .sensoryFeedback(.success, trigger: copied)
         }
         .promptSheet()
+        .onChange(of: copied) { _, value in if value { library.recommendations.record(.use, prompt: item) } }
         .interactiveDismissDisabled(saveFailed)
         .alert(String(localized: "本次修改尚未保存"), isPresented: $leavePresented) {
             Button(String(localized: "复制并退出")) {

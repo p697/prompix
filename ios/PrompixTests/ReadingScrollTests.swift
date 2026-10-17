@@ -20,6 +20,17 @@ final class ReadingScrollTests: XCTestCase {
         XCTAssertTrue(state.update(offset: 220, maximum: 1000, isScrolling: true))
         XCTAssertFalse(state.update(offset: -40, maximum: 1000, isScrolling: true))
     }
+    func testInertialSettlingCannotRevealControlsBeforeAUserReverses() {
+        var state = ReadingScrollState()
+        _ = state.update(offset: 0, maximum: 400, isScrolling: false)
+        XCTAssertTrue(state.update(offset: 171, maximum: 400, isScrolling: true))
+        XCTAssertTrue(state.update(offset: 201, maximum: 400, isScrolling: true, isInteracting: false))
+        XCTAssertTrue(state.update(offset: 178, maximum: 400, isScrolling: true, isInteracting: false))
+        XCTAssertTrue(state.update(offset: 178, maximum: 400, isScrolling: false, isInteracting: false))
+        XCTAssertFalse(state.update(offset: 150, maximum: 400, isScrolling: true))
+        XCTAssertFalse(state.update(offset: 0, maximum: 400, isScrolling: true, isInteracting: false))
+    }
+
     func testBottomBounceAndLayoutChangesDoNotRevealChrome() {
         var state = ReadingScrollState()
         _ = state.update(offset: 0, maximum: 400, isScrolling: false)

@@ -1,6 +1,7 @@
+import { contentTopics } from "../../packages/schema/interests.ts";
 import { collectionDefinitions, contentID, feedLocale, revisionID, type FeedCard, type FeedFilters, type FeedLocale, type FeedPage } from "../../packages/schema/feed.ts";
 import type { Prompt } from "../../packages/schema/catalog.ts";
-import { cursorLifetimeSeconds, decodeCursor, encodeCursor, decodeCreatorCursor, encodeCreatorCursor, encodeVisualFeedCursor, decodeVisualFeedCursor } from "./cursor.ts";
+import { cursorLifetimeSeconds, decodeCursor, encodeCursor, decodeCreatorCursor, encodeCreatorCursor, encodeVisualFeedCursor, decodeVisualFeedCursor, encodeRecommendedCursor, decodeRecommendedCursor } from "./cursor.ts";
 import { FeedError, type Database } from "./database.ts";
 
 type StateRow = { release: string | null; generation: string; removalSequence: string; count: number; publishedAt: string | null };
@@ -16,8 +17,12 @@ export async function getState(db: Database) {
 }
 
 export async function getFeed(db: Database, query: { filters: FeedFilters; limit: number; cursor?: string }, secret: string, now = Date.now()): Promise<FeedPage> {
+  const page = await getRawFeed(db, query, secret, now);
+  return { ...page, items: page.items.map(card => ({ ...card, topics: contentTopics(card) })) };
+}
+async function getRawFeed(db: Database, query: { filters: FeedFilters; limit: number; cursor?: string }, secret: string, now: number): Promise<FeedPage> {
   const { filters, limit } = query;
-  if (filters.sort === "discovery") return getVisualFeed(db, query, secret, now);
+  if (filters.sort === "discovery" || filters.sort === "recommended") return getVisualFeed(db, query, secret, now);
   let release: string, position = -1, rank = 5, expires = Math.floor(now / 1000) + cursorLifetimeSeconds;
   if (query.cursor) {
     try { ({ release, position, rank, expires } = decodeCursor(query.cursor, filters, secret, now)); }
@@ -82,11 +87,13 @@ function feedConditions(filters: FeedFilters, parameter: (value: unknown) => str
 /** Real media determines visual eligibility, not a tag, title or generated cover. */
 async function getVisualFeed(db: Database, query: { filters: FeedFilters; limit: number; cursor?: string }, secret: string, now: number): Promise<FeedPage> {
   const { filters, limit } = query;
-  if (filters.q) throw new FeedError("invalid_request", 400);
+  const recommended = filters.sort === "recommended";
+  if (filters.q || (recommended && !/^[a-f0-9]{32}$/.test(filters.seed ?? ""))) throw new FeedError("invalid_request", 400);
   let visualRemaining: number | undefined, textRemaining: number | undefined, plainRun = 0;
-  let release: string, visual = -1, text = -1, slot = 0, expires = Math.floor(now / 1000) + cursorLifetimeSeconds;
+  let release: string, visual: number | string = recommended ? "" : -1, text: number | string = visual;
+  let slot = 0, expires = Math.floor(now / 1000) + cursorLifetimeSeconds;
   if (query.cursor) {
-    try { ({ release, visual, text, slot, expires, visualRemaining, textRemaining, plainRun } = decodeVisualFeedCursor(query.cursor, filters, secret, now)); }
+    try { ({ release, visual, text, slot, expires, visualRemaining, textRemaining, plainRun } = (recommended ? decodeRecommendedCursor : decodeVisualFeedCursor)(query.cursor, filters, secret, now)); }
     catch { throw new FeedError("invalid_request", 400); }
     if (!(await db.query("select id from prompix.releases where id=$1 and published_at is not null", [release])).rows.length)
       throw new FeedError("snapshot_expired", 410);
@@ -96,9 +103,17 @@ async function getVisualFeed(db: Database, query: { filters: FeedFilters; limit:
   const where = feedConditions(filters, parameter);
   const bound = parameter(limit + 1);
   const countLanes = visualRemaining === undefined || textRemaining === undefined;
-  const rows = (await db.query<{ position: number; visual: boolean; total: number; card: FeedCard }>(`
+  // Small fresh-content exploration lane, then a session permutation of the
+  // whole filtered catalog. Hashing is for ranking, not authentication. Only
+  // metadata is scanned; cards and translations are loaded after the page bound.
+  const seed = recommended ? parameter(filters.seed) : undefined;
+  const hash = `md5(${seed}::text || e.content_id)`;
+  const position = recommended
+    ? `(case when e.latest_position<120 and left(${hash},1)='0' then '0' else '1' end) || ${hash} || lpad(e.latest_position::text,7,'0')`
+    : "e.latest_position";
+  const rows = (await db.query<{ position: number | string; visual: boolean; total: number; card: FeedCard }>(`
     with candidates as not materialized (
-      select e.latest_position as position,e.revision_id,
+      select ${position} as position,e.revision_id,
         (coalesce(nullif(v.card#>>'{media,imageURL}',''),nullif(v.card#>>'{media,image}','')) is not null) as visual
       from prompix.release_entries e join prompix.releases r on r.id=e.release_id
       join prompix.content c on c.id=e.content_id join prompix.revisions v on v.id=e.revision_id
@@ -128,7 +143,7 @@ async function getVisualFeed(db: Database, query: { filters: FeedFilters; limit:
     // exhausting every image and returning hundreds of text-only tail cards.
     if (visualRemaining <= Math.ceil(textRemaining / 2) && textRemaining > 0 && plainRun < 2) preferred = 1;
     if (plainRun >= 2 && visualRemaining > 0) preferred = 0;
-    if (visual === -1 && text === -1 && visualRemaining > 0) preferred = 0;
+    if (visual === (recommended ? "" : -1) && text === (recommended ? "" : -1) && visualRemaining > 0) preferred = 0;
     const lane = offsets[preferred] < lanes[preferred].length ? preferred : 1 - preferred;
     const row = lanes[lane][offsets[lane]];
     if (!row) break;
@@ -138,8 +153,11 @@ async function getVisualFeed(db: Database, query: { filters: FeedFilters; limit:
     slot = (slot + 1) % 5;
   }
   const hasMore = lanes.some((lane, index) => offsets[index] < lane.length);
+  const common = { v: 1 as const, release, slot, visualRemaining, textRemaining, plainRun, filters, expires };
   return { schemaVersion: 3, release, items,
-    nextCursor: hasMore ? encodeVisualFeedCursor({ v: 1, scope: "visual-feed", release, visual, text, slot, visualRemaining, textRemaining, plainRun, filters, expires }, secret) : null };
+    nextCursor: !hasMore ? null : recommended
+      ? encodeRecommendedCursor({ ...common, scope: "recommended-feed", visual: String(visual), text: String(text) }, secret)
+      : encodeVisualFeedCursor({ ...common, scope: "visual-feed", visual: Number(visual), text: Number(text) }, secret) };
 }
 
 /** Explicit revision gives stable detail during paging; no revision means current release. */

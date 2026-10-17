@@ -64,7 +64,7 @@ actor SimulatorFeedService: FeedServing {
             catch { try? record("page-cancelled"); throw error }
         }
         if FileManager.default.fileExists(atPath: directory.appending(path: "fail-feed-refresh").path) { throw FeedError.unavailable(0) }
-        try record("page", query: query.sort == "discovery" ? "__discovery__" : query.sort == "latest" ? "__latest__" : query.q, cursor: cursor)
+        try record("page", query: ["discovery", "recommended"].contains(query.sort ?? "") ? "__discovery__" : query.sort == "latest" ? "__latest__" : query.q, cursor: cursor)
         if query.creator != nil {
             try record("creatorWorks", query: (query.creator ?? "") + ":" + (query.kind ?? "all"), cursor: cursor)
             try await waitForAcceptanceGate("creator")
@@ -92,8 +92,16 @@ actor SimulatorFeedService: FeedServing {
             return true
         }
         let ordered: [Int]
-        if query.sort == "discovery" {
-            let latest = Array(indices.reversed())
+        if ["discovery", "recommended"].contains(query.sort ?? "") {
+            var latest = Array(indices.reversed())
+            if query.sort == "recommended", let seed = query.seed {
+                let ranked = indices.map { index -> (Int, UInt64) in
+                    let key = "\(seed):\(index)".utf8.reduce(UInt64(14695981039346656037)) { ($0 ^ UInt64($1)) &* 1099511628211 }
+                    return (index, key)
+                }
+                latest = ranked.sorted { $0.1 == $1.1 ? $0.0 < $1.0 : $0.1 < $1.1 }.map(\.0)
+                try record("recommendation-session", query: seed, cursor: cursor)
+            }
             let visual = latest.filter { prompt($0).media?.image != nil || prompt($0).media?.imageURL != nil }
             let plain = latest.filter { prompt($0).media?.image == nil && prompt($0).media?.imageURL == nil }
             var blended: [Int] = [], a = 0, b = 0, plainRun = 0

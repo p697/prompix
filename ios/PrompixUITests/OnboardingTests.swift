@@ -36,8 +36,11 @@ extension XCUIApplication {
         XCTAssertTrue(app.staticTexts["onboarding-title-0"].exists)
         app.buttons["onboardingNext"].tap()
         app.buttons["onboardingNext"].tap()
+        app.buttons["onboardingNext"].tap()
+        XCTAssertTrue(app.buttons["interest-portrait"].waitForExistence(timeout: 3))
+        for id in ["portrait", "illustration", "product"] { app.buttons["interest-\(id)"].tap() }
         XCTAssertTrue(app.buttons["onboardingComplete"].waitForExistence(timeout: 3))
-        capture("cosmos-03-use")
+        capture("cosmos-04-interests")
         app.buttons["onboardingComplete"].tap()
         XCTAssertTrue(app.buttons["onboardingComplete"].waitForNonExistence(timeout: 5))
         XCTAssertTrue(app.buttons["discoverySettings"].waitForExistence(timeout: 5))
@@ -91,7 +94,7 @@ extension XCUIApplication {
         // Merely previewing a real prompt must neither launch a tool nor
         // complete onboarding. Closing returns to the same third page.
         app.buttons["finishPromptUse"].tap()
-        XCTAssertTrue(app.buttons["onboardingComplete"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["onboardingNext"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["onboarding-title-2"].exists)
         XCTAssertTrue(app.buttons["handoffOpen"].waitForNonExistence(timeout: 3))
         capture("welcome-trial-return")
@@ -154,16 +157,37 @@ extension XCUIApplication {
         capture("experience-edits-preserved")
     }
 
+    func testInterestControlsRemainReachableAtAccessibilitySize() {
+        app.launch()
+        for _ in 0..<3 { app.buttons["onboardingNext"].tap() }
+        let scroll = app.scrollViews["onboarding-page-3"]
+        let portrait = app.buttons["interest-portrait"]
+        XCTAssertTrue(portrait.waitForExistence(timeout: 5))
+        if portrait.isSelected { portrait.tap() }
+        portrait.tap(); XCTAssertTrue(portrait.isSelected)
+        capture("interests-accessibility-top")
+        let comfort = app.switches["reduceSuggestiveRecommendations"]
+        for _ in 0..<12 {
+            if comfort.isHittable { break }
+            scroll.swipeUp()
+        }
+        XCTAssertTrue(comfort.isHittable)
+        XCTAssertTrue(app.buttons["onboardingComplete"].isHittable)
+        capture("interests-accessibility-controls")
+        app.buttons["onboardingComplete"].tap()
+        XCTAssertTrue(app.buttons["discoverySettings"].waitForExistence(timeout: 10))
+    }
+
     func testLocalizedWelcomeLayout() {
         for language in ["en", "de"] {
             app.launchArguments = ["--offline", "-AppleLanguages", "(\(language))", "-AppleLocale", language, "--reset-onboarding"]
             app.launch()
             XCTAssertTrue(app.buttons["onboardingNext"].waitForExistence(timeout: 10))
-            for page in 0..<3 {
-                let action = app.buttons[page == 2 ? "onboardingComplete" : "onboardingNext"]
+            for page in 0..<4 {
+                let action = app.buttons[page == 3 ? "onboardingComplete" : "onboardingNext"]
                 XCTAssertTrue(action.isHittable)
                 XCTAssertTrue(app.buttons["onboardingSkip"].isHittable)
-                let body = app.staticTexts["onboarding-body-\(page)"]
+                let body = page == 3 ? app.buttons["interest-portrait"] : app.staticTexts["onboarding-body-\(page)"]
                 for _ in 0..<5 {
                     if body.isHittable { break }
                     app.scrollViews["onboarding-page-\(page)"].swipeUp()

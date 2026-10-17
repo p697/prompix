@@ -13,6 +13,7 @@ struct FeedCheckpoint: Codable {
 }
 
 @MainActor @Observable final class FeedRepository {
+    let recommendations: LocalRecommendations
     let discovery: FeedStore
     let search: FeedStore
     let creatorDiscovery: CreatorDiscoveryStore
@@ -27,17 +28,18 @@ struct FeedCheckpoint: Codable {
     private var detailSizes: [String: Int] = [:]
     private var checkpoint: FeedCheckpoint
     private let commitRemovals: (FeedCheckpoint) throws -> Void
-    init(service: any FeedServing, cache: FeedCache, checkpoint: FeedCheckpoint,
+    init(service: any FeedServing, cache: FeedCache, checkpoint: FeedCheckpoint, recommendations: LocalRecommendations? = nil,
          commitRemovals: @escaping (FeedCheckpoint) throws -> Void) {
+        self.recommendations = recommendations ?? LocalRecommendations()
         self.service = service; self.cache = cache; self.checkpoint = checkpoint; self.commitRemovals = commitRemovals
         removedIDs = Set(checkpoint.removedIDs)
         creatorDiscovery = CreatorDiscoveryStore(service: service, cache: cache)
         creators = FeedCreatorStore(service: service, cache: cache); browse = FeedBrowseStore(service: service, cache: cache)
-        discovery = FeedStore(service: service, cache: cache, memoryPageLimit: 6); search = FeedStore(service: service, cache: cache)
+        discovery = FeedStore(service: service, cache: cache, memoryPageLimit: 6, recommendations: self.recommendations); search = FeedStore(service: service, cache: cache)
     }
     func makeCreatorDiscoveryStore() -> CreatorDiscoveryStore { CreatorDiscoveryStore(service: service, cache: cache) }
     func makeCreatorStore() -> FeedCreatorStore { FeedCreatorStore(service: service, cache: cache) }
-    func makeStore() -> FeedStore { FeedStore(service: service, cache: cache) }
+    func makeStore() -> FeedStore { FeedStore(service: service, cache: cache, recommendations: recommendations) }
 
     func creatorPreview(_ entry: FeedCreatorsPage.Entry) -> FeedCard? {
         guard let preview = entry.preview, !removedIDs.contains(preview.id) else { return nil }
@@ -46,14 +48,18 @@ struct FeedCheckpoint: Codable {
 
     /// A few already visible cards can preview an exact scoped query while its
     /// first page arrives. They never become a page, cursor, or result count.
-    func previewCards(for value: FeedQuery) -> [FeedCard] {
+    func previewCards(for value: FeedQuery, including provided: [FeedCard] = []) -> [FeedCard] {
         guard let query = try? value.validated(), query.q.isEmpty, query.collection == nil,
               query.creator != nil || query.tag != nil || query.model != nil else { return [] }
         var seen = Set<String>()
         var result: [FeedCard] = []
-        for card in [discovery.items, search.items].joined() {
+        let providedIDs = Set(provided.map(\.id))
+        // Prefer a matching translated card when it is already loaded. A cover
+        // just shown in the creator directory may keep its original caption
+        // until the scoped page supplies the preferred language.
+        for card in [discovery.items, search.items, provided].joined() {
             guard !self.removedIDs.contains(card.id),
-                  card.language == query.locale || (card.language == "original" && !card.availableLanguages.contains(query.locale)),
+                  card.language == query.locale || (card.language == "original" && (providedIDs.contains(card.id) || !card.availableLanguages.contains(query.locale))),
                   query.creator == nil || card.creator?.id == query.creator,
                   query.tag == nil || card.tags.contains(query.tag!),
                   query.model == nil || card.model == query.model,
@@ -149,6 +155,7 @@ struct FeedCheckpoint: Codable {
         let ids = Set(next.removedIDs)
         guard removedIDs.isSubset(of: ids) else { throw FeedError.invalidResponse }
         // A known takedown blocks use immediately, even if durable storage fails.
+        recommendations.forget(ids)
         removedIDs = ids; details = details.filter { !ids.contains($0.key) }
         detailSizes = detailSizes.filter { !ids.contains($0.key) }
         detailOrder.removeAll { ids.contains($0) }; discovery.discard(ids); search.discard(ids)

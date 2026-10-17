@@ -27,7 +27,7 @@ function cardFor(item: Prompt, revision: string, locale: FeedLocale, languages: 
     title: translated?.title ?? item.title, summary: translated?.summary ?? item.summary,
     tags: item.tags, model: item.model, artwork: item.artwork,
     previewLabel: translated?.previewLabel ?? item.previewLabel,
-    creator: item.creator, media: item.media,
+    creator: item.creator, media: item.media, presentation: item.presentation,
     cover: item.cover ? { ...item.cover, ...(translated?.cover ?? {}) } : undefined,
     language: translated ? locale : "original", availableLanguages: languages,
   });
@@ -43,6 +43,7 @@ export function preparePublication(input: PublicationInput) {
   const removedSet = new Set(removed);
   const records = input.prompts.map((item, position) => {
     contentID.parse(item.id);
+    if (item.presentation === "explicit") throw new Error(`Explicit visual content cannot be published: ${item.id}`);
     if (ids.has(item.id) || removedSet.has(item.id)) throw new Error("Duplicate or removed content ID");
     ids.add(item.id);
     if (item.localization && item.localization.sourceFingerprint !== translationFingerprint(item))

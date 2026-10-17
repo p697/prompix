@@ -52,7 +52,7 @@ else if (behavior === 'stderr-limit') { process.stderr.write('x'.repeat(2000001)
 else if (behavior === 'tool') { process.stdout.write(JSON.stringify({ type: 'item.started', item: { type: 'command_execution', command: 'synthetic private command' } }) + '\\n'); setInterval(() => {}, 1000); }
 else if (behavior === 'exit') { process.stderr.write('synthetic-private-provider-diagnostic'); process.exitCode = 9; }
 else {
-  const decisions = candidates.map(item => ({ id: item.id, identity: item.identity, verdict: item.kind === 'video' ? 'uncertain' : 'match',
+  const decisions = candidates.map(item => ({ id: item.id, identity: item.identity, presentation: 'general', verdict: item.kind === 'video' ? 'uncertain' : 'match',
     reason: item.kind === 'video' ? 'Only sampled still frames are available; the essential audio and motion cannot be established.' : 'Synthetic response for transport testing only.',
     attachments: item.attachments.map(attachment => ({ id: attachment.id, sha256: attachment.sha256, verdict: 'match', reason: 'Synthetic attachment response.' })) }));
   if (behavior === 'wrong-identity') decisions[0].identity = 'f'.repeat(64);
@@ -81,7 +81,7 @@ else {
 }
 
 const response = (items: readonly VisualInput[]) => ({ decisions: items.map(item => ({ id: item.id, identity: item.identity,
-  verdict: "match", reason: "Synthetic valid response.", attachments: item.attachments.map(attachment => ({ id: attachment.id,
+  presentation: "general", verdict: "match", reason: "Synthetic valid response.", attachments: item.attachments.map(attachment => ({ id: attachment.id,
     sha256: attachment.sha256, verdict: "match", reason: "Synthetic valid attachment." })) })) });
 async function assertCleaned(capture: string) {
   const saved = JSON.parse(await readFile(capture, "utf8"));

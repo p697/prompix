@@ -6,7 +6,7 @@ import { createTestDatabase } from "./test-database.ts";
 import { activatePublication, stagePublication } from "./publication.ts";
 import { getFeed } from "./queries.ts";
 
-test("10000-item visual feed traverses every item once with bounded, release-pinned keyset pages", {
+for (const sort of ["discovery", "recommended"] as const) test(`10000-item ${sort} feed traverses every item once with bounded, release-pinned keyset pages`, {
   skip: process.env.PROMPIX_FEED_SCALE !== "1" ? "Explicit 10000-item SQL acceptance" : false,
 }, async t => {
   const { pg, writer, reader } = await createTestDatabase(); t.after(() => pg.close());
@@ -22,7 +22,7 @@ test("10000-item visual feed traverses every item once with bounded, release-pin
   let cursor: string | undefined, plainRun = 0;
   do {
     const start = performance.now();
-    const page = await getFeed(reader, { filters: { locale: "original", sort: "discovery", q: "" }, limit: 30, cursor }, "visual-scale-secret-00000000000000000000000000000");
+    const page = await getFeed(reader, { filters: { locale: "original", sort, ...(sort === "recommended" ? { seed: "b".repeat(32) } : {}), q: "" }, limit: 30, cursor }, "visual-scale-secret-00000000000000000000000000000");
     elapsed.push(performance.now() - start);
     assert.equal(page.release, release); assert.ok(page.items.length <= 30);
     for (const card of page.items) {
@@ -38,6 +38,6 @@ test("10000-item visual feed traverses every item once with bounded, release-pin
   } while (cursor);
   assert.equal(seen.size, 10000);
   elapsed.sort((a, b) => a - b);
-  console.log(JSON.stringify({ workload: "10000-item-visual-feed", pages: elapsed.length,
+  console.log(JSON.stringify({ workload: `10000-item-${sort}-feed`, pages: elapsed.length,
     medianMs: elapsed[Math.floor(elapsed.length / 2)], p95Ms: elapsed[Math.floor(elapsed.length * 0.95)] }));
 });

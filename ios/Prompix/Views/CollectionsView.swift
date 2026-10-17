@@ -228,7 +228,7 @@ struct CollectionDetail: View {
                 Text(collection.subtitle).font(.subheadline).foregroundStyle(Palette.muted).fixedSize(horizontal: false, vertical: true)
                 let items = collection.items(in: library)
                 if let feed = library.feed {
-                    OwnedFeedResults(repository: feed, query: FeedQuery(collection: collection.id), fallback: items)
+                    OwnedFeedResults(repository: feed, query: FeedQuery(collection: collection.id, sort: "recommended"), fallback: items)
                 } else if items.isEmpty {
                     ContentUnavailableView(String(localized: "暂无匹配内容"), systemImage: "sparkle", description: Text(String(localized: "试试其他分类，或清除筛选条件。")))
                 } else { PromptGrid(items: items) }
@@ -251,7 +251,6 @@ struct SettingsView: View {
                     }.foregroundStyle(Palette.ink).padding(.top, 12).padding(.bottom, 20)
                         .listRowSeparator(.hidden)
                     LabeledContent(String(localized: "版本")) { Text("\(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—") (\(Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "—"))").foregroundStyle(Palette.muted) }
-                    LabeledContent(String(localized: "内容数量")) { Text(library.feed.map { $0.state.map { String($0.count) } ?? "—" } ?? String(library.prompts.count)).foregroundStyle(Palette.muted) }
                     Link(String(localized: "App 语言与系统设置"), destination: URL(string: UIApplication.openSettingsURLString)!)
                     Button(String(localized: "onboarding.replay", table: "Onboarding")) { showOnboarding = true }
                         .accessibilityIdentifier("replayOnboarding")
@@ -259,6 +258,11 @@ struct SettingsView: View {
                     if let updated = library.updatedAt { LabeledContent(String(localized: "最近更新")) { Text(updated, style: .date).foregroundStyle(Palette.muted) } }
                     Button(library.isRefreshing ? String(localized: "正在更新…") : String(localized: "检查内容更新")) { Task { await library.refresh(force: true) } }.disabled(library.isRefreshing)
                     if let message = library.syncMessage { Text(message).font(.footnote).foregroundStyle(Palette.muted) }
+                }.listRowBackground(Color.clear)
+                Section {
+                    NavigationLink { RecommendationPreferences() } label: {
+                        Label(RecommendationCopy.text("interests.title"), systemImage: "slider.horizontal.3")
+                    }.accessibilityIdentifier("recommendationPreferences")
                 }.listRowBackground(Color.clear)
                 Section {
                     Button(cleared ? String(localized: "图片缓存已清理") : String(localized: "清理图片缓存")) { ImageStore.shared.clear(); cleared = true }

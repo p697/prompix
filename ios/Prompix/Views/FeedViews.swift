@@ -15,7 +15,7 @@ struct FeedResults: View {
         let matches = store.query == ((try? query.validated()) ?? query)
         let waiting = !matches || (store.failure == nil && (store.release == nil || (store.items.isEmpty && store.isLoading)))
         let hasPage = matches && store.release != nil
-        let items = (hasPage ? store.items : previews).filter { $0.id != excludingID && !library.isRemoved(id: $0.id) }
+        let items = (hasPage ? store.items : previews).filter { $0.id != excludingID && !library.isRemoved(id: $0.id) && (query.sort != "recommended" || library.recommendations.allowsRecommended($0)) }
         let offlineItems = fallback.filter { $0.id != excludingID && !library.isRemoved($0) }
         let showsFallback = items.isEmpty && matches && !offlineItems.isEmpty &&
             (store.failure != nil || (store.isLoading && fallbackQuery == query))
@@ -119,13 +119,16 @@ struct FeedPromptCard: View {
     @Namespace private var transition
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Button { detailPresented = true } label: {
+            Button { library.recommendations.record(.open, card: card); detailPresented = true } label: {
                 PromptCardFace(preview: ContentPreview(card)).promptTransitionSource(id: card.id, in: transition)
                     .overlay(alignment: .bottomTrailing) {
                         if actionID != nil { ContentActivityLabel(size: 40).padding(8).background(.regularMaterial, in: Capsule()).padding(8) }
                     }
             }.buttonStyle(.plain).accessibilityLabel(card.title).accessibilityIdentifier("prompt-\(card.id)")
                 .contextMenu {
+                    Button { library.recommendations.record(.dismiss, card: card) } label: {
+                        Label(RecommendationCopy.text("feedback.less"), systemImage: "minus.circle")
+                    }
                     Button { perform(save: false) } label: {
                         Label(card.contentType == "skill" ? String(localized: "复制 Skill") : String(localized: "复制 Prompt"), systemImage: "doc.on.doc")
                     }.disabled(actionID != nil)
@@ -145,6 +148,7 @@ struct FeedPromptCard: View {
                 }.buttonStyle(.plain).foregroundStyle(Palette.muted).accessibilityLabel(creator.displayName)
             }
         }
+        .recommendationExposure(card, enabled: !detailPresented)
         .fullScreenCover(isPresented: $detailPresented) {
             FeedReadingPresentation(card: card).preferredColorScheme(colorScheme)
                 .promptTransitionDestination(id: card.id, in: transition)
@@ -164,7 +168,7 @@ struct FeedPromptCard: View {
                 try Task.checkCancellation()
                 guard actionID == owner, !library.isRemoved(item) else { throw FeedError.removed }
                 if save { if library.toggle(item) { savedFeedback.toggle() } }
-                else { UIPasteboard.general.string = item.displayContent.prompt; copiedFeedback.toggle() }
+                else { UIPasteboard.general.string = item.displayContent.prompt; library.recommendations.record(.use, card: card); copiedFeedback.toggle() }
             } catch is CancellationError { }
             catch { if !Task.isCancelled, actionID == owner { library.reportContentFailure(error) } }
         }
@@ -253,14 +257,15 @@ struct OwnedFeedResults: View {
     let repository: FeedRepository
     let query: FeedQuery
     var fallback: [Prompt] = []
+    var initialPreviews: [FeedCard] = []
     var excludingID: String?
-    init(repository: FeedRepository, query: FeedQuery, fallback: [Prompt] = [], excludingID: String? = nil) {
+    init(repository: FeedRepository, query: FeedQuery, fallback: [Prompt] = [], initialPreviews: [FeedCard] = [], excludingID: String? = nil) {
         _store = State(initialValue: repository.makeStore()); self.repository = repository
-        self.query = query; self.fallback = fallback; self.excludingID = excludingID
+        self.query = query; self.fallback = fallback; self.initialPreviews = initialPreviews; self.excludingID = excludingID
     }
     var body: some View {
         FeedResults(store: store, query: query, fallback: fallback,
-                    previews: repository.previewCards(for: query), excludingID: excludingID)
+                    previews: repository.previewCards(for: query, including: initialPreviews), excludingID: excludingID)
     }
 }
 
@@ -275,15 +280,15 @@ struct FeedExplorationPath: Identifiable {
         var paths: [Self] = []
         if let collection = Collection.all.first(where: { !$0.tags.isEmpty && $0.includes(item) }) {
             paths.append(.init(id: "topic", label: String(localized: "同用途"), title: collection.title,
-                               query: FeedQuery(collection: collection.id)))
+                               query: FeedQuery(collection: collection.id, sort: "recommended")))
         }
         if !item.model.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             paths.append(.init(id: "model", label: String(localized: "同模型"), title: item.displayModel,
-                               query: FeedQuery(model: item.model)))
+                               query: FeedQuery(model: item.model, sort: "recommended")))
         }
         if let creator = item.creator {
             paths.append(.init(id: "creator", label: String(localized: "同作者"), title: creator.displayName,
-                               query: FeedQuery(creator: creator.id)))
+                               query: FeedQuery(creator: creator.id, sort: "recommended")))
         }
         return paths
     }
