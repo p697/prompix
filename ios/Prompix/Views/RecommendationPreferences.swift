@@ -21,11 +21,14 @@ struct InterestSelection: View {
                         library.recommendations.setInterests(values)
                     } label: {
                         HStack(spacing: 9) {
-                            Image(systemName: topic.symbol).frame(width: 22).foregroundStyle(Palette.accent)
+                            Image(systemName: topic.symbol)
+                                .font(.system(size: typeSize.isAccessibilitySize ? 28 : 20))
+                                .frame(width: typeSize.isAccessibilitySize ? 34 : 22).foregroundStyle(Palette.accent)
                             Text(topic.title).font(.subheadline.weight(selected ? .semibold : .regular))
                                 .fixedSize(horizontal: false, vertical: true)
                             Spacer(minLength: 0)
                             Image(systemName: selected ? "checkmark.circle.fill" : "circle")
+                                .font(.system(size: typeSize.isAccessibilitySize ? 28 : 18))
                                 .foregroundStyle(selected ? Palette.accent : Palette.muted)
                         }.padding(12).frame(maxWidth: .infinity, minHeight: 54, alignment: .leading)
                             .background(selected ? Palette.accent.opacity(0.09) : Palette.soft.opacity(0.6), in: RoundedRectangle(cornerRadius: 16))
