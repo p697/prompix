@@ -18,8 +18,11 @@ export function inspectRapidAPILookup(raw: unknown, ids: readonly string[]) {
   for (const item of envelope.result.tweetResult) {
     const wrapper = z.object({ __typename: z.string(), tweet: z.unknown().optional() }).passthrough().parse(item.result);
     if (["TweetTombstone", "TweetUnavailable"].includes(wrapper.__typename)) { unavailablePlaceholders++; continue; }
-    const tweet = z.object({ __typename: z.literal("Tweet"), rest_id: numericID }).passthrough()
-      .parse(wrapper.__typename === "TweetWithVisibilityResults" ? wrapper.tweet : wrapper);
+    // Live visibility wrappers omit the nested typename. Only this known wrapper
+    // may do so; an explicit contradictory type or a bare untyped object fails.
+    const tweet = wrapper.__typename === "TweetWithVisibilityResults"
+      ? z.object({ __typename: z.literal("Tweet").optional(), rest_id: numericID }).passthrough().parse(wrapper.tweet)
+      : z.object({ __typename: z.literal("Tweet"), rest_id: numericID }).passthrough().parse(wrapper);
     if (returnedIDs.includes(tweet.rest_id) || !ids.includes(tweet.rest_id)) throw new Error("RapidAPI returned inconsistent identities");
     returnedIDs.push(tweet.rest_id);
   }

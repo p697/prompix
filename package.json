@@ -25,6 +25,7 @@
     "test:x-provider": "tsx scripts/test-x-provider.ts",
     "test:x-batch-provider": "tsx scripts/test-x-batch-provider.ts",
     "test:x-rapidapi-provider": "tsx scripts/test-rapidapi-batch-provider.ts",
+    "audit:x-rapidapi-sources": "tsx scripts/audit-rapidapi-sources.ts",
     "collect:x-search": "tsx scripts/collect-x-search-plan.ts",
     "collect:x-leads": "tsx scripts/manage-x-leads.ts",
     "collect:skills": "tsx ingest/skill-intake.ts",

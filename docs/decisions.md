@@ -816,3 +816,9 @@ Evaluate TweetAPI's documented 200-ID, one-unit lookup as an isolated read pilot
 - Test Twttr API (`twitter241`) separately from the stopped TweetAPI trial. The user's approval covers one $1 Basic month and at most eight requests inside the existing $20 cap; it does not cover Pro, renewal or a production switch.
 - Reserve the whole fixed fee before checkout. Confirm actual payment separately, count every included request and uncertain attempt, and keep protected maintenance headroom. Immutable captures allow offline replay; failed controls stop batch expansion.
 - Treat 200 IDs as an experimental bound until actual responses prove capacity and fidelity. A 1,000-call plan does not cover 10,000 X originals at two checks per day even at that batch size; use the real X population and fallback costs before claiming large-library feasibility.
+
+### 2026-10-17 — Recover captured provider schema differences offline
+
+- Accept an omitted nested tweet typename only inside a known visibility wrapper; reject contradictory types and identities. Reuse saved100-ID evidence rather than retrying a billed call, and preserve its uncertain ledger entry.
+- Normalize the pilot's full source fields through existing strict validators, then run actual extraction and revision comparison. Protected/withheld authors, unavailable media and malformed privacy/reference metadata cannot refresh source validity.
+- The first200-ID call and dashboard reconciliation establish initial batch capacity and one-call billing. They do not authorize a production switch, renew the subscription, or replace delayed reliability and fallback tests.
