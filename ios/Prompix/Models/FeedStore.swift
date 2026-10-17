@@ -20,7 +20,43 @@ import Observation
     private var pending: Task<Void, Never>?
     private let service: any FeedServing
     private let cache: FeedCache?
-    init(service: any FeedServing, cache: FeedCache? = nil) { self.service = service; self.cache = cache }
+    private let memoryPageLimit: Int
+    private struct Snapshot {
+        var items: [Source.Page.Item]
+        let release: String
+        let nextCursor: String?
+        var loadedAt: Date
+    }
+    private var snapshots: [Source.Query: Snapshot] = [:]
+    private var snapshotOrder: [Source.Query] = []
+    init(service: any FeedServing, cache: FeedCache? = nil, memoryPageLimit: Int = 0) {
+        self.service = service; self.cache = cache; self.memoryPageLimit = max(0, memoryPageLimit)
+    }
+
+    /// Select synchronously with the category control, before SwiftUI renders.
+    /// Only exact, bounded first-page snapshots can skip a loading placeholder.
+    func select(_ value: Source.Query, now: Date = Date()) {
+        guard let normalized = try? Source.validate(value), normalized != query else { return }
+        cancel()
+        query = normalized; failedFirstPage = false; cacheWriteFailed = false
+        hasLoadedAdditionalPages = false
+        if retryAt == nil || now >= retryAt! { failure = nil; retryAt = nil }
+        if let page = snapshots[normalized] {
+            items = page.items; release = page.release; loadedAt = page.loadedAt
+            isCached = now.timeIntervalSince(page.loadedAt) >= 300
+            nextCursor = isCached ? nil : page.nextCursor
+            snapshotOrder.removeAll { $0 == normalized }; snapshotOrder.append(normalized)
+        } else {
+            items = []; release = nil; nextCursor = nil; loadedAt = nil; isCached = false
+        }
+        firstPageGeneration &+= 1
+    }
+    private func remember(_ page: Source.Page, query: Source.Query, now: Date) {
+        guard memoryPageLimit > 0 else { return }
+        snapshots[query] = Snapshot(items: page.items, release: page.release, nextCursor: page.nextCursor, loadedAt: now)
+        snapshotOrder.removeAll { $0 == query }; snapshotOrder.append(query)
+        while snapshotOrder.count > memoryPageLimit { snapshots.removeValue(forKey: snapshotOrder.removeFirst()) }
+    }
 
     func load(_ value: Source.Query, force: Bool = false, now: Date = Date()) async {
         guard !Task.isCancelled else { return }
@@ -30,20 +66,19 @@ import Observation
             cancel(); items = []; query = value; release = nil; nextCursor = nil; failure = error
             return
         }
-        let sameQuery = query == normalized
+        select(normalized, now: now)
+        let needsDiskCache = release == nil
         if let retryAt, now < retryAt {
-            if !sameQuery { cancel(); items = []; query = normalized; release = nil; nextCursor = nil; loadedAt = nil; isCached = false; hasLoadedAdditionalPages = false }
             return
         }
-        if sameQuery, !force, failure == nil, !isCached, let loadedAt, now.timeIntervalSince(loadedAt) < 300 { return }
+        if !force, failure == nil, !isCached, let loadedAt, now.timeIntervalSince(loadedAt) < 300 { return }
         cancel()
-        if !sameQuery { items = []; release = nil; nextCursor = nil; loadedAt = nil; isCached = false; hasLoadedAdditionalPages = false }
         firstPageGeneration &+= 1
         query = normalized; failedFirstPage = true; failure = nil; retryAt = nil; isLoading = true
         let owner = UUID(); requestID = owner
         let task = Task { [weak self] in
             guard let self else { return }
-            if !sameQuery, let page = try? await Source.cached(in: cache, query: normalized), self.owns(owner) {
+            if needsDiskCache, let page = try? await Source.cached(in: cache, query: normalized), self.owns(owner) {
                 self.items = page.items; self.release = page.release; self.isCached = true
                 // Cached cursors may be expired; revalidate the first page before paging.
                 self.nextCursor = nil
@@ -57,6 +92,7 @@ import Observation
                 self.items = page.items; self.release = page.release; self.nextCursor = page.nextCursor
                 self.isCached = false; self.loadedAt = now; self.failure = nil
                 self.hasLoadedAdditionalPages = false; self.failedFirstPage = false
+                self.remember(page, query: normalized, now: now)
                 if let cache {
                     do { try await Source.save(page, in: cache, query: normalized, now: now); if self.owns(owner) { self.cacheWriteFailed = false } }
                     catch { if self.owns(owner) { self.cacheWriteFailed = true } }
@@ -92,7 +128,10 @@ import Observation
     func cancel() {
         pending?.cancel(); pending = nil; requestID = nil; isLoading = false
     }
-    func discard(_ ids: Set<String>) { items.removeAll { ids.contains($0.id) } }
+    func discard(_ ids: Set<String>) {
+        items.removeAll { ids.contains($0.id) }
+        for key in Array(snapshots.keys) { snapshots[key]?.items.removeAll { ids.contains($0.id) } }
+    }
     private func owns(_ owner: UUID) -> Bool { requestID == owner }
     private func finish(_ owner: UUID) {
         guard owns(owner) else { return }
@@ -101,6 +140,9 @@ import Observation
     private func record(_ error: any Error, owner: UUID, now: Date) {
         guard owns(owner), !(error is CancellationError), (error as? URLError)?.code != .cancelled else { return }
         failure = error
+        if error as? FeedError == .snapshotExpired, let query {
+            snapshots[query]?.loadedAt = .distantPast
+        }
         if case let FeedError.rateLimited(seconds) = error { retryAt = now.addingTimeInterval(seconds) }
         if case let FeedError.unavailable(seconds) = error { retryAt = now.addingTimeInterval(seconds) }
     }

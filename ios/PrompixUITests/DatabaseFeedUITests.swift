@@ -358,6 +358,44 @@ import UIKit
         XCTAssertEqual(app.searchFields.firstMatch.value as? String, "preview")
     }
 
+    func testCategorySwitchUsesWarmPagesAndCancelsColdRequest() throws {
+        launch()
+        XCTAssertTrue(app.buttons["prompt-database-fixture-9999"].waitForExistence(timeout: 15))
+        let settings = app.buttons["discoverySettings"], top = settings.frame.minY
+        app.buttons["kind-image"].tap()
+        XCTAssertTrue(app.buttons["prompt-database-fixture-9997"].waitForExistence(timeout: 10))
+        app.buttons["kind-video"].tap()
+        XCTAssertTrue(app.buttons["prompt-database-fixture-9998"].waitForExistence(timeout: 10))
+        let before = try requests().filter { $0["operation"] as? String == "page-start" && ($0["cursor"] as? String ?? "").isEmpty }.count
+        let gate = try directory().appending(path: "hold-feed-refresh")
+        try Data().write(to: gate)
+        defer { try? FileManager.default.removeItem(at: gate) }
+        for _ in 0..<3 {
+            for (kind, id) in [("image", 9997), ("video", 9998), ("all", 9999)] {
+                app.buttons["kind-" + kind].tap()
+                XCTAssertTrue(app.buttons["prompt-database-fixture-\(id)"].exists)
+                XCTAssertEqual(settings.frame.minY, top, accuracy: 1)
+                XCTAssertFalse(app.descendants(matching: .any)["feedLoading"].exists)
+            }
+        }
+        let after = try requests().filter { $0["operation"] as? String == "page-start" && ($0["cursor"] as? String ?? "").isEmpty }.count
+        XCTAssertEqual(after, before, "Warm category switches must not clear/refetch their pages")
+        capture("filter-warm-all")
+        app.buttons["kind-text"].tap()
+        XCTAssertFalse(app.buttons["prompt-database-fixture-9998"].exists)
+        XCTAssertFalse(app.buttons["prompt-database-fixture-9997"].exists)
+        XCTAssertEqual(settings.frame.minY, top, accuracy: 1)
+        XCTAssertTrue(app.descendants(matching: .any)["feedLoading"].exists)
+        capture("filter-cold-placeholder")
+        app.buttons["kind-image"].tap()
+        XCTAssertTrue(app.buttons["prompt-database-fixture-9997"].exists)
+        try FileManager.default.removeItem(at: gate)
+        app.buttons["kind-image"].tap() // Repeated selection is a no-op.
+        XCTAssertTrue(app.buttons["prompt-database-fixture-9997"].exists)
+        XCTAssertFalse(app.buttons["prompt-database-fixture-9996"].exists)
+        capture("filter-warm-image-after-cancellation")
+    }
+
     func testDiscoveryHeaderCollapsesRevealsAndResetsAfterFiltering() throws {
         launch()
         let scroll = app.scrollViews["discoveryScroll"]

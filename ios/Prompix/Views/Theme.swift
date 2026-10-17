@@ -72,16 +72,18 @@ struct KindPicker: View {
     @Binding var skillsOnly: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Namespace private var selectionLine
-    init(selection: Binding<PromptKind?>, skillsOnly: Binding<Bool> = .constant(false)) {
+    private var onSelect: ((PromptKind?, Bool) -> Void)?
+    init(selection: Binding<PromptKind?>, skillsOnly: Binding<Bool> = .constant(false), onSelect: ((PromptKind?, Bool) -> Void)? = nil) {
         _selection = selection
         _skillsOnly = skillsOnly
+        self.onSelect = onSelect
     }
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 18) {
                 choice(nil, title: String(localized: "全部"))
                 ForEach(PromptKind.allCases) { choice($0, title: $0.title) }
-                Button { selection = nil; skillsOnly = true } label: {
+                Button { select(nil, skills: true) } label: {
                     choiceLabel("Skills", selected: skillsOnly)
                 }.buttonStyle(.plain).accessibilityAddTraits(skillsOnly ? .isSelected : [])
                     .accessibilityIdentifier("kind-skill")
@@ -91,9 +93,14 @@ struct KindPicker: View {
         .animation(reduceMotion ? nil : .snappy(duration: 0.24), value: selection)
         .animation(reduceMotion ? nil : .snappy(duration: 0.24), value: skillsOnly)
     }
+    private func select(_ kind: PromptKind?, skills: Bool) {
+        guard selection != kind || skillsOnly != skills else { return }
+        if let onSelect { onSelect(kind, skills) }
+        else { selection = kind; skillsOnly = skills }
+    }
     private func choice(_ kind: PromptKind?, title: String) -> some View {
         let selected = selection == kind && !skillsOnly
-        return Button { selection = kind; skillsOnly = false } label: {
+        return Button { select(kind, skills: false) } label: {
             choiceLabel(title, selected: selected)
         }.buttonStyle(.plain)
             .accessibilityAddTraits(selected ? .isSelected : [])
