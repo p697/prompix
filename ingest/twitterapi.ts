@@ -42,7 +42,7 @@ export function canonicalTwitterVideoURL(input: string) {
 /** Normalize source fields only. Missing identities never become deletion evidence. */
 export function parseTwitterAPI(value: unknown, options: { ids?: readonly string[]; search?: boolean } = {}): TwitterAPIResult {
   const body = z.object({ tweets: z.array(z.unknown()).max(options.search ? 20 : 50), status: z.string().optional(),
-    code: z.number().optional(), has_next_page: z.boolean().optional(), next_cursor: z.string().max(2000).optional(),
+    code: z.number().optional(), has_next_page: z.boolean().optional(), next_cursor: z.string().max(2000).nullish(),
     error: z.unknown().optional() }).passthrough().parse(value);
   if (body.error !== undefined || (body.status !== undefined && body.status !== "success") || (body.code !== undefined && body.code !== 0))
     throw new Error("TwitterAPI returned an application error");
@@ -107,7 +107,7 @@ export function parseTwitterAPI(value: unknown, options: { ids?: readonly string
   }
   return { posts, creators: [...creators.values()], media, provider: "twitterapi",
     unknownIDs: options.ids?.filter(id => !posts.some(post => post.id === id)) ?? [],
-    ...(body.has_next_page ? { nextToken: body.next_cursor } : {}) };
+    ...(body.has_next_page ? { nextToken: body.next_cursor! } : {}) };
 }
 
 /** Translate the operators used by our existing discovery streams, preserving query breadth. */
