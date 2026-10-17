@@ -86,3 +86,15 @@ The three unavailable post IDs belong to the same author. A separate official us
 Source downloads now retry transient connection failures and HTTP 408/429/500/502/503/504 at most twice, keeping host, redirect, TLS and decoded-byte checks. Retry-After is honored up to 30 seconds; longer delays fail the current attempt. Missing content, invalid hosts, oversized media and TLS verification failures never trigger a retry.
 
 Only content-addressed `media/<sha256>.<extension>` uploads receive storage retries. File bytes must match the key before every attempt; a changed file stops immediately. Authentication errors and long Retry-After also stop immediately. Mutable publication pointers still use their existing reconciliation protocol, rather than replaying an uncertain write. Raw CLI diagnostics are not copied into media failure reports.
+
+### Historical readiness audit, 2026-10-17 12:20 UTC
+
+The public library contains 836 items after a separately verified quality hold removed one mismatching image. Three historical items remain published; their Chinese translations are live. The next 20 acquired originals produced 19 complete drafts, all text-approved using seven existing Codex review requests. Only 18 of those pass the subsequent library selection rules. Approval of metadata alone is not publication eligibility.
+
+Including the earlier fourth historical candidate, 19 unpublished image candidates now pass source freshness, text selection and quality-hold checks. Two image mirrors already exist; 38 further images must be prepared. All 19 still need complete Chinese translation and current presentation review. In particular, the fourth candidate's earlier image/prompt match lacks the newer presentation label, so its cached match cannot bypass the configured classification gate.
+
+Today's visual ledger has 24 completed requests covering 61 candidates and 247 images or sampled video frames. It is exhausted without failed or uncertain attempts. This is already bounded batch review, not one request per image. The current publication window permits 75 new items and 50 have been published today, but spare publication capacity cannot substitute for visual review. The readiness audit made zero model calls, vendor calls or publications and did not reset any ledger.
+
+Media preparation may proceed from these already acquired, approved sources under the content lock, using the existing allowlisted downloader, image normalization, content-addressed uploader and CDN checksum checks. Cached media is preparation only. The next review window must reuse the cache, retain all attempt accounting, revalidate source freshness, finish presentation/translation checks and apply the ordinary publication quota before adding any record. Do not repurchase the original 20 posts to restart this cohort.
+
+Both completed official compliance pilots returned empty results and failed their known-unavailable negative controls, including the user-suspension control. They are not a source-freshness replacement; do not create another copy of either job or continue polling completed jobs.

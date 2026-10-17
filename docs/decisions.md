@@ -799,3 +799,8 @@ Evaluate TweetAPI's documented 200-ID, one-unit lookup as an isolated read pilot
 - Extend the existing shared twelve-topic catalog using audited editorial tags for visual design and everyday tasks. Keep ambiguous tags unclassified instead of treating a coverage percentage as semantic accuracy.
 - Support exact tag aliases where substring matching changes meaning: sports/exercise tags must not match camera or simulated motion. Apply the same definition in cloud cards and native fallback learning.
 - Topic labels remain independent of visual presentation review; this update does not mark any image as checked, publish new content, or relax ingestion limits.
+
+## 2026-10-17 — Stop the TweetAPI signup trial and preserve backfill gates
+
+- The user chose to stop TweetAPI after repeated signup failures. Cancel the registration handoff and keep its isolated pilot dormant; no vendor API request or production switch occurred. Preserve the existing TwitterAPI.io route, frozen comparison plan and shared accounting. Do not request another account or payment until an alternative passes endpoint-specific cost and capability preflight.
+- Count historical acquisition, text approval, media preparation and actual publication separately. A previous image/prompt match without the newly required presentation label does not pass the configured classification gate. Spare publication slots do not authorize resetting visual review limits; prepare reusable media while waiting for the next review window.
