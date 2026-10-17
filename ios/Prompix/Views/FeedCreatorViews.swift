@@ -43,7 +43,7 @@ struct FeedCreatorResults: View {
                 Task { await store.loadMore() }
             }
         }
-            .refreshable { await store.load(query, force: true) }
+            .pageRefreshable { await store.load(query, force: true) }
             .task(id: query) {
                 if !query.q.isEmpty { do { try await Task.sleep(for: .milliseconds(300)) } catch { return } }
                 guard !Task.isCancelled else { return }
