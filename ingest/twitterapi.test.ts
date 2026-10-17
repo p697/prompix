@@ -3,10 +3,11 @@ import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { parseTwitterAPI, TwitterAPIClient, twitterAPIQuery } from "./twitterapi.ts";
+import { parseTwitterAPI, TwitterAPIClient, twitterAPIQuery, canonicalTwitterVideoURL } from "./twitterapi.ts";
 import { XSpendBudget } from "./x-spend.ts";
 import { json } from "./publication.ts";
-import { fullXText } from "./x-intake.ts";
+import { fullXText, extractMarkedXPrompt } from "./x-intake.ts";
+import { TransientXReadError } from "./x.ts";
 const tweet = { id: "101", text: "Original instructions", createdAt: "Fri Oct 16 10:00:00 +0000 2026", isReply: false,
   author: { id: "42", userName: "fixture", name: "Fixture" } };
 const photo = { id_str: "501", type: "photo", media_url_https: "https://pbs.twimg.com/media/fixture.jpg" };
@@ -107,4 +108,53 @@ test("empty results charge the minimum; a repeated cursor is not followed", asyn
     const ledger = await json<any>(join(root, "2026-10.json"), null);
     assert.deepEqual(ledger.entries.map((e: any) => e.accounted), [150, 150]);
   } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test("live-shape empty reply IDs and media-link entities preserve complete extraction", () => {
+  const result = parseTwitterAPI(page([{ ...tweet, inReplyToId: "", inReplyToUserId: "",
+    text: "Image prompt:\nCreate an original watercolor garden with warm morning light and delicate green leaves.\nhttps://t.co/fixture",
+    extendedEntities: { media: [{ ...photo, url: "https://t.co/fixture", expanded_url: "https://x.com/fixture/status/101/photo/1" }] } }]));
+  const extracted = extractMarkedXPrompt(result.posts[0], result.media);
+  assert.ok("body" in extracted);
+  assert.equal(extracted.body, "Create an original watercolor garden with warm morning light and delicate green leaves.");
+  assert.equal(extracted.kind, "image");
+  assert.throws(() => parseTwitterAPI(page([{ ...tweet, isReply: true, inReplyToId: "", inReplyToUserId: "" }])), /incomplete reply/);
+});
+
+test("video canonicalization preserves file identity and never rewrites an untrusted host", () => {
+  assert.equal(canonicalTwitterVideoURL("https://video-s.twimg.com/amplify_video/123/vid/example.mp4?tag=29"),
+    "https://video.twimg.com/amplify_video/123/vid/example.mp4");
+  assert.equal(canonicalTwitterVideoURL("https://example.com/example.mp4?tag=29"), "https://example.com/example.mp4?tag=29");
+  assert.equal(canonicalTwitterVideoURL("https://video.twimg.com/example.mp4?token=keep&tag=29"), "https://video.twimg.com/example.mp4?token=keep");
+});
+
+test("ambiguous quote and retweet relationships are never silently converted to originals", () => {
+  for (const flag of ["isQuote", "isRetweet"])
+    assert.throws(() => parseTwitterAPI(page([{ ...tweet, [flag]: true }])), /incomplete reference/);
+  assert.deepEqual(parseTwitterAPI(page([{ ...tweet, isQuote: true, quoted_tweet: { id: "99" } }])).posts[0].referenced_tweets,
+    [{ type: "quoted", id: "99" }]);
+});
+
+test("rate limits preserve long Retry-After periods and capture errors without retrying", async () => {
+  const root = await mkdtemp(join(tmpdir(), "prompix-twitterapi-retry-"));
+  try {
+    for (const retry of ["3600", new Date(Date.now() + 3600_000).toUTCString()]) {
+      let captured: any, calls = 0;
+      const client = new TwitterAPIClient("fixture-secret", new XSpendBudget(root), (async () => {
+        calls++; return new Response("rate limited", { status: 429, headers: { "retry-after": retry } });
+      }) as typeof fetch);
+      await assert.rejects(client.search("prompt", undefined, async raw => { captured = raw; }), error =>
+        error instanceof TransientXReadError && error.retryAfterMS > 3500_000 && error.retryAfterMS <= 3600_000);
+      assert.equal(calls, 1);
+      assert.equal(captured.httpError.status, 429);
+      assert.equal(captured.httpError.retryAfter, retry);
+    }
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+
+test("historical search uses exact UTC boundaries instead of vendor date-only windows", () => {
+  assert.equal(twitterAPIQuery("prompt since:2026-07-01 until:2026-08-01"),
+    `prompt since_time:${Date.parse("2026-07-01T00:00:00Z") / 1000} until_time:${Date.parse("2026-08-01T00:00:00Z") / 1000}`);
+  assert.throws(() => twitterAPIQuery("prompt since:2026-02-30"), /Invalid.*boundary/);
 });

@@ -1,6 +1,6 @@
 # X provider pilot and maintenance costs
 
-Status: implementation and local tests only. Production still uses the official X API. TwitterAPI.io registration and live comparisons must complete before any provider switch. The pilot does not publish, translate, mirror media, or change the discovery query mix.
+Status: live pilot completed on 2026-10-17; a full production switch did **not** pass the discovery coverage gate. Production still uses the official X API. The independent maintenance optimization is ready for deployment after CI. The pilot does not publish, translate, mirror media, or change the discovery query mix.
 
 ## Scope and cost boundary
 
@@ -20,13 +20,15 @@ Keep `TWITTERAPI_IO_KEY` only in an external `~/.config/prompix/*.env` file. Do 
 npm run test:x-provider
 # Explicitly load the external credential into the environment before this command:
 npm run test:x-provider -- --fetch
+# Reparse captured responses without credentials or network access:
+npm run test:x-provider -- --replay /absolute/external/UTC-day/plan-hash
 ```
 
 Without `--fetch`, the command only reads cached sources and writes a plan. Output defaults to `~/.local/share/prompix/x-pilot/<UTC day>/<plan hash>/`; `PROMPIX_X_PILOT_DIR` may select another external directory. The command rejects output inside the checkout or production content root. `PROMPIX_X_SPEND_DIR` selects the shared external ledger, defaulting to `~/.local/share/prompix/x-spend/`.
 
-A paid run pins that day's active plan. Changing the inputs cannot silently replace it or start another paid plan. Completed requests are reused; unresolved attempts stop. Raw successful JSON is saved before parsing, so parser repairs can replay evidence offline. There are no automatic paid retries or fallback requests. Raw source data stays outside Git.
+A paid run pins that day's active plan. Changing the inputs cannot silently replace it or start another paid plan. Completed requests are reparsed from saved raw responses; unresolved attempts stop. New paid runs freeze their comparison candidates and excerpt reviews outside Git. Legacy replay explicitly labels its baseline as the current revision of the original sample, rather than claiming the baseline was frozen before acquisition. Raw successful JSON is saved before parsing, so parser repairs can replay evidence offline. There are no automatic paid retries or fallback requests. Raw source data stays outside Git.
 
-The report compares original text, numeric author identities, source timestamps, reply parents and expected image/video URLs against the stored official-source baseline. Differences remain unresolved: an edited source or stale baseline needs investigation, not automatic rejection of either provider. The initial normalized media/long-text shapes remain provisional until actual responses confirm them. The report always records `productionSwitchAllowed: false`; it is diagnostic evidence, not a deployment authorization.
+The report compares original text, numeric author identities, source timestamps, reply parents and expected image/video URLs against the stored official-source baseline. Differences remain unresolved: an edited source or stale baseline needs investigation, not automatic rejection of either provider. It also runs the existing standalone and thread extractors and compares prompt, kind and model. Search audits flag out-of-window dates, excluded replies/quotes/retweets and missing requested media. Free-tier calls wait 6.5 seconds after the previous response completes; Retry-After values are honored up to 24 hours without automatic retries. The report always records `productionSwitchAllowed: false`; it is diagnostic evidence, not a deployment authorization.
 
 ## Production maintenance improvements
 
@@ -50,6 +52,21 @@ The 12-hour recheck target, 24-hour publication freshness gate, full thread depe
 
 ## Validation
 
-Automated tests cover budget persistence, concurrent reservation, monthly boundaries, opening spend, empty-result billing, key redaction, redirect/HTTP/JSON failures, long text and media normalization, ambiguous omissions, immutable source comparisons, maintenance prioritization, rejection skipping, fresh-source reuse and withdrawal protection. Live provider fidelity and account billing remain unverified until registration completes.
+Automated tests cover budget persistence, concurrent reservation, monthly boundaries, opening spend, empty-result billing, key redaction, redirect/HTTP/JSON failures, long text and media normalization, ambiguous omissions, immutable source comparisons, maintenance prioritization, rejection skipping, fresh-source reuse and withdrawal protection. Live lookup fidelity and trial billing were checked as described below; search equivalence failed its initial gate.
 
-Local validation on 2026-10-17: type checking passed; the full TypeScript suite passed 554 tests with one explicitly opt-in 10,000-item SQL acceptance test skipped. The scheduler safety suite passed 13 tests and the bundled first-party catalog validated. Budget/counter validation was rerun after final ledger hardening. No paid live provider request, production deployment, or mobile build is claimed by these results.
+Local validation on 2026-10-17: type checking passed; the full TypeScript suite passed 560 tests with one explicitly opt-in 10,000-item SQL acceptance test skipped. After the final UTC query conversion, all 17 provider/pilot tests passed. The scheduler safety suite passed 13 tests. Final CI results and maintenance deployment are recorded separately below. No mobile build is required for these ingestion-only changes.
+
+## Live evidence, 2026-10-17
+
+Registration succeeded with 100,000 bonus credits ($1), no recharge and no subscription. The first 25 successful requests consumed exactly 7,875 credits ($0.07875), independently confirmed in the account dashboard. A failed local TLS handshake and one HTTP 429 retained conservative reservations in the local ledger; neither appeared as a charged call in that dashboard observation. TLS was fixed with the existing host CA bundle, without disabling certificate verification.
+
+- **Known-source lookup:** all 45 requested posts were returned, covering 39 library candidates (18 images, 12 videos, 9 texts, including reply chains and galleries). Full source text, numeric author, timestamp, reply parent and media identity matched 39/39; the real extractor reproduced prompt, kind and model for 39/39. There was no existing website candidate in this sample, so this is not website extraction coverage.
+- **Video identity:** 12 videos used equivalent X CDN hosts or a non-content `tag` parameter. The adapter canonicalizes only exact HTTPS X video hosts and MP4 paths. Two pairs of 64 KiB range responses had identical bytes, total lengths and content ranges; this is not a full-file checksum comparison of all videos.
+- **Discovery:** 24 pages across the existing ten topics and two historical queries returned 480 posts without within-query page duplicates. Populated responses alone did not pass fidelity: seven current-query records violated a requested media/exclusion condition, and 29 historical records exceeded the requested month boundary.
+- **Historical repair:** exact `since_time` / `until_time` UTC seconds, as documented by the vendor, returned 80/80 posts inside July/August on a separate four-page rerun. Date-only query inputs now translate to those exact boundaries. These results establish bounded historical retrieval, not complete archive coverage.
+- **Same-window comparison:** both providers queried the same 2026-10-16 22:00 to 2026-10-17 04:30 UTC window with equivalent topics. The first image pages overlapped 11/20 official results; video 15/20; website 2/4. The third-party pages included older results while omitting newer official results, including complete visual prompts. This is a small diagnostic sample, not a global recall estimate.
+- **Gap investigation:** all 15 distinct omitted IDs were readable by third-party ID lookup. Removing the quote/reply/retweet exclusions did not recover those IDs in the first image/video pages. Thus a successful lookup is insufficient evidence of search equivalence. No production cutover is allowed on this evidence.
+
+The full experiment used 702 third-party tweet results across 35 successful calls. The final dashboard confirmed 10,530 consumed credits ($0.10530), 89,470 bonus credits remaining and zero recharge. The 44 official comparison results reserve $0.22 locally; the refreshed official dashboard rose from $14.43 to $14.56 (a $0.13 observed increase). Keep the conservative local reservation rather than assume billing timing or deduplication behavior. Raw results, query plans, extraction reports and range checks remain outside Git under `~/.local/share/prompix/x-pilot/2026-10-17/`. The $14.43 official billing-cycle spend observed before comparison was conservatively imported as opening spend in the pilot ledger. Production official reads are still independent and must be reconciled again before a shared budget can be activated.
+
+The next architecture candidate is third-party discovery/known-ID reads with a bounded official validation and discovery supplement, explicit acquisition provenance and one dollar ledger across all paths. It is a candidate, not an implemented or validated $10–20/month service. The current official production collection cannot be claimed to fit that target merely because the trial API is cheap.

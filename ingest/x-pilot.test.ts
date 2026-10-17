@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { convertXDiscovery } from "./x-intake.ts";
-import { pilotSample, comparePilotSources } from "./x-pilot.ts";
+import { pilotSample, comparePilotSources, comparePilotExtraction, auditPilotSearch } from "./x-pilot.ts";
 import type { TwitterAPIResult } from "./twitterapi.ts";
 
 const now = new Date().toISOString();
@@ -23,4 +23,20 @@ test("pilot sample keeps every selected dependency and stays within one lookup r
   assert.equal(result.ids.length, 2);
   assert.ok(result.candidates.some(c => c.source.context));
   assert.deepEqual(new Set(result.ids), new Set(["123", "124"]));
+});
+
+test("pilot exercises actual instruction extraction in addition to source-text parity", () => {
+  const result: TwitterAPIResult = { ...snapshot, provider: "twitterapi", unknownIDs: [] };
+  assert.equal(comparePilotExtraction([candidate], result, now)[0].matched, true);
+  assert.equal(comparePilotExtraction([candidate], { ...result, posts: [{ ...post, text: post.text.replace("Text prompt:", "Tutorial:") }] }, now)[0].missing, true);
+});
+
+test("search audits reject out-of-window dates and missing media even when the API succeeds", () => {
+  const result: TwitterAPIResult = { posts: [{ ...post, created_at: "2026-08-01T00:00:00Z", referenced_tweets: [{ type: "quoted", id: "122" }] }],
+    media: [], creators: [creator], provider: "twitterapi", unknownIDs: [] };
+  assert.deepEqual(auditPilotSearch("prompt has:images -is:quote since:2026-07-01 until:2026-08-01", result)[0].issues,
+    ["after-window", "excluded-quote", "missing-image"]);
+  const start = Date.parse("2026-08-01T00:00:00Z") / 1000;
+  assert.deepEqual(auditPilotSearch(`prompt since_time:${start} until_time:${start + 1}`, result), []);
+  assert.equal(auditPilotSearch(`prompt since_time:${start + 1}`, result)[0].issues[0], "before-window");
 });

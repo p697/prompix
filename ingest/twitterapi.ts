@@ -5,14 +5,16 @@ import { xMediaSchema, xPostSchema, type XMedia, type XPost } from "./x-intake.t
 import { XSpendBudget } from "./x-spend.ts";
 
 const id = z.string().regex(/^\d{1,19}$/);
+const optionalReplyID = z.union([id, z.literal("")]).nullish();
 const entities = z.object({ urls: z.array(z.object({ url: z.string(), expanded_url: z.string().optional(),
-  unwound_url: z.string().optional(), indices: z.array(z.number().int()).optional() }).passthrough()).max(100).optional() }).passthrough();
+  unwound_url: z.string().optional(), media_key: z.string().optional(), indices: z.array(z.number().int()).optional() }).passthrough()).max(100).optional() }).passthrough();
 const rawMedia = z.object({ id_str: id.optional(), media_key: z.string().optional(), type: z.enum(["photo", "video", "animated_gif"]),
+  url: z.string().optional(), expanded_url: z.string().optional(),
   media_url_https: z.string(), video_info: z.object({ variants: z.array(z.object({ content_type: z.string(), url: z.string(),
     bitrate: z.number().optional() })).max(30) }).optional() }).passthrough();
 const rawTweet = z.object({
   id, text: z.string().min(1).max(50_000), createdAt: z.string(), lang: z.string().optional(),
-  isReply: z.boolean(), inReplyToId: id.nullish(), inReplyToUserId: id.nullish(), conversationId: id.optional(),
+  isReply: z.boolean(), isQuote: z.boolean().optional(), isRetweet: z.boolean().optional(), inReplyToId: optionalReplyID, inReplyToUserId: optionalReplyID, conversationId: id.optional(),
   author: z.object({ id, userName: z.string(), name: z.string(), profilePicture: z.string().optional(),
     description: z.string().optional(), unavailable: z.boolean().optional(), isProtected: z.boolean().optional(),
     withheldInCountries: z.array(z.string()).optional() }).passthrough(),
@@ -25,6 +27,17 @@ const rawTweet = z.object({
 export type TwitterAPIResult = { posts: XPost[]; creators: ReturnType<typeof parseXUsers>; media: XMedia[];
   nextToken?: string; unknownIDs: string[]; provider: "twitterapi" };
 type CaptureResponse = (raw: unknown) => Promise<void>;
+
+/** X's alternate video CDN and non-content tag parameter do not change the MP4 identity. */
+export function canonicalTwitterVideoURL(input: string) {
+  const url = new URL(input);
+  if (url.protocol === "https:" && !url.username && !url.password && !url.port &&
+      ["video.twimg.com", "video-s.twimg.com"].includes(url.hostname) && url.pathname.endsWith(".mp4")) {
+    url.hostname = "video.twimg.com";
+    url.searchParams.delete("tag");
+  }
+  return url.toString();
+}
 
 /** Normalize source fields only. Missing identities never become deletion evidence. */
 export function parseTwitterAPI(value: unknown, options: { ids?: readonly string[]; search?: boolean } = {}): TwitterAPIResult {
@@ -56,6 +69,8 @@ export function parseTwitterAPI(value: unknown, options: { ids?: readonly string
       references.push({ type: "replied_to", id: tweet.inReplyToId });
     }
     for (const [field, type] of [["quoted_tweet", "quoted"], ["retweeted_tweet", "retweeted"]] as const) {
+      if ((type === "quoted" ? tweet.isQuote : tweet.isRetweet) && tweet[field] == null)
+        throw new Error("TwitterAPI returned an incomplete reference");
       if (tweet[field] != null) references.push({ type, id: z.object({ id }).parse(tweet[field]).id });
     }
     const attachments: string[] = [];
@@ -66,14 +81,25 @@ export function parseTwitterAPI(value: unknown, options: { ids?: readonly string
       attachments.push(key);
       const item = xMediaSchema.parse({ media_key: key, type: source.type,
         ...(source.type === "photo" ? { url: source.media_url_https } : { preview_image_url: source.media_url_https,
-          variants: source.video_info?.variants.map(v => ({ content_type: v.content_type, url: v.url, bit_rate: v.bitrate })) }) });
+          variants: source.video_info?.variants.map(v => ({ content_type: v.content_type, url: canonicalTwitterVideoURL(v.url), bit_rate: v.bitrate })) }) });
       const existing = media.find(m => m.media_key === key);
       if (existing && JSON.stringify(existing) !== JSON.stringify(item)) throw new Error("TwitterAPI returned conflicting media");
       if (!existing) media.push(item);
     }
+    const normalizedEntities = (original?: z.infer<typeof entities>) => {
+      const urls = [...(original?.urls ?? [])];
+      for (const source of tweet.extendedEntities?.media ?? []) {
+        if (!source.url || !source.expanded_url) continue;
+        const linked = { url: source.url, expanded_url: source.expanded_url, media_key: source.media_key ?? source.id_str! };
+        const index = urls.findIndex(value => value.url === linked.url && value.expanded_url === linked.expanded_url);
+        if (index >= 0) urls[index] = { ...urls[index], media_key: linked.media_key };
+        else urls.push(linked);
+      }
+      return original || urls.length ? { ...original, urls } : undefined;
+    };
     posts.push(xPostSchema.parse({ id: tweet.id, author_id: tweet.author.id, text: tweet.text,
-      created_at: created.toISOString(), truncated: tweet.truncated, entities: tweet.entities,
-      ...(tweet.note_tweet ? { note_tweet: tweet.note_tweet } : {}),
+      created_at: created.toISOString(), truncated: tweet.truncated, entities: normalizedEntities(tweet.entities),
+      ...(tweet.note_tweet ? { note_tweet: { ...tweet.note_tweet, entities: normalizedEntities(tweet.note_tweet.entities) } } : {}),
       ...(tweet.conversationId ? { conversation_id: tweet.conversationId } : {}),
       ...(tweet.isReply ? { in_reply_to_user_id: tweet.inReplyToUserId } : {}),
       ...(references.length ? { referenced_tweets: references } : {}),
@@ -87,7 +113,12 @@ export function parseTwitterAPI(value: unknown, options: { ids?: readonly string
 /** Translate the operators used by our existing discovery streams, preserving query breadth. */
 export function twitterAPIQuery(query: string) {
   return query.replaceAll("has:images", "filter:images").replaceAll("has:videos", "filter:videos")
-    .replaceAll("-is:retweet", "-filter:retweets").replaceAll("-is:reply", "-filter:replies").replaceAll("-is:quote", "-filter:quote");
+    .replaceAll("-is:retweet", "-filter:retweets").replaceAll("-is:reply", "-filter:replies").replaceAll("-is:quote", "-filter:quote")
+    .replace(/\b(since|until):(\d{4}-\d{2}-\d{2})(?=\s|$)/g, (_match, operator: string, day: string) => {
+      const date = new Date(`${day}T00:00:00Z`);
+      if (!Number.isFinite(date.getTime()) || date.toISOString().slice(0, 10) !== day) throw new Error("Invalid TwitterAPI date boundary");
+      return `${operator}_time:${date.getTime() / 1000}`;
+    });
 }
 export class TwitterAPIClient {
   constructor(private readonly key: string, private readonly budget: XSpendBudget,
@@ -101,8 +132,16 @@ export class TwitterAPIClient {
       try { response = await this.fetcher(url, { headers: { "X-API-Key": this.key }, redirect: "manual", signal: AbortSignal.timeout(60_000) }); }
       catch { throw new TransientXReadError("TwitterAPI transport failed; request remains accounted"); }
       if (!response.ok) {
-        await response.body?.cancel();
-        if (response.status === 429 || response.status >= 500) throw new TransientXReadError(`TwitterAPI HTTP ${response.status}`);
+        if (capture) {
+          const bytes = await readResponseBytes(response, 64_000);
+          await capture({ httpError: { status: response.status, retryAfter: response.headers.get("retry-after"), body: bytes.toString() } });
+        } else await response.body?.cancel();
+        if (response.status === 429 || response.status >= 500) {
+          const retry = response.headers.get("retry-after");
+          const wait = retry && /^\d+$/.test(retry) ? Number(retry) * 1000 : retry ? Date.parse(retry) - Date.now() : 6500;
+          throw new TransientXReadError(`TwitterAPI HTTP ${response.status}`,
+            Number.isFinite(wait) ? Math.max(1000, Math.min(wait, 24 * 3600_000)) : 6500);
+        }
         throw new Error(`TwitterAPI HTTP ${response.status}`);
       }
       let raw: unknown;
