@@ -1,7 +1,8 @@
 import { createHash } from "node:crypto";
-import { download, readResponseBytes } from "./network.ts";
+import { readResponseBytes } from "./network.ts";
 import { z } from "zod";
 import type { Creator } from "./creators.ts";
+import { configuredXSpendBudget } from "./x-spend.ts";
 
 const userSchema = z.object({
   id: z.string().regex(/^\d+$/), name: z.string().trim().min(1).max(200),
@@ -39,8 +40,7 @@ export function xUserLookupURL(usernames: readonly string[]): URL {
 
 /** Caller records the paid attempt before this one request; no automatic retry. */
 export async function lookupXUsers(bearer: string, usernames: readonly string[]) {
-  const result = await download(xUserLookupURL(usernames).toString(), ["api.x.com"], 500_000, { Authorization: `Bearer ${bearer}` });
-  const body = JSON.parse(result.bytes.toString());
+  const body = await requestX(xUserLookupURL(usernames).toString(), bearer, "users") as { data?: unknown[]; errors?: unknown[] };
   if (!body || (!Array.isArray(body.data) && !Array.isArray(body.errors))) throw new Error("X user lookup returned an invalid response; account availability unchanged");
   const creators = parseXUsers(body.data);
   if (Array.isArray(body.data) && creators.length !== body.data.length) throw new Error("X user lookup returned invalid profile data; account availability unchanged");
@@ -227,7 +227,28 @@ export class TransientXReadError extends Error {
   constructor(message: string, public readonly retryAfterMS = 1000) { super(message); }
 }
 /** One bounded request. Retry policy belongs to the persistent, budgeted caller. */
-async function requestX(url: string, bearer: string, operation: "search" | "lookup", maxBytes = 500_000) {
+async function requestX(url: string, bearer: string, operation: "search" | "lookup" | "users", maxBytes = 500_000) {
+  const budget = configuredXSpendBudget();
+  if (!budget) return requestXResponse(url, bearer, operation, maxBytes);
+  const query = new URL(url).searchParams;
+  const units = operation === "search" ? Number(query.get("max_results"))
+    : (query.get(operation === "users" ? "usernames" : "ids") ?? "").split(",").filter(Boolean).length;
+  if (!Number.isInteger(units) || units < 1 || units > 100) throw new Error("Invalid official X result bound");
+  const reservation = await budget.reserve("official", operation, url, units);
+  try {
+    const raw = await requestXResponse(url, bearer, operation, maxBytes);
+    const body = z.object({ data: z.array(z.unknown()).max(units).optional(), errors: z.array(z.unknown()).optional(),
+      meta: z.object({ result_count: z.number().int().nonnegative().optional() }).passthrough().optional() }).passthrough().parse(raw);
+    // Missing counts retain their upper bound. Return the response so the existing
+    // availability parser can still recognize explicit deletion/protection errors.
+    await reservation.finish(body.data?.length ?? (body.meta?.result_count === 0 ? 0 : undefined));
+    return raw;
+  } catch (error) {
+    try { await reservation.finish(); } catch { /* Retain the persisted reservation on uncertain outcomes. */ }
+    throw error;
+  }
+}
+async function requestXResponse(url: string, bearer: string, operation: "search" | "lookup" | "users", maxBytes: number) {
   const unchanged = operation === "search" ? "cursor unchanged" : "cached posts unchanged";
   let response: Response;
   try {
