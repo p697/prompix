@@ -123,6 +123,106 @@ import XCTest
         XCTAssertFalse(profile.allowsRecommended(revealing), "Explicit negative feedback still applies")
     }
 
+    /// Opt-in replay of frozen public candidate pools. It measures ranking behavior,
+    /// not human relevance or engagement, and never reads a user's preference file.
+    func testPublishedCandidatePoolsMeasureInterestLiftAndExposureSuppression() throws {
+        let environment = ProcessInfo.processInfo.environment
+        guard let path = environment["PROMPIX_RECOMMENDATION_POOLS"], let output = environment["PROMPIX_RECOMMENDATION_REPORT"] else {
+            throw XCTSkip("Requires external public candidate pools; third-party content is never committed.")
+        }
+        struct Session: Decodable { let name: String; let kind: String?; let items: [FeedCard] }
+        struct Capture: Decodable { let complete: Bool; let release: String; let sessions: [Session] }
+        let file = URL(fileURLWithPath: path)
+        XCTAssertLessThanOrEqual(try file.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? .max, 8_000_000)
+        let capture = try JSONDecoder().decode(Capture.self, from: Data(contentsOf: file))
+        XCTAssertTrue(capture.complete); XCTAssertLessThanOrEqual(capture.sessions.count, 32)
+        XCTAssertGreaterThanOrEqual(capture.sessions.filter { $0.kind == nil }.count, 10)
+        let profiles = InterestCatalog.topics.map { [$0.id] } + [["portrait", "fashion", "illustration"], ["product", "web", "cinema"], ["writing", "learning", "lifestyle"]]
+        var rows: [[String: Any]] = [], exposureRows: [[String: Any]] = [], timings: [Double] = []
+        var exposureProfiles: [String: LocalRecommendations] = [:]
+        var exposures: [String: Set<String>] = [:]
+        let training = capture.sessions.flatMap(\.items).reduce(into: [String: FeedCard]()) { $0[$1.id] = $1 }.values.sorted { $0.id < $1.id }
+        func match(_ cards: [FeedCard], _ interests: Set<String>) -> Int {
+            cards.filter { !Set(InterestCatalog.classify($0)).isDisjoint(with: interests) }.count
+        }
+        for session in capture.sessions {
+            let cards = session.items
+            _ = try FeedPage(schemaVersion: 3, release: capture.release, items: cards, nextCursor: nil)
+                .validated(locale: "zh-Hans", limit: 90, release: capture.release)
+            XCTAssertEqual(Set(cards.map(\.id)).count, cards.count)
+            let neutral = LocalRecommendations(now: now)
+            let baseline = neutral.rank(cards, now: now).filter(neutral.allowsRecommended)
+            for values in profiles {
+                let interests = Set(values), profile = LocalRecommendations(now: now)
+                XCTAssertTrue(profile.setInterests(interests))
+                let start = ContinuousClock.now
+                let full = profile.rank(cards, now: now)
+                let elapsed = start.duration(to: .now).components
+                timings.append(Double(elapsed.seconds) * 1000 + Double(elapsed.attoseconds) / 1e15)
+                XCTAssertEqual(full.map(LocalRecommendations.visual), cards.map(LocalRecommendations.visual))
+                XCTAssertEqual(Set(full.map(\.id)), Set(cards.map(\.id)))
+                XCTAssertEqual(full.map(\.id), profile.rank(cards, now: now).map(\.id))
+                let ranked = full.filter(profile.allowsRecommended), top = Array(ranked.prefix(30)), base = Array(baseline.prefix(30))
+                XCTAssertFalse(top.contains { $0.presentation == "suggestive" || $0.presentation == "explicit" })
+                if session.kind == nil { XCTAssertGreaterThanOrEqual(top.filter(LocalRecommendations.visual).count, 20) }
+                let learned = LocalRecommendations(now: now)
+                let poolIDs = Set(cards.map(\.id))
+                let history = training.filter { !poolIDs.contains($0.id) && !Set(InterestCatalog.classify($0)).isDisjoint(with: interests) }.prefix(12)
+                for card in history { learned.record(.open, card: card, now: now.addingTimeInterval(-3600)) }
+                let learnedTop = Array(learned.rank(cards, now: now).filter(learned.allowsRecommended).prefix(30))
+                XCTAssertTrue(learned.setLearning(false))
+                XCTAssertEqual(learned.rank(cards, now: now).filter(learned.allowsRecommended).map(\.id), baseline.map(\.id))
+                let visualSlots = top.filter(LocalRecommendations.visual).count
+                let matching = ranked.filter { !Set(InterestCatalog.classify($0)).isDisjoint(with: interests) }
+                let visualMatches = matching.filter(LocalRecommendations.visual).count
+                let attainableMatches = min(visualSlots, visualMatches) + min(top.count - visualSlots, matching.count - visualMatches)
+                let authors = Dictionary(grouping: top.compactMap { $0.creator?.id }, by: { $0 })
+                rows.append(["session": session.name, "kind": session.kind ?? "all", "interests": values,
+                    "pool": cards.count, "availableMatching": match(ranked, interests), "topCount": top.count,
+                    "baselineMatching": match(base, interests), "personalizedMatching": match(top, interests),
+                    "learnedMatching": match(learnedTop, interests), "trainingItemsOutsidePool": history.count, "attainableMatching": attainableMatches,
+                    "visual": top.filter(LocalRecommendations.visual).count, "distinctCreators": authors.count,
+                    "maxCreatorItems": authors.values.map(\.count).max() ?? 0,
+                    "unknownPresentation": top.filter { $0.presentation == nil || $0.presentation == "unknown" }.count])
+            }
+            do {
+                let kind = session.kind ?? "all"
+                let exposureProfile = exposureProfiles[kind] ?? LocalRecommendations(now: now)
+                exposureProfiles[kind] = exposureProfile
+                var seen = exposures[kind] ?? []
+                let ranked = exposureProfile.rank(cards, now: now).filter(exposureProfile.allowsRecommended)
+                let top = Array(ranked.prefix(30)), base = Array(baseline.prefix(30))
+                let repeated = top.filter { seen.contains($0.id) }.count
+                exposureRows.append(["session": session.name, "kind": kind, "topCount": top.count, "availableUnseen": ranked.filter { !seen.contains($0.id) }.count,
+                    "baselineRepeated": base.filter { seen.contains($0.id) }.count, "personalizedRepeated": repeated])
+                for card in top { exposureProfile.record(.impression, card: card, now: now); seen.insert(card.id) }
+                exposureProfile.flush(); exposures[kind] = seen
+            }
+        }
+        timings.sort()
+        let report: [String: Any] = ["at": ISO8601DateFormatter().string(from: Date()), "release": capture.release,
+            "scope": "Real public candidate pools replayed through the production native ranker with synthetic local profiles. Tag matches are not human relevance or online engagement.",
+            "rows": rows, "exposure": exposureRows, "rankingMedianMS": timings[timings.count / 2],
+            "rankingP95MS": timings[min(timings.count - 1, Int(ceil(Double(timings.count) * 0.95)) - 1)], "paidXRequests": 0]
+        try JSONSerialization.data(withJSONObject: report, options: [.prettyPrinted, .sortedKeys]).write(to: URL(fileURLWithPath: output), options: .atomic)
+        // Judge improvement against what this finite pool can actually supply,
+        // retaining the visual lane schedule. Do not demand unseen items from an exhausted category.
+        for values in profiles {
+            let cohort = rows.filter { ($0["kind"] as? String) == "all" && ($0["interests"] as? [String]) == values }
+            func sum(_ key: String) -> Int { cohort.reduce(0) { $0 + ($1[key] as? Int ?? 0) } }
+            let baseline = sum("baselineMatching"), opportunity = sum("attainableMatching") - baseline
+            if opportunity >= cohort.count {
+                XCTAssertGreaterThanOrEqual(Double(sum("personalizedMatching") - baseline), Double(opportunity) * 0.25,
+                                            "Explicit interest must realize a meaningful part of available matching candidates: \(values)")
+                XCTAssertGreaterThan(sum("learnedMatching"), baseline, "Disjoint click history should improve relevant topic ranking: \(values)")
+            }
+        }
+        let available = exposureRows.filter { ($0["availableUnseen"] as? Int ?? 0) >= ($0["topCount"] as? Int ?? 0) }
+        XCTAssertLessThanOrEqual(available.reduce(0) { $0 + ($1["personalizedRepeated"] as? Int ?? 0) },
+                                 available.reduce(0) { $0 + ($1["baselineRepeated"] as? Int ?? 0) })
+        print("Published recommendation evaluation: \(rows.count) profile/session combinations, \(exposureRows.count) refresh sessions")
+    }
+
     func testSessionRotationBoundedPoolsWarmRestorationAndOfflineCache() async throws {
         let server = RecommendationServer(), cache = FeedCache(directory: directory)
         let profile = LocalRecommendations(now: now)
