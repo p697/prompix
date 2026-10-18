@@ -13,7 +13,7 @@ import { codexEditorialProvider } from "./editorial-provider.ts";
 import { selectLibrary } from "./library.ts";
 import { publicationText } from "./templates.ts";
 import { websiteReviewer } from "./website-review.ts";
-import { mirrorPromptMedia } from "./mirror-media.ts";
+import { mirrorPromptMediaBatch } from "./mirror-media.ts";
 import { runVisualReview, applyVisualPresentation, visualCacheSchema, visualLedgerSchema, visualReviewVersion } from "./visual-review.ts";
 import { codexVisualProvider } from "./visual-provider.ts";
 import { prepareVisualMedia } from "./visual-media.ts";
@@ -43,7 +43,11 @@ export async function runHistoryBatch(directory: string, input: HistoryBatch, pr
     report.priorErrors = [...(Array.isArray(report.priorErrors) ? report.priorErrors : []), { at: report.updatedAt, error: report.error }];
     delete report.error;
   }
-  const phase = async (stage: string) => { report.stage = stage; report.updatedAt = new Date().toISOString(); await atomic(reportPath, report); };
+  const phase = async (stage: string) => {
+    const at = new Date().toISOString();
+    report.phases = [...(Array.isArray(report.phases) ? report.phases : []), { stage, at }];
+    report.stage = stage; report.updatedAt = at; await atomic(reportPath, report);
+  };
   try {
     await phase("source");
     const ledgers = await readdir(join(directory, "x-lead-acquisitions")).catch(e => { if (e.code === "ENOENT") return []; throw e; });
@@ -83,11 +87,7 @@ export async function runHistoryBatch(directory: string, input: HistoryBatch, pr
     for (const name of ["media-map.json", "media-aspects.json"]) {
       if (await json(join(directory, name), null) === null) await atomic(join(directory, name), await json(join(sharedRoot, name), {}));
     }
-    const mirrored: Prompt[] = [], mediaErrors: { id: string; error: string }[] = [];
-    for (const item of planned) {
-      try { mirrored.push(await mirrorPromptMedia(item, directory)); }
-      catch (error) { mediaErrors.push({ id: item.id, error: (error instanceof Error ? error.message : "Media failure").slice(0, 300) }); }
-    }
+    const { prompts: mirrored, errors: mediaErrors } = await mirrorPromptMediaBatch(planned, directory);
     report.mediaErrors = mediaErrors; report.mediaPrepared = mirrored.length;
     await phase("visual");
     const visualPath = join(directory, "visual-cache.json"), visualLedgerPath = join(directory, "visual-ledger.json");
@@ -126,7 +126,7 @@ export async function runHistoryBatch(directory: string, input: HistoryBatch, pr
         await writeImmutableBytes(join(translations, "responses", `${attempt}.json`), Buffer.from(JSON.stringify({ locale, ids: segments.map(s => s.id), response }) + "\n"));
         return response;
       }, providerName: "codex", model: "gpt-6-luna",
-      concurrency: 2, maxRequests: historyLimits.translation, maxUSD: 0, locales: translationLocales,
+      concurrency: 3, maxRequests: historyLimits.translation, maxUSD: 0, locales: translationLocales,
       prior: priorTranslation,
       persist: async (state, status) => { await atomic(translationPath, state); await atomic(join(translations, "report.json"), status); } });
     report.translation = translationReport;
