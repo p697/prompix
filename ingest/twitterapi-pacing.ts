@@ -28,16 +28,21 @@ export async function paceTwitterAPI<T>(root: string, operation: () => Promise<T
     const previous = stateSchema.parse(await json(state, { notBefore: 0 }));
     const delay = Math.max(0, previous.notBefore - Date.now());
     if (delay > deadline - Date.now()) throw new Error("TwitterAPI cooldown exceeds this wait window; no request sent");
-    if (delay) await new Promise(resolve => setTimeout(resolve, delay));
+    while (previous.notBefore > Date.now())
+      await new Promise(resolve => setTimeout(resolve, previous.notBefore - Date.now()));
     // Persist before the callback can reserve money or send HTTP. Keeping the
     // lock through response settlement prevents overlapping daily/backfill calls.
     await atomic(state, { notBefore: Date.now() + interval });
+    let cooldown = interval;
     try { return await operation(); }
     catch (error) {
-      if (error instanceof TransientXReadError) {
-        await atomic(state, { notBefore: Date.now() + Math.max(interval, Math.min(error.retryAfterMS, 24 * 3600_000)) });
-      }
+      if (error instanceof TransientXReadError)
+        cooldown = Math.max(interval, Math.min(error.retryAfterMS, 24 * 3600_000));
       throw error;
+    } finally {
+      // Start the next interval after settlement. A slow filesystem write or a
+      // suspended process before HTTP must not consume the network spacing.
+      await atomic(state, { notBefore: Date.now() + cooldown });
     }
   } finally { await rm(lock, { recursive: true }); }
 }
