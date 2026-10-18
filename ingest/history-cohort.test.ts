@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -65,6 +66,10 @@ test("completion does not count incomplete translations, unclassified or stale s
   assert.deepEqual(currentHistoryAcceptance([complete], [], holds, []), []);
   assert.deepEqual(currentHistoryAcceptance([complete], [], { schemaVersion: 1, holds: {} }, [complete.id]), []);
   assert.deepEqual(currentHistoryAcceptance([complete], [], { schemaVersion: 1, holds: {} }, []).map(p => p.id), [complete.id]);
+  const hash = (s: string) => createHash("sha256").update(s).digest("hex");
+  const rejected = { locale: "zh-Hans", segmentID: "0".repeat(64), translationSHA256: "0".repeat(64), reason: "Confirmed semantic defect",
+    sourceSHA256: hash(complete.prompt), renderedTranslationSHA256: hash(complete.localization.translations["zh-Hans"].prompt) };
+  assert.deepEqual(currentHistoryAcceptance([complete], [], { schemaVersion: 1, holds: {} }, [], Date.now(), [rejected]), []);
 });
 test("an interrupted historical acquisition stays blocked across calendar days without HTTP", async () => {
   const directory = await mkdtemp(join(tmpdir(), "prompix-history-test-"));
@@ -74,6 +79,10 @@ test("an interrupted historical acquisition stays blocked across calendar days w
   try {
     await atomic(join(directory, "x-lead-acquisitions", "2026-01-01.json"), [{ state: "reserved", ids: ["1"] }]);
     await assert.rejects(runHistoryBatch(directory, { version: 1, id: "batch-0001", createdAt: now, leads: [lead(1)] }, [], directory), /Unresolved historical acquisition/);
+    await atomic(join(directory, "complete.json"), { schemaVersion: 1, version: "synthetic-completion", prompts: [] });
+    await assert.rejects(runHistoryBatch(directory, { version: 1, id: "batch-0001", createdAt: now, leads: [lead(1)] }, [], directory, undefined, true), /Unresolved historical acquisition/);
+    assert.deepEqual(await json(join(directory, "x-lead-acquisitions", "2026-01-01.json"), []), [{ state: "reserved", ids: ["1"] }]);
+    assert.deepEqual((await json<{ prompts: unknown[] }>(join(directory, "complete.json"), { prompts: [] })).prompts, [], "Old completion remains inspectable after unsuccessful revalidation");
     assert.equal(calls, 0); assert.equal((await json<{ stage: string }>(join(directory, "report.json"), { stage: "" })).stage, "blocked");
   } finally { globalThis.fetch = fetchBefore; for (const key of Object.keys(process.env)) if (!(key in before)) delete process.env[key]; Object.assign(process.env, before); await rm(directory, { recursive: true, force: true }); }
 });

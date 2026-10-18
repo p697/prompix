@@ -80,6 +80,34 @@ test("JSON keys, nesting and non-string parameters survive translated values", (
   assert.deepEqual(Object.keys(parsed), ["prompt", "seed", "model", "aspect_ratio", "style_preset", "html", "style"]);
   assert.match(parsed.prompt, /\{subject\}/);
 });
+test("multiline captions and explicit-language dialogue remain literal without freezing scene directions", () => {
+  const source = "语言：中文\n女主自然开口：\n\n“欢迎……\n今天去哪？”\n\n字幕逐字显示：\n“欢迎……\n今天去哪？”\n\n她轻轻挥手，然后走向门口。";
+  const result = protectText(source, true);
+  assert.deepEqual(result.protectedValues, ["“欢迎……\n今天去哪？”", "“欢迎……\n今天去哪？”"]);
+  assert.match(result.masked, /她轻轻挥手/);
+  assert.equal(restoreText(result.masked, result.protectedValues), source);
+  assert.equal(protectText(source, false).protectedValues.length, 0);
+  const english = protectText('Dialogue must be in Japanese.\nThe narrator whispers:\n\n「明日、また会おう。」\nThe camera pulls back.', true);
+  assert.ok(english.protectedValues.includes('「明日、また会おう。」'));
+  assert.match(english.masked, /The camera pulls back/);
+  const spoken = protectText('Commentator:\n\n“THE RACE IS ON!”\n\nThe narrator whispers:\n“Stay close.”\n\nMood: “quiet excitement.”', true);
+  assert.deepEqual(spoken.protectedValues, ['“THE RACE IS ON!”', '“Stay close.”']);
+  assert.match(spoken.masked, /quiet excitement/);
+});
+test("unquoted on-screen typography stops before the next visual instruction", () => {
+  const source = "Large neon typography appears:\n\nFOLLOW THE LIGHT.\nFIND YOUR WAY.\nUse slow camera moves throughout.\n\nTEXT REQUIREMENTS:\nKEEP BACKGROUND CLEAN";
+  const result = protectText(source, true);
+  assert.deepEqual(result.protectedValues, ["FOLLOW THE LIGHT.", "FIND YOUR WAY."]);
+  assert.match(result.masked, /Use slow camera moves/);
+  assert.match(result.masked, /KEEP BACKGROUND CLEAN/);
+  assert.equal(restoreText(result.masked, result.protectedValues), source);
+  assert.deepEqual(protectText(source, false).protectedValues, []);
+  const template = "Below the scene, include vintage typography:\n\n[PLACE]\nNo. [NUMBER] [DESCRIPTION]\nYear: 2040\n\nTypography should use a serif font.";
+  const fields = protectText(template, true);
+  assert.deepEqual(fields.protectedValues, ["[PLACE]", "No. [NUMBER] [DESCRIPTION]", "Year: 2040"]);
+  assert.match(fields.masked, /Typography should use a serif font/);
+  assert.equal(restoreText(fields.masked, fields.protectedValues), template);
+});
 test("JSON quality enums stay opaque while descriptive quality prose is translated", () => {
   const description = "Detailed texture, natural lighting, and realistic materials.";
   const prose = { ...item, prompt: JSON.stringify({ quality: description, variant: { quality: "high" } }) };
@@ -121,6 +149,12 @@ test("wrong target script and oversized translation cannot be published", () => 
   const cache = fillCache();
   cache.segments.en[promptSegments(item)[0].id] = "x".repeat(251);
   assert.equal(localizePrompt(item, "en", cache), undefined);
+});
+test("mid-century design cannot silently turn into medieval Chinese terminology", () => {
+  assert.throws(() => validateSegment("Mid-century graphic illustration", "中世纪图形插画", "zh-Hans"), /mistranslated as medieval/);
+  assert.throws(() => validateSegment("Mid century graphic illustration", "中世紀圖形插畫", "zh-Hant"), /mistranslated as medieval/);
+  assert.doesNotThrow(() => validateSegment("Mid-century graphic illustration", "20世纪中叶图形插画", "zh-Hans"));
+  assert.doesNotThrow(() => validateSegment("Compare mid-century and medieval illustration", "对比20世纪中叶与中世纪插画", "zh-Hans"));
 });
 test("request budget is persisted before provider execution and unchanged reruns cost no requests", async () => {
   const cache = emptyTranslationCache();

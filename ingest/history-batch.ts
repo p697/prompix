@@ -1,5 +1,6 @@
 import { mkdtemp, rm, readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
+import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { catalogSchema, type Prompt } from "../packages/schema/catalog.ts";
 import { atomic, json, writeImmutableBytes } from "./publication.ts";
@@ -24,13 +25,18 @@ import { runTranslations, type TranslationRunReport } from "./translation-runner
 import { codexTranslationProvider } from "./translation-provider.ts";
 
 /** Run under the cohort lock. This stages artifacts only, and never activates a public release. */
-export async function runHistoryBatch(directory: string, input: HistoryBatch, previous: Prompt[], sharedRoot: string, seedTranslations?: string) {
+export async function runHistoryBatch(directory: string, input: HistoryBatch, previous: Prompt[], sharedRoot: string, seedTranslations?: string, revalidate = false) {
   const batch = historyBatchSchema.parse(input), day = batch.createdAt.slice(0, 10), env = process.env;
   if (env.PROMPIX_X_DISCOVERY_PROVIDER !== "third-party" || env.PROMPIX_X_OFFICIAL_ENABLED !== "0" || env.X_BEARER_TOKEN ||
       env.PROMPIX_TRANSLATION_MODEL !== "gpt-6-luna" || env.PROMPIX_TRANSLATION_PROVIDER !== "codex" || !env.PROMPIX_CODEX)
     throw new Error("History requires explicit third-party-only and Codex gpt-6-luna configuration");
   const completed = await json<unknown>(join(directory, "complete.json"), null);
-  if (completed) return historyCatalogSchema.parse(completed).prompts;
+  if (completed) {
+    historyCatalogSchema.parse(completed);
+    if (!revalidate) return historyCatalogSchema.parse(completed).prompts;
+    const retained = Buffer.from(JSON.stringify(completed, null, 2) + "\n");
+    await writeImmutableBytes(join(directory, "quality-revisions", `complete-${createHash("sha256").update(retained).digest("hex")}.json`), retained);
+  }
   const reportPath = join(directory, "report.json");
   const report: Record<string, unknown> = await json(reportPath, { startedAt: new Date().toISOString(), batch: batch.id, assigned: batch.leads.length, published: 0 });
   if (report.error) {

@@ -5,6 +5,7 @@ import { catalogSchema, type Prompt } from "../packages/schema/catalog.ts";
 import { atomic, json, lockContent, repo, writeImmutableBytes } from "../ingest/publication.ts";
 import { historyBaseline, historyCatalogSchema, historyBatchSchema, historyLeadSchema, historyLimits, chooseHistoryLeads, currentHistoryAcceptance } from "../ingest/history-cohort.ts";
 import { readQualityHolds } from "../ingest/quality-holds.ts";
+import { readTranslationReviews } from "../ingest/translation-review.ts";
 import { runHistoryBatch } from "../ingest/history-batch.ts";
 import { searchPlanSchema, readXSearchPlan, runXSearchPlan } from "../ingest/x-search-plan.ts";
 import { selectXSearchLeads, type XSearchLead } from "../ingest/x-search-admission.ts";
@@ -52,7 +53,9 @@ try {
       if (new Set(assigned).size !== assigned.length || assigned.length > config.maximumSources) throw new Error("Historical source assignment budget or uniqueness violated");
       const holds = await readQualityHolds(config.sharedRoot);
       const moderation = await json<{ removedIDs: string[] }>(join(config.sharedRoot, "moderation.json"), { removedIDs: [] });
-      const staged = currentHistoryAcceptance(batches.flatMap(b => b.catalog ? historyCatalogSchema.parse(b.catalog).prompts : []), baseline.prompts, holds, moderation.removedIDs);
+      const reviews = await readTranslationReviews(join(config.sharedRoot, "translations", "semantic-rejections.json"));
+      const currentAcceptance = (prompts: Prompt[], previous: Prompt[] = []) => currentHistoryAcceptance(prompts, previous, holds, moderation.removedIDs, Date.now(), reviews);
+      const staged = currentAcceptance(batches.flatMap(b => b.catalog ? historyCatalogSchema.parse(b.catalog).prompts : []), baseline.prompts);
       if (staged.length > config.target) throw new Error("Acceptance target exceeded");
       await atomic(join(directory, "catalog.staged.json"), { schemaVersion: 1, version: "history-cohort500", prompts: staged, removedIDs: [] });
       await save(execute ? "running" : "dry-run", { staged: staged.length, assigned: assigned.length, published: 0,
@@ -61,10 +64,11 @@ try {
       if (!execute) break;
       if (staged.length >= config.target) { await save("awaiting-user-acceptance", { completedAt: new Date().toISOString() }); break; }
       if (processed && process.argv.includes("--one-batch")) { await save("batch-checkpoint"); break; }
-      const pending = batches.find(b => !b.catalog);
+      const pending = batches.find(b => !b.catalog || currentAcceptance(historyCatalogSchema.parse(b.catalog).prompts).length !== historyCatalogSchema.parse(b.catalog).prompts.length);
       if (pending) {
         await save("processing", { batch: pending.manifest.id });
-        await runHistoryBatch(pending.directory, pending.manifest, [...baseline.prompts, ...staged], config.sharedRoot, config.seedTranslations);
+        const ownIDs = new Set(pending.manifest.leads.map(lead => `x-post-${lead.id}`));
+        await runHistoryBatch(pending.directory, pending.manifest, [...baseline.prompts, ...staged.filter(p => !ownIDs.has(p.id))], config.sharedRoot, config.seedTranslations, Boolean(pending.catalog));
         processed++;
         continue;
       }
