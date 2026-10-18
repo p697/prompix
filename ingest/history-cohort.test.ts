@@ -149,6 +149,6 @@ test("Chinese-only completion changes only the locale requirement, retaining med
   assert.equal(completeHistoryItem(localized), false, "legacy nine-language acceptance is preserved");
   assert.equal(completeHistoryItem(localized, Date.now(), ["zh-Hans"]), true);
   assert.equal(completeHistoryItem({ ...localized, presentation: undefined }, Date.now(), ["zh-Hans"]), false);
-  assert.equal(completeHistoryItem({ ...localized, media: undefined }, Date.now(), ["zh-Hans"]), false);
+  assert.equal(completeHistoryItem({ ...localized, media: null }, Date.now(), ["zh-Hans"]), false);
   assert.equal(completeHistoryItem(localized, Date.now() + 25 * 3600_000, ["zh-Hans"]), false);
 });

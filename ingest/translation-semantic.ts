@@ -60,9 +60,9 @@ export function partitionSemanticResult(raw: unknown, items: readonly Prompt[], 
   }
   return { reviews, unverifiedEvidence };
 }
-export async function reviewTranslationSemantics(items: readonly Prompt[], locale: TranslationLocale, directory: string, executable: string, effort: "low" | "medium" = "medium") {
+export async function reviewTranslationSemantics(items: readonly Prompt[], locale: TranslationLocale, directory: string, executable: string, effort: "low" | "medium" = "medium", model: "gpt-6-luna" | "gpt-6.1-sol" = "gpt-6-luna") {
   if (items.length < 1 || items.length > 4 || new Set(items.map(p => p.id)).size !== items.length) throw new Error("Invalid semantic batch");
-  const input = semanticInput(items, locale), identity = queueIdentity({ instructions: semanticInstructions, input, model: "gpt-6-luna", effort });
+  const input = semanticInput(items, locale), identity = queueIdentity({ instructions: semanticInstructions, input, model, effort });
   await mkdir(directory, { recursive: true });
   await writeImmutableBytes(join(directory, "input.json"), Buffer.from(JSON.stringify({ identity, input }) + "\n"));
   const schema = z.object({ reviews: z.array(verdictSchema.extend({ id: z.enum(items.map(p => p.id) as [string, ...string[]]) })).length(items.length) }).strict();
@@ -72,7 +72,7 @@ export async function reviewTranslationSemantics(items: readonly Prompt[], local
   try {
     await new Promise<void>((resolve, reject) => {
       const child = spawn(executable, ["exec", "--ignore-user-config", "--ignore-rules", "--ephemeral", "--skip-git-repo-check", "--sandbox", "read-only", "--cd", directory,
-        "--model", "gpt-6-luna", "--json", "-c", `model_reasoning_effort="${effort}"`, "-c", "features.shell_tool=false", "-c", 'web_search="disabled"',
+        "--model", model, "--json", "-c", `model_reasoning_effort="${effort}"`, "-c", "features.shell_tool=false", "-c", 'web_search="disabled"',
         "--output-schema", join(directory, "schema.json"), "--output-last-message", join(directory, "output.json"), "-"], { stdio: ["pipe", "pipe", "pipe"] });
       let failure: Error | undefined, escalation: ReturnType<typeof setTimeout> | undefined;
       const stop = (error: Error) => { if (failure) return; failure = error; child.kill("SIGTERM"); escalation = setTimeout(() => child.kill("SIGKILL"), 2000); };
@@ -87,7 +87,7 @@ export async function reviewTranslationSemantics(items: readonly Prompt[], local
     const { reviews, unverifiedEvidence } = partitionSemanticResult(JSON.parse(await readFile(join(directory, "output.json"), "utf8")), items, locale);
     let usage: { input_tokens?: number; output_tokens?: number } = {};
     for (const line of events.split("\n")) { try { const event = JSON.parse(line); if (event.type === "turn.completed") usage = event.usage; } catch {} }
-    return { identity, reviews, usage, unverifiedEvidence };
+    return { identity, model, effort, reviews, usage, unverifiedEvidence };
   } finally {
     await writeImmutableBytes(join(directory, "events.jsonl"), Buffer.from(events));
     await writeImmutableBytes(join(directory, "diagnostic.json"), Buffer.from(JSON.stringify({ diagnostic })));
