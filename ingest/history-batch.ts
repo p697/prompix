@@ -33,6 +33,10 @@ export async function runHistoryBatch(directory: string, input: HistoryBatch, pr
   if (completed) return historyCatalogSchema.parse(completed).prompts;
   const reportPath = join(directory, "report.json");
   const report: Record<string, unknown> = await json(reportPath, { startedAt: new Date().toISOString(), batch: batch.id, assigned: batch.leads.length, published: 0 });
+  if (report.error) {
+    report.priorErrors = [...(Array.isArray(report.priorErrors) ? report.priorErrors : []), { at: report.updatedAt, error: report.error }];
+    delete report.error;
+  }
   const phase = async (stage: string) => { report.stage = stage; report.updatedAt = new Date().toISOString(); await atomic(reportPath, report); };
   try {
     await phase("source");
