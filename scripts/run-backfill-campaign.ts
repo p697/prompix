@@ -56,6 +56,7 @@ try {
   const worker = async () => {
     while (!stopping && claimed < 3000) {
       try {
+        assertSubscriptionSnapshot(await json(join(root, "subscription-quota.json"), null));
         const did = await workStage(queue, config.run, ["collect", "review", "translate", "semantic"], job => processHistoryStage(queue, root, config.sharedRoot, job, { beforeRequest: async () => assertSubscriptionSnapshot(await json(join(root, "subscription-quota.json"), null)) }));
         if (did) claimed++; else await sleep(5000);
       } catch (error) { failure = error; stopping = true; }
