@@ -922,3 +922,7 @@ Preserve complete decimal quantities before attached units. An unfamiliar unit m
 ## 2026-10-18 — Preserve failed search accounting during network recovery
 
 A common transport outage must stop historical searching instead of draining all month plans' retry allowances. An inspected query that exhausted its three transient attempts may be explicitly deferred with a plan/attempt hash-bound record; other queries may continue. Retain failed requests and charges, report the skipped coverage, and keep all acceptance and budget limits unchanged.
+
+## 2026-10-18 — Original + Chinese and independent ingest stages
+
+New history queue ingestion requires original content plus validated Simplified Chinese. Other locales are separate revision-bound requests; missing optional languages do not block acceptance, and rejected optional outputs remain unavailable. Collection, exact-source/full-media review, Chinese translation and independent semantic review use durable private Postgres jobs with fenced leases, global concurrency and retained attempts. Unknown external results require reconciliation rather than automatic replay. Test existing data with cold Chinese/model checks before approving any 10,000-item run; keep daily publication limits and the paused original cohort intact.

@@ -2,7 +2,7 @@ import { z } from "zod";
 import { catalogSchema, promptSchema, type Catalog, type Prompt } from "../packages/schema/catalog.ts";
 import type { XSearchLead } from "./x-search-admission.ts";
 import { fingerprint } from "./sources.ts";
-import { translationFingerprint, translationLocales, validLocalizedText } from "./translation.ts";
+import { translationFingerprint, translationLocales, validLocalizedText, type TranslationLocale } from "./translation.ts";
 import { originalBaseSchema } from "../packages/schema/language-packs.ts";
 import { nativeXSourceIssue } from "./x-source.ts";
 import { applyQualityHolds, type QualityHolds } from "./quality-holds.ts";
@@ -41,12 +41,12 @@ export function uniqueHistoryItems(items: readonly Prompt[], previous: readonly 
   return items.filter(item => { const hash = fingerprint(item.prompt); if (ids.has(item.id) || hashes.has(hash) || (item.media?.imageURL && covers.has(item.media.imageURL))) return false;
     ids.add(item.id); hashes.add(hash); if (item.media?.imageURL) covers.add(item.media.imageURL); return true; });
 }
-export function completeHistoryItem(item: Prompt, now = Date.now()): boolean {
+export function completeHistoryItem(item: Prompt, now = Date.now(), locales: readonly TranslationLocale[] = translationLocales): boolean {
   if (item.source.acquiredVia !== "twitterapi" || nativeXSourceIssue(item, now) ||
       !["general", "suggestive"].includes(item.presentation ?? "") || !item.media?.imageURL ||
       !/^https:\/\/api\.prompix\.dev\/media\/[a-f0-9]{64}\.jpg$/.test(item.media.imageURL) ||
       item.localization?.sourceFingerprint !== translationFingerprint(item)) return false;
-  return translationLocales.every(locale => {
+  return locales.every(locale => {
     const text = item.localization?.translations[locale]; return !!text && validLocalizedText(item, locale, text);
   });
 }

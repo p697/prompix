@@ -1,0 +1,86 @@
+import { join } from "node:path";
+import { z } from "zod";
+import { readFile } from "node:fs/promises";
+import { catalogSchema, type Prompt } from "../packages/schema/catalog.ts";
+import { atomic, json, lockContent, writeImmutableBytes } from "./publication.ts";
+import { StageQueue, queueIdentity, type QueueJob } from "./stage-queue.ts";
+import { historyBatchSchema, type HistoryBatch, completeHistoryItem } from "./history-cohort.ts";
+import { runHistoryBatch } from "./history-batch.ts";
+import { verifyReviewedHistory } from "./history-stage-verification.ts";
+import { requiredIngestLocales, ingestLanguagePolicy, hasRequiredTranslations } from "./ingest-language-policy.ts";
+import { readTranslationReviews } from "./translation-review.ts";
+import { reviewTranslationSemantics } from "./translation-semantic.ts";
+const runName = z.string().regex(/^[a-z0-9][a-z0-9-]{0,79}$/);
+const payloadSchema = z.object({ batch: z.string().regex(/^batch-\d{4}$/), manifestSHA: z.string().regex(/^[a-f0-9]{64}$/), policy: z.literal(ingestLanguagePolicy), start: z.number().int().min(0).max(49).optional() }).strict();
+
+/** Input originals, paid attempts and stage evidence remain in a durable external workspace. */
+export async function enqueueHistoryPipeline(queue: StageQueue, root: string, runInput: string, raw: HistoryBatch) {
+  const run = runName.parse(runInput), batch = historyBatchSchema.parse(raw), directory = join(root, run, batch.id);
+  const unlock = await lockContent(directory);
+  try { await writeImmutableBytes(join(directory, "manifest.json"), Buffer.from(JSON.stringify(batch) + "\n")); }
+  finally { await unlock(); }
+  const payload = { batch: batch.id, manifestSHA: queueIdentity(batch), policy: ingestLanguagePolicy };
+  const prefix = `${run}:${batch.id}`;
+  await queue.enqueue({ id: `${prefix}:collect`, run, stage: "collect", payload });
+  await queue.enqueue({ id: `${prefix}:review`, run, stage: "review", dependency: `${prefix}:collect`, payload });
+  await queue.enqueue({ id: `${prefix}:translate`, run, stage: "translate", dependency: `${prefix}:review`, payload });
+  // Fixed slots are idempotent even if enqueue crashes midway. Empty slots make no model call.
+  for (let start = 0; start < batch.leads.length; start += 4) await queue.enqueue({ id: `${prefix}:semantic:${start}`, run, stage: "semantic", dependency: `${prefix}:translate`, payload: { ...payload, start } });
+}
+
+export async function processHistoryStage(queue: StageQueue, root: string, shared: string, job: QueueJob) {
+  const run = runName.parse(job.run_id), payload = payloadSchema.parse(job.payload), directory = join(root, run, payload.batch);
+  const batch = historyBatchSchema.parse(await json(join(directory, "manifest.json"), null));
+  if (queueIdentity(batch) !== payload.manifestSHA || batch.id !== payload.batch) throw new Error("Queue batch identity changed");
+  const unlock = job.stage === "semantic" ? async () => {} : await lockContent(directory);
+  try {
+    const prior = await json<Prompt[]>(join(root, run, "exclusions.json"), []);
+    if (job.stage === "collect" || job.stage === "review" || job.stage === "translate") {
+      if (job.stage === "translate") {
+        const predecessor = (await queue.db.query<{ output: { sourceSHA?: string } }>("select output from prompix.queue_jobs where id=$1 and state='succeeded'", [job.dependency])).rows[0];
+        const source = await json(join(directory, "source-catalog.json"), null);
+        if (!source || predecessor?.output.sourceSHA !== queueIdentity(source)) throw new Error("Reviewed stage artifact changed");
+      }
+      const items = await runHistoryBatch(directory, batch, prior, shared, undefined, false, {
+        stage: job.stage === "collect" ? "source" : job.stage === "review" ? "review" : "translation", chineseOnly: true, translationConcurrency: 1 });
+      const source = await json(join(directory, "source-catalog.json"), null);
+      const complete = await json(join(directory, "complete.json"), null);
+      return { count: items.length, sourceSHA: source ? queueIdentity(source) : null, translatedSHA: complete ? queueIdentity(complete) : null, published: 0 };
+    }
+    if (job.stage !== "semantic" || payload.start === undefined) throw new Error("Unsupported history queue stage");
+    const complete = catalogSchema.parse(await json(join(directory, "complete.json"), null));
+    const predecessor = (await queue.db.query<{ output: { translatedSHA?: string } }>("select output from prompix.queue_jobs where id=$1 and state='succeeded'", [job.dependency])).rows[0];
+    if (predecessor?.output.translatedSHA !== queueIdentity(complete)) throw new Error("Translated stage artifact changed");
+    const items = complete.prompts.slice(payload.start, payload.start + 4);
+    if (!items.length) return { pass: 0, held: 0, published: 0 };
+    await verifyReviewedHistory(directory, shared, items);
+    if (!items.every(item => completeHistoryItem(item, Date.now(), requiredIngestLocales))) throw new Error("Required history quality changed");
+    const reviewDirectory = join(directory, "semantic", `${payload.start}-${job.attempts}`);
+    const review = await reviewTranslationSemantics(items, "zh-Hans", reviewDirectory, process.env.PROMPIX_CODEX ?? "codex");
+    await atomic(join(reviewDirectory, "result.json"), review);
+    const approved = new Set(review.reviews.filter(r => r.verdict === "pass").map(r => r.id));
+    const ready = items.filter(item => approved.has(item.id));
+    await atomic(join(directory, `ready-${payload.start}.json`), ready);
+    return { pass: ready.length, held: items.length - ready.length, identity: review.identity, readySHA: queueIdentity(ready), usage: review.usage, published: 0 };
+  } finally { await unlock(); }
+}
+
+/** Export is an acceptance input only. Existing publication limits/holds still apply. */
+export async function exportQueueReady(queue: StageQueue, root: string, shared: string, runInput: string) {
+  const run = runName.parse(runInput);
+  const rows = (await queue.db.query<{ payload: unknown; output: { pass: number; readySHA?: string } }>(
+    "select payload,output from prompix.queue_jobs where run_id=$1 and stage='semantic' and state='succeeded' order by id", [run])).rows;
+  const items: Prompt[] = [];
+  for (const row of rows) {
+    if (!row.output.pass) continue;
+    const payload = payloadSchema.parse(row.payload), directory = join(root, run, payload.batch);
+    const ready = JSON.parse(await readFile(join(directory, `ready-${payload.start}.json`), "utf8")) as Prompt[];
+    if (queueIdentity(ready) !== row.output.readySHA || ready.length !== row.output.pass) throw new Error("Ready evidence changed");
+    await verifyReviewedHistory(directory, shared, ready);
+    const rejections = await readTranslationReviews(join(shared, "translations", "semantic-rejections.json"));
+    if (!ready.every(item => completeHistoryItem(item, Date.now(), requiredIngestLocales) && hasRequiredTranslations(item, rejections))) throw new Error("Ready quality expired");
+    items.push(...ready);
+  }
+  if (new Set(items.map(p => p.id)).size !== items.length) throw new Error("Duplicate queue output");
+  return items;
+}
