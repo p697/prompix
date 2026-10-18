@@ -75,3 +75,14 @@ test("an identical visible cover cannot inflate the unique acceptance sample", (
   const first = item(), other = { ...first, id: "different-source", prompt: "A completely different description of this same image." };
   assert.equal(uniqueHistoryItems([other], [first]).length, 0);
 });
+
+test("general chat hosts do not force explicit visual generation into the text category", async () => {
+  const { extractMarkedXPrompt } = await import("./x-intake.ts");
+  const post = { id: "99", author_id: "9", created_at: now, text: "", attachments: { media_keys: ["p"] } };
+  const media = [{ media_key: "p", type: "photo" as const, url: "https://pbs.twimg.com/media/synthetic.jpg" }];
+  assert.equal((extractMarkedXPrompt({ ...post, text: "ChatGPT\nPrompt:\nCreate a photorealistic portrait with soft studio lighting and carefully composed framing." }, media) as { kind: string }).kind, "image");
+  assert.equal((extractMarkedXPrompt({ ...post, text: "ChatGPT images\nPrompt:\nTurn the original scene into an editorial artbook page with warm paper texture." }, media) as { kind: string }).kind, "image");
+  assert.equal((extractMarkedXPrompt({ ...post, text: "ChatGPT\nPrompt:\nAnalyze this photograph and explain the composition in a concise paragraph." }, media) as { kind: string }).kind, "text");
+  const video = [{ media_key: "p", type: "video" as const, preview_image_url: media[0].url, variants: [{ content_type: "video/mp4", url: "https://video.twimg.com/synthetic.mp4", bit_rate: 100 }] }];
+  assert.equal((extractMarkedXPrompt({ ...post, text: "Create with ChatGPT\nPrompt:\nOpening shot: a paper village assembles itself from folded sheets. Use slow camera movements and a warm final shot." }, video) as { kind: string }).kind, "video");
+});
