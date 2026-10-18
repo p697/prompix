@@ -18,12 +18,13 @@ create table prompix.queue_jobs (
   lease_token uuid, lease_until timestamptz,
   output jsonb check(octet_length(output::text)<=64000),
   created_at timestamptz not null default now(), finished_at timestamptz,
-  check ((state='leased')=(lease_token is not null and lease_until is not null)),
+  check ((state='leased' and lease_token is not null and lease_until is not null) or (state<>'leased' and lease_token is null and lease_until is null)),
   check (dependency is null or dependency<>id),
   unique(run_id,stage,identity)
 );
 create index queue_claim on prompix.queue_jobs(stage,priority desc,available_at,created_at) where state in ('queued','retry');
 create index queue_expired on prompix.queue_jobs(lease_until) where state='leased';
+create index queue_dependency on prompix.queue_jobs(dependency) where dependency is not null;
 create index queue_run on prompix.queue_jobs(run_id,state);
 create table prompix.queue_attempts (
   job_id text not null references prompix.queue_jobs(id), attempt integer not null,
