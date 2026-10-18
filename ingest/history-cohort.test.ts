@@ -152,3 +152,15 @@ test("Chinese-only completion changes only the locale requirement, retaining med
   assert.equal(completeHistoryItem({ ...localized, media: null }, Date.now(), ["zh-Hans"]), false);
   assert.equal(completeHistoryItem(localized, Date.now() + 25 * 3600_000, ["zh-Hans"]), false);
 });
+
+test("private full-library baselines exceed the public window without losing schema and duplicate checks", () => {
+  const one = item();
+  const prompts = Array.from({ length: 10001 }, (_, i) => ({ ...one, id: `private-${i}` }));
+  const input = { schemaVersion: 1, version: "full-library", prompts };
+  assert.equal(historyBaseline(input).prompts.length, 10001);
+  assert.equal(historyBaseline({ ...input, schemaVersion: 2, publishedAt: now,
+    prompts: prompts.map(({ fingerprint, featured, reviewStatus, editorialRank, ...p }: any) => p) }).prompts.length, 10001);
+  assert.equal(catalogSchema.safeParse(input).success, false);
+  assert.throws(() => historyBaseline({ ...input, prompts: [...prompts, prompts[0]] }), /Duplicate/);
+  assert.throws(() => historyBaseline({ ...input, prompts: [{ ...one, title: "" }] }));
+});
