@@ -10,7 +10,7 @@ import { historyBaseline, historyBatchSchema, historyLeadSchema, chooseHistoryLe
 import { readQualityHolds, applyQualityHolds } from "../ingest/quality-holds.ts";
 import { readTranslationReviews } from "../ingest/translation-review.ts";
 import { hasRequiredTranslations, requiredIngestLocales } from "../ingest/ingest-language-policy.ts";
-import { readXSearchPlan, runXSearchPlan, searchPlanSchema } from "../ingest/x-search-plan.ts";
+import { readXSearchPlan, runXSearchPlan, searchPlanSchema, searchPlanReadiness } from "../ingest/x-search-plan.ts";
 import { selectXSearchLeads } from "../ingest/x-search-admission.ts";
 import { TwitterAPIClient } from "../ingest/twitterapi.ts";
 import { configuredXSpendBudget } from "../ingest/x-spend.ts";
@@ -115,13 +115,22 @@ try {
       continue;
     }
     if (searches >= searchLimit) throw new Error("Campaign search bound reached");
-    const next = scans.filter(s => !s.state.pending.size && s.state.report.queries.some(q => q.status === "pending")).sort((a, b) => a.state.state.attempts.length - b.state.state.attempts.length)[0];
-    if (!next) throw new Error("No resumable search windows; retained failures require inspection");
+    const next = scans.filter(s => searchPlanReadiness(s.state) === "ready").sort((a, b) => a.state.state.attempts.length - b.state.state.attempts.length)[0];
+    if (!next) {
+      if (scans.some(s => searchPlanReadiness(s.state) === "backoff")) { await sleep(15000); continue; }
+      throw new Error("No resumable search windows; retained failures require inspection");
+    }
     const release = await lockContent(next.directory);
     let found;
     try { const client = new TwitterAPIClient(process.env.TWITTERAPI_IO_KEY ?? "", budget); found = await runXSearchPlan(next.directory, next.plan, { maxRequests: Math.min(10, searchLimit - searches), search: client.search.bind(client) }); }
     finally { await release(); }
-    if (["failed", "unresolved", "budget-limit"].includes(found.status)) throw new Error(`Campaign search ${found.status}; retained response must be inspected`);
+    if (["failed", "unresolved", "budget-limit"].includes(found.status)) {
+      const readiness = searchPlanReadiness(await readXSearchPlan(next.directory, next.plan));
+      // A request at the invocation boundary can fail transiently after using its final slot.
+      // Re-read captures before admitting a later invocation; never reset the three-attempt bound.
+      if (found.status === "budget-limit" || !["ready", "backoff", "complete"].includes(readiness))
+        throw new Error(`Campaign search ${found.status}; retained response must be inspected`);
+    }
   }
   stopping = true; await Promise.all(workers);
   if (failure) throw failure;

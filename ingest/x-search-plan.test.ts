@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, rm, readdir, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { buildXSearchPlan, readXSearchPlan, runXSearchPlan, boundedSearchQuery, type XSearchPlan } from "./x-search-plan.ts";
+import { buildXSearchPlan, readXSearchPlan, runXSearchPlan, boundedSearchQuery, type XSearchPlan, searchPlanReadiness } from "./x-search-plan.ts";
 import { atomic, json } from "./publication.ts";
 import { TwitterAPIClient } from "./twitterapi.ts";
 import { XSpendBudget } from "./x-spend.ts";
@@ -172,4 +172,51 @@ test("owner deferral preserves exhausted failures and charges while other querie
   const records = await json<any[]>(join(directory, 'owner-deferrals.json'), []);
   records[0].attemptsSHA256 = '0'.repeat(64); await atomic(join(directory, 'owner-deferrals.json'), records);
   await assert.rejects(readXSearchPlan(directory, p), /does not match exhausted/);
+}));
+
+
+test("invocation-boundary transient failure resumes after backoff and retains its original charge", async () => fixture(async root => {
+  const directory = join(root, "leads"), p = plan(1);
+  let calls = 0;
+  const api = client(root, () => { if (++calls === 1) throw new Error("transport"); return page([tweet()]); });
+  await runXSearchPlan(directory, p, { search: api.search.bind(api), maxRequests: 1, now, sleep });
+  const failed = await readXSearchPlan(directory, p);
+  assert.equal(searchPlanReadiness(failed, Date.parse(at)), "backoff");
+  const later = () => new Date(Date.parse(at) + 60_000);
+  assert.equal(searchPlanReadiness(failed, later().getTime()), "ready");
+  const result = await runXSearchPlan(directory, p, { search: api.search.bind(api), maxRequests: 1, now: later, sleep });
+  assert.equal(result.status, "complete"); assert.equal(calls, 2);
+  assert.equal(searchPlanReadiness(await readXSearchPlan(directory, p)), "complete");
+  const ledger = await json<any>(join(root, "spend", "2026-10.json"), null);
+  assert.deepEqual(ledger.entries.map((e: any) => [e.state, e.accounted]), [["uncertain", 3000], ["completed", 150]]);
+}));
+
+test("readiness never schedules unknown, malformed, multiple or exhausted failures", async () => fixture(async root => {
+  const directory = join(root, "leads"), p = plan(2), checkpoint = (await readXSearchPlan(directory, p)).state;
+  for (const state of ["reserved", "failed"] as const) {
+    checkpoint.attempts = [{ state, at, query: 0, response: "response-00001.json" }];
+    await atomic(join(directory, "progress.json"), checkpoint);
+    assert.equal(searchPlanReadiness(await readXSearchPlan(directory, p)), "blocked");
+  }
+  await atomic(join(directory, "response-00001.json"), { at, raw: { unexpected: true } });
+  assert.equal(searchPlanReadiness(await readXSearchPlan(directory, p)), "blocked");
+  await rm(join(directory, "response-00001.json"));
+  checkpoint.attempts = Array.from({ length: 3 }, (_, i) => ({ state: i === 2 ? "retryable" as const : "retried" as const,
+    at, query: 0, response: `response-0000${i + 1}.json`, retryAfter: at }));
+  await atomic(join(directory, "progress.json"), checkpoint);
+  assert.equal(searchPlanReadiness(await readXSearchPlan(directory, p)), "blocked");
+  checkpoint.attempts = [0, 1].map(query => ({ state: "retryable" as const, at, query,
+    response: `response-0000${query + 1}.json`, retryAfter: at }));
+  await atomic(join(directory, "progress.json"), checkpoint);
+  assert.equal(searchPlanReadiness(await readXSearchPlan(directory, p)), "blocked");
+}));
+
+test("readiness replays a retained valid capture without scheduling another paid request", async () => fixture(async root => {
+  const directory = join(root, "leads"), p = plan(1), checkpoint = (await readXSearchPlan(directory, p)).state;
+  checkpoint.attempts = [{ state: "retryable", at, query: 0, response: "response-00001.json", retryAfter: at }];
+  await atomic(join(directory, "progress.json"), checkpoint);
+  await atomic(join(directory, "response-00001.json"), { at, raw: page([tweet()]) });
+  const recovered = await readXSearchPlan(directory, p);
+  assert.equal(recovered.recovered, 1);
+  assert.equal(searchPlanReadiness(recovered), "complete");
 }));
