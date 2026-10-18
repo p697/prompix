@@ -4,7 +4,7 @@ import { readFile } from "node:fs/promises";
 import { catalogSchema } from "../packages/schema/catalog.ts";
 import { attachTranslations, emptyTranslationCache, inheritPreviousTranslations, localizePrompt, promptSegments, protectText, restoreText, translationLocales, translationFingerprint, validLocalizedText, validateSegment } from "./translation.ts";
 import { translationBatches, runTranslations } from "./translation-runner.ts";
-import { TranslationProviderError } from "./translation-provider.ts";
+import { TranslationProviderError, codexTranslationProvider } from "./translation-provider.ts";
 
 const fixture = catalogSchema.parse(JSON.parse(await readFile(new URL("../ios/Prompix/Resources/catalog.json", import.meta.url), "utf8"))).prompts[0];
 const item = { ...fixture, title: "Portrait", summary: "Generate a portrait with gentle studio lighting.", prompt: "Create a portrait of {subject}, add https://example.com/reference and --ar 16:9. Keep `field_name`.", example: "Replace {subject} with the person you want to depict.", previewLabel: "Studio example", cover: { text: "Portrait", eyebrow: "IMAGE", tone: "sage" as const } };
@@ -828,4 +828,55 @@ test("exhausted transient translation failures remain visible to monitoring with
     assert.equal(repeated.report.attempted, 1); assert.equal(repeated.report.failed, 1);
     assert.equal(repeated.report.status, "updated", "Old failures must not masquerade as another failed run");
   } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test("JSON age fields carry disambiguating context and cannot reuse calendar-era cache entries", async () => {
+  const source = { ...item, title: "人像", summary: "保持人物的自然神态。", example: "使用人物参考。", previewLabel: "示例", cover: undefined,
+    prompt: JSON.stringify({ subject: { age: "Early 20s" }, era: "Early 20s", model: "renderer-v1" }) };
+  const cache = emptyTranslationCache(), segments = promptSegments(source);
+  const age = segments.find(s => s.semanticContext === "age")!, era = segments.find(s => s.sourceText === "Early 20s" && !s.semanticContext)!;
+  assert.notEqual(age.id, era.id); assert.equal(age.text, era.text);
+  cache.segments['zh-Hans'] = Object.fromEntries(segments.filter(s => s !== age).map(s => [s.id, s === era ? '⟦PP0⟧年代初' : s.text]));
+  assert.deepEqual(translationBatches([source], cache, ['zh-Hans']).flatMap(j => j.segments.map(s => s.id)), [age.id]);
+  const bad = await runTranslations({ items: [source], cache, locales: ['zh-Hans'], providerName: 'codex', maxRequests: 2, persist: async () => {},
+    provider: async (_, pending) => ({ translations: pending.map(s => ({ id: s.id, text: '⟦PP0⟧年代初' })) }) });
+  assert.equal(bad.rejected, 1); assert.equal(bad.pendingSegments, 1);
+  const good = await runTranslations({ items: [source], cache, locales: ['zh-Hans'], providerName: 'codex', maxRequests: 2, prior: bad, persist: async () => {},
+    provider: async (_, pending) => { assert.equal(pending[0].semanticContext, 'age'); return { translations: pending.map(s => ({ id: s.id, text: '⟦PP0⟧岁出头' })) }; } });
+  assert.equal(good.attempted, 2); assert.equal(good.pendingSegments, 0);
+  assert.deepEqual(JSON.parse(localizePrompt(source, 'zh-Hans', cache)!.prompt), { subject: { age: '20岁出头' }, era: '20年代初', model: 'renderer-v1' });
+});
+
+test("inherited and array age fields reject calendar decades while keeping unrelated era fields", () => {
+  const source = { ...item, prompt: JSON.stringify({ subjects: [{ age: 'Early 20s' }], age_range: ['Mid 30s'], era: 'Early 20s' }) };
+  const cache = emptyTranslationCache(), segments = promptSegments(source);
+  assert.equal(segments.filter(s => s.semanticContext === 'age').length, 2);
+  cache.segments.en = Object.fromEntries(segments.map(s => [s.id, s.text]));
+  const text = localizePrompt(source, 'en', cache)!;
+  assert.ok(text); assert.equal(text.prompt, source.prompt);
+  const bad = { ...text, prompt: JSON.stringify({ subjects: [{ age: '20年代初' }], age_range: ['30岁中段'], era: '20年代初' }) };
+  assert.equal(validLocalizedText(source, 'zh-Hans', bad), false);
+});
+
+
+test("Codex request transport carries age context while restoring compact segment IDs", async () => {
+  const { mkdtemp, writeFile, chmod, rm } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const directory = await mkdtemp(join(tmpdir(), "prompix-age-transport-")), executable = join(directory, "fake-codex");
+  try {
+    await writeFile(executable, `#!${process.execPath}
+const fs = require('node:fs'); let input = '';
+process.stdin.on('data', b => input += b);
+process.stdin.on('end', () => {
+ const payload = JSON.parse(input.trim().split('\\n').at(-1));
+ if (payload.segments[0].semanticContext !== 'age' || payload.segments[0].id !== '0') process.exit(3);
+ fs.writeFileSync(process.argv[process.argv.indexOf('--output-last-message') + 1], JSON.stringify({ translations: [{ id: '0', text: payload.segments[0].text }] }));
+});
+`);
+    await chmod(executable, 0o700);
+    const age = promptSegments({ ...item, prompt: '{"age":"Early 20s"}' }).find(s => s.semanticContext === 'age')!;
+    const result = await codexTranslationProvider(executable)('en', [age]);
+    assert.deepEqual(result.translations, [{ id: age.id, text: age.text }]);
+  } finally { await rm(directory, { recursive: true, force: true }); }
 });
