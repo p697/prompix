@@ -133,7 +133,11 @@ export async function runHistoryBatch(directory: string, input: HistoryBatch, pr
 export async function runHistoryTranslations(options: Parameters<typeof runTranslations>[0]) {
   let prior = options.prior;
   for (let pass = 0; pass < 3; pass++) {
-    const report = await runTranslations({ ...options, prior });
+    const failures = prior?.failures ?? [];
+    const report = await runTranslations({ ...options, prior, provider: (locale, segments) => options.provider(locale, segments.map(segment => {
+      const feedback = failures.filter(f => f.locale === locale && f.ids.includes(segment.id)).map(f => `Previous validation failed: ${f.reason}. Correct this against the complete source; preserve every opaque token exactly once.`);
+      return feedback.length ? { ...segment, reviewFeedback: [...new Set([...(segment.reviewFeedback ?? []), ...feedback])] } : segment;
+    })) });
     if (!report.pendingSegments || report.failed > (prior?.failed ?? 0) || report.attempted <= (prior?.attempted ?? 0)
         || report.attempted >= (options.maxRequests ?? 500) || pass === 2) return report;
     prior = report;

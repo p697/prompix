@@ -95,7 +95,7 @@ test("historical translation repair retains spent requests and stops at the shar
     maxRequests: 2, maxUSD: 0, persist: async () => {} };
   let calls = 0;
   const result = await runHistoryTranslations({ ...options, provider: async (_locale, segments) => {
-    calls++; return { translations: calls === 1 ? [] : segments.map(s => ({ id: s.id, text: "精致的纸雕村庄" })) };
+    calls++; if (calls === 2) assert.ok(segments[0].reviewFeedback?.some(f => f.includes("Missing translation"))); return { translations: calls === 1 ? [] : segments.map(s => ({ id: s.id, text: "精致的纸雕村庄" })) };
   } });
   assert.equal(calls, 2); assert.equal(result.attempted, 2); assert.equal(result.pendingSegments, 0); assert.ok(result.rejected > 0);
   calls = 0;
