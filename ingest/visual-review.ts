@@ -52,6 +52,14 @@ export const visualDecisionSchema = z.object({
 }).strict();
 export const visualOutputSchema = z.object({ decisions: z.array(visualDecisionSchema).min(1).max(visualLimits.candidates) }).strict();
 export type VisualDecision = z.infer<typeof visualDecisionSchema>;
+
+/** A contradictory approval is a content hold, never evidence of a successful match. */
+export function conservativeVisualDecision(decision: VisualDecision): VisualDecision {
+  if (decision.verdict !== "match" || decision.attachments.every(attachment => attachment.verdict === "match")) return decision;
+  return { ...decision, verdict: "uncertain",
+    reason: `Held: aggregate approval conflicts with attachment evidence. ${decision.reason}`.slice(0, 500) };
+}
+
 export type VisualProvider = (items: readonly VisualInput[]) => Promise<{ decisions: unknown; inputTokens?: number; outputTokens?: number }>;
 const evidenceAttachmentSchema = attachmentReferenceSchema.extend({ verdict, reason });
 const savedDecisionSchema = visualDecisionSchema.omit({ attachments: true }).extend({
@@ -340,7 +348,7 @@ export async function runVisualReview(options: {
     report.attachments += attempt.attachments; report.attachmentBytes += attempt.attachmentBytes;
     try {
       const result = await options.provider(selected);
-      const decisions = visualOutputSchema.parse({ decisions: result.decisions }).decisions;
+      const decisions = visualOutputSchema.parse({ decisions: result.decisions }).decisions.map(conservativeVisualDecision);
       if (decisions.length !== selected.length) throw new Error("Visual response is missing or adding source decisions");
       for (let index = 0; index < selected.length; index++) {
         const input = selected[index], decision = decisions[index];

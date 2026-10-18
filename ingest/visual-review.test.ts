@@ -210,6 +210,8 @@ test("one uncertain or mismatching attachment defers the item even if its overal
     } });
     assert.deepEqual(result.prompts, []); assert.equal(result.report.approved, 0); assert.equal(result.report.deferred, 1);
     assert.match(result.report.items[0].reason!, /second image/);
+    assert.equal(state.cache.decisions[visualReviewIdentity(item)].verdict, "uncertain");
+    assert.equal(state.ledger?.attempts.at(-1)?.state, "completed");
     const second = await run({ day: "2026-10-14" });
     assert.equal(second.report.cachedDeferred, 1); assert.equal(second.report.requests, 0);
     assert.equal(state.events.filter(event => event === "provider").length, 1);

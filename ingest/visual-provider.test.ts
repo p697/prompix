@@ -183,10 +183,10 @@ test("changed hashes, size, missing files, symlinks and non-JPEG data cannot rea
   }
 });
 
-test("the provider rejects missing, duplicate, reordered, inconsistent or unbound decisions", async t => {
+test("the provider rejects missing, duplicate, reordered or unbound decisions", async t => {
   const { root, item } = await fixture(t), second = { ...item, id: "second-item", identity: sha("second-item") };
   for (const behavior of ["wrong-identity", "wrong-hash", "missing-item", "duplicate-item", "reorder-items", "missing-attachment",
-    "duplicate-attachment", "reorder-attachments", "contradictory-match", "invented-field"]) {
+    "duplicate-attachment", "reorder-attachments", "invented-field"]) {
     const cli = await fakeCLI(root, behavior);
     await assert.rejects(codexVisualProvider(cli.executable)([item, second]), /invalid decisions|duplicate, unordered or inconsistent/);
     await assertCleaned(cli.capture);
@@ -259,5 +259,21 @@ test("missing or malformed usage stays unknown instead of inventing token counts
   }
   const cli = await fakeCLI(root, "malformed-event"), result = await codexVisualProvider(cli.executable)([item]);
   assert.equal(result.inputTokens, 137); assert.equal(result.outputTokens, 29);
+  await assertCleaned(cli.capture);
+});
+
+
+test("contradictory approvals are held without losing valid siblings or replaying the provider", async t => {
+  const { root, item } = await fixture(t), cli = await fakeCLI(root, "contradictory-match");
+  const second = { ...item, id: "second-item", identity: sha("second") };
+  const raw: string[] = [];
+  const result = await codexVisualProvider(cli.executable, async response => { raw.push(response.text); })([item, second]);
+  const decisions = result.decisions as VisualDecision[];
+  assert.equal(raw.length, 1);
+  assert.equal(JSON.parse(raw[0]).decisions[0].verdict, "match", "Keep the original inconsistent response as evidence");
+  assert.equal(decisions[0].verdict, "uncertain");
+  assert.match(decisions[0].reason, /^Held:/);
+  assert.equal(decisions[0].attachments[0].verdict, "uncertain");
+  assert.equal(decisions[1].verdict, "match");
   await assertCleaned(cli.capture);
 });
