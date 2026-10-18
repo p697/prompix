@@ -64,7 +64,7 @@ function renderedLiterals(text: string, preserveLettering: boolean): { start: nu
     const start = match.index!, end = start + match[0].length;
     const before = text.slice(Math.max(0, start - 120), start).trimEnd().split(/[。.!?;；\n”」』"’]/).at(-1)!;
     const after = text.slice(end, end + 20);
-    const caption = /字幕|文字|字体|字體|字样|字樣|文本|标语|標語|标注|標註|标有|標有|写着|寫著|标题|標題|标签|標籤|日期|笔记|筆記|\b(?:typography|lettering|text|caption|slogan|label|title|headline|read|reads|say|says|written)\b/iu.test(before)
+    const caption = /字幕|文字|字体|字體|字样|字樣|文本|标语|標語|标注|標註|标有|標有|写着|寫著|标题|標題|标签|標籤|日期|笔记|筆記|\b(?:typography|lettering|text|caption|slogan|label|labeled|labelled|title|headline|read|reads|say|says|written)\b/iu.test(before)
       || /^\s*(?:文字|字样|字樣|标题|標題|标签|標籤|按钮|按鈕|text|caption|label|button)/iu.test(after)
       || (previousEnd >= 0 && /^[\s,，、/]*(?:(?:and|or|above|below|under|beneath|over|next to|和|与|與|以及|上方|下方)[\s,，、/]*)?$/iu.test(text.slice(previousEnd, start)));
     const input = /(?:my first sentence is|first (?:input|sentence)\s*(?:is|:)|input (?:example|sentence|text)\s*:|我的第一句(?:话|話)?(?:是|：)|输入示例[：:]|輸入示例[：:])\s*$/iu.test(before);
@@ -152,6 +152,9 @@ export function protectText(text: string, preserveLettering = false) {
     return [{ start, end: start + match[0].length }];
   });
   const ranges = collectRanges(text);
+  // Preserve standalone image-tool command labels as a complete unit.
+  for (const command of text.matchAll(/^@(Create|Generate)[ \t]+(?:image|video)[ \t]*$/gim))
+    ranges.push({ start: command.index!, end: command.index! + command[0].length });
   ranges.push(...renderedLiterals(text, preserveLettering));
   ranges.sort((a, b) => a.start - b.start || b.end - a.end);
   let cursor = 0, masked = "";
@@ -177,7 +180,7 @@ export function restoreText(masked: string, protectedValues: readonly string[]):
 }
 
 const opaqueJSONKeys = new Set(["render_engine", "renderEngine", "renderer", "model", "model_id", "modelId", "seed", "steps", "cfg_scale", "sampler", "sampler_name", "scheduler", "aspect_ratio", "aspectRatio", "resolution", "size", "width", "height", "fps", "duration", "duration_seconds", "output_format", "response_format", "style_preset", "code", "html", "css", "javascript", "typescript", "script"]);
-const opaqueJSONString = (key: string | undefined, value: string) => Boolean(key && (opaqueJSONKeys.has(key) || (key === "quality" && /^(auto|low|medium|high|standard|hd)$/i.test(value))));
+const opaqueJSONString = (key: string | undefined, value: string) => Boolean(/^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+$/.test(value) || key && (opaqueJSONKeys.has(key) || (key === "quality" && /^(auto|low|medium|high|standard|hd)$/i.test(value))));
 function semanticContext(key?: string): "age" | undefined { return key && /^(?:age|age_range|ageRange|年龄|年齡|年齢)$/iu.test(key) ? "age" : undefined; }
 function segmentIdentity(masked: string, context?: "age"): string { return hash(context ? JSON.stringify(["field-context-1", context, masked]) : masked); }
 export function validateSemanticContext(source: string, translated: string, locale: TranslationLocale, context?: "age"): void {
@@ -288,6 +291,22 @@ export function validateSegment(source: string, translated: string, locale: Tran
   if (!translated.trim() || translated.length > Math.max(500, source.length * 6)) throw new Error("Empty or oversized translation");
   const placeholders = [...source.matchAll(/⟦PP(\d+)⟧/g)].map(m => Number(m[1]));
   restoreText(translated, placeholders.map(() => "opaque"));
+  // A numbered instruction is an ordinal list marker, not a quantity to apply
+  // to the following object. Keep that distinction in fresh and inherited text.
+  const listCounts = (text: string, localized: boolean) => {
+    const markers = localized ? /^[ \t]*(⟦PP\d+⟧|\d+)[.)、。．）：:](?!\d)[ \t]*/gm : /^[ \t]*(⟦PP\d+⟧)[.)][ \t]+/gm;
+    const counts = new Map<string, number>();
+    for (const marker of text.matchAll(markers)) {
+      // Inherited text can assign different token indices to repeated equal
+      // numbers; compare their original values rather than occurrence order.
+      const key = hints[marker[1]] ?? marker[1];
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+    return counts;
+  };
+  const outputLists = listCounts(translated, true);
+  for (const [marker, count] of listCounts(source, false))
+    if ((outputLists.get(marker) ?? 0) < count) throw new Error("Translation changed an ordered-list marker into prose or a quantity");
   const prose = source.replace(/⟦PP\d+⟧/g, "");
   const outputProse = translated.replace(/⟦PP\d+⟧/g, "");
   for (const language of requiredHumanLanguages(prose)) if (!humanLanguageNames[language].test(outputProse)) throw new Error(`Translation changed explicit ${language} language requirement`);

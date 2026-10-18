@@ -880,3 +880,44 @@ process.stdin.on('end', () => {
     assert.deepEqual(result.translations, [{ id: age.id, text: age.text }]);
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
+
+test("ordered instructions cannot become object quantities in new or inherited translations", () => {
+  const source = { ...item, title: "场景练习", summary: "选择场景。", example: "填写主体。", previewLabel: "来源附图", cover: undefined, kind: "image" as const, prompt: "Choose the scene:\n1. one statue,\n2. one local plant,\n3. one traveler." };
+  const protectedText = protectText(source.prompt, true);
+  const correct = "选择场景：\n⟦PP0⟧、一座雕像，\n⟦PP1⟧、一种当地植物，\n⟦PP2⟧、一位旅行者。";
+  const wrong = "选择场景：\n⟦PP0⟧座雕像，\n⟦PP1⟧种当地植物，\n⟦PP2⟧位旅行者。";
+  assert.doesNotThrow(() => validateSegment(protectedText.masked, correct, "zh-Hans"));
+  assert.throws(() => validateSegment(protectedText.masked, wrong, "zh-Hans"), /ordered-list/);
+  const cache = emptyTranslationCache(); cache.segments['zh-Hans'] = Object.fromEntries(promptSegments(source).map(s => [s.id, s.sourceText === source.prompt ? correct : s.text]));
+  const good = localizePrompt(source, 'zh-Hans', cache)!; assert.ok(good);
+  assert.equal(validLocalizedText(source, 'zh-Hans', { ...good, prompt: restoreText(wrong, protectedText.protectedValues) }), false);
+  assert.doesNotThrow(() => validateSegment("Add ⟦PP0⟧ flowers.", "添加⟦PP0⟧朵花。", "zh-Hans"));
+  assert.doesNotThrow(() => validateSegment("⟦PP0⟧. one tree", "⟦PP0⟧) ein Baum", "de"));
+  assert.throws(() => validateSegment("⟦PP0⟧. one tree", "⟦PP0⟧.5棵树", "zh-Hans"), /ordered-list/);
+  assert.doesNotThrow(() => validateSegment("2D art.\n⟦PP0⟧. one tree", "⟦PP0⟧D画面。\n2. 一棵树。", "zh-Hans", { "⟦PP0⟧": "2" }));
+  assert.doesNotThrow(() => validateSegment("Use ⟦PP0⟧ plants.\n⟦PP1⟧. one planter", "⟦PP0⟧. 一个花盆，里面有⟦PP1⟧株植物。", "zh-Hans", { "⟦PP0⟧": "1", "⟦PP1⟧": "1" }));
+});
+
+test("JSON template identifier arrays remain literal while neighboring prose is translated", () => {
+  const source = { ...item, title: '模板练习', summary: '选择场景。', example: '填写主体。', previewLabel: '来源附图', cover: undefined, kind: 'image' as const, prompt: JSON.stringify({ editable: ['POSTER_TITLE', 'BRAND_LINE'], scene: 'A quiet garden', style: 'soft_painterly' }) };
+  const segments = promptSegments(source), cache = emptyTranslationCache();
+  assert.equal(segments.some(s => ['POSTER_TITLE', 'BRAND_LINE'].includes(s.sourceText!)), false);
+  assert.equal(segments.some(s => s.sourceText === 'soft_painterly'), true);
+  cache.segments['zh-Hans'] = Object.fromEntries(segments.map(s => [s.id, s.sourceText === 'A quiet garden' ? '宁静的花园' : s.sourceText === 'soft_painterly' ? '柔和的绘画风格' : s.text]));
+  const localized = localizePrompt(source, 'zh-Hans', cache)!;
+  assert.deepEqual(JSON.parse(localized.prompt), { editable: ['POSTER_TITLE', 'BRAND_LINE'], scene: '宁静的花园', style: '柔和的绘画风格' });
+  assert.equal(validLocalizedText(source, 'zh-Hans', { ...localized, prompt: localized.prompt.replace('POSTER_TITLE', '海报标题') }), false);
+});
+
+test("explicit labeled lettering and standalone generation commands retain their full literals", () => {
+  for (const cue of ['labeled', 'labelled']) {
+    const source = `Show a travel badge ${cue} "Coastal Journey" beside a red suitcase.\n@Create image`;
+    const mask = protectText(source, true);
+    assert.ok(mask.protectedValues.includes('"Coastal Journey"'));
+    assert.ok(mask.protectedValues.includes('@Create image'));
+    assert.ok(mask.masked.includes('red suitcase'));
+    assert.equal(restoreText(mask.masked, mask.protectedValues), source);
+  }
+  const prose = protectText('Ask @Mira to create an image of a garden.', true);
+  assert.ok(prose.masked.includes('create an image of a garden'));
+});
