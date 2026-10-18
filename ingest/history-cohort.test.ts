@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { chooseHistoryLeads, historyBatchSchema, historyCatalogSchema, historyBaseline, uniqueHistoryItems, completeHistoryItem } from "./history-cohort.ts";
+import { chooseHistoryLeads, historyBatchSchema, historyCatalogSchema, historyBaseline, uniqueHistoryItems, completeHistoryItem, currentHistoryAcceptance } from "./history-cohort.ts";
 import { convertXDiscovery } from "./x-intake.ts";
 import { translationFingerprint, translationLocales } from "./translation.ts";
 import type { Prompt } from "../packages/schema/catalog.ts";
@@ -61,6 +61,10 @@ test("completion does not count incomplete translations, unclassified or stale s
   assert.deepEqual(accepted.deferred.map(p => p.id), [partial.id]);
   assert.throws(() => acceptHistoryTranslations([complete, partial], { ...status, failed: 1 }), /provider failed/);
   assert.throws(() => acceptHistoryTranslations([complete, partial], { ...status, attempted: 200 }), /allowance exhausted/);
+  const holds = { schemaVersion: 1 as const, holds: { [complete.id]: { sourceIdentitySHA256: "a".repeat(64), evidenceSHA256: "b".repeat(64), reason: "Missing prior storyboard", reviewerID: "test", reviewedAt: now } } };
+  assert.deepEqual(currentHistoryAcceptance([complete], [], holds, []), []);
+  assert.deepEqual(currentHistoryAcceptance([complete], [], { schemaVersion: 1, holds: {} }, [complete.id]), []);
+  assert.deepEqual(currentHistoryAcceptance([complete], [], { schemaVersion: 1, holds: {} }, []).map(p => p.id), [complete.id]);
 });
 test("an interrupted historical acquisition stays blocked across calendar days without HTTP", async () => {
   const directory = await mkdtemp(join(tmpdir(), "prompix-history-test-"));
