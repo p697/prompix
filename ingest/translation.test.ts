@@ -965,3 +965,17 @@ test("explicit spoken-line lists preserve all dialogue and repeated script occur
   assert.equal(protectText(source).protectedValues.includes('"Good morning!"'), false);
   assert.ok(protectText('The spoken lines should sound "natural".', true).masked.includes('"natural"'));
 });
+
+test("decimal quantities keep their fractional part before attached units", () => {
+  const source = { ...item, prompt: 'Keep the camera 1.5m behind the subject, with a 2.75kg prop and a 35mm lens. Use a realistic physical setup.' };
+  const mask = protectText(source.prompt, true);
+  assert.deepEqual(mask.protectedValues, ['1.5', '2.75', '35mm']);
+  assert.equal(restoreText(mask.masked, mask.protectedValues), source.prompt);
+  const segment = promptSegments(source).find(s => s.sourceText === source.prompt)!;
+  assert.deepEqual(segment.numericHints, { '⟦PP0⟧': '1.5', '⟦PP1⟧': '2.75', '⟦PP2⟧': '35mm' });
+  const cache = emptyTranslationCache();
+  cache.segments.en = Object.fromEntries(promptSegments(source).map(s => [s.id, s.text]));
+  const localized = localizePrompt(source, 'en', cache)!;
+  assert.equal(validLocalizedText(source, 'en', localized), true);
+  assert.equal(validLocalizedText(source, 'en', { ...localized, prompt: localized.prompt.replace('1.5m', '1m') }), false);
+});

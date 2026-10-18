@@ -157,6 +157,10 @@ export function protectText(text: string, preserveLettering = false) {
     return [{ start, end: start + match[0].length }];
   });
   const ranges = collectRanges(text);
+  // An unfamiliar attached unit must not make the numeric matcher backtrack
+  // from 1.5m to just 1. Keep the full quantity; leave the unit translatable.
+  for (const number of text.matchAll(/\b\d+(?:[.,:]\d+)+(?=\p{L})/gu))
+    ranges.push({ start: number.index!, end: number.index! + number[0].length });
   // Multi-image references use paired angle delimiters as part of their syntax.
   // Protect the outer pair too; retaining only <image_1> loses template identity.
   for (const reference of text.matchAll(/<<<[A-Za-z_][A-Za-z0-9_ -]*>>>|<<[A-Za-z_][A-Za-z0-9_ -]*>>/g))
