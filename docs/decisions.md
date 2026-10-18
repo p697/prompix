@@ -898,3 +898,7 @@ JSON age and age-range string values carry an explicit age context into translat
 ## 2026-10-18 — Bound historical subscription translation at six workers
 
 The historical acceptance trial is constrained by nine-language processing latency. Permit six concurrent Codex subscription translation requests in the isolated history lane, retaining the existing per-batch cumulative request allowance and all validation. The general default stays two and paid API concurrency stays three. Verify serialized reservation/persistence, retained-budget limits, fatal-error draining and actual subsequent batch latency before claiming a throughput improvement. No new paid model route or publication allowance is introduced.
+
+### 2026-10-18 — Preserve list semantics and template identifiers
+
+Historical semantic checks exposed a list-number/quantity confusion and translated JSON field-reference identifiers. Preserve ordinal structure, uppercase snake-case template identifiers, explicit labeled image lettering and standalone generation command labels. Revalidate inherited text under the same rules; retain original source bytes and attempt ledgers. This strengthens correctness without adding official X fallback or changing any processing/publication allowance.
