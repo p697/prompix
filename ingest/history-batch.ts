@@ -110,7 +110,7 @@ export async function runHistoryBatch(directory: string, input: HistoryBatch, pr
     const existingCache = await json(translationPath, null);
     if (!existingCache && seedTranslations) await atomic(translationPath, await readTranslationCache(join(seedTranslations, "cache.json")));
     const translationCache = await readTranslationCache(translationPath), translationReviews = await readTranslationReviews(join(sharedRoot, "translations", "semantic-rejections.json"));
-    const translationReport = await runTranslations({ items: ready, cache: translationCache, reviews: translationReviews,
+    const translationReport = await runHistoryTranslations({ items: ready, cache: translationCache, reviews: translationReviews,
       provider: codexTranslationProvider(env.PROMPIX_CODEX, 24000, "gpt-6-luna"), providerName: "codex", model: "gpt-6-luna",
       concurrency: 2, maxRequests: historyLimits.translation, maxUSD: 0, locales: translationLocales,
       prior: await json<TranslationRunReport | undefined>(join(translations, "report.json"), undefined),
@@ -127,4 +127,16 @@ export async function runHistoryBatch(directory: string, input: HistoryBatch, pr
   } catch (error) {
     report.error = error instanceof Error ? error.message : "History processing failed"; await phase("blocked"); throw error;
   }
+}
+
+/** Retry only missing validated segments; every pass retains the same cumulative allowance. */
+export async function runHistoryTranslations(options: Parameters<typeof runTranslations>[0]) {
+  let prior = options.prior;
+  for (let pass = 0; pass < 3; pass++) {
+    const report = await runTranslations({ ...options, prior });
+    if (!report.pendingSegments || report.failed > (prior?.failed ?? 0) || report.attempted <= (prior?.attempted ?? 0)
+        || report.attempted >= (options.maxRequests ?? 500) || pass === 2) return report;
+    prior = report;
+  }
+  throw new Error("Unreachable historical translation retry state");
 }

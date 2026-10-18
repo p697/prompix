@@ -86,3 +86,20 @@ test("general chat hosts do not force explicit visual generation into the text c
   const video = [{ media_key: "p", type: "video" as const, preview_image_url: media[0].url, variants: [{ content_type: "video/mp4", url: "https://video.twimg.com/synthetic.mp4", bit_rate: 100 }] }];
   assert.equal((extractMarkedXPrompt({ ...post, text: "Create with ChatGPT\nPrompt:\nOpening shot: a paper village assembles itself from folded sheets. Use slow camera movements and a warm final shot." }, video) as { kind: string }).kind, "video");
 });
+
+test("historical translation repair retains spent requests and stops at the shared batch bound", async () => {
+  const { runHistoryTranslations } = await import("./history-batch.ts");
+  const { emptyTranslationCache } = await import("./translation.ts");
+  const source = { ...item(), title: "Paper village", summary: "Paper village", example: "Paper village", previewLabel: "Paper village", prompt: "Paper village" };
+  const options = { items: [source], cache: emptyTranslationCache(), providerName: "codex", model: "gpt-6-luna", locales: ["zh-Hans" as const], concurrency: 1,
+    maxRequests: 2, maxUSD: 0, persist: async () => {} };
+  let calls = 0;
+  const result = await runHistoryTranslations({ ...options, provider: async (_locale, segments) => {
+    calls++; return { translations: calls === 1 ? [] : segments.map(s => ({ id: s.id, text: "精致的纸雕村庄" })) };
+  } });
+  assert.equal(calls, 2); assert.equal(result.attempted, 2); assert.equal(result.pendingSegments, 0); assert.ok(result.rejected > 0);
+  calls = 0;
+  const blocked = await runHistoryTranslations({ ...options, cache: emptyTranslationCache(), maxRequests: 1,
+    provider: async () => { calls++; return { translations: [] }; } });
+  assert.equal(calls, 1); assert.equal(blocked.attempted, 1); assert.ok(blocked.pendingSegments > 0);
+});
