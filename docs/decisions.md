@@ -935,3 +935,7 @@ New history queue ingestion requires original content plus validated Simplified 
 ### 2026-10-19：区分私有全库快照和公开窗口，按持久原始表示校验队列产物
 
 历史补库基线/排除集合必须容纳完整库，私有上限50,000；公开兼容catalog的1,000条限制不变。队列哈希校验在schema解析前执行，避免规范化字段顺序误判修改。失败恢复保留原始attempt和付费证据，只恢复经核对未发出请求的语义任务。
+
+### 2026-10-19 — Hold contradictory visual approvals without stopping healthy work
+
+If a bound, complete visual response says the candidate matches but an attachment is uncertain or mismatched, downgrade the candidate to uncertain and retain the untouched raw response. This is a content hold, not a provider outage. Missing, reordered or changed identities, transport failures and ambiguous results still stop for reconciliation. Never retry a paid request merely to obtain a more favorable verdict.
