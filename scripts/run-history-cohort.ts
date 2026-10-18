@@ -30,6 +30,10 @@ try {
   if (!budget || budget.monthlyUSD > 20) throw new Error("History must use the existing shared monthly budget, at most $20");
   const execute = process.argv.includes("--execute");
   const report: Record<string, unknown> = await json(join(directory, "progress.json"), { startedAt: new Date().toISOString(), staged: 0, published: 0 });
+  if (execute && report.error) {
+    report.priorErrors = [...(Array.isArray(report.priorErrors) ? report.priorErrors : []), { at: report.updatedAt, error: report.error }];
+    delete report.error;
+  }
   const save = async (status: string, extra: Record<string, unknown> = {}) => {
     Object.assign(report, extra, { status, updatedAt: new Date().toISOString() }); await atomic(join(directory, "progress.json"), report);
     console.log(JSON.stringify({ status, staged: report.staged, assigned: report.assigned, searches: report.searches, batch: report.batch }));
