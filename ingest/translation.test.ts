@@ -122,6 +122,24 @@ test("off-screen voice and narration retain exact lines even without a speech ve
   const segment = promptSegments(visualItem).find(segment => segment.text.includes('男主画外音'))!;
   assert.throws(() => validateSegment(segment.text, segment.text.replace('⟦PP0⟧', 'This color is great.'), 'en'), /protected syntax/);
 });
+test("render engine identifiers remain exact while neighboring scene instructions translate", () => {
+  const engine = "Octane Render / Unreal Engine 5 / Redshift";
+  const source = { ...item, prompt: JSON.stringify({ style: { render_engine: engine }, renderEngine: "Cycles", renderer: "Eevee", description: "Create a portrait with soft light." }) };
+  const segments = promptSegments(source);
+  assert.ok(!segments.some(segment => segment.sourceText === engine));
+  const cache = emptyTranslationCache();
+  cache.segments["zh-Hans"] = Object.fromEntries(segments.map(segment => [segment.id, "生成柔光人像。" + [...segment.text.matchAll(/⟦PP\d+⟧/g)].map(match => match[0]).join(" ")]));
+  const translated = localizePrompt(source, "zh-Hans", cache)!;
+  assert.ok(translated, "A Latin renderer identifier must not fail target-script validation");
+  const body = JSON.parse(translated.prompt);
+  assert.equal(body.style.render_engine, engine);
+  assert.equal(body.renderEngine, "Cycles"); assert.equal(body.renderer, "Eevee");
+  assert.equal(body.description, "生成柔光人像。");
+  assert.ok(validLocalizedText(source, "zh-Hans", translated));
+  body.style.render_engine = "Different engine";
+  assert.equal(validLocalizedText(source, "zh-Hans", { ...translated, prompt: JSON.stringify(body) }), false);
+});
+
 test("JSON quality enums stay opaque while descriptive quality prose is translated", () => {
   const description = "Detailed texture, natural lighting, and realistic materials.";
   const prose = { ...item, prompt: JSON.stringify({ quality: description, variant: { quality: "high" } }) };

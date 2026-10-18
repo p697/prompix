@@ -165,7 +165,7 @@ export function restoreText(masked: string, protectedValues: readonly string[]):
   return masked.replace(/⟦PP(\d+)⟧/g, (_, index) => protectedValues[Number(index)]);
 }
 
-const opaqueJSONKeys = new Set(["model", "model_id", "modelId", "seed", "steps", "cfg_scale", "sampler", "sampler_name", "scheduler", "aspect_ratio", "aspectRatio", "resolution", "size", "width", "height", "fps", "duration", "duration_seconds", "output_format", "response_format", "style_preset", "code", "html", "css", "javascript", "typescript", "script"]);
+const opaqueJSONKeys = new Set(["render_engine", "renderEngine", "renderer", "model", "model_id", "modelId", "seed", "steps", "cfg_scale", "sampler", "sampler_name", "scheduler", "aspect_ratio", "aspectRatio", "resolution", "size", "width", "height", "fps", "duration", "duration_seconds", "output_format", "response_format", "style_preset", "code", "html", "css", "javascript", "typescript", "script"]);
 const opaqueJSONString = (key: string | undefined, value: string) => Boolean(key && (opaqueJSONKeys.has(key) || (key === "quality" && /^(auto|low|medium|high|standard|hd)$/i.test(value))));
 function transformStrings(value: unknown, transform: (text: string) => string, key?: string): unknown {
   if (typeof value === "string") return opaqueJSONString(key, value) ? value : transform(value);
