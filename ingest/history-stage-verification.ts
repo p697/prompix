@@ -23,6 +23,8 @@ export async function verifyReviewedHistory(directory: string, sharedRoot: strin
   for (const item of items) {
     const source = eligible.get(item.id);
     if (!source || nativeXSourceIssue(item) || source.source.revision !== item.source.revision || !isDeepStrictEqual(translationText({ ...source, prompt: publicationText(source, reviews) }), translationText(item))) throw new Error("History editorial/source approval changed");
+    for (const key of ["kind", "creator", "source", "model", "toolURL", "tags", "publishedAt"] as const)
+      if (!isDeepStrictEqual(source[key], item[key])) throw new Error(`History approved ${key} changed`);
   }
   const cache = visualCacheSchema.parse(await json(join(directory, "visual-cache.json"), null));
   const forbidden = async (): Promise<never> => { throw new Error("Review evidence missing; stage cannot silently approve or recharge"); };
