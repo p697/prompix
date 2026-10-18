@@ -921,3 +921,22 @@ test("explicit labeled lettering and standalone generation commands retain their
   const prose = protectText('Ask @Mira to create an image of a garden.', true);
   assert.ok(prose.masked.includes('create an image of a garden'));
 });
+
+test("multiline typography preserves quoted copy after template fields without freezing scene prose", () => {
+  const text = 'Place refined typography in the negative space:\n\n[EVENT NAME]\n[CITY, COUNTRY]\n\n“Stay curious.”\n\nUse a “dreamlike” visual mood.';
+  const mask = protectText(text, true);
+  assert.ok(mask.protectedValues.includes('“Stay curious.”'));
+  assert.ok(mask.masked.includes('“dreamlike”'));
+  assert.equal(restoreText(mask.masked, mask.protectedValues), text);
+  assert.ok(!protectText(text).protectedValues.includes('“Stay curious.”'));
+  const source = { ...item, kind: 'image' as const, prompt: text };
+  const cache = emptyTranslationCache();
+  cache.segments.en = Object.fromEntries(promptSegments(source).map(s => [s.id, s.text]));
+  const translated = localizePrompt(source, 'en', cache)!;
+  assert.equal(validLocalizedText(source, 'en', translated), true);
+  assert.equal(validLocalizedText(source, 'en', { ...translated, prompt: translated.prompt.replace('Stay curious.', 'Explore more.') }), false);
+  for (const between of ['Use subtle lighting.\n\n', 'Scene direction\n\n']) {
+    const separated = `Place typography here:\n[EVENT]\n\n${between}“dreamlike”`;
+    assert.ok(!protectText(separated, true).protectedValues.includes('“dreamlike”'));
+  }
+});

@@ -64,7 +64,11 @@ function renderedLiterals(text: string, preserveLettering: boolean): { start: nu
     const start = match.index!, end = start + match[0].length;
     const before = text.slice(Math.max(0, start - 120), start).trimEnd().split(/[。.!?;；\n”」』"’]/).at(-1)!;
     const after = text.slice(end, end + 20);
+    // A displayed copy block may put template fields and blank lines before its
+    // quoted tagline. Ordinary intervening prose ends this bounded context.
+    const captionBlock = /\b(?:typography|lettering|caption|text)\b[^\n:]{0,60}:[ \t]*\r?\n(?:[ \t]*(?:\[[^\]\r\n]{1,160}\][ \t]*)?\r?\n){0,8}[ \t]*$/iu.test(text.slice(Math.max(0, start - 800), start));
     const caption = /字幕|文字|字体|字體|字样|字樣|文本|标语|標語|标注|標註|标有|標有|写着|寫著|标题|標題|标签|標籤|日期|笔记|筆記|\b(?:typography|lettering|text|caption|slogan|label|labeled|labelled|title|headline|read|reads|say|says|written)\b/iu.test(before)
+      || captionBlock
       || /^\s*(?:文字|字样|字樣|标题|標題|标签|標籤|按钮|按鈕|text|caption|label|button)/iu.test(after)
       || (previousEnd >= 0 && /^[\s,，、/]*(?:(?:and|or|above|below|under|beneath|over|next to|和|与|與|以及|上方|下方)[\s,，、/]*)?$/iu.test(text.slice(previousEnd, start)));
     const input = /(?:my first sentence is|first (?:input|sentence)\s*(?:is|:)|input (?:example|sentence|text)\s*:|我的第一句(?:话|話)?(?:是|：)|输入示例[：:]|輸入示例[：:])\s*$/iu.test(before);
