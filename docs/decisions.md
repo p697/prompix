@@ -943,3 +943,7 @@ If a bound, complete visual response says the candidate matches but an attachmen
 ### 2026-10-19 — Quarantine received identity-invalid responses
 
 A fully received, retained visual response can repeat candidate or attachment identities. Reject every candidate in that response, record its raw-response SHA and consumed request as `rejected`, create no approval cache, and continue other candidates within the same allowance. Rejected identities cannot be replayed on resume. This supersedes stopping the entire campaign for this known response shape; malformed schemas, transport failures, timeouts and ambiguous reservations still require reconciliation. Existing failed records remain unchanged until explicit operator reconciliation.
+
+### 2026-10-19 — Keep existing-source checks within the temporary backfill budget
+
+补库与日常复查共享累计账本，历史补库超过普通月限额会阻断旧来源检查。增加显式、限时且仅 maintenance lookup 可用的补库授权入口；保留普通增长月限额、每日总限额和失败收费记录，不重置账本，也不扩大长期订阅预算。授权过期恢复普通限制。
