@@ -894,3 +894,7 @@ Evaluate TweetAPI's documented 200-ID, one-unit lookup as an isolated read pilot
 ## 2026-10-18: Preserve age context in structured prompt translations
 
 JSON age and age-range string values carry an explicit age context into translation, including array elements. Their cache identity differs from identical prose used as a calendar era, so a cached decade translation cannot supply a subject's age. Fresh, cached and inherited Chinese/Japanese/Korean results reject explicit calendar wording for early/mid/late age ranges. Other prose cache identities and literal JSON parameters remain unchanged. This addresses a historical pilot finding without replacing source wording or relaxing language checks.
+
+## 2026-10-18 — Bound historical subscription translation at six workers
+
+The historical acceptance trial is constrained by nine-language processing latency. Permit six concurrent Codex subscription translation requests in the isolated history lane, retaining the existing per-batch cumulative request allowance and all validation. The general default stays two and paid API concurrency stays three. Verify serialized reservation/persistence, retained-budget limits, fatal-error draining and actual subsequent batch latency before claiming a throughput improvement. No new paid model route or publication allowance is introduced.
