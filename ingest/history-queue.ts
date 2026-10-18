@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import { z } from "zod";
 import { readFile } from "node:fs/promises";
+import { isDeepStrictEqual } from "node:util";
 import type { Prompt } from "../packages/schema/catalog.ts";
 import { atomic, json, lockContent, writeImmutableBytes } from "./publication.ts";
 import { StageQueue, queueIdentity, type QueueJob } from "./stage-queue.ts";
@@ -16,7 +17,13 @@ const payloadSchema = z.object({ batch: z.string().regex(/^batch-\d{4}$/), manif
 /** Input originals, paid attempts and stage evidence remain in a durable external workspace. */
 export async function enqueueHistoryPipeline(queue: StageQueue, root: string, runInput: string, raw: HistoryBatch, baseline: readonly Prompt[]) {
   const run = runName.parse(runInput), batch = historyBatchSchema.parse(raw), directory = join(root, run, batch.id);
-  await writeImmutableBytes(join(root, run, "exclusions.json"), Buffer.from(JSON.stringify(baseline) + "\n"));
+  const exclusionPath = join(root, run, "exclusions.json");
+  const existingExclusions = await json<Prompt[] | null>(exclusionPath, null);
+  // A schema round trip may reorder object keys without changing the frozen
+  // baseline. Preserve its original bytes, while rejecting any value/order change.
+  if (existingExclusions !== null) {
+    if (!isDeepStrictEqual(existingExclusions, baseline)) throw new Error("Immutable queue exclusions changed");
+  } else await writeImmutableBytes(exclusionPath, Buffer.from(JSON.stringify(baseline) + "\n"));
   const unlock = await lockContent(directory);
   try { await writeImmutableBytes(join(directory, "manifest.json"), Buffer.from(JSON.stringify(batch) + "\n")); }
   finally { await unlock(); }

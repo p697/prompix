@@ -1,10 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { catalogSchema } from "../packages/schema/catalog.ts";
-import { processHistoryStage } from "./history-queue.ts";
+import { processHistoryStage, enqueueHistoryPipeline } from "./history-queue.ts";
 import { StageQueue, queueIdentity, type QueueJob } from "./stage-queue.ts";
 import { atomic } from "./publication.ts";
 import { verifyReviewedHistory } from "./history-stage-verification.ts";
@@ -38,5 +38,29 @@ test("semantic stage hashes persisted JSON before schema normalization and rejec
     expected = queueIdentity(invalid);
     await atomic(join(directory, "complete.json"), invalid);
     await assert.rejects(processHistoryStage(queue, root, root, job), /Too small/);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test("resumed enqueue preserves exclusion bytes across key normalization and rejects value changes", async () => {
+  const root = await mkdtemp(join(tmpdir(), "prompix-exclusions-"));
+  try {
+    const run = "resume-test", batch = { version: 1 as const, id: "batch-0002", createdAt: "2026-10-19T00:00:00Z", leads: [
+      { id: "1", authorID: "2", reason: "prompt" as const, kind: "image" as const, visual: true, sourceDate: "2026-08-10T00:00:00Z", evidence: "synthetic" }] };
+    const item = { source: { method: "test", license: "CC0", url: null, name: "Synthetic" },
+      previewLabel: "Preview", artwork: "paper", toolURL: null, model: "Any", tags: ["art"], example: "Example", prompt: "Draw a paper garden.", summary: "Summary", title: "Title", kind: "text", id: "synthetic", media: { image: null, video: null, demoURL: null } };
+    const normalized = catalogSchema.parse({ schemaVersion: 1, version: "test", prompts: [item] }).prompts;
+    const path = join(root, run, "exclusions.json");
+    await atomic(path, [item]);
+    const before = await readFile(path);
+    const jobs: string[] = [];
+    const queue = { enqueue: async (job: { id: string }) => { jobs.push(job.id); } } as unknown as StageQueue;
+    await enqueueHistoryPipeline(queue, root, run, batch, normalized);
+    assert.equal(jobs.length, 4);
+    assert.deepEqual(await readFile(path), before);
+    await enqueueHistoryPipeline(queue, root, run, { ...batch, id: "batch-0003" }, normalized);
+    assert.equal(jobs.length, 8);
+    await assert.rejects(enqueueHistoryPipeline(queue, root, run, { ...batch, id: "batch-0004" }, [{ ...normalized[0], title: "Changed" }]), /Immutable queue exclusions changed/);
+    assert.equal(jobs.length, 8);
+    assert.deepEqual(await readFile(path), before);
   } finally { await rm(root, { recursive: true, force: true }); }
 });
