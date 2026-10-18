@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { z } from "zod";
 import { visualAttachmentSchema, visualCoverageSchema, visualDecisionSchema, visualInputCharacters, visualLimits,
-  visualRequestText, visualReviewModel, conservativeVisualDecision, type VisualInput, type VisualProvider } from "./visual-review.ts";
+  visualRequestText, visualReviewModel, conservativeVisualDecision, VisualIdentityRejection, type VisualInput, type VisualProvider } from "./visual-review.ts";
 
 export { visualInstructions } from "./visual-review.ts";
 
@@ -207,7 +207,8 @@ export function codexVisualProvider(executable = "codex",
         const item = values[index];
         if (decision.id !== item.id || decision.identity !== item.identity || decision.attachments.some((attachment, position) =>
           attachment.id !== item.attachments[position].id || attachment.sha256 !== item.attachments[position].sha256))
-          throw new Error("Visual provider returned duplicate, unordered or inconsistent decisions");
+          throw recordResponse ? new VisualIdentityRejection(createHash("sha256").update(text).digest("hex"))
+            : new Error("Visual provider returned duplicate, unordered or inconsistent decisions");
       }
       return { decisions: parsed.data.decisions.map(conservativeVisualDecision), inputTokens, outputTokens };
     } finally { await rm(directory, { recursive: true, force: true }); }

@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test, type TestContext } from "node:test";
 import { codexVisualProvider, visualInstructions, visualResponseSchema } from "./visual-provider.ts";
-import { visualInputCharacters, visualLimits, visualProviderInput, visualRequestText, visualReviewModel, type VisualAttachment, type VisualDecision, type VisualInput } from "./visual-review.ts";
+import { VisualIdentityRejection, visualInputCharacters, visualLimits, visualProviderInput, visualRequestText, visualReviewModel, type VisualAttachment, type VisualDecision, type VisualInput } from "./visual-review.ts";
 
 // One-pixel synthetic JPEG; no third-party source imagery or prompt content.
 const pixel = Buffer.from("/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////2wBDAf//////////////////////////////////////////////////////////////////////////////////////wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAX/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAX/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwCdABmX/9k=", "base64");
@@ -276,4 +276,14 @@ test("contradictory approvals are held without losing valid siblings or replayin
   assert.equal(decisions[0].attachments[0].verdict, "uncertain");
   assert.equal(decisions[1].verdict, "match");
   await assertCleaned(cli.capture);
+});
+
+
+test("duplicate identity responses carry a hash of retained raw evidence for quarantine", async t => {
+  const { root, item } = await fixture(t), cli = await fakeCLI(root, "duplicate-item");
+  const second = { ...item, id: "second-item", identity: sha("second") }; let raw = "";
+  await assert.rejects(codexVisualProvider(cli.executable, async response => { raw = response.text; })([item, second]), error => {
+    assert.ok(error instanceof VisualIdentityRejection); assert.equal(error.responseSHA256, sha(raw)); return true;
+  });
+  assert.ok(raw.length > 0); await assertCleaned(cli.capture);
 });

@@ -2,10 +2,15 @@ import { z } from "zod";
 
 export const defaultReviewRequests = 4;
 export const maximumReviewRequests = 64;
-export type ReviewAttempt = { day: string; requests: 1; state: "reserved" | "completed" | "failed" };
+export type ReviewAttempt = { day: string; requests: 1; state: "reserved" | "completed" | "failed" | "rejected" };
 export type ReviewLedger<Attempt extends ReviewAttempt> = {
   schemaVersion: 2; day: string; requests: number; attempts: Attempt[];
 };
+
+/** A received but rejected response consumes its request without approving any content. */
+export function settledReviewAttempt(attempt: ReviewAttempt): boolean {
+  return attempt.state === "completed" || attempt.state === "rejected";
+}
 
 /** Request counts bound Codex usage; they do not represent a measured dollar budget. */
 export function reviewRequestLimit(value: unknown = defaultReviewRequests): number {
@@ -24,7 +29,7 @@ export function reviewLedgerSchema<Attempt extends ReviewAttempt>(attemptSchema:
     attempts: z.array(attemptSchema).min(1).max(maximumReviewRequests),
   }).strict().superRefine((ledger, context) => {
     if (ledger.requests !== ledger.attempts.length || ledger.attempts.some(attempt => attempt.day !== ledger.day)
-      || ledger.attempts.slice(0, -1).some(attempt => attempt.state !== "completed"))
+      || ledger.attempts.slice(0, -1).some(attempt => !settledReviewAttempt(attempt)))
       context.addIssue({ code: "custom", message: "Inconsistent daily review ledger" });
   });
   return z.union([attemptSchema, current]).transform((value): ReviewLedger<Attempt> =>
@@ -35,7 +40,7 @@ export function reviewLedgerSchema<Attempt extends ReviewAttempt>(attemptSchema:
 export function appendReviewAttempt<Attempt extends ReviewAttempt>(ledger: ReviewLedger<Attempt> | undefined, attempt: Attempt): ReviewLedger<Attempt> {
   if (attempt.state !== "reserved") throw new Error("A review attempt must be reserved before it starts");
   const previous = ledger?.day === attempt.day ? ledger.attempts : [];
-  if (previous.length >= maximumReviewRequests || previous.some(value => value.state !== "completed"))
+  if (previous.length >= maximumReviewRequests || previous.some(value => !settledReviewAttempt(value)))
     throw new Error("An unfinished review attempt blocks further requests for its day");
   const attempts = [...structuredClone(previous), structuredClone(attempt)];
   return { schemaVersion: 2, day: attempt.day, requests: attempts.length, attempts };
