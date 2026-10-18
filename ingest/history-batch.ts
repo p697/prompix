@@ -126,7 +126,7 @@ export async function runHistoryBatch(directory: string, input: HistoryBatch, pr
         await writeImmutableBytes(join(translations, "responses", `${attempt}.json`), Buffer.from(JSON.stringify({ locale, ids: segments.map(s => s.id), response }) + "\n"));
         return response;
       }, providerName: "codex", model: "gpt-6-luna",
-      concurrency: 3, maxRequests: historyLimits.translation, maxUSD: 0, locales: translationLocales,
+      concurrency: 6, maxRequests: historyLimits.translation, maxUSD: 0, locales: translationLocales,
       prior: priorTranslation,
       persist: async (state, status) => { await atomic(translationPath, state); await atomic(join(translations, "report.json"), status); } });
     report.translation = translationReport;
