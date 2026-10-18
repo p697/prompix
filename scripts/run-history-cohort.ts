@@ -101,7 +101,9 @@ try {
       let found;
       try { found = await runXSearchPlan(next.path, next.plan, { maxRequests: Math.min(10, config.maximumSearches - searches), search: client!.search.bind(client) }); }
       finally { await releaseSearch(); }
-      if (["budget-limit", "unresolved"].includes(found.status) || found.requestsThisRun === 0) { await save(`search-${found.status}`); break; }
+      // Stop the whole collector on a failed search. Trying every remaining plan during a
+      // shared outage consumes their bounded retry allowances without adding coverage.
+      if (["budget-limit", "unresolved", "failed"].includes(found.status) || found.requestsThisRun === 0) { await save(`search-${found.status}`); break; }
     }
   } catch (error) { await save("blocked", { error: error instanceof Error ? error.message : "Historical job failed" }); throw error; }
 } finally { await unlock(); }
