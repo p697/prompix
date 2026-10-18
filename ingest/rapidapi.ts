@@ -2,7 +2,7 @@ import { XSpendBudget, type XSpendPurpose } from "./x-spend.ts";
 import { parseRapidAPISources } from "./rapidapi-sources.ts";
 import { rapidAPILookupURL, readRapidAPILookup } from "./rapidapi-transport.ts";
 
-/** Existing-source verification only; acquisition remains official. Installation
+/** Existing-source verification only; new acquisition is handled separately. Installation
  * does not configure a cycle or select this provider. */
 export class RapidAPIClient {
   constructor(private readonly key: string, private readonly budget: XSpendBudget, private readonly fetcher: typeof fetch = fetch) {

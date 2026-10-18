@@ -22,7 +22,7 @@ export const xPostSchema = z.object({
 export const xMediaSchema = z.object({ media_key: z.string(), type: z.enum(["photo", "video", "animated_gif"]),
   url: z.string().optional(), preview_image_url: z.string().optional(),
   variants: z.array(z.object({ content_type: z.string(), url: z.string(), bit_rate: z.number().optional() })).max(30).optional() });
-const snapshotSchema = z.object({ capturedAt: z.iso.datetime().optional(), posts: z.array(z.unknown()).max(100),
+const snapshotSchema = z.object({ provider: z.enum(["twitterapi", "rapidapi"]).optional(), capturedAt: z.iso.datetime().optional(), posts: z.array(z.unknown()).max(100),
   creators: z.array(creatorSchema).max(100).optional(), media: z.array(z.unknown()).max(400).optional() });
 export type XPost = z.infer<typeof xPostSchema>;
 export type XMedia = z.infer<typeof xMediaSchema>;
@@ -209,7 +209,7 @@ export function convertXDiscovery(snapshots: readonly Snapshot[], creators: Crea
   const records: XIntakeRecord[] = [], candidates: Candidate[] = [];
   const report: XIntakeReport = { snapshots: snapshots.length, discovered: 0, duplicatePosts: 0, drafted: 0, blocked: 0,
     publicationBlocked: 0, reviewedDrafts: 0, reasons: {}, snapshotErrors: [] };
-  const posts = new Map<string, { post?: XPost; snapshot: string; capturedAt?: string; creators: z.infer<typeof creatorSchema>[]; media: XMedia[] }>();
+  const posts = new Map<string, { post?: XPost; snapshot: string; capturedAt?: string; provider?: "twitterapi" | "rapidapi"; creators: z.infer<typeof creatorSchema>[]; media: XMedia[] }>();
   const capturedAt = (snapshot: Snapshot) => {
     const parsed = snapshotSchema.safeParse(snapshot.data);
     return parsed.success && parsed.data.capturedAt ? parsed.data.capturedAt : snapshot.name.slice(0, 10) + "T00:00:00.000Z";
@@ -228,10 +228,10 @@ export function convertXDiscovery(snapshots: readonly Snapshot[], creators: Crea
       // Deduplicate identity before validation, so a later corrected snapshot
       // replaces a stale failure and a later invalid snapshot remains visible.
       if (posts.has(sourceID)) report.duplicatePosts++;
-      posts.set(sourceID, { post: parsedPost.success ? parsedPost.data : undefined, snapshot: snapshot.name, capturedAt: parsed.data.capturedAt, creators: parsed.data.creators ?? [], media });
+      posts.set(sourceID, { post: parsedPost.success ? parsedPost.data : undefined, snapshot: snapshot.name, capturedAt: parsed.data.capturedAt, provider: parsed.data.provider, creators: parsed.data.creators ?? [], media });
     }
   }
-  for (const [postID, { post, snapshot, capturedAt, creators: profiles, media }] of posts) {
+  for (const [postID, { post, snapshot, capturedAt, provider, creators: profiles, media }] of posts) {
     const sourceURL = `https://x.com/i/web/status/${postID}`;
     if (!post || post.withheld !== undefined) {
       records.push({ postID, sourceURL, snapshot, state: "blocked", reason: "invalid-post" });
@@ -245,8 +245,8 @@ export function convertXDiscovery(snapshots: readonly Snapshot[], creators: Crea
       hasCreatorProfile: !!profile, mediaItems: verifiedMedia(post, media).length, attachedMediaKeys: post.attachments?.media_keys ?? [] };
     if ("reason" in extracted) { records.push({ ...record, reason: extracted.reason }); continue; }
     const id = `x-post-${post.id}`, hash = fingerprint(extracted.body);
-    const candidate = buildXCandidate(post, extracted, excerpt?.includeMedia === false ? [] : media, profile, capturedAt);
-    if (excerpt) candidate.source.method = "X API — reviewed excerpt from the original post";
+    const candidate = buildXCandidate(post, extracted, excerpt?.includeMedia === false ? [] : media, profile, capturedAt, provider);
+    if (excerpt && !provider) candidate.source.method = "X API — reviewed excerpt from the original post";
     candidates.push(candidate);
     records.push({ ...record, state: "draft", reason: nativeXSourceIssue(candidate) ?? "awaiting-editorial-and-preview-review", candidateID: id, fingerprint: hash, sourceDigest: nativeXSourceDigest(candidates.at(-1)!) });
   }
@@ -292,7 +292,7 @@ export function hasPublicReplyPrompt(text: string): boolean {
 }
 
 export function buildXCandidate(post: XPost, extracted: { body: string; kind: Prompt["kind"]; model?: string },
-  media: readonly XMedia[], profile: z.infer<typeof creatorSchema> | undefined, capturedAt: string | undefined): Candidate {
+  media: readonly XMedia[], profile: z.infer<typeof creatorSchema> | undefined, capturedAt: string | undefined, provider?: "twitterapi" | "rapidapi"): Candidate {
   const id = `x-post-${post.id}`, hash = fingerprint(extracted.body), sourceURL = `https://x.com/i/web/status/${post.id}`;
   const author = profile?.displayName ?? `X account ${post.author_id}`;
   const candidate: Candidate = { id, kind: extracted.kind, title: `X prompt ${post.id}`,
@@ -309,8 +309,9 @@ export function buildXCandidate(post: XPost, extracted: { body: string; kind: Pr
   if (capturedAt && post.created_at && profile?.username) {
     candidate.source.post = { id: post.id, authorID: post.author_id, text: fullXText(post).text,
       createdAt: post.created_at, checkedAt: capturedAt };
-    candidate.source.license = "X-API-Terms";
-    candidate.source.method = "X API — prompt extracted from the original post";
+    candidate.source.license = provider ? "Source-author-rights" : "X-API-Terms";
+    if (provider) candidate.source.acquiredVia = provider;
+    candidate.source.method = `${provider === "twitterapi" ? "TwitterAPI.io" : provider === "rapidapi" ? "Twttr API" : "X API"} — prompt extracted from the original post`;
     candidate.source.revision = nativeXSourceDigest(candidate);
   }
   return candidate;

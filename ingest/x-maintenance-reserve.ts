@@ -8,14 +8,14 @@ import { configuredXSpendBudget, maintenanceReserveSchema, maintenanceRunway } f
 /** Called under daily.lock before maintenance or growth. Only immutable numeric
  * identities determine the cost census; no source text enters the budget directory. */
 export function maintenanceCensus(items: readonly Candidate[], protectedIDs: ReadonlySet<string>, inactiveIDs: ReadonlySet<string>, now: Date,
-  hybrid: boolean) {
+  hybrid: boolean, thirdPartyOnly = false) {
   const expected = [...protectedIDs].filter(id => /^x-post-\d{1,19}$/.test(id) && !inactiveIDs.has(id));
   const expectedSet = new Set(expected);
   const protectedItems = items.filter(item => expectedSet.has(item.id));
   // Match the maintenance router: even a standalone root belonging to an unapproved
   // thread is checked officially, so it cannot be priced as a cheap standalone.
   const threadIDs = new Set(items.filter(item => item.source.context).flatMap(nativeXPostIDs));
-  const official = new Set(protectedItems.filter(item => !hybrid || threadIDs.has(item.source.post?.id ?? "") || item.source.post?.parentID || item.source.mediaPostID).flatMap(nativeXPostIDs));
+  const official = new Set((thirdPartyOnly ? [] : protectedItems).filter(item => !hybrid || threadIDs.has(item.source.post?.id ?? "") || item.source.post?.parentID || item.source.mediaPostID).flatMap(nativeXPostIDs));
   const standalone = new Set(protectedItems.flatMap(nativeXPostIDs).filter(id => !official.has(id)));
   const present = new Set(protectedItems.filter(item => nativeXPostIDs(item).length > 0).map(item => item.id));
   const missing = expected.filter(id => !present.has(id));
@@ -30,7 +30,7 @@ export async function saveMaintenanceCensus(items: readonly Candidate[], protect
   const budget = configuredXSpendBudget(environment);
   if (!budget?.protectMaintenance) return;
   const hybrid = ["twitterapi", "rapidapi"].includes(environment.PROMPIX_X_RECHECK_PROVIDER ?? "");
-  const result = maintenanceCensus(items, protectedIDs, inactiveIDs, now, hybrid);
+  const result = maintenanceCensus(items, protectedIDs, inactiveIDs, now, hybrid, environment.PROMPIX_X_DISCOVERY_PROVIDER === "third-party");
   result.plan.complete &&= hasPublishedHistory;
   // Atomic replacement cannot expose a partial census to another guarded reader.
   // Spending stays serialized by the original ledger lock and format.

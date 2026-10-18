@@ -6,11 +6,12 @@ import { atomic, json } from "./publication.ts";
 import { convertXDiscovery, readXIntake } from "./x-intake.ts";
 import { readXSearchPlan, type XSearchPlan } from "./x-search-plan.ts";
 import { githubRepositoryLink } from "./discovered-skills.ts";
+import { thirdPartyOnly, thirdPartySourceLookup, type XSourceLookup } from "./x-third-party.ts";
 import { checkXAvailability } from "./x.ts";
 import { mergeCreatorCache, type CreatorCache } from "./creators.ts";
 import { XBudgetExceeded } from "./x-spend.ts";
 
-/** In-memory extraction identifies leads only. Third-party bodies never become source acquisitions. */
+/** Search bodies identify leads; selected originals pass separate acquisition and review. */
 export async function selectXSearchLeads(directory: string, plan: XSearchPlan) {
   const search = await readXSearchPlan(directory, plan);
   const snapshots = [...search.unique.values()].map(({ result, page }) => ({ name: `${page.response}-${result.posts[0].id}`,
@@ -37,17 +38,18 @@ export async function selectXSearchLeads(directory: string, plan: XSearchPlan) {
 }
 export type XSearchLead = Awaited<ReturnType<typeof selectXSearchLeads>>["leads"][number] & { planID?: string; directory?: string };
 export type XAdmissionOptions = {
-  enabled: boolean; bearer?: string; maxPosts: number; now?: string; lookup?: typeof checkXAvailability;
+  enabled: boolean; bearer?: string; maxPosts: number; now?: string; lookup?: XSourceLookup; environment?: NodeJS.ProcessEnv;
   lane?: "live" | "history"; order?: (leads: XSearchLead[]) => XSearchLead[];
 };
 
 const id = z.string().regex(/^\d{1,19}$/);
 const attemptSchema = z.object({ at: z.iso.datetime(), ids: z.array(id).min(1).max(100),
   state: z.enum(["reserved", "completed", "failed", "budget-blocked"]), lane: z.enum(["live", "history"]).optional(),
+  provider: z.enum(["twitterapi", "rapidapi"]).optional(), unknownIDs: z.array(id).optional(),
   accepted: z.array(id).optional(), unavailable: z.array(id).optional() }).strict();
 const ledgerSchema = z.array(attemptSchema).max(100);
 
-/** Separate bounded official acquisition after cheap discovery, before the existing editorial/media gates. */
+/** Bounded source acquisition after discovery, before editorial/media gates. */
 export async function admitXSearchLeads(root: string, directory: string, plan: XSearchPlan, options: XAdmissionOptions) {
   const selected = await selectXSearchLeads(directory, plan);
   return admitXLeadSelection(root, selected.leads, selected.report.planID, options);
@@ -59,7 +61,8 @@ export async function admitXLeadSelection(root: string, leads: XSearchLead[], pl
   const now = options.now ?? new Date().toISOString(), day = z.iso.datetime().parse(now).slice(0, 10);
   const lane = options.lane ?? "live";
   const report = { status: "dry-run", requests: 0, acquired: 0, unavailable: 0, known: 0, pending: leads.length, needsInspection: 0 };
-  if (!options.enabled || !options.bearer) return report;
+  const env = options.environment ?? process.env, thirdParty = thirdPartyOnly(env);
+  if (!options.enabled || (!thirdParty && !options.bearer)) return report;
   const ledgerPath = join(root, "x-lead-acquisitions", `${day}.json`);
   const ledger = ledgerSchema.parse(await json(ledgerPath, []));
   if (ledger.some(a => a.state === "reserved" || a.state === "failed")) return { ...report, status: "unresolved" };
@@ -91,19 +94,21 @@ export async function admitXLeadSelection(root: string, leads: XSearchLead[], pl
   const attempt: z.infer<typeof attemptSchema> = { at: now, ids: chosen.map(l => l.id), state: "reserved", lane };
   ledger.push(attempt); await atomic(ledgerPath, ledger); report.requests++;
   try {
-    const result = await (options.lookup ?? checkXAvailability)(options.bearer, attempt.ids);
-    const observed = [...result.posts.map(p => p.id), ...result.unavailable];
+    const lookup: XSourceLookup = options.lookup ?? (thirdParty ? thirdPartySourceLookup(root, env) : checkXAvailability);
+    const result = await lookup(options.bearer ?? "", attempt.ids);
+    const observed = [...result.posts.map(p => p.id), ...result.unavailable, ...(result.restricted ?? []), ...(result.unknownIDs ?? [])];
     if (observed.length !== chosen.length || new Set(observed).size !== chosen.length || observed.some(id => !attempt.ids.includes(id)) ||
         result.posts.some(post => chosen.find(l => l.id === post.id)?.authorID !== post.author_id))
-      throw new Error("Official acquisition did not preserve source identities");
-    // Only this official response enters the established acquisition directory. It is still a draft.
+      throw new Error("Source acquisition did not preserve identities");
+    if (thirdParty && !result.provider) throw new Error("Third-party acquisition must retain its provider");
+    // Persist the real provider; acquisition is still only an unapproved draft.
     await atomic(join(root, "x-discovery", `${day}-feed-${String(ledger.length).padStart(3, "0")}-${randomUUID()}.json`),
-      { ...result, capturedAt: now, reviewStatus: "draft", acquisition: "official-lookup", discoveredBy: "twitterapi",
+      { ...result, capturedAt: now, reviewStatus: "draft", acquisition: result.provider ? `${result.provider}-lookup` : "official-lookup", discoveredBy: "twitterapi",
         leadPlan: planID, leadEvidence: chosen.map(lead => ({ id: lead.id, planID: lead.planID ?? planID,
           directory: lead.directory, response: lead.evidence })) });
     const creatorPath = join(root, "creators.json");
     await atomic(creatorPath, mergeCreatorCache(await json<CreatorCache>(creatorPath, {}), result.creators));
-    attempt.state = "completed"; attempt.accepted = result.posts.map(p => p.id); attempt.unavailable = result.unavailable;
+    attempt.state = "completed"; attempt.accepted = result.posts.map(p => p.id); attempt.unavailable = result.unavailable; attempt.unknownIDs = result.unknownIDs; attempt.provider = result.provider;
     await atomic(ledgerPath, ledger);
     return { ...report, status: "ok", acquired: result.posts.length, unavailable: result.unavailable.length };
   } catch (error) {

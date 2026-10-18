@@ -18,7 +18,7 @@ export class TranslationProviderError extends Error {
   constructor(message: string, public readonly permanent = false) { super(message); }
 }
 export type TranslationProvider = (locale: TranslationLocale, segments: readonly Segment[]) => Promise<TranslationResponse>;
-export function codexTranslationProvider(executable = "codex", maxOutputTokens = 24000, model = "gpt-5.6-luna"): TranslationProvider {
+export function codexTranslationProvider(executable = "codex", maxOutputTokens = 24000, model = "gpt-6-luna"): TranslationProvider {
   return async (locale, segments) => {
     const directory = await mkdtemp(join(tmpdir(), "prompix-translation-"));
     const schema = join(directory, "schema.json");

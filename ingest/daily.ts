@@ -97,7 +97,7 @@ async function run() {
   await withDailyStatus(root, report, async () => {
     const qualityHolds = await readQualityHolds(root);
     // Registry availability must be fresh even when resuming a retained target.
-    const admission = publishing && process.env.X_BEARER_TOKEN ? await prepareXMaintenanceAdmission(root) : undefined;
+    const admission = publishing && (process.env.X_BEARER_TOKEN || process.env.PROMPIX_X_DISCOVERY_PROVIDER === "third-party") ? await prepareXMaintenanceAdmission(root) : undefined;
     const xAvailability = await prepareXAvailability(root, { enabled: publishing, bearer: process.env.X_BEARER_TOKEN, admission });
     report.sources["x-availability"] = xAvailability.report;
     if (publishing) {
@@ -230,7 +230,7 @@ async function run() {
       return { ...prompt, prompt: publicationText(candidate, reviews) };
     });
     const refreshed = await refreshCreatorProfiles(planned, creators, root, {
-      enabled: process.env.PROMPIX_CREATOR_LOOKUP_ENABLED === "true", publishing, bearer: process.env.X_BEARER_TOKEN,
+      enabled: process.env.PROMPIX_X_DISCOVERY_PROVIDER !== "third-party" && process.env.PROMPIX_CREATOR_LOOKUP_ENABLED === "true", publishing, bearer: process.env.X_BEARER_TOKEN,
     });
     report.sources["x-creators"] = refreshed.report;
     creators = refreshed.cache;

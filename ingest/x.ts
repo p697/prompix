@@ -238,6 +238,8 @@ export class TransientXReadError extends Error {
 }
 /** One bounded request. Retry policy belongs to the persistent, budgeted caller. */
 async function requestX(url: string, bearer: string, operation: "search" | "lookup" | "users", maxBytes = 500_000, purpose: XSpendPurpose = "growth") {
+  if (process.env.PROMPIX_X_OFFICIAL_ENABLED === "0" || process.env.PROMPIX_X_DISCOVERY_PROVIDER === "third-party")
+    throw new Error("Official X requests are disabled; no request sent");
   const budget = configuredXSpendBudget();
   if (!budget) return requestXResponse(url, bearer, operation, maxBytes);
   const query = new URL(url).searchParams;

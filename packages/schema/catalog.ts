@@ -59,6 +59,7 @@ export const promptSchema = z.object({
     revision: nonempty.optional(),
     post: sourcePostSchema.optional(),
     context: z.array(sourcePostSchema).min(1).max(8).optional(),
+    acquiredVia: z.enum(["twitterapi", "rapidapi"]).optional(),
     mediaPostID: z.string().regex(/^\d{1,19}$/).optional(),
   }),
   media: z
