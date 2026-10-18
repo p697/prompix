@@ -67,7 +67,7 @@ function renderedLiterals(text: string, preserveLettering: boolean): { start: nu
       || /^\s*(?:文字|字样|字樣|标题|標題|标签|標籤|按钮|按鈕|text|caption|label|button)/iu.test(after)
       || (previousEnd >= 0 && /^[\s,，、/]*(?:(?:and|or|above|below|under|beneath|over|next to|和|与|與|以及|上方|下方)[\s,，、/]*)?$/iu.test(text.slice(previousEnd, start)));
     const input = /(?:my first sentence is|first (?:input|sentence)\s*(?:is|:)|input (?:example|sentence|text)\s*:|我的第一句(?:话|話)?(?:是|：)|输入示例[：:]|輸入示例[：:])\s*$/iu.test(before);
-    const dialogue = /台词|臺詞|开口|開口|说[：:]|說[：:]|\b(?:commentator|narrator|dialogue|whispers?|shouts?)\b/iu.test(before)
+    const dialogue = /台词|臺詞|开口|開口|画外音|畫外音|旁白|说[：:]|說[：:]|\b(?:commentator|narrator|dialogue|voiceover|voice-over|off-screen voice|whispers?|shouts?)\b/iu.test(before)
       || (fixedDialogueLanguage && /说|說|回答|询问|詢問|男声|男聲|女声|女聲|语气|語氣|\b(?:says?|asks?|replies|answers?|speaks?)\b/iu.test(before));
     if (input || (preserveLettering && (caption || dialogue))) { ranges.push({ start, end }); previousEnd = end; }
     else previousEnd = -1;

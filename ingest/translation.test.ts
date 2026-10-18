@@ -108,6 +108,20 @@ test("unquoted on-screen typography stops before the next visual instruction", (
   assert.match(fields.masked, /Typography should use a serif font/);
   assert.equal(restoreText(fields.masked, fields.protectedValues), template);
 });
+test("off-screen voice and narration retain exact lines even without a speech verb", () => {
+  const source = '语言：中文\n男主画外音立即赞赏：\n\n“这次配色很棒。”\n\n旁白：\n“沿着河流前进。”\n\nMood: “quiet anticipation.”\nThe camera slowly tilts up.';
+  const protectedText = protectText(source, true);
+  assert.deepEqual(protectedText.protectedValues, ['“这次配色很棒。”', '“沿着河流前进。”']);
+  assert.match(protectedText.masked, /quiet anticipation/);
+  assert.match(protectedText.masked, /The camera slowly tilts up/);
+  assert.equal(restoreText(protectedText.masked, protectedText.protectedValues), source);
+  assert.deepEqual(protectText(source, false).protectedValues, []);
+  const english = protectText('The off-screen voice is enthusiastic:\n“KEEP GOING!”\n\nVoice-over:\n“Follow the river.”', true);
+  assert.deepEqual(english.protectedValues, ['“KEEP GOING!”', '“Follow the river.”']);
+  const visualItem = { ...item, kind: 'video' as const, prompt: source };
+  const segment = promptSegments(visualItem).find(segment => segment.text.includes('男主画外音'))!;
+  assert.throws(() => validateSegment(segment.text, segment.text.replace('⟦PP0⟧', 'This color is great.'), 'en'), /protected syntax/);
+});
 test("JSON quality enums stay opaque while descriptive quality prose is translated", () => {
   const description = "Detailed texture, natural lighting, and realistic materials.";
   const prose = { ...item, prompt: JSON.stringify({ quality: description, variant: { quality: "high" } }) };
