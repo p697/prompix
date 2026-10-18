@@ -8,7 +8,7 @@ export const translationVersion = "prompix-translation-1";
 export type LocalizedText = Pick<Prompt, "title" | "summary" | "prompt" | "example" | "previewLabel"> & { cover?: { text: string; eyebrow: string } };
 export type Localization = { sourceLanguage: string; sourceFingerprint: string; translations: Partial<Record<TranslationLocale, LocalizedText>> };
 export type SegmentContext = { sourceText: string; protectedValues: string[]; numericHints?: Record<string, string> };
-export type Segment = { id: string; text: string; maxOutputCharacters?: number; numericHints?: Record<string, string>; reviewFeedback?: string[]; sourceText?: string; protectedValues?: string[]; contexts?: SegmentContext[] };
+export type Segment = { id: string; text: string; semanticContext?: "age"; maxOutputCharacters?: number; numericHints?: Record<string, string>; reviewFeedback?: string[]; sourceText?: string; protectedValues?: string[]; contexts?: SegmentContext[] };
 export function mergeSegmentContexts(target: Segment, incoming: Segment): void {
   if (incoming.maxOutputCharacters !== undefined) target.maxOutputCharacters = Math.min(target.maxOutputCharacters ?? Infinity, incoming.maxOutputCharacters);
   const contexts = [...(incoming.contexts ?? []), ...(incoming.sourceText !== undefined && incoming.protectedValues ? [{ sourceText: incoming.sourceText, protectedValues: incoming.protectedValues, numericHints: incoming.numericHints }] : [])];
@@ -178,13 +178,20 @@ export function restoreText(masked: string, protectedValues: readonly string[]):
 
 const opaqueJSONKeys = new Set(["render_engine", "renderEngine", "renderer", "model", "model_id", "modelId", "seed", "steps", "cfg_scale", "sampler", "sampler_name", "scheduler", "aspect_ratio", "aspectRatio", "resolution", "size", "width", "height", "fps", "duration", "duration_seconds", "output_format", "response_format", "style_preset", "code", "html", "css", "javascript", "typescript", "script"]);
 const opaqueJSONString = (key: string | undefined, value: string) => Boolean(key && (opaqueJSONKeys.has(key) || (key === "quality" && /^(auto|low|medium|high|standard|hd)$/i.test(value))));
-function transformStrings(value: unknown, transform: (text: string) => string, key?: string): unknown {
-  if (typeof value === "string") return opaqueJSONString(key, value) ? value : transform(value);
-  if (Array.isArray(value)) return value.map(item => transformStrings(item, transform));
+function semanticContext(key?: string): "age" | undefined { return key && /^(?:age|age_range|ageRange|年龄|年齡|年齢)$/iu.test(key) ? "age" : undefined; }
+function segmentIdentity(masked: string, context?: "age"): string { return hash(context ? JSON.stringify(["field-context-1", context, masked]) : masked); }
+export function validateSemanticContext(source: string, translated: string, locale: TranslationLocale, context?: "age"): void {
+  const calendarWording = (/^(?:zh|ja)/.test(locale) && /年代|世纪|世紀/u.test(translated)) || (locale === "ko" && /세기|년대/u.test(translated));
+  if (context === "age" && /^(?:early|mid|late)[ -]?[1-9]\d?s\b/iu.test(source) && calendarWording)
+    throw new Error("Translation changed a subject's age into a calendar decade");
+}
+function transformStrings(value: unknown, transform: (text: string, key?: string) => string, key?: string): unknown {
+  if (typeof value === "string") return opaqueJSONString(key, value) ? value : transform(value, key);
+  if (Array.isArray(value)) return value.map(item => transformStrings(item, transform, key));
   if (value && typeof value === "object") return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, transformStrings(item, transform, key)]));
   return value;
 }
-function visitText(text: string, transform: (text: string) => string): string {
+function visitText(text: string, transform: (text: string, key?: string) => string): string {
   // Parse whole JSON prompts before translation. Keep exact original bytes if no value changed.
   try {
     const value: unknown = JSON.parse(text);
@@ -228,12 +235,13 @@ function translationParts(text: string, visual: boolean) {
 }
 export function promptSegments(item: Prompt): Segment[] {
   const segments = new Map<string, Segment>();
-  const collect = (text: string, displayLimit?: number) => {
+  const collect = (text: string, displayLimit?: number, key?: string) => {
+    const context = semanticContext(key);
     const parts = translationParts(text, item.kind === "image" || item.kind === "video");
     for (const { masked, protectedValues, sourceText } of parts) {
       if (/[\p{L}]/u.test(masked.replace(/⟦PP\d+⟧/g, ""))) {
         // Bound returned masked text so restored tokens also fit the existing UI limit.
-        const segment: Segment = { id: hash(masked), text: masked, sourceText, protectedValues, ...numericHints(protectedValues),
+        const segment: Segment = { id: segmentIdentity(masked, context), text: masked, sourceText, protectedValues, ...(context ? { semanticContext: context } : {}), ...numericHints(protectedValues),
           ...(displayLimit !== undefined && parts.length === 1 ? { maxOutputCharacters: displayLimit - sourceText.length + masked.length } : {}) };
         const previous = segments.get(segment.id);
         if (previous) mergeSegmentContexts(previous, segment); else segments.set(segment.id, segment);
@@ -243,7 +251,7 @@ export function promptSegments(item: Prompt): Segment[] {
   };
   for (const [key, value] of Object.entries(translationText(item))) {
     if (key === "cover") { const cover = value as LocalizedText["cover"]; collect(cover!.text, 100); collect(cover!.eyebrow, 40); }
-    else visitText(value as string, text => collect(text, key === "title" ? 250 : key === "previewLabel" ? 500 : undefined));
+    else visitText(value as string, (text, fieldKey) => collect(text, key === "title" ? 250 : key === "previewLabel" ? 500 : undefined, fieldKey));
   }
   return [...segments.values()];
 }
@@ -334,13 +342,15 @@ export function validateSegment(source: string, translated: string, locale: Tran
 }
 export function localizePrompt(item: Prompt, locale: TranslationLocale, cache: TranslationCache, reviews: readonly TranslationRejection[] = []): LocalizedText | undefined {
   if (cache.version !== translationVersion) return undefined;
-  const translate = (text: string) => {
+  const translate = (text: string, key?: string) => {
+    const context = semanticContext(key);
     return translationParts(text, item.kind === "image" || item.kind === "video").map(({ masked, protectedValues, sourceText, prefix, suffix }) => {
       if (!/[\p{L}]/u.test(masked.replace(/⟦PP\d+⟧/g, ""))) return prefix + sourceText + suffix;
-      const translated = cache.segments[locale]?.[hash(masked)];
+      const translated = cache.segments[locale]?.[segmentIdentity(masked, context)];
       if (translated === undefined) throw new Error("Missing translation segment");
       validateSegment(masked, translated, locale, numericHints(protectedValues).numericHints);
-      validateReviewedTranslation(reviews, locale, hash(masked), translated);
+      validateReviewedTranslation(reviews, locale, segmentIdentity(masked, context), translated);
+      validateSemanticContext(sourceText, translated, locale, context);
       const restored = restoreText(translated, protectedValues);
       validateReviewedTranslationField(reviews, locale, sourceText, restored);
       return prefix + restored + suffix;
@@ -357,7 +367,9 @@ export function localizePrompt(item: Prompt, locale: TranslationLocale, cache: T
 }
 /** Revalidate inherited first-party/offline localizations before reusing them. */
 export function validLocalizedText(item: Prompt, locale: TranslationLocale, translated: LocalizedText, reviews: readonly TranslationRejection[] = []): boolean {
-  const check = (source: string, value: string) => {
+  const check = (source: string, value: string, key?: string) => {
+    const context = semanticContext(key);
+    validateSemanticContext(source, value, locale, context);
     if (typeof value !== "string") throw new Error("Invalid translation field");
     validateReviewedTranslationField(reviews, locale, source, value);
     const protectedText = protectText(source, item.kind === "image" || item.kind === "video");
@@ -380,13 +392,13 @@ export function validLocalizedText(item: Prompt, locale: TranslationLocale, tran
     }) : value;
     if ([...indices.values()].some(remaining => remaining.length)) throw new Error("Inherited translation changed opaque syntax");
     validateSegment(protectedText.masked, masked, locale, numericHints(protectedText.protectedValues).numericHints);
-    validateReviewedTranslation(reviews, locale, hash(protectedText.masked), masked);
+    validateReviewedTranslation(reviews, locale, segmentIdentity(protectedText.masked, context), masked);
   };
   const compareJSON = (source: unknown, value: unknown, key?: string): void => {
-    if (typeof source === "string") { if (opaqueJSONString(key, source)) { if (source !== value) throw new Error("Changed JSON model parameter"); } else check(source, value as string); return; }
+    if (typeof source === "string") { if (opaqueJSONString(key, source)) { if (source !== value) throw new Error("Changed JSON model parameter"); } else check(source, value as string, key); return; }
     if (Array.isArray(source)) {
       if (!Array.isArray(value) || value.length !== source.length) throw new Error("Changed JSON array");
-      source.forEach((part, index) => compareJSON(part, value[index])); return;
+      source.forEach((part, index) => compareJSON(part, value[index], key)); return;
     }
     if (source && typeof source === "object") {
       if (!value || typeof value !== "object" || Array.isArray(value) || Object.keys(source).sort().join("\0") !== Object.keys(value).sort().join("\0")) throw new Error("Changed JSON keys");

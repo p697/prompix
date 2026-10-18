@@ -1,6 +1,6 @@
 import { applyTranslationReviews, validateReviewedTranslation, validateReviewedTranslationField, translationReviewFeedback, type TranslationRejection } from "./translation-review.ts";
 import type { Prompt } from "../packages/schema/catalog.ts";
-import { promptSegments, mergeSegmentContexts, translationFingerprint, validLocalizedText, restoreText, translationLocales, translationVersion, validateSegment, seedOriginalSegments, type Segment, type TranslationCache, type TranslationLocale } from "./translation.ts";
+import { promptSegments, mergeSegmentContexts, translationFingerprint, validLocalizedText, restoreText, translationLocales, translationVersion, validateSegment, validateSemanticContext, seedOriginalSegments, type Segment, type TranslationCache, type TranslationLocale } from "./translation.ts";
 import { TranslationProviderError, type TranslationProvider } from "./translation-provider.ts";
 
 export type TranslationRunReport = { version: string; provider: string; attempted: number; succeeded: number; rejected: number; failed: number; pendingSegments: number;
@@ -13,6 +13,7 @@ function validateForEverySource(segment: Segment, translated: string, locale: Tr
   const contexts = [...(segment.contexts ?? []), ...(segment.sourceText !== undefined && segment.protectedValues ? [{ sourceText: segment.sourceText, protectedValues: segment.protectedValues, numericHints: segment.numericHints }] : [])];
   for (const context of contexts) {
     validateSegment(segment.text, translated, locale, context.numericHints);
+    validateSemanticContext(context.sourceText, translated, locale, segment.semanticContext);
     validateReviewedTranslationField(reviews, locale, context.sourceText, restoreText(translated, context.protectedValues));
   }
 }

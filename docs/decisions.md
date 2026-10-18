@@ -890,3 +890,7 @@ Evaluate TweetAPI's documented 200-ID, one-unit lookup as an isolated read pilot
 ### 2026-10-18：在翻译阶段执行显示长度与画面文字约束
 
 短标签的显示上限必须传入翻译任务并参与缓存校验，不能等到整条内容组装时才静默缺失。相同片段复用最严格的适用长度上限，按保护值还原后的真实长度计算；仅缺失或超限片段在原账本额度内重试，不缩写正文、不放宽 UI 上限。图片／视频里明确给出的品牌文字块、字体海报系列名与标题选项保留原始字面值，周围的自然语言方向继续翻译。
+
+## 2026-10-18: Preserve age context in structured prompt translations
+
+JSON age and age-range string values carry an explicit age context into translation, including array elements. Their cache identity differs from identical prose used as a calendar era, so a cached decade translation cannot supply a subject's age. Fresh, cached and inherited Chinese/Japanese/Korean results reject explicit calendar wording for early/mid/late age ranges. Other prose cache identities and literal JSON parameters remain unchanged. This addresses a historical pilot finding without replacing source wording or relaxing language checks.
