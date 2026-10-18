@@ -56,23 +56,44 @@ export function seedOriginalSegments(items: readonly Prompt[], cache: Translatio
 /** Opaque syntax never goes to the model unprotected. JSON keys and primitives never become segments. */
 function renderedLiterals(text: string, preserveLettering: boolean): { start: number; end: number }[] {
   const ranges: { start: number; end: number }[] = [];
-  const quotes = /“[^”\n]+”|「[^」\n]+」|『[^』\n]+』|"[^"\n]+"|‘[^’\n]+’/gu;
+  const quotes = /“[^”]{1,1000}”|「[^」]{1,1000}」|『[^』]{1,1000}』|"[^"\n]+"|‘[^’\n]+’/gu;
+  const fixedDialogueLanguage = /\b(?:dialogue|spoken language|speech|voiceover|voice-over)\s*(?:(?:must be|is|in|:)\s*)+(?:English|Chinese|Mandarin|Japanese|Korean|Spanish|French|German|Portuguese)\b|(?:语言|語言)\s*[：:]\s*(?:中文|英文|英语|英語|日文|日语|日語|韩语|韓語|法语|法語|德语|德語)|(?:中文|英文|英语|英語|日文|日语|日語|韩语|韓語|法语|法語|德语|德語)(?:对白|對白|台词|臺詞|男声|男聲|女声|女聲|配音)/iu.test(text);
   let previousEnd = -1;
   for (const match of text.matchAll(quotes)) {
     const start = match.index!, end = start + match[0].length;
-    const before = text.slice(Math.max(0, start - 85), start).split(/[。.!?;；\n”」』"’]/).at(-1)!;
+    const before = text.slice(Math.max(0, start - 120), start).trimEnd().split(/[。.!?;；\n”」』"’]/).at(-1)!;
     const after = text.slice(end, end + 20);
-    const caption = /文字|字体|字體|字样|字樣|文本|标语|標語|标注|標註|标有|標有|写着|寫著|标题|標題|标签|標籤|日期|笔记|筆記|\b(?:lettering|text|caption|slogan|label|title|headline|read|reads|say|says|written)\b/iu.test(before)
+    const caption = /字幕|文字|字体|字體|字样|字樣|文本|标语|標語|标注|標註|标有|標有|写着|寫著|标题|標題|标签|標籤|日期|笔记|筆記|\b(?:typography|lettering|text|caption|slogan|label|title|headline|read|reads|say|says|written)\b/iu.test(before)
       || /^\s*(?:文字|字样|字樣|标题|標題|标签|標籤|按钮|按鈕|text|caption|label|button)/iu.test(after)
       || (previousEnd >= 0 && /^[\s,，、/]*(?:(?:and|or|above|below|under|beneath|over|next to|和|与|與|以及|上方|下方)[\s,，、/]*)?$/iu.test(text.slice(previousEnd, start)));
     const input = /(?:my first sentence is|first (?:input|sentence)\s*(?:is|:)|input (?:example|sentence|text)\s*:|我的第一句(?:话|話)?(?:是|：)|输入示例[：:]|輸入示例[：:])\s*$/iu.test(before);
-    if (input || (preserveLettering && caption)) { ranges.push({ start, end }); previousEnd = end; }
+    const dialogue = fixedDialogueLanguage && /说|說|回答|询问|詢問|开口|開口|台词|臺詞|男声|男聲|女声|女聲|语气|語氣|\b(?:says?|asks?|replies|answers?|dialogue|speaks?|whispers?|shouts?)\b/iu.test(before);
+    if (input || (preserveLettering && (caption || dialogue))) { ranges.push({ start, end }); previousEnd = end; }
     else previousEnd = -1;
   }
   // Treat repeated occurrences of the same literal consistently, including later
   // references to a caption. Otherwise a whole-quote token overlaps an inner placeholder.
   const literals = new Set(ranges.map(range => text.slice(range.start, range.end)));
-  for (const match of text.matchAll(quotes)) if (literals.has(match[0]) && !ranges.some(range => range.start === match.index)) ranges.push({ start: match.index!, end: match.index! + match[0].length });
+  for (const match of text.matchAll(quotes)) {
+    const body = match[0].slice(1, -1);
+    const spokenReference = preserveLettering && fixedDialogueLanguage && body.length >= 3 && [...literals].some(literal => literal.slice(1, -1).includes(body));
+    if ((literals.has(match[0]) || spokenReference) && !ranges.some(range => range.start === match.index)) ranges.push({ start: match.index!, end: match.index! + match[0].length });
+  }
+  // Unquoted, all-capital lines immediately after an explicit on-screen text cue
+  // are lettering too. Stop at scene directions instead of freezing the paragraph.
+  if (preserveLettering) for (const cue of text.matchAll(/^[^\n]{0,200}\b(?:typography|lettering|caption|text)\b[^\n:]{0,60}:[ \t]*\r?\n(?:[ \t]*\r?\n)*/gimu)) {
+    if (!/\b(?:include|show|display|render|place|add|appears?|reads?|displayed)\b/iu.test(cue[0])) continue;
+    const start = cue.index! + cue[0].length;
+    let cursor = start;
+    for (const line of text.slice(start).split(/(?<=\n)/u).slice(0, 6)) {
+      const prose = line.trim();
+      const template = /\[[^\]\n]+\]|\b(?:No\.|Year:)/u.test(prose)
+        && !prose.replace(/\[[^\]\n]{1,160}\]/gu, "").replace(/\b(?:No\.|Year:)[ \t]*(?:\d+)?/gu, "").trim();
+      const capitalized = /[A-Z]/.test(prose) && !/[a-z]/.test(prose) && !/^(?:USE|KEEP|DO NOT|CREATE|ENSURE|AVOID)\b/.test(prose);
+      if (!prose || prose.length > 160 || (!template && !capitalized)) break;
+      ranges.push({ start: cursor, end: cursor + line.trimEnd().length }); cursor += line.length;
+    }
+  }
   if (preserveLettering) for (const match of text.matchAll(/^(\[[A-Z][A-Z0-9_]*\])[ \t]*=[ \t]*([^\r\n]+)$/gm)) {
     const end = match.index! + match[0].length, start = end - match[2].length;
     const usedAsLettering = text.slice(end).split(/\n\s*\n/).some(paragraph => paragraph.length <= 2000 && paragraph.includes(match[1])

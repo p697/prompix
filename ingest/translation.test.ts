@@ -80,6 +80,31 @@ test("JSON keys, nesting and non-string parameters survive translated values", (
   assert.deepEqual(Object.keys(parsed), ["prompt", "seed", "model", "aspect_ratio", "style_preset", "html", "style"]);
   assert.match(parsed.prompt, /\{subject\}/);
 });
+test("multiline captions and explicit-language dialogue remain literal without freezing scene directions", () => {
+  const source = "语言：中文\n女主自然开口：\n\n“欢迎……\n今天去哪？”\n\n字幕逐字显示：\n“欢迎……\n今天去哪？”\n\n她轻轻挥手，然后走向门口。";
+  const result = protectText(source, true);
+  assert.deepEqual(result.protectedValues, ["“欢迎……\n今天去哪？”", "“欢迎……\n今天去哪？”"]);
+  assert.match(result.masked, /她轻轻挥手/);
+  assert.equal(restoreText(result.masked, result.protectedValues), source);
+  assert.equal(protectText(source, false).protectedValues.length, 0);
+  const english = protectText('Dialogue must be in Japanese.\nThe narrator whispers:\n\n「明日、また会おう。」\nThe camera pulls back.', true);
+  assert.ok(english.protectedValues.includes('「明日、また会おう。」'));
+  assert.match(english.masked, /The camera pulls back/);
+});
+test("unquoted on-screen typography stops before the next visual instruction", () => {
+  const source = "Large neon typography appears:\n\nFOLLOW THE LIGHT.\nFIND YOUR WAY.\nUse slow camera moves throughout.\n\nTEXT REQUIREMENTS:\nKEEP BACKGROUND CLEAN";
+  const result = protectText(source, true);
+  assert.deepEqual(result.protectedValues, ["FOLLOW THE LIGHT.", "FIND YOUR WAY."]);
+  assert.match(result.masked, /Use slow camera moves/);
+  assert.match(result.masked, /KEEP BACKGROUND CLEAN/);
+  assert.equal(restoreText(result.masked, result.protectedValues), source);
+  assert.deepEqual(protectText(source, false).protectedValues, []);
+  const template = "Below the scene, include vintage typography:\n\n[PLACE]\nNo. [NUMBER] [DESCRIPTION]\nYear: 2040\n\nTypography should use a serif font.";
+  const fields = protectText(template, true);
+  assert.deepEqual(fields.protectedValues, ["[PLACE]", "No. [NUMBER] [DESCRIPTION]", "Year: 2040"]);
+  assert.match(fields.masked, /Typography should use a serif font/);
+  assert.equal(restoreText(fields.masked, fields.protectedValues), template);
+});
 test("JSON quality enums stay opaque while descriptive quality prose is translated", () => {
   const description = "Detailed texture, natural lighting, and realistic materials.";
   const prose = { ...item, prompt: JSON.stringify({ quality: description, variant: { quality: "high" } }) };

@@ -6,6 +6,7 @@ import { translationFingerprint, translationLocales, validLocalizedText } from "
 import { originalBaseSchema } from "../packages/schema/language-packs.ts";
 import { nativeXSourceIssue } from "./x-source.ts";
 import { applyQualityHolds, type QualityHolds } from "./quality-holds.ts";
+import type { TranslationRejection } from "./translation-review.ts";
 
 export const historyLimits = { target: 500, sources: 1500, searches: 750, batch: 50, editorial: 64, visual: 64, translation: 200 } as const;
 export const historyLeadSchema = z.object({ id: z.string().regex(/^\d{1,19}$/), authorID: z.string().regex(/^\d{1,19}$/),
@@ -48,10 +49,10 @@ export function completeHistoryItem(item: Prompt, now = Date.now()): boolean {
 }
 
 /** A cached batch completion cannot override a later operator hold or removal. */
-export function currentHistoryAcceptance(items: Prompt[], previous: Prompt[], holds: QualityHolds, removedIDs: readonly string[], now = Date.now()) {
+export function currentHistoryAcceptance(items: Prompt[], previous: Prompt[], holds: QualityHolds, removedIDs: readonly string[], now = Date.now(), reviews: readonly TranslationRejection[] = []) {
   const removed = new Set(removedIDs);
   return uniqueHistoryItems(applyQualityHolds(items, holds).prompts.filter(item => !removed.has(item.id)), previous)
-    .filter(item => completeHistoryItem(item, now));
+    .filter(item => completeHistoryItem(item, now) && translationLocales.every(locale => validLocalizedText(item, locale, item.localization!.translations[locale]!, reviews)));
 }
 
 /** Original v2 baselines have language availability, not embedded translated bodies. */
