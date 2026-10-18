@@ -83,3 +83,9 @@
 历史实跑另发现正常模板输入被误判为缺失来源：用户填写日期、人物、画面文字或上传自己的参考图，本身不构成不完整。编辑指令现区分普通用户输入与缺失的特定原文／前序分镜，要求使用建议说明需要准备的输入。保留来源预览、正文完整性和所有后续审核。两次Codex订阅调用对照三条真实误暂缓案例及三条自编负例：三个完整模板获准进入后续审核，缺失分镜、私有说明和宣传预告仍暂缓；该验证不直接修改它们既有审核结果或发布任何条目。38项相关自动测试及类型检查通过。
 
 JSON提示词中的渲染引擎名称（如多个引擎组合）不是需要汉化的自然语言。渲染引擎字段纳入既有不透明参数保护，要求译文逐字保留；回归覆盖旁边的场景说明仍需翻译，以及改动引擎名称必须拒绝。
+
+## Display constraints during translation
+
+The 500-item trial exposed a gap between segment validation and complete-record validation: a correctly translated French cover eyebrow could exceed the existing 40-character UI limit, leaving a record incomplete while the segment queue reported zero pending work. Short-label segments now carry a hard masked-output length bound, adjusted for the actual length of protected syntax after restoration. Shared segments keep the strictest applicable bound. Oversized cached or newly returned labels remain pending and only those segments are retried, using the original cumulative request allowance. Title, preview-label and cover limits remain unchanged; full prompt and usage prose are never abbreviated to meet a label budget.
+
+Visual translation also protects mixed-case product copy after an explicit branding-text cue, plus fixed series names and numbered title alternatives in typography-poster templates. Scene directions remain translatable. Previously accepted translations are revalidated against these exact source literals; changed masks affect only the relevant fields. The capture, editorial, visual and publication gates remain independent.

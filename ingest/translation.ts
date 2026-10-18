@@ -8,8 +8,9 @@ export const translationVersion = "prompix-translation-1";
 export type LocalizedText = Pick<Prompt, "title" | "summary" | "prompt" | "example" | "previewLabel"> & { cover?: { text: string; eyebrow: string } };
 export type Localization = { sourceLanguage: string; sourceFingerprint: string; translations: Partial<Record<TranslationLocale, LocalizedText>> };
 export type SegmentContext = { sourceText: string; protectedValues: string[]; numericHints?: Record<string, string> };
-export type Segment = { id: string; text: string; numericHints?: Record<string, string>; reviewFeedback?: string[]; sourceText?: string; protectedValues?: string[]; contexts?: SegmentContext[] };
+export type Segment = { id: string; text: string; maxOutputCharacters?: number; numericHints?: Record<string, string>; reviewFeedback?: string[]; sourceText?: string; protectedValues?: string[]; contexts?: SegmentContext[] };
 export function mergeSegmentContexts(target: Segment, incoming: Segment): void {
+  if (incoming.maxOutputCharacters !== undefined) target.maxOutputCharacters = Math.min(target.maxOutputCharacters ?? Infinity, incoming.maxOutputCharacters);
   const contexts = [...(incoming.contexts ?? []), ...(incoming.sourceText !== undefined && incoming.protectedValues ? [{ sourceText: incoming.sourceText, protectedValues: incoming.protectedValues, numericHints: incoming.numericHints }] : [])];
   for (const context of contexts) if (context.sourceText !== target.sourceText && !target.contexts?.some(existing => existing.sourceText === context.sourceText)) (target.contexts ??= []).push(context);
 }
@@ -82,17 +83,27 @@ function renderedLiterals(text: string, preserveLettering: boolean): { start: nu
   }
   // Unquoted, all-capital lines immediately after an explicit on-screen text cue
   // are lettering too. Stop at scene directions instead of freezing the paragraph.
-  if (preserveLettering) for (const cue of text.matchAll(/^[^\n]{0,200}\b(?:typography|lettering|caption|text)\b[^\n:]{0,60}:[ \t]*\r?\n(?:[ \t]*\r?\n)*/gimu)) {
+  if (preserveLettering) for (const cue of text.matchAll(/^[^\n]{0,1000}\b(?:typography|lettering|caption|text)\b[^\n:]{0,60}:[ \t]*\r?\n(?:[ \t]*\r?\n)*/gimu)) {
     if (!/\b(?:include|show|display|render|place|add|appears?|reads?|displayed)\b/iu.test(cue[0])) continue;
     const start = cue.index! + cue[0].length;
+    const brandCopy = /\b(?:branding|brand|packaging)\b/iu.test(cue[0].trim().split(/[.!?]\s+/u).at(-1)!);
     let cursor = start;
     for (const line of text.slice(start).split(/(?<=\n)/u).slice(0, 6)) {
       const prose = line.trim();
       const template = /\[[^\]\n]+\]|\b(?:No\.|Year:)/u.test(prose)
         && !prose.replace(/\[[^\]\n]{1,160}\]/gu, "").replace(/\b(?:No\.|Year:)[ \t]*(?:\d+)?/gu, "").trim();
       const capitalized = /[A-Z]/.test(prose) && !/[a-z]/.test(prose) && !/^(?:USE|KEEP|DO NOT|CREATE|ENSURE|AVOID)\b/.test(prose);
-      if (!prose || prose.length > 160 || (!template && !capitalized)) break;
+      const mixedCaseBrand = brandCopy && /[A-Za-z]/u.test(prose) && !/^(?:use|keep|do not|create|ensure|avoid|lighting|background|composition|camera)\b/iu.test(prose);
+      if (!prose || prose.length > 160 || (!template && !capitalized && !mixedCaseBrand)) break;
       ranges.push({ start: cursor, end: cursor + line.trimEnd().length }); cursor += line.length;
+    }
+  }
+  if (preserveLettering && /\b(?:typography|letterforms|lettering)\b/iu.test(text) && /\bposter\b/iu.test(text)) {
+    for (const match of text.matchAll(/^(?:Series|Title|Headline):[ \t]*([A-Z][A-Z0-9]*(?:[ -][A-Z0-9]+){0,7})[ \t]*$/gm)) {
+      const start = match.index! + match[0].indexOf(match[1]); ranges.push({ start, end: start + match[1].length });
+    }
+    if (/^Title:[ \t]*\[/mi.test(text)) for (const match of text.matchAll(/^\d+\.[ \t]+([A-Z][A-Z0-9]*(?:[ -][A-Z0-9]+){1,5})[ \t]+[—–][ \t]+/gm)) {
+      const start = match.index! + match[0].indexOf(match[1]); ranges.push({ start, end: start + match[1].length });
     }
   }
   if (preserveLettering) for (const match of text.matchAll(/^(\[[A-Z][A-Z0-9_]*\])[ \t]*=[ \t]*([^\r\n]+)$/gm)) {
@@ -217,10 +228,13 @@ function translationParts(text: string, visual: boolean) {
 }
 export function promptSegments(item: Prompt): Segment[] {
   const segments = new Map<string, Segment>();
-  const collect = (text: string) => {
-    for (const { masked, protectedValues, sourceText } of translationParts(text, item.kind === "image" || item.kind === "video")) {
+  const collect = (text: string, displayLimit?: number) => {
+    const parts = translationParts(text, item.kind === "image" || item.kind === "video");
+    for (const { masked, protectedValues, sourceText } of parts) {
       if (/[\p{L}]/u.test(masked.replace(/⟦PP\d+⟧/g, ""))) {
-        const segment = { id: hash(masked), text: masked, sourceText, protectedValues, ...numericHints(protectedValues) };
+        // Bound returned masked text so restored tokens also fit the existing UI limit.
+        const segment: Segment = { id: hash(masked), text: masked, sourceText, protectedValues, ...numericHints(protectedValues),
+          ...(displayLimit !== undefined && parts.length === 1 ? { maxOutputCharacters: displayLimit - sourceText.length + masked.length } : {}) };
         const previous = segments.get(segment.id);
         if (previous) mergeSegmentContexts(previous, segment); else segments.set(segment.id, segment);
       }
@@ -228,8 +242,8 @@ export function promptSegments(item: Prompt): Segment[] {
     return text;
   };
   for (const [key, value] of Object.entries(translationText(item))) {
-    if (key === "cover") { const cover = value as LocalizedText["cover"]; collect(cover!.text); collect(cover!.eyebrow); }
-    else visitText(value as string, collect);
+    if (key === "cover") { const cover = value as LocalizedText["cover"]; collect(cover!.text, 100); collect(cover!.eyebrow, 40); }
+    else visitText(value as string, text => collect(text, key === "title" ? 250 : key === "previewLabel" ? 500 : undefined));
   }
   return [...segments.values()];
 }

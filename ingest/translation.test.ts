@@ -9,6 +9,66 @@ import { TranslationProviderError } from "./translation-provider.ts";
 const fixture = catalogSchema.parse(JSON.parse(await readFile(new URL("../ios/Prompix/Resources/catalog.json", import.meta.url), "utf8"))).prompts[0];
 const item = { ...fixture, title: "Portrait", summary: "Generate a portrait with gentle studio lighting.", prompt: "Create a portrait of {subject}, add https://example.com/reference and --ar 16:9. Keep `field_name`.", example: "Replace {subject} with the person you want to depict.", previewLabel: "Studio example", cover: { text: "Portrait", eyebrow: "IMAGE", tone: "sage" as const } };
 
+test("oversized cached display labels remain pending and repair without retranslating the body or resetting attempts", async () => {
+  const source = { ...item, title: "Étude", summary: "Une étude visuelle.", prompt: "Une scène calme.", example: "Choisissez le cadrage.", previewLabel: "Aperçu",
+    cover: { ...item.cover, text: "Étude", eyebrow: "Soft editorial portrait" } };
+  const cache = emptyTranslationCache(), segments = promptSegments(source), label = segments.find(s => s.sourceText === source.cover.eyebrow)!;
+  const tooLong = "Portrait à l’esthétique cinématographique";
+  assert.equal(tooLong.length, 41);
+  cache.segments.fr = Object.fromEntries(segments.map(s => [s.id, s.id === label.id ? tooLong : s.text]));
+  assert.equal(localizePrompt(source, "fr", cache), undefined);
+  assert.deepEqual(translationBatches([source], cache, ["fr"]).flatMap(j => j.segments.map(s => s.id)), [label.id]);
+  const rejected = await runTranslations({ items: [source], cache, locales: ["fr"], providerName: "codex", maxRequests: 2,
+    persist: async () => {}, provider: async (_, pending) => {
+      assert.equal(pending[0].maxOutputCharacters, 40);
+      return { translations: [{ id: label.id, text: tooLong }] };
+    } });
+  assert.equal(rejected.rejected, 1); assert.equal(rejected.pendingSegments, 1);
+  const repaired = await runTranslations({ items: [source], cache, locales: ["fr"], providerName: "codex", maxRequests: 2, prior: rejected,
+    persist: async () => {}, provider: async (_, pending) => {
+      assert.deepEqual(pending.map(s => s.id), [label.id]);
+      return { translations: [{ id: label.id, text: "Portrait éditorial doux" }] };
+    } });
+  assert.equal(repaired.attempted, 2); assert.equal(repaired.pendingSegments, 0);
+  assert.equal(localizePrompt(source, "fr", cache)?.prompt, source.prompt);
+  assert.equal(localizePrompt(source, "fr", cache)?.cover?.eyebrow, "Portrait éditorial doux");
+});
+
+test("display bounds account for restored tokens and the strictest shared field without limiting prompt prose", () => {
+  const source = { ...item, title: "Shared label", cover: { ...item.cover, text: "Shared label", eyebrow: "Use [REFERENCE_SUBJECT] here" } };
+  const segments = promptSegments(source), label = segments.find(s => s.sourceText === source.cover.eyebrow)!;
+  assert.equal(label.maxOutputCharacters, 40 - label.sourceText!.length + label.text.length);
+  assert.equal(segments.find(s => s.sourceText === source.title)?.maxOutputCharacters, 100);
+  assert.equal(segments.find(s => s.sourceText === source.prompt)?.maxOutputCharacters, undefined);
+  const second = { ...source, id: "second-label", cover: { ...source.cover, eyebrow: "Shared label" } };
+  for (const items of [[source, second], [second, source]]) {
+    const shared = translationBatches(items, emptyTranslationCache(), ["fr"]).flatMap(j => j.segments).find(s => s.sourceText === source.title)!;
+    assert.equal(shared.maxOutputCharacters, 40);
+  }
+});
+
+test("visual branding blocks preserve mixed-case package copy but leave following directions translatable", () => {
+  const source = "Describe the product material, background and soft reflections. ".repeat(4) + "Add the branding text:\n\nASTER+\nVitamin D\nFace Lotion — 12%\n\nSoft lighting and a gray background.";
+  const p = protectText(source, true);
+  assert.ok(p.protectedValues.includes("Vitamin D"));
+  assert.ok(p.protectedValues.includes("Face Lotion — 12%"));
+  assert.ok(p.masked.includes("Soft lighting and a gray background."));
+  assert.equal(restoreText(p.masked, p.protectedValues), source);
+  assert.ok(protectText(source, false).masked.includes("Vitamin D"));
+  assert.ok(protectText("Add text:\nSoft lighting\nNatural colors", true).masked.includes("Soft lighting"));
+});
+
+test("typography poster series and title options remain literal while their scene descriptions translate", () => {
+  const source = "Create a typography poster with giant letterforms.\nTitle: [custom title]\nSeries: DAILY MOMENTS\n1. MORNING RIDE — a cyclist by the river.\n2. QUIET STUDIO — an artist painting.\nUse natural lighting.";
+  const p = protectText(source, true);
+  for (const value of ["DAILY MOMENTS", "MORNING RIDE", "QUIET STUDIO"]) assert.ok(p.protectedValues.includes(value));
+  assert.ok(p.masked.includes("a cyclist by the river."));
+  assert.ok(p.masked.includes("Use natural lighting."));
+  assert.equal(restoreText(p.masked, p.protectedValues), source);
+  const ordinary = "Write a report.\nSeries: DAILY MOMENTS\n1. MORNING RIDE — summarize the commute.";
+  assert.ok(protectText(ordinary, true).masked.includes("DAILY MOMENTS"));
+});
+
 test("oversized historical fields split without truncation, broken syntax or blocking other records", () => {
   const prose = "The scene you create should tell your story with a clear focus. Keep {subject}, https://example.com/reference and `field_name` unchanged. 🌿\n\n".repeat(290);
   for (const body of [prose, JSON.stringify({ prompt: prose, seed: 42, model: "literal_model" })]) {
