@@ -58,11 +58,15 @@ export function currentHistoryAcceptance(items: Prompt[], previous: Prompt[], ho
     .filter(item => completeHistoryItem(item, now) && translationLocales.every(locale => validLocalizedText(item, locale, item.localization!.translations[locale]!, reviews)));
 }
 
+// Private DB/exclusion snapshots cover the full library. The public compatibility
+// catalog and language pack retain their independent 1,000-item window limit.
+const historyBaselineSchema = catalogSchema.safeExtend({ prompts: z.array(promptSchema).min(1).max(50000) });
+const historyOriginalBaselineSchema = originalBaseSchema.safeExtend({ prompts: z.array(originalBaseSchema.shape.prompts.element).min(1).max(50000) });
 /** Original v2 baselines have language availability, not embedded translated bodies. */
 export function historyBaseline(input: unknown): Catalog {
-  const base = originalBaseSchema.safeParse(input);
-  if (!base.success) return catalogSchema.parse(input);
-  return catalogSchema.parse({ ...base.data, schemaVersion: 1, prompts: base.data.prompts.map(({ localization, ...item }) => item) });
+  const base = historyOriginalBaselineSchema.safeParse(input);
+  if (!base.success) return historyBaselineSchema.parse(input);
+  return historyBaselineSchema.parse({ ...base.data, schemaVersion: 1, prompts: base.data.prompts.map(({ localization, ...item }) => item) });
 }
 
 /** Add the verified local published window without replacing the frozen baseline.

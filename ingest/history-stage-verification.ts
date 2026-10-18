@@ -1,5 +1,6 @@
 import { join } from "node:path";
-import { catalogSchema, type Prompt } from "../packages/schema/catalog.ts";
+import type { Prompt } from "../packages/schema/catalog.ts";
+import { historyCatalogSchema } from "./history-cohort.ts";
 import { json } from "./publication.ts";
 import { readXIntake } from "./x-intake.ts";
 import { applyEditorialReviews, reviewsSchema } from "./editorial.ts";
@@ -13,7 +14,8 @@ import { nativeXSourceIssue } from "./x-source.ts";
 
 /** Recheck exact source/media approvals at the stage boundary; no network or review bypass. */
 export async function verifyReviewedHistory(directory: string, sharedRoot: string, supplied?: readonly Prompt[]): Promise<Prompt[]> {
-  const items = supplied ?? catalogSchema.parse(await json(join(directory, "source-catalog.json"), null)).prompts;
+  const items = supplied ?? historyCatalogSchema.parse(await json(join(directory, "source-catalog.json"), null)).prompts;
+  if (!items.length) return [];
   const intake = await readXIntake(directory);
   const reviews = reviewsSchema.parse(await json(join(directory, "editorial.json"), {}));
   const removed = new Set((await json<{ removedIDs: string[] }>(join(sharedRoot, "moderation.json"), { removedIDs: [] })).removedIDs);

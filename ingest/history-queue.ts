@@ -1,10 +1,10 @@
 import { join } from "node:path";
 import { z } from "zod";
 import { readFile } from "node:fs/promises";
-import { catalogSchema, type Prompt } from "../packages/schema/catalog.ts";
+import type { Prompt } from "../packages/schema/catalog.ts";
 import { atomic, json, lockContent, writeImmutableBytes } from "./publication.ts";
 import { StageQueue, queueIdentity, type QueueJob } from "./stage-queue.ts";
-import { historyBatchSchema, type HistoryBatch, completeHistoryItem, uniqueHistoryItems } from "./history-cohort.ts";
+import { historyBatchSchema, historyCatalogSchema, type HistoryBatch, completeHistoryItem, uniqueHistoryItems } from "./history-cohort.ts";
 import { runHistoryBatch } from "./history-batch.ts";
 import { verifyReviewedHistory } from "./history-stage-verification.ts";
 import { requiredIngestLocales, ingestLanguagePolicy, hasRequiredTranslations } from "./ingest-language-policy.ts";
@@ -49,9 +49,12 @@ export async function processHistoryStage(queue: StageQueue, root: string, share
       return { count: items.length, sourceSHA: source ? queueIdentity(source) : null, translatedSHA: complete ? queueIdentity(complete) : null, published: 0 };
     }
     if (job.stage !== "semantic" || payload.start === undefined) throw new Error("Unsupported history queue stage");
-    const complete = catalogSchema.parse(await json(join(directory, "complete.json"), null));
+    const rawComplete = await json(join(directory, "complete.json"), null);
     const predecessor = (await queue.db.query<{ output: { translatedSHA?: string } }>("select output from prompix.queue_jobs where id=$1 and state='succeeded'", [job.dependency])).rows[0];
-    if (predecessor?.output.translatedSHA !== queueIdentity(complete)) throw new Error("Translated stage artifact changed");
+    // Match the producer's persisted representation before parsing can reorder keys
+    // or strip extra fields. Schema validation remains mandatory afterwards.
+    if (predecessor?.output.translatedSHA !== queueIdentity(rawComplete)) throw new Error("Translated stage artifact changed");
+    const complete = historyCatalogSchema.parse(rawComplete);
     const items = complete.prompts.slice(payload.start, payload.start + 4);
     if (!items.length) return { pass: 0, held: 0, published: 0 };
     await verifyReviewedHistory(directory, shared, items);
