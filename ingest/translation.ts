@@ -105,6 +105,10 @@ export function protectText(text: string, preserveLettering = false) {
   const collectRanges = (part: string, offset = 0): { start: number; end: number }[] => [...part.matchAll(opaque)].flatMap(match => {
     const start = offset + match.index!;
     if (match[0].startsWith("[") && humanBracket(match[0].slice(1, -1), start, start + match[0].length)) return collectRanges(match[0].slice(1, -1), start + 1);
+    // In age/decade prose, the suffix is plural grammar, not a seconds unit.
+    // Protect the numeral while allowing "early 20s" to become "20岁出头".
+    if (/^(?:[2-9]0|[12]\d{2}0)s$/i.test(match[0]) && /\b(?:(?:early|mid|late)[ -]?|(?:her|his|their|the)\s+)$/i.test(text.slice(Math.max(0, start - 20), start)))
+      return [{ start, end: start + match[0].length - 1 }];
     return [{ start, end: start + match[0].length }];
   });
   const ranges = collectRanges(text);

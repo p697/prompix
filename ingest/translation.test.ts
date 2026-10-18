@@ -49,6 +49,14 @@ test("Skill frontmatter and fenced implementation remain opaque", () => {
   assert.match(protectedText.masked, /Explain the workflow/);
   assert.equal(restoreText(protectedText.masked, protectedText.protectedValues), text);
 });
+
+test("age and decade plurals remain translatable without changing actual seconds units", () => {
+  const source = "A woman in her early 20s, styled like the late 1950s. Hold for 20s at 24fps.";
+  const result = protectText(source);
+  assert.deepEqual(result.protectedValues, ["20", "1950", "20s", "24fps"]);
+  assert.equal(restoreText(result.masked, result.protectedValues), source);
+  assert.equal(restoreText("一位⟦PP0⟧岁出头的女性，采用⟦PP1⟧年代末的风格。保持⟦PP2⟧，帧率为⟦PP3⟧。", result.protectedValues), "一位20岁出头的女性，采用1950年代末的风格。保持20s，帧率为24fps。");
+});
 test("JSON keys, nesting and non-string parameters survive translated values", () => {
   const jsonItem = { ...item, prompt: JSON.stringify({ prompt: "Create a portrait of {subject}", seed: 42, model: "custom_model_v2", aspect_ratio: "16:9", style_preset: "cinematic", html: "<h1>Hello</h1>", style: ["Soft light", { color_space: "sRGB", enabled: true }] }) };
   const cache = emptyTranslationCache();
