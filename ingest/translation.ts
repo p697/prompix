@@ -67,7 +67,8 @@ function renderedLiterals(text: string, preserveLettering: boolean): { start: nu
       || /^\s*(?:文字|字样|字樣|标题|標題|标签|標籤|按钮|按鈕|text|caption|label|button)/iu.test(after)
       || (previousEnd >= 0 && /^[\s,，、/]*(?:(?:and|or|above|below|under|beneath|over|next to|和|与|與|以及|上方|下方)[\s,，、/]*)?$/iu.test(text.slice(previousEnd, start)));
     const input = /(?:my first sentence is|first (?:input|sentence)\s*(?:is|:)|input (?:example|sentence|text)\s*:|我的第一句(?:话|話)?(?:是|：)|输入示例[：:]|輸入示例[：:])\s*$/iu.test(before);
-    const dialogue = fixedDialogueLanguage && /说|說|回答|询问|詢問|开口|開口|台词|臺詞|男声|男聲|女声|女聲|语气|語氣|\b(?:says?|asks?|replies|answers?|dialogue|speaks?|whispers?|shouts?)\b/iu.test(before);
+    const dialogue = /台词|臺詞|开口|開口|说[：:]|說[：:]|\b(?:commentator|narrator|dialogue|whispers?|shouts?)\b/iu.test(before)
+      || (fixedDialogueLanguage && /说|說|回答|询问|詢問|男声|男聲|女声|女聲|语气|語氣|\b(?:says?|asks?|replies|answers?|speaks?)\b/iu.test(before));
     if (input || (preserveLettering && (caption || dialogue))) { ranges.push({ start, end }); previousEnd = end; }
     else previousEnd = -1;
   }
@@ -283,6 +284,8 @@ export function validateSegment(source: string, translated: string, locale: Tran
     if (outputLetters < sourceLetters * 0.15 || (locale.startsWith("zh") && sourceHan / sourceLetters > 0.7 && outputHan < sourceHan * 0.5) || (/^(en|es|pt-BR|fr|de)$/.test(locale) && sourceLatin / sourceLetters > 0.8 && outputLatin < sourceLatin * 0.45)) throw new Error("Translation may omit substantial source prose");
   }
   if (locale === "ko" && /超写实|超寫實|hyperreal/iu.test(prose) && !/超现实|超現實|surreal/iu.test(prose) && /초현실/u.test(outputProse)) throw new Error("Hyperrealism mistranslated as surrealism");
+  if (locale.startsWith("zh") && /\bmid[- ]century\b/iu.test(prose) && !/\bmedieval\b|\bmiddle ages\b/iu.test(prose)
+      && /中世纪|中世紀/u.test(outputProse)) throw new Error("Mid-century design mistranslated as medieval");
   for (const [token, value] of Object.entries(hints)) {
     if (value !== "1") continue;
     const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");

@@ -90,6 +90,9 @@ test("multiline captions and explicit-language dialogue remain literal without f
   const english = protectText('Dialogue must be in Japanese.\nThe narrator whispers:\n\n「明日、また会おう。」\nThe camera pulls back.', true);
   assert.ok(english.protectedValues.includes('「明日、また会おう。」'));
   assert.match(english.masked, /The camera pulls back/);
+  const spoken = protectText('Commentator:\n\n“THE RACE IS ON!”\n\nThe narrator whispers:\n“Stay close.”\n\nMood: “quiet excitement.”', true);
+  assert.deepEqual(spoken.protectedValues, ['“THE RACE IS ON!”', '“Stay close.”']);
+  assert.match(spoken.masked, /quiet excitement/);
 });
 test("unquoted on-screen typography stops before the next visual instruction", () => {
   const source = "Large neon typography appears:\n\nFOLLOW THE LIGHT.\nFIND YOUR WAY.\nUse slow camera moves throughout.\n\nTEXT REQUIREMENTS:\nKEEP BACKGROUND CLEAN";
@@ -146,6 +149,12 @@ test("wrong target script and oversized translation cannot be published", () => 
   const cache = fillCache();
   cache.segments.en[promptSegments(item)[0].id] = "x".repeat(251);
   assert.equal(localizePrompt(item, "en", cache), undefined);
+});
+test("mid-century design cannot silently turn into medieval Chinese terminology", () => {
+  assert.throws(() => validateSegment("Mid-century graphic illustration", "中世纪图形插画", "zh-Hans"), /mistranslated as medieval/);
+  assert.throws(() => validateSegment("Mid century graphic illustration", "中世紀圖形插畫", "zh-Hant"), /mistranslated as medieval/);
+  assert.doesNotThrow(() => validateSegment("Mid-century graphic illustration", "20世纪中叶图形插画", "zh-Hans"));
+  assert.doesNotThrow(() => validateSegment("Compare mid-century and medieval illustration", "对比20世纪中叶与中世纪插画", "zh-Hans"));
 });
 test("request budget is persisted before provider execution and unchanged reruns cost no requests", async () => {
   const cache = emptyTranslationCache();
