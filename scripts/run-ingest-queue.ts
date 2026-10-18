@@ -1,16 +1,15 @@
 import { historyBaseline } from "../ingest/history-cohort.ts";
 import { readFile } from "node:fs/promises";
 import { StageQueue, queueStages, workStage } from "../ingest/stage-queue.ts";
-import { withPublisherDatabase } from "../ingest/database-publication.ts";
+import { queueDatabase } from "../ingest/queue-database.ts";
 import { enqueueHistoryPipeline, exportQueueReady, processHistoryStage } from "../ingest/history-queue.ts";
 import { atomic } from "../ingest/publication.ts";
 import { join } from "node:path";
-import type { TransactionalDatabase } from "../services/feed/database.ts";
 
 const [command, root, shared, run, argument, baselinePath] = process.argv.slice(2);
 if (!root || !shared || !run || !["enqueue", "drain", "status", "export"].includes(command)) throw new Error("Usage: run-ingest-queue enqueue|drain|status|export ROOT SHARED RUN [MANIFEST|MAX_JOBS]");
 // Each short transaction has a separate TLS-verified connection; model waits never hold a connection.
-const db: TransactionalDatabase = { query: (sql, params) => withPublisherDatabase(db => db.query(sql, params)), transaction: op => withPublisherDatabase(db => db.transaction(op)) };
+const db = queueDatabase();
 const queue = new StageQueue(db);
 if (command === "enqueue") {
   if (!argument || !baselinePath) throw new Error("Explicit manifest and frozen baseline required; this command never discovers new leads");

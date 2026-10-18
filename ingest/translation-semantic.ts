@@ -60,7 +60,7 @@ export function partitionSemanticResult(raw: unknown, items: readonly Prompt[], 
   }
   return { reviews, unverifiedEvidence };
 }
-export async function reviewTranslationSemantics(items: readonly Prompt[], locale: TranslationLocale, directory: string, executable: string, effort: "low" | "medium" = "medium", model: "gpt-6-luna" | "gpt-6.1-sol" = "gpt-6-luna") {
+export async function reviewTranslationSemantics(items: readonly Prompt[], locale: TranslationLocale, directory: string, executable: string, effort: "low" | "medium" = "medium", model: "gpt-6-luna" | "gpt-6.1-sol" = "gpt-6.1-sol") {
   if (items.length < 1 || items.length > 4 || new Set(items.map(p => p.id)).size !== items.length) throw new Error("Invalid semantic batch");
   const input = semanticInput(items, locale), identity = queueIdentity({ instructions: semanticInstructions, input, model, effort });
   await mkdir(directory, { recursive: true });
