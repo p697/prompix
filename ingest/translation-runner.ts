@@ -6,6 +6,8 @@ import { TranslationProviderError, type TranslationProvider } from "./translatio
 export type TranslationRunReport = { version: string; provider: string; attempted: number; succeeded: number; rejected: number; failed: number; pendingSegments: number;
   reservedUSD: number; measuredUSD: number | null; inputTokens: number; outputTokens: number; failures: { locale: string; ids: string[]; reason: string }[] };
 function validateForEverySource(segment: Segment, translated: string, locale: TranslationLocale, reviews: readonly TranslationRejection[]) {
+  if (segment.maxOutputCharacters !== undefined && translated.length > segment.maxOutputCharacters)
+    throw new Error(`Translation exceeds display label limit of ${segment.maxOutputCharacters} masked characters`);
   validateSegment(segment.text, translated, locale, segment.numericHints);
   validateReviewedTranslation(reviews, locale, segment.id, translated);
   const contexts = [...(segment.contexts ?? []), ...(segment.sourceText !== undefined && segment.protectedValues ? [{ sourceText: segment.sourceText, protectedValues: segment.protectedValues, numericHints: segment.numericHints }] : [])];
