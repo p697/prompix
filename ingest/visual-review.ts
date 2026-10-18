@@ -60,6 +60,13 @@ export function conservativeVisualDecision(decision: VisualDecision): VisualDeci
     reason: `Held: aggregate approval conflicts with attachment evidence. ${decision.reason}`.slice(0, 500) };
 }
 
+/** Only a fully received and retained response with invalid identity bindings qualifies. */
+export class VisualIdentityRejection extends Error {
+  constructor(readonly responseSHA256: string) {
+    super("Visual provider returned duplicate, unordered or inconsistent decisions");
+    if (!/^[a-f0-9]{64}$/.test(responseSHA256)) throw new Error("Invalid rejected-response hash");
+  }
+}
 export type VisualProvider = (items: readonly VisualInput[]) => Promise<{ decisions: unknown; inputTokens?: number; outputTokens?: number }>;
 const evidenceAttachmentSchema = attachmentReferenceSchema.extend({ verdict, reason });
 const savedDecisionSchema = visualDecisionSchema.omit({ attachments: true }).extend({
@@ -80,10 +87,11 @@ export const visualAttemptSchema = z.object({
   inputCharacters: z.number().int().positive().max(visualLimits.inputCharacters),
   attachments: z.number().int().positive().max(visualLimits.attachments),
   attachmentBytes: z.number().int().positive().max(visualLimits.totalBytes),
-  state: z.enum(["reserved", "completed", "failed"]),
+  state: z.enum(["reserved", "completed", "failed", "rejected"]),
+  responseSHA256: sha.optional(),
   inputTokens: z.number().int().nonnegative().optional(), outputTokens: z.number().int().nonnegative().optional(),
   error: z.string().max(500).optional(),
-}).strict();
+}).strict().refine(attempt => attempt.state !== "rejected" || !!(attempt.error && attempt.responseSHA256), "Rejected responses require retained evidence");
 export const visualLedgerSchema = reviewLedgerSchema(visualAttemptSchema);
 export type VisualAttempt = z.infer<typeof visualAttemptSchema>;
 export type VisualLedger = z.output<typeof visualLedgerSchema>;
@@ -116,7 +124,7 @@ export type VisualItemReport = { id: string; identity: string;
 export type VisualReport = { status: "disabled" | "no-pending" | "daily-limit" | "prior-attempt-blocked" | "reviewed" | "failed";
   considered: number; notRequired: number; previousSnapshots: number; cachedApproved: number; cachedDeferred: number; websitesReviewed: number;
   pending: number; prepared: number; requests: number; dailyRequests: number; maxRequests: number; attemptedCandidates: number; approved: number; deferred: number;
-  preflightDeferred: number; inputCharacters: number; attachments: number; attachmentBytes: number; model: string;
+  rejectedRequests: number; preflightDeferred: number; inputCharacters: number; attachments: number; attachmentBytes: number; model: string;
   items: VisualItemReport[]; error?: string;
   blockedAttempt?: { ordinal: number; state: "reserved" | "failed"; reservedAt: string } };
 
@@ -232,7 +240,7 @@ export async function runVisualReview(options: {
   const pending: Prompt[] = [];
   const report: VisualReport = { status: options.provider ? "no-pending" : "disabled", considered: options.prompts.length,
     notRequired: 0, previousSnapshots: 0, cachedApproved: 0, cachedDeferred: 0, websitesReviewed: 0, pending: 0, prepared: 0, requests: 0,
-    dailyRequests: ledger?.requests ?? 0, maxRequests,
+    dailyRequests: ledger?.requests ?? 0, maxRequests, rejectedRequests: 0,
     attemptedCandidates: 0, approved: 0, deferred: 0, preflightDeferred: 0, inputCharacters: 0, attachments: 0,
     attachmentBytes: 0, model: visualReviewModel, items: [] };
   const records = new Map<string, VisualItemReport>();
@@ -289,7 +297,7 @@ export async function runVisualReview(options: {
     report.status = "daily-limit"; return finish();
   }
   const lastAttempt = ledger?.attempts.at(-1);
-  if (lastAttempt && lastAttempt.state !== "completed") {
+  if (lastAttempt && (lastAttempt.state === "failed" || lastAttempt.state === "reserved")) {
     report.status = "prior-attempt-blocked";
     report.blockedAttempt = { ordinal: report.dailyRequests, state: lastAttempt.state, reservedAt: lastAttempt.reservedAt };
     return finish();
@@ -381,6 +389,16 @@ export async function runVisualReview(options: {
       }
       report.status = "reviewed";
     } catch (error) {
+      if (error instanceof VisualIdentityRejection) {
+        // Reject every candidate in this received response. Do not invent cache
+        // evidence, retry its identities, or refund its consumed request.
+        const rejected = replaceReviewAttempt(ledger, { ...attempt, state: "rejected" as const,
+          error: errorText(error), responseSHA256: error.responseSHA256 });
+        await options.persistLedger(rejected); ledger = rejected;
+        for (const input of selected) update(options.prompts.find(item => item.id === input.id)!, "deferred", error.message);
+        report.rejectedRequests++; report.status = "reviewed";
+        continue;
+      }
       report.status = "failed"; report.error = errorText(error);
       for (const input of selected) update(options.prompts.find(item => item.id === input.id)!, "deferred", report.error);
       await options.persistLedger(replaceReviewAttempt(ledger, { ...attempt, state: "failed", error: report.error }));

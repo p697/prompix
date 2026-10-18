@@ -939,3 +939,7 @@ New history queue ingestion requires original content plus validated Simplified 
 ### 2026-10-19 — Hold contradictory visual approvals without stopping healthy work
 
 If a bound, complete visual response says the candidate matches but an attachment is uncertain or mismatched, downgrade the candidate to uncertain and retain the untouched raw response. This is a content hold, not a provider outage. Missing, reordered or changed identities, transport failures and ambiguous results still stop for reconciliation. Never retry a paid request merely to obtain a more favorable verdict.
+
+### 2026-10-19 — Quarantine received identity-invalid responses
+
+A fully received, retained visual response can repeat candidate or attachment identities. Reject every candidate in that response, record its raw-response SHA and consumed request as `rejected`, create no approval cache, and continue other candidates within the same allowance. Rejected identities cannot be replayed on resume. This supersedes stopping the entire campaign for this known response shape; malformed schemas, transport failures, timeouts and ambiguous reservations still require reconciliation. Existing failed records remain unchanged until explicit operator reconciliation.

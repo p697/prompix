@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import type { Prompt } from "../packages/schema/catalog.ts";
 import { applyVisualPresentation, runVisualReview, visualCacheSchema, visualLedgerSchema, visualInputCharacters, visualProviderInput, visualReviewIdentity,
-  visualReviewModel, type PreparedVisualMedia, type VisualAttachment, type VisualCache, type VisualInput,
+  visualReviewModel, VisualIdentityRejection, type PreparedVisualMedia, type VisualAttachment, type VisualCache, type VisualInput,
   type VisualLedger, type VisualAttempt, type VisualProvider } from "./visual-review.ts";
 
 const day = "2026-10-13", now = `${day}T12:00:00Z`;
@@ -518,4 +518,25 @@ test("retained media keeps a presentation rating independently of relevance and 
   const foreign = structuredClone(state.cache);
   foreign.decisions[visualReviewIdentity(item)].id = "other-source";
   assert.equal(applyVisualPresentation([item], foreign)[0].presentation, "unknown");
+});
+
+
+test("retained identity rejection isolates its batch, consumes allowance and never fabricates visual evidence", async () => {
+  const items = Array.from({ length: 6 }, (_, i) => prompt(`identity-rejection-${i}`));
+  const { run, state } = harness(items); let calls = 0;
+  const result = await run({ maxRequests: 2, provider: async inputs => {
+    if (++calls === 1) throw new VisualIdentityRejection(hash("retained-invalid-response"));
+    return approve(inputs);
+  } });
+  assert.equal(result.prompts.length, 3); assert.equal(result.withheldIDs.length, 3);
+  assert.equal(result.report.rejectedRequests, 1); assert.equal(result.report.dailyRequests, 2);
+  assert.deepEqual(state.ledger?.attempts.map(a => a.state), ["rejected", "completed"]);
+  assert.equal(state.ledger?.attempts[0].responseSHA256, hash("retained-invalid-response"));
+  for (const input of state.batches[0]) assert.equal(state.cache.decisions[input.identity], undefined);
+  assert.equal(visualLedgerSchema.safeParse(state.ledger).success, true);
+  const missingProof = structuredClone(state.ledger!); delete missingProof.attempts[0].responseSHA256;
+  assert.equal(visualLedgerSchema.safeParse(missingProof).success, false);
+  const resumed = await run({ maxRequests: 3 });
+  assert.equal(resumed.report.requests, 0); assert.equal(state.events.filter(e => e === "provider").length, 2);
+  assert.equal(resumed.prompts.length, 3);
 });
