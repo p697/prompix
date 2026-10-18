@@ -3,7 +3,8 @@ export { readTranslationCache } from "./translation-cache.ts";
 import { applyTranslationReviews, readTranslationReviews } from "./translation-review.ts";
 import { mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
-import { catalogSchema, type Prompt } from "../packages/schema/catalog.ts";
+import type { Catalog, Prompt } from "../packages/schema/catalog.ts";
+import { preservePublicationInput } from "../services/feed/publication.ts";
 import { atomic, json } from "./publication.ts";
 import { attachTranslations, inheritPreviousTranslations, translationLocales } from "./translation.ts";
 import { codexTranslationProvider, openAITranslationProvider } from "./translation-provider.ts";
@@ -17,7 +18,9 @@ export async function prepareDailyTranslations(items: readonly Prompt[], root: s
   let reviews = await readTranslationReviews(join(directory, "semantic-rejections.json"));
   const inheritLocalArtifact = async () => {
     const artifact = await json<unknown>(join(directory, "catalog.localized.json"), undefined);
-    return artifact === undefined ? [...items] : inheritPreviousTranslations(items, catalogSchema.parse(artifact).prompts);
+    // This private artifact represents the authoritative library, not the
+    // bounded legacy download. Validate without trimming original source bytes.
+    return artifact === undefined ? [...items] : inheritPreviousTranslations(items, preservePublicationInput(artifact as Catalog).prompts);
   };
   let prepared = await inheritLocalArtifact();
   applyTranslationReviews(cache, reviews);
