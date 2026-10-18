@@ -18,7 +18,7 @@
 
 迁移：`supabase/migrations/20261018141245_independent_ingest_queues.sql`。
 
-`tsx scripts/run-ingest-queue.ts enqueue ROOT SHARED RUN MANIFEST` 将显式批次排入队列；不自动搜索。`drain ... [MAX_JOBS]` 有界消费；`status ...` 查看状态；`export ...` 重新验证后导出待验收记录。数据库凭据继续只来自仓库外环境；使用现有 TLS 校验的发布连接。
+`tsx scripts/run-ingest-queue.ts enqueue ROOT SHARED RUN MANIFEST BASELINE` 将显式批次排入队列；不自动搜索。`drain ... [MAX_JOBS]` 有界消费；`status ...` 查看状态；`export ...` 重新验证后导出待验收记录。数据库凭据继续只来自仓库外环境；使用现有 TLS 校验的发布连接。
 
 多个独立 worker 可消费不同阶段；数据库持久化并不等于模型服务24小时运行。现阶段模型执行依赖这台 Mac 和 Codex 订阅，可恢复队列保存积压。`reconcile` 任务必须检查留存响应再恢复，不能删除尝试重新入队。源记录过期必须通过已有预算保护的来源复查，不改采集时间。
 

@@ -4,7 +4,7 @@ import { readFile } from "node:fs/promises";
 import { catalogSchema, type Prompt } from "../packages/schema/catalog.ts";
 import { atomic, json, lockContent, writeImmutableBytes } from "./publication.ts";
 import { StageQueue, queueIdentity, type QueueJob } from "./stage-queue.ts";
-import { historyBatchSchema, type HistoryBatch, completeHistoryItem } from "./history-cohort.ts";
+import { historyBatchSchema, type HistoryBatch, completeHistoryItem, uniqueHistoryItems } from "./history-cohort.ts";
 import { runHistoryBatch } from "./history-batch.ts";
 import { verifyReviewedHistory } from "./history-stage-verification.ts";
 import { requiredIngestLocales, ingestLanguagePolicy, hasRequiredTranslations } from "./ingest-language-policy.ts";
@@ -14,8 +14,9 @@ const runName = z.string().regex(/^[a-z0-9][a-z0-9-]{0,79}$/);
 const payloadSchema = z.object({ batch: z.string().regex(/^batch-\d{4}$/), manifestSHA: z.string().regex(/^[a-f0-9]{64}$/), policy: z.literal(ingestLanguagePolicy), start: z.number().int().min(0).max(49).optional() }).strict();
 
 /** Input originals, paid attempts and stage evidence remain in a durable external workspace. */
-export async function enqueueHistoryPipeline(queue: StageQueue, root: string, runInput: string, raw: HistoryBatch) {
+export async function enqueueHistoryPipeline(queue: StageQueue, root: string, runInput: string, raw: HistoryBatch, baseline: readonly Prompt[]) {
   const run = runName.parse(runInput), batch = historyBatchSchema.parse(raw), directory = join(root, run, batch.id);
+  await writeImmutableBytes(join(root, run, "exclusions.json"), Buffer.from(JSON.stringify(baseline) + "\n"));
   const unlock = await lockContent(directory);
   try { await writeImmutableBytes(join(directory, "manifest.json"), Buffer.from(JSON.stringify(batch) + "\n")); }
   finally { await unlock(); }
@@ -82,5 +83,5 @@ export async function exportQueueReady(queue: StageQueue, root: string, shared: 
     items.push(...ready);
   }
   if (new Set(items.map(p => p.id)).size !== items.length) throw new Error("Duplicate queue output");
-  return items;
+  return uniqueHistoryItems(items, await json<Prompt[]>(join(root, run, "exclusions.json"), []));
 }
