@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { readAllXIntake, convertXThread } from "./x-thread-intake.ts";
 import { join } from "node:path";
 import { z } from "zod";
@@ -16,11 +17,14 @@ import { TwitterAPIClient } from "./twitterapi.ts";
 import { RapidAPIClient } from "./rapidapi.ts";
 import { configuredXSpendBudget, XBudgetExceeded } from "./x-spend.ts";
 import { saveMaintenanceCensus } from "./x-maintenance-reserve.ts";
-import { recheckXStandalone, type XRecheckOptions } from "./x-recheck.ts";
+import { recheckXStandalone, refreshedXSource, type XRecheckOptions } from "./x-recheck.ts";
 import type { XMaintenanceAdmission } from "./x-maintenance-admission.ts";
+
+import { thirdPartyOnly } from "./x-third-party.ts";
 
 const recordSchema = z.object({ checkedAt: z.iso.datetime(), status: z.enum(["ready", "withheld"]),
   checkedBy: z.enum(["official", "twitterapi", "rapidapi"]).optional(),
+  scopeIDs: z.array(z.string().regex(/^\d{1,19}$/)).max(10).optional(),
   removed: z.boolean().optional(), revision: z.string().regex(/^[a-f0-9]{64}$/).optional() }).strict();
 const stateSchema = z.record(z.string().regex(/^x-post-\d{1,19}$/), recordSchema);
 const ledgerSchema = z.array(z.object({ ids: z.array(z.string().regex(/^\d{1,19}$/)).min(1).max(100),
@@ -32,13 +36,13 @@ export async function readXAvailability(root: string): Promise<XAvailabilityStat
 function thirdPartyCheck(record: XAvailabilityState[string] | undefined) {
   return record?.checkedBy === "twitterapi" || record?.checkedBy === "rapidapi";
 }
-/** Only exact official intake snapshots can supply a free, non-renewing availability check. */
+/** Only exact complete intake snapshots can supply a free, non-renewing availability check. */
 function freshDiscoveryRecord(item: Prompt, record: XAvailabilityState[string] | undefined, threadIDs: ReadonlySet<string>, now: number) {
   const post = item.source.post, checked = Date.parse(post?.checkedAt ?? "");
   if (!isNativeXDraft(item) || !post || record?.removed || threadIDs.has(post.id) || !Number.isFinite(checked) || checked > now ||
       now - checked >= 12 * 3600_000 || (record && checked <= Date.parse(record.checkedAt)) || nativeXSourceIssue(item, now) ||
       nativeXSourceDigest(item) !== item.source.revision) return;
-  return { checkedAt: new Date(checked).toISOString(), status: "ready" as const, revision: item.source.revision, checkedBy: "official" as const };
+  return { checkedAt: new Date(checked).toISOString(), status: "ready" as const, revision: item.source.revision, checkedBy: item.source.acquiredVia ?? "official" as const };
 }
 
 /** Called under daily.lock after collection, before editorial. Never fetches or grants approval. */
@@ -61,7 +65,7 @@ export function filterXAvailability<T extends Prompt>(items: readonly T[], state
     if (!isNativeXDraft(item)) return [item];
     const record = state[item.id], post = item.source.post;
     const needsJointCheck = !!(item.source.context || post?.parentID || item.source.mediaPostID);
-    if (!post || record?.status !== "ready" || record.revision !== item.source.revision || (needsJointCheck && thirdPartyCheck(record))) {
+    if (!post || record?.status !== "ready" || record.revision !== item.source.revision || (needsJointCheck && thirdPartyCheck(record) && !nativeXPostIDs(item).every(id => record.scopeIDs?.includes(id)))) {
       withheldIDs.push(item.id); return [];
     }
     item = { ...item, source: { ...item.source, post: { ...post, checkedAt: record.checkedAt },
@@ -76,18 +80,18 @@ export async function assertXAvailability(root: string, catalog: Pick<Catalog, "
   const result = filterXAvailability(catalog.prompts, await readXAvailability(root));
   if (result.withheldIDs.length) throw new Error(`X posts need a current source check: ${result.withheldIDs.join(", ")}`);
 }
-export function configuredRecheck(): XRecheckOptions | undefined {
-  const provider = process.env.PROMPIX_X_RECHECK_PROVIDER ?? "official";
+export function configuredRecheck(environment: NodeJS.ProcessEnv = process.env): XRecheckOptions | undefined {
+  const provider = environment.PROMPIX_X_RECHECK_PROVIDER ?? "official";
   if (provider === "official") return;
   if (provider !== "twitterapi" && provider !== "rapidapi") throw new Error("Invalid X recheck provider");
-  const budget = configuredXSpendBudget(), key = provider === "rapidapi" ? process.env.RAPIDAPI_KEY : process.env.TWITTERAPI_IO_KEY;
+  const budget = configuredXSpendBudget(environment), key = provider === "rapidapi" ? environment.RAPIDAPI_KEY : environment.TWITTERAPI_IO_KEY;
   if (!budget || !key) throw new Error("Third-party rechecks require a shared dollar budget and key");
   const client = provider === "rapidapi" ? new RapidAPIClient(key, budget) : new TwitterAPIClient(key, budget);
-  return { provider, lookup: client.lookup.bind(client), maxRequests: Number(process.env.PROMPIX_X_RECHECK_MAX_REQUESTS ?? 16) };
+  return { provider, lookup: client.lookup.bind(client), maxRequests: Number(environment.PROMPIX_X_RECHECK_MAX_REQUESTS ?? 16) };
 }
 /** Separate maintenance budget: default two requests, bounded to four / 400 posts per UTC day. No automatic retries. Caller holds daily.lock. */
 export async function prepareXAvailability(root: string, options: { enabled: boolean; bearer?: string; now?: string;
-  lookup?: typeof checkXAvailability; maxRequests?: number; recheck?: XRecheckOptions; admission?: XMaintenanceAdmission } ) {
+  lookup?: typeof checkXAvailability; maxRequests?: number; recheck?: XRecheckOptions; admission?: XMaintenanceAdmission; environment?: NodeJS.ProcessEnv } ) {
   const now = options.now ?? new Date().toISOString(), nowMS = Date.parse(now), day = now.slice(0, 10);
   if (!Number.isFinite(nowMS)) throw new Error("Invalid X availability time");
   const maxRequests = options.maxRequests ?? Number(process.env.PROMPIX_X_AVAILABILITY_MAX_REQUESTS ?? 2);
@@ -98,7 +102,8 @@ export async function prepareXAvailability(root: string, options: { enabled: boo
   const report = { status: "cached", requests: 0, checked: 0, withheld: 0, skippedInactive: 0, reusedDiscovery: 0, deferredDrafts: 0,
     maintenanceReserve: undefined as Awaited<ReturnType<typeof saveMaintenanceCensus>>,
     recheck: undefined as Awaited<ReturnType<typeof recheckXStandalone>> | undefined };
-  if (!options.enabled || !options.bearer) return { state, report };
+  const env = options.environment ?? process.env, thirdParty = thirdPartyOnly(env);
+  if (!options.enabled || (!thirdParty && !options.bearer)) return { state, report };
   const ledgerPath = join(root, "x-availability", `${day}.json`);
   const ledger = ledgerSchema.parse(await json(ledgerPath, []));
   const intake = await readAllXIntake(root);
@@ -112,7 +117,7 @@ export async function prepareXAvailability(root: string, options: { enabled: boo
   const isInactive = (item: typeof intake.candidates[number]) => removed.has(item.id) || !!holds.holds[item.id] ||
     (!protectedIDs.has(item.id) && !!decisions[editorialDecisionKey(item)] && decisions[editorialDecisionKey(item)].decision !== "approve");
   report.maintenanceReserve = await saveMaintenanceCensus(intake.candidates, protectedIDs,
-    new Set([...removed, ...Object.keys(holds.holds), ...Object.entries(state).filter(([, value]) => value.removed).map(([id]) => id)]), new Date(now), !!options.admission);
+    new Set([...removed, ...Object.keys(holds.holds), ...Object.entries(state).filter(([, value]) => value.removed).map(([id]) => id)]), new Date(now), !!options.admission, env);
   // Include fresh drafts in the queue: they already occupy upcoming review slots and cost no recheck.
   const admitted = options.admission ? new Set(editorialQueue(intake.candidates.filter(item =>
     !isInactive(item) && !protectedIDs.has(item.id) && !options.admission!.attemptedIDs.has(item.id)), [],
@@ -137,7 +142,7 @@ export async function prepareXAvailability(root: string, options: { enabled: boo
     }
     // A recently recorded standalone result cannot defer a now-known joint
     // dependency check. Keep the daily official quota; retry at its next window.
-    const incompleteScope = threadIDs.has(item.source.post!.id) && thirdPartyCheck(record);
+    const incompleteScope = threadIDs.has(item.source.post!.id) && thirdPartyCheck(record) && !nativeXPostIDs(item).every(id => record?.scopeIDs?.includes(id));
     const needsCheck = incompleteScope || !record || (record.status === "ready" && record.revision !== item.source.revision) || nowMS - checked >= 12 * 3600_000;
     if (needsCheck && admitted && !protectedIDs.has(item.id) && !admitted.has(item.id)) {
       report.deferredDrafts++; return false;
@@ -145,11 +150,34 @@ export async function prepareXAvailability(root: string, options: { enabled: boo
     return needsCheck;
   }).sort((a, b) => Number(protectedIDs.has(b.id)) - Number(protectedIDs.has(a.id)) || checkedAt(a) - checkedAt(b) || a.id.localeCompare(b.id));
   if (report.reusedDiscovery) await atomic(join(root, "x-availability", "state.json"), stateSchema.parse(state));
-  const recheck = options.recheck ?? configuredRecheck();
+  const recheck = options.recheck ?? configuredRecheck(env);
   if (recheck) {
     const verified = new Set<string>();
-    report.recheck = await recheckXStandalone(root, due.filter(item => !threadIDs.has(item.source.post!.id)), {
-      ...recheck, protectedIDs, now, excerpts, apply: async (matched, unresolved) => {
+    report.recheck = await recheckXStandalone(root, due.filter(item => thirdParty || !threadIDs.has(item.source.post!.id)), {
+      ...recheck, joint: thirdParty, protectedIDs, now, excerpts, apply: async (matched, unresolved, result, ids) => {
+        if (thirdParty) {
+          const snapshot = { ...result, capturedAt: now };
+          const affected = intake.candidates.filter(item => nativeXPostIDs(item).some(id => ids.includes(id)));
+          for (const item of affected) {
+            const complete = nativeXPostIDs(item).every(id => ids.includes(id));
+            const next = complete ? refreshedXSource(item, result, now, excerpts) : undefined;
+            state[item.id] = { checkedAt: now, status: next ? "ready" : "withheld", checkedBy: result.provider,
+              ...(next ? { revision: next.source.revision, scopeIDs: nativeXPostIDs(item) } : {}) };
+            if (next) verified.add(item.id);
+            if (item.source.context && complete) await atomic(join(root, "x-replies", "checks", `${item.id}.json`),
+              { rootID: item.source.context[0].id, snapshot });
+          }
+          await atomic(join(root, "x-availability", "state.json"), stateSchema.parse(state));
+          for (let offset = 0; offset < result.posts.length; offset += 100) {
+            const posts = result.posts.slice(offset, offset + 100);
+            await atomic(join(root, "x-discovery", `${day}-check-000-${randomUUID()}.json`), { ...snapshot, posts,
+              media: result.media.filter(m => posts.some(post => post.attachments?.media_keys?.includes(m.media_key))) });
+          }
+          const path = join(root, "creators.json");
+          await atomic(path, mergeCreatorCache(await json<CreatorCache>(path, {}), result.creators));
+          report.withheld += affected.filter(item => state[item.id].status === "withheld").length;
+          return;
+        }
         for (const item of matched) {
           verified.add(item.id);
           state[item.id] = { checkedAt: now, status: "ready", revision: item.source.revision, checkedBy: recheck.provider ?? "twitterapi" };
@@ -163,6 +191,7 @@ export async function prepareXAvailability(root: string, options: { enabled: boo
     due = due.filter(item => !verified.has(item.id));
     if (report.recheck.requests) report.status = report.recheck.status;
   }
+  if (thirdParty) return { state, report: { ...report, status: report.recheck?.status ?? "not-configured" } };
   if (ledger.some(attempt => attempt.state !== "completed") || ledger.length >= maxRequests)
     return { state, report: { ...report, status: "daily-limit" } };
   while (due.length && ledger.length < maxRequests) {
@@ -178,7 +207,7 @@ export async function prepareXAvailability(root: string, options: { enabled: boo
     const attempt: z.infer<typeof ledgerSchema>[number] = { ids, state: "reserved", at: now };
     ledger.push(attempt); await atomic(ledgerPath, ledger); report.requests++;
     try {
-      const result = await (options.lookup ?? checkXAvailability)(options.bearer, ids, protectedBatch ? "maintenance" : "growth");
+      const result = await (options.lookup ?? checkXAvailability)(options.bearer!, ids, protectedBatch ? "maintenance" : "growth");
       const name = `${day}-check-${String(ledger.length).padStart(3, "0")}.json`;
       const snapshot = { capturedAt: now, ...result };
       const refreshed = convertXDiscovery([{ name, data: snapshot }], {}, excerpts).candidates;

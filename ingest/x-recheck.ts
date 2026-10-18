@@ -2,9 +2,10 @@ import { join } from "node:path";
 import { z } from "zod";
 import { atomic, json } from "./publication.ts";
 import type { Candidate } from "./sources.ts";
+import { convertXThread } from "./x-thread-intake.ts";
 import { convertXDiscovery } from "./x-intake.ts";
 import type { XExcerptReviews } from "./x-excerpts.ts";
-import { nativeXSourceDigest, nativeXSourceIssue } from "./x-source.ts";
+import { nativeXSourceDigest, nativeXSourceIssue, nativeXPostIDs } from "./x-source.ts";
 import { canonicalTwitterVideoURL, type TwitterAPIResult } from "./twitterapi.ts";
 import { XBudgetExceeded, type XSpendPurpose } from "./x-spend.ts";
 
@@ -18,11 +19,12 @@ export type XRecheckOptions = {
   }>;
   maxRequests: number;
   protectedIDs?: ReadonlySet<string>;
+  joint?: boolean;
   sleep?: (ms: number) => Promise<void> };
 
 /** Compare the exact publishable revision and current attribution, not only text or a subset of media.
  * This is a verification signal for an already acquired official source, never a new acquisition.
- * Reply chains deliberately stay on joint official lookups.
+ * Legacy callers keep their previous provenance. Joint mode below acquires complete dependencies.
  */
 export function unchangedXStandalone(item: Candidate, result: Pick<TwitterAPIResult, "posts" | "creators" | "media">, capturedAt: string, excerpts: XExcerptReviews = {}) {
   if (item.source.context || !item.source.post || item.source.post.parentID || item.source.mediaPostID) return false;
@@ -43,16 +45,34 @@ export function unchangedXStandalone(item: Candidate, result: Pick<TwitterAPIRes
   return digest(item) === digest(next);
 }
 
+/** A complete dependency snapshot may refresh source facts, never editorial approval.
+ * Missing, protected, truncated or inconsistent dependencies withhold the item. */
+export function refreshedXSource(item: Candidate, result: Pick<TwitterAPIResult, "posts" | "creators" | "media"> & { provider: XRecheckProvider },
+  capturedAt: string, excerpts: XExcerptReviews = {}) {
+  const ids = nativeXPostIDs(item);
+  if (!ids.length || !ids.every(id => result.posts.some(post => post.id === id))) return;
+  const posts = result.posts.filter(post => ids.includes(post.id));
+  if (posts.some(post => !result.creators.some(c => c.externalID === post.author_id) ||
+    post.attachments?.media_keys?.some(key => !result.media.some(media => media.media_key === key)))) return;
+  const snapshot = { provider: result.provider, capturedAt, posts,
+    creators: result.creators.filter(c => posts.some(post => post.author_id === c.externalID)),
+    media: result.media.filter(media => posts.some(post => post.attachments?.media_keys?.includes(media.media_key))) };
+  const next = (item.source.context ? convertXThread(snapshot, item.source.context[0].id)
+    : convertXDiscovery([{ name: "third-party-source-refresh", data: snapshot }], {}, excerpts)).candidates.find(value => value.id === item.id);
+  return next && !nativeXSourceIssue(next, Date.parse(capturedAt)) ? next : undefined;
+}
+
 /** Caller holds daily.lock. Durable reservations survive restarts; uncertain requests are never repeated.
- * Only standalone posts with no thread dependencies may be passed here. Unknowns require official checks.
+ * Joint mode batches complete dependency sets; omissions never prove deletion.
  */
 export async function recheckXStandalone(root: string, candidates: readonly Candidate[], options: XRecheckOptions & {
   now: string; excerpts: XExcerptReviews;
-  apply: (matched: readonly Candidate[], unresolved: readonly Candidate[]) => Promise<void>;
+  apply: (matched: readonly Candidate[], unresolved: readonly Candidate[],
+    result: Pick<TwitterAPIResult, "posts" | "creators" | "media"> & { provider: XRecheckProvider }, ids: readonly string[]) => Promise<void>;
 }) {
   if (!Number.isInteger(options.maxRequests) || options.maxRequests < 0 || options.maxRequests > 40) throw new Error("Invalid third-party recheck budget");
   if (!Number.isFinite(Date.parse(options.now))) throw new Error("Invalid third-party recheck time");
-  if (candidates.some(item => !item.source.post || item.source.context || item.source.post.parentID)) throw new Error("Third-party recheck requires standalone sources");
+  if (candidates.some(item => !item.source.post || (!options.joint && (item.source.context || item.source.post.parentID || item.source.mediaPostID)))) throw new Error("Third-party recheck requires standalone sources");
   const provider = options.provider ?? "twitterapi";
   if (!["twitterapi", "rapidapi"].includes(provider)) throw new Error("Invalid recheck provider");
   const batchSize = provider === "rapidapi" ? 200 : 50;
@@ -68,9 +88,14 @@ export async function recheckXStandalone(root: string, candidates: readonly Cand
   for (let offset = 0; offset < candidates.length && ledger.length < options.maxRequests;) {
     const protectedBatch = options.protectedIDs?.has(candidates[offset].id) ?? false;
     const batch: Candidate[] = [];
-    while (offset < candidates.length && batch.length < batchSize && (options.protectedIDs?.has(candidates[offset].id) ?? false) === protectedBatch)
-      batch.push(candidates[offset++]);
-    const ids = batch.map(item => item.source.post!.id);
+    const required = new Set<string>();
+    while (offset < candidates.length && (options.protectedIDs?.has(candidates[offset].id) ?? false) === protectedBatch) {
+      const next = nativeXPostIDs(candidates[offset]);
+      if (new Set([...required, ...next]).size > batchSize) break;
+      batch.push(candidates[offset++]); next.forEach(id => required.add(id));
+    }
+    if (!batch.length) throw new Error("Source dependency set exceeds provider batch size");
+    const ids = [...required];
     if (new Set(ids).size !== ids.length) throw new Error("Duplicate recheck identities");
     // Retain conservative 0.2 QPS pacing for both providers, including the first
     // call of a new invocation, so consecutive processes cannot burst.
@@ -84,11 +109,13 @@ export async function recheckXStandalone(root: string, candidates: readonly Cand
       if (result.provider !== provider) throw new Error("Recheck response provider mismatch");
       if (result.posts.some(post => !ids.includes(post.id)) || new Set(result.posts.map(post => post.id)).size !== result.posts.length)
         throw new Error("Unrequested recheck identity");
-      const matched = batch.filter(item => unchangedXStandalone(item, result, options.now, options.excerpts));
+      const matched = batch.filter(item => options.joint
+        ? refreshedXSource(item, result, options.now, options.excerpts)?.source.revision === item.source.revision
+        : unchangedXStandalone(item, result, options.now, options.excerpts));
       const verified = new Set(matched.map(item => item.id)), unresolved = batch.filter(item => !verified.has(item.id));
       // Persist verification before completing the request. A crash in between is
       // blocked on the next run rather than repeating a billable request.
-      await options.apply(matched, unresolved);
+      await options.apply(matched, unresolved, result, ids);
       attempt.state = "completed"; await atomic(path, ledger);
       report.status = "checked"; report.checked += ids.length; report.verified += matched.length; report.unresolved += unresolved.length;
     } catch (error) {

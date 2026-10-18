@@ -13,8 +13,8 @@ const lane = scope as "live" | "history", directory = value("--directory"), acqu
 const maxPosts = Number(value("--max-posts") ?? 0);
 // Backfill can use at most 60 additional originals per day; live discovery retains its independent 40 slots.
 if (!Number.isInteger(maxPosts) || maxPosts < 0 || maxPosts > (lane === "history" ? 60 : 40)) throw new Error("Invalid acquisition limit");
-if (acquire && (!maxPosts || !process.env.X_BEARER_TOKEN || !configuredXSpendBudget()))
-  throw new Error("Acquisition requires explicit --max-posts, official credentials and the shared dollar budget");
+if (acquire && (!maxPosts || (process.env.PROMPIX_X_DISCOVERY_PROVIDER === "third-party" ? !process.env.TWITTERAPI_IO_KEY : !process.env.X_BEARER_TOKEN) || !configuredXSpendBudget()))
+  throw new Error("Acquisition requires explicit --max-posts, source credentials and the shared dollar budget");
 if (directory) {
   const rel = relative(await realpath(repo), await realpath(resolve(directory)));
   if (!rel || (!rel.startsWith("..") && !isAbsolute(rel))) throw new Error("Search evidence must remain outside Git");

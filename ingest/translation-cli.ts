@@ -44,7 +44,7 @@ try {
       Object.fromEntries(Object.keys(segments).map(id => [id, { provider: prior.provider, model: prior.model!, generatedAt: "unknown" }]))]));
   }
   const usageTrackedFromRequest = prior?.usageTrackedFromRequest ?? (prior?.attempted ?? 0) + 1;
-  const model = providerName === "codex" ? value("--model", "gpt-5.6-luna") : "gpt-6.1-sol";
+  const model = providerName === "codex" ? value("--model", "gpt-6-luna") : "gpt-6.1-sol";
   const provider = providerName === "codex" ? codexTranslationProvider(process.env.PROMPIX_CODEX ?? "codex", maxOutputTokens, model) : openAITranslationProvider(process.env.OPENAI_API_KEY ?? "", maxOutputTokens);
   const persist = async (state: TranslationCache, report: TranslationRunReport) => {
     await atomic(cachePath, state);

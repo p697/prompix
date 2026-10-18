@@ -9,6 +9,8 @@ import { configuredXSpendBudget } from "./x-spend.ts";
 import { TwitterAPIClient } from "./twitterapi.ts";
 import { windowBudget } from "./discovery-budget.ts";
 
+import { thirdPartyFeedSearch } from "./x-third-party.ts";
+
 const attemptSchema = z.object({ window: z.string(), state: z.enum(["reserved", "completed", "failed"]),
   allowance: z.number().int().min(0).max(40), used: z.number().int().min(0).max(40).optional(), retryAfter: z.iso.datetime().optional() }).strict();
 const ledgerSchema = z.array(attemptSchema).max(40);
@@ -25,7 +27,7 @@ export function currentXSearchPlan(now: Date): XSearchPlan {
 // Observed third-party blind spots are concentrated in video; retain independent official video reads.
 export const officialSupplementFeeds = xFeeds.flatMap(feed => feed.id === "video" ? [] : [xFeeds[1], feed]);
 
-/** Explicit opt-in only. Discovery provenance and official acquisition remain separate. */
+/** Explicit routing mode. Both acquisition and maintenance retain the actual provider. */
 export async function collectXDiscovery(root: string, options: {
   enabled: boolean; bearer?: string; environment?: NodeJS.ProcessEnv; now?: () => Date;
   search?: TwitterAPIClient["search"]; lookup?: Parameters<typeof admitXSearchLeads>[3]["lookup"];
@@ -33,10 +35,10 @@ export async function collectXDiscovery(root: string, options: {
 }) {
   const env = options.environment ?? process.env, mode = env.PROMPIX_X_DISCOVERY_PROVIDER ?? "official";
   if (mode === "official") return collectXFeeds(root, { ...options, search: options.officialSearch });
-  if (mode !== "hybrid") throw new Error("Invalid X discovery provider");
+  if (mode !== "hybrid" && mode !== "third-party") throw new Error("Invalid X discovery provider");
   if (!options.enabled) return { status: "dry-run", mode };
   const budget = configuredXSpendBudget(env);
-  if (!options.bearer || !env.TWITTERAPI_IO_KEY || !budget) throw new Error("Hybrid X discovery requires both credentials and a shared dollar budget");
+  if ((mode === "hybrid" && !options.bearer) || !env.TWITTERAPI_IO_KEY || !budget) throw new Error("Hybrid X discovery requires both credentials and a shared dollar budget");
   const now = options.now ?? (() => new Date()), at = now(), day = at.toISOString().slice(0, 10);
   const slot = Math.floor(at.getUTCHours() / 6), window = `${day}-${slot}`;
   const directory = join(root, "x-search-plans", window), path = join(root, "x-search-budgets", `${day}.json`);
@@ -71,14 +73,16 @@ export async function collectXDiscovery(root: string, options: {
   try {
     await syncLiveXLeadQueue(root, at.toISOString());
     admission = await acquireXLeadQueue(root, { enabled: options.enabled, bearer: options.bearer,
-      maxPosts: windowBudget(40, at), now: at.toISOString(), lookup: options.lookup });
+      maxPosts: windowBudget(40, at), now: at.toISOString(), lookup: options.lookup, environment: env });
   } catch { admission = { status: "failed", requests: 0, acquired: 0, unavailable: 0, known: 0, pending: 0, needsInspection: 0 }; }
-  const supplement = await collectXFeeds(root, { enabled: true, bearer: options.bearer, now, search: options.officialSearch,
+  const supplement = mode === "third-party" ? await collectXFeeds(root, { enabled: true, bearer: "third-party", provider: "twitterapi", now,
+    search: thirdPartyFeedSearch(root, env, options.search, undefined, options.sleep), sleep: options.sleep,
+    limits: { requests: 3, posts: 60 }, pageSize: 20, replyEvery: 3, feeds: officialSupplementFeeds }) : await collectXFeeds(root, { enabled: true, bearer: options.bearer, now, search: options.officialSearch,
     sleep: options.sleep, limits: { requests: 3, posts: 30 }, pageSize: 10, replyEvery: 3, feeds: officialSupplementFeeds });
   const statuses = [search.status, admission.status, supplement.status];
   const report = { status: statuses.some(s => ["failed", "unresolved", "prior-attempt-blocked", "budget-limit", "checkpoint-limit"].includes(s)) ? "failed" : "ok",
-    mode, search, admission, supplement, rawDailyLimit: 800, officialAcquisitionDailyLimit: 40,
-    officialSupplementDailyLimit: 30, globalRecallProven: false };
+    mode, search, admission, supplement, rawDailyLimit: 800, acquisitionDailyLimit: 40, officialAcquisitionDailyLimit: mode === "third-party" ? 0 : 40,
+    officialSupplementDailyLimit: mode === "third-party" ? 0 : 30, globalRecallProven: false };
   await atomic(join(root, "x-hybrid-discovery-status.json"), { at: now().toISOString(), ...report });
   return report;
 }

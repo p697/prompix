@@ -21,7 +21,7 @@ export function nativeXSourceDigest(item: Pick<Prompt, "id" | "kind" | "prompt" 
 export function nativeXSourceIssue(item: Pick<Prompt, "id" | "source" | "creator" | "publishedAt">, now = Date.now()): string | undefined {
   if (!isNativeXDraft(item)) return;
   const post = item.source.post, creator = item.creator;
-  if (!post || item.source.license !== "X-API-Terms" || item.id !== `x-post-${post.id}` ||
+  if (!post || (item.source.acquiredVia ? item.source.license !== "Source-author-rights" : item.source.license !== "X-API-Terms") || item.id !== `x-post-${post.id}` ||
       item.source.url !== `https://x.com/i/web/status/${post.id}` || creator?.platform !== "x" ||
       creator.externalID !== post.authorID || !creator.username || !creator.displayName ||
       item.publishedAt !== post.createdAt || !post.text.trim() || !/^[a-f0-9]{64}$/.test(item.source.revision ?? ""))

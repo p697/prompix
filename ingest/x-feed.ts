@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { readXIntake } from "./x-intake.ts";
+import { readXIntake, type XPost } from "./x-intake.ts";
 import { readXReplyCursors, nextXReply, replyWindow, xReplyRequest, saveXReplyPage } from "./x-replies.ts";
 import { join } from "node:path";
 import { z } from "zod";
@@ -7,6 +7,12 @@ import { atomic, json } from "./publication.ts";
 import { searchXFeed, xFeedRequest, TransientXReadError } from "./x.ts";
 import { mergeCreatorCache, type CreatorCache } from "./creators.ts";
 import { windowBudget } from "./discovery-budget.ts";
+
+export type XFeedSearchResult = Omit<Awaited<ReturnType<typeof searchXFeed>>, "posts" | "coverage"> & {
+  posts: (XPost | Awaited<ReturnType<typeof searchXFeed>>["posts"][number])[]; coverage?: Awaited<ReturnType<typeof searchXFeed>>["coverage"]; provider?: "twitterapi";
+  rootCheck?: { capturedAt: string; posts: XPost[]; creators: Awaited<ReturnType<typeof searchXFeed>>["creators"]; media: Awaited<ReturnType<typeof searchXFeed>>["media"] };
+};
+export type XFeedSearch = (credential: string, request: ReturnType<typeof xFeedRequest>) => Promise<XFeedSearchResult>;
 
 const exclude = "-is:retweet -is:reply -is:quote";
 // Independent discovery: topics span creators and tools, rather than mirroring
@@ -63,7 +69,7 @@ export type XFeedReport = {
 /** Caller holds the content lock. Every retry reserves another slot; interrupted reservations remain blocked. */
 export async function collectXFeeds(root: string, options: {
   enabled: boolean; bearer?: string; now?: () => Date;
-  limits?: ReturnType<typeof xFeedLimits>; search?: typeof searchXFeed; replyOnly?: boolean; sleep?: (ms: number) => Promise<void>;
+  limits?: ReturnType<typeof xFeedLimits>; search?: XFeedSearch; provider?: "twitterapi"; replyOnly?: boolean; sleep?: (ms: number) => Promise<void>;
   pageSize?: number; replyEvery?: number; feeds?: readonly { id: string; query: string }[];
 }) {
   const now = options.now ?? (() => new Date()), day = now().toISOString().slice(0, 10);
@@ -77,7 +83,8 @@ export async function collectXFeeds(root: string, options: {
     dailyRequests: 0, reservedPosts: 0, limits, feeds: [] };
   if (!options.enabled) return report;
   if (!options.bearer) return { ...report, status: "not-configured" as const };
-  const path = join(root, "x-feed-state.json"), ledgerPath = join(root, "x-feed-attempts", `${day}.json`);
+  const replyDirectory = options.provider ? "x-replies-twitterapi" : "x-replies";
+  const path = join(root, options.provider ? "x-feed-state-twitterapi.json" : "x-feed-state.json"), ledgerPath = join(root, "x-feed-attempts", `${day}.json`);
   const state = stateSchema.parse(await json(path, {}));
   if (state.cooldownUntil && Date.parse(state.cooldownUntil) > now().getTime()) return { ...report, status: "failed" as const };
   const creatorsPath = join(root, "creators.json");
@@ -99,7 +106,7 @@ export async function collectXFeeds(root: string, options: {
   const requestAllowance = windowBudget(limits.requests, now());
   const postAllowance = windowBudget(limits.posts, now());
   const leads = (await readXIntake(root, creators)).replyLeads;
-  let replyCursors = await readXReplyCursors(root);
+  let replyCursors = await readXReplyCursors(root, replyDirectory);
   while (report.dailyRequests < requestAllowance && postAllowance - report.reservedPosts >= 10) {
     if (now().toISOString().slice(0, 10) !== day) break;
     const feed = feeds[state.nextFeed % feeds.length];
@@ -131,7 +138,7 @@ export async function collectXFeeds(root: string, options: {
       creators = mergeCreatorCache(creators, result.creators);
       await atomic(creatorsPath, creators);
       if (reply) {
-        const saved = await saveXReplyPage(root, reply, replyCursors, now().toISOString(), result);
+        const saved = await saveXReplyPage(root, reply, replyCursors, now().toISOString(), result, replyDirectory);
         replyCursors = saved.cursors;
       } else {
         const snapshot = `${day}-feed-${String(ledger.attempts.length).padStart(3, "0")}-${randomUUID()}.json`;

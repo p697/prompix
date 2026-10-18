@@ -4,8 +4,10 @@ import { join } from "node:path";
 import { z } from "zod";
 import { atomic, json } from "./publication.ts";
 import { readXIntake, xPostSchema, fullXText, type XPost } from "./x-intake.ts";
-import { xFeedRequest, type searchXFeed } from "./x.ts";
+import { xFeedRequest } from "./x.ts";
 
+import type { XFeedSearchResult } from "./x-feed.ts";
+export type XReplyDirectory = "x-replies" | "x-replies-twitterapi";
 export type XReplyLead = Awaited<ReturnType<typeof readXIntake>>["replyLeads"][number];
 const cursorSchema = z.object({ nextToken: z.string().min(1).max(2000).optional(),
   startedAt: z.iso.datetime(), completedAt: z.iso.datetime().optional(), pages: z.number().int().min(0).max(20),
@@ -13,8 +15,8 @@ const cursorSchema = z.object({ nextToken: z.string().min(1).max(2000).optional(
 }).strict();
 const cursorsSchema = z.record(z.string().regex(/^\d{1,19}$/), cursorSchema);
 export type XReplyCursors = z.infer<typeof cursorsSchema>;
-export async function readXReplyCursors(root: string) {
-  return cursorsSchema.parse(await json(join(root, "x-replies", "cursors.json"), {}));
+export async function readXReplyCursors(root: string, namespace: XReplyDirectory = "x-replies") {
+  return cursorsSchema.parse(await json(join(root, namespace, "cursors.json"), {}));
 }
 export function xReplyRequest(lead: XReplyLead, nextToken?: string, limit = 50) {
   if (!/^\d{1,19}$/.test(lead.post.id) || !/^\d{1,19}$/.test(lead.post.author_id) ||
@@ -100,11 +102,17 @@ export function analyzeXReplyThread(root: XPost, values: readonly unknown[], com
 
 /** Caller owns content and shared paid-search locks/budget. Files here never enter ordinary intake. */
 export async function saveXReplyPage(root: string, lead: XReplyLead, cursors: XReplyCursors, now: string,
-  result: Awaited<ReturnType<typeof searchXFeed>>) {
+  result: XFeedSearchResult, namespace: XReplyDirectory = "x-replies") {
   const window = replyWindow(lead, cursors, now);
+  if (result.rootCheck && !window.pages) {
+    const checkedAt = Date.parse(result.rootCheck.capturedAt), capturedAt = Date.parse(now);
+    if (!Number.isFinite(checkedAt) || checkedAt > capturedAt || capturedAt - checkedAt > 120_000)
+      throw new Error("Invalid reply root check time");
+    window.startedAt = new Date(Math.min(Date.parse(window.startedAt), checkedAt)).toISOString();
+  }
   const expected = xReplyRequest(lead, window.nextToken, result.request.limit);
   if (result.request.requestFingerprint !== expected.requestFingerprint) throw new Error("Reply page request mismatch");
-  const directory = join(root, "x-replies", lead.post.id, window.startedAt.replace(/[:.]/g, "-"));
+  const directory = join(root, namespace, lead.post.id, window.startedAt.replace(/[:.]/g, "-"));
   const page = window.pages + 1;
   // Preserve each exact API snapshot separately, including unrelated/rejected returned posts.
   await atomic(join(directory, `${String(page).padStart(3, "0")}.json`), { ...result, capturedAt: now, root: lead });
@@ -128,6 +136,6 @@ export async function saveXReplyPage(root: string, lead: XReplyLead, cursors: XR
   await atomic(join(directory, "analysis.json"), { ...analysis, conflicting, exhausted, capturedAt: now, reviewStatus: "draft" });
   const next = { ...cursors, [lead.post.id]: { ...window, pages: page, nextToken: result.nextToken,
     ...(!result.nextToken ? { completedAt: now } : {}), ...(exhausted ? { exhausted: true } : {}) } };
-  await atomic(join(root, "x-replies", "cursors.json"), cursorsSchema.parse(next));
+  await atomic(join(root, namespace, "cursors.json"), cursorsSchema.parse(next));
   return { cursors: next, analysis, directory };
 }

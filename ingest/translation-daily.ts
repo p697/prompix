@@ -24,7 +24,7 @@ export async function prepareDailyTranslations(items: readonly Prompt[], root: s
   let status: DailyTranslationStatus["status"] = "cached", error: string | undefined;
   let report: TranslationRunReport | undefined;
   const providerName = allowModelCalls ? environment.PROMPIX_TRANSLATION_PROVIDER : undefined;
-  const model = providerName === "openai" ? "gpt-6.1-sol" : (environment.PROMPIX_TRANSLATION_MODEL ?? "gpt-5.6-luna");
+  const model = providerName === "openai" ? "gpt-6.1-sol" : (environment.PROMPIX_TRANSLATION_MODEL ?? "gpt-6-luna");
   if (providerName) {
     if (!["codex", "openai"].includes(providerName)) { status = "failed"; error = "Unknown translation provider"; }
     else {
