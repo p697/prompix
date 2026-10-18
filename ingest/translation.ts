@@ -122,7 +122,12 @@ export function protectText(text: string, preserveLettering = false) {
 export function restoreText(masked: string, protectedValues: readonly string[]): string {
   const tokens = [...masked.matchAll(/⟦PP(\d+)⟧/g)].map(m => Number(m[1])).sort((a, b) => a - b);
   if (tokens.length !== protectedValues.length || tokens.some((token, index) => token !== index)) {
-    throw new Error("Translation changed, reordered or duplicated protected syntax");
+    const expected = Array.from({ length: protectedValues.length }, (_, index) => index);
+    const missing = expected.filter(index => !tokens.includes(index));
+    const duplicate = [...new Set(tokens.filter((token, index) => tokens.indexOf(token) !== index))];
+    const unexpected = [...new Set(tokens.filter(token => token >= protectedValues.length))];
+    const describe = (values: number[]) => values.slice(0, 20).map(value => `⟦PP${value}⟧`).join(", ") || "none";
+    throw new Error(`Translation changed or duplicated protected syntax; missing: ${describe(missing)}; duplicate: ${describe(duplicate)}; unexpected: ${describe(unexpected)}`);
   }
   return masked.replace(/⟦PP(\d+)⟧/g, (_, index) => protectedValues[Number(index)]);
 }

@@ -2,7 +2,7 @@ import { mkdtemp, rm, readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { catalogSchema, type Prompt } from "../packages/schema/catalog.ts";
-import { atomic, json } from "./publication.ts";
+import { atomic, json, writeImmutableBytes } from "./publication.ts";
 import { historyBatchSchema, historyCatalogSchema, historyLimits, completeHistoryItem, uniqueHistoryItems, type HistoryBatch } from "./history-cohort.ts";
 import { admitXLeadSelection } from "./x-search-admission.ts";
 import { readXIntake } from "./x-intake.ts";
@@ -110,16 +110,24 @@ export async function runHistoryBatch(directory: string, input: HistoryBatch, pr
     const existingCache = await json(translationPath, null);
     if (!existingCache && seedTranslations) await atomic(translationPath, await readTranslationCache(join(seedTranslations, "cache.json")));
     const translationCache = await readTranslationCache(translationPath), translationReviews = await readTranslationReviews(join(sharedRoot, "translations", "semantic-rejections.json"));
+    const priorTranslation = await json<TranslationRunReport | undefined>(join(translations, "report.json"), undefined);
+    const translate = codexTranslationProvider(env.PROMPIX_CODEX, 24000, "gpt-6-luna");
+    let translationSequence = priorTranslation?.attempted ?? 0;
     const translationReport = await runHistoryTranslations({ items: ready, cache: translationCache, reviews: translationReviews,
-      provider: codexTranslationProvider(env.PROMPIX_CODEX, 24000, "gpt-6-luna"), providerName: "codex", model: "gpt-6-luna",
+      provider: async (locale, segments) => {
+        const attempt = ++translationSequence;
+        const response = await translate(locale, segments);
+        await writeImmutableBytes(join(translations, "responses", `${attempt}.json`), Buffer.from(JSON.stringify({ locale, ids: segments.map(s => s.id), response }) + "\n"));
+        return response;
+      }, providerName: "codex", model: "gpt-6-luna",
       concurrency: 2, maxRequests: historyLimits.translation, maxUSD: 0, locales: translationLocales,
-      prior: await json<TranslationRunReport | undefined>(join(translations, "report.json"), undefined),
+      prior: priorTranslation,
       persist: async (state, status) => { await atomic(translationPath, state); await atomic(join(translations, "report.json"), status); } });
     report.translation = translationReport;
     const localized = attachTranslations(ready, translationCache, translationReviews);
     await atomic(join(directory, "catalog.localized.json"), { ...sourceCatalog, prompts: localized });
-    if (translationReport.pendingSegments > 0) throw new Error("History translations remain incomplete; resume only missing segments within retained budget");
-    const complete = localized.filter(p => completeHistoryItem(p));
+    const { complete, deferred } = acceptHistoryTranslations(localized, translationReport, priorTranslation?.failed ?? 0);
+    report.translationDeferredIDs = deferred.map(p => p.id);
     report.complete = complete.length; report.completedAt = new Date().toISOString();
     await atomic(join(directory, "complete.json"), { ...sourceCatalog, prompts: complete });
     await phase("complete");
@@ -127,6 +135,15 @@ export async function runHistoryBatch(directory: string, input: HistoryBatch, pr
   } catch (error) {
     report.error = error instanceof Error ? error.message : "History processing failed"; await phase("blocked"); throw error;
   }
+}
+
+/** Isolate rejected content, but never route around an exhausted quota or a failed provider. */
+export function acceptHistoryTranslations(items: Prompt[], report: TranslationRunReport, priorFailures = 0) {
+  if (report.failed > priorFailures) throw new Error("Historical translation provider failed; inspect retained attempts before continuing");
+  if (report.pendingSegments && report.attempted >= historyLimits.translation) throw new Error("Historical translation request allowance exhausted");
+  const complete: Prompt[] = [], deferred: Prompt[] = [];
+  for (const item of items) (completeHistoryItem(item) ? complete : deferred).push(item);
+  return { complete, deferred };
 }
 
 /** Retry only missing validated segments; every pass retains the same cumulative allowance. */

@@ -39,6 +39,7 @@ test("opaque syntax is preserved exactly and natural word order may reorder it",
   assert.throws(() => restoreText(protectedText.masked.replace("⟦PP0⟧", "broken"), protectedText.protectedValues));
   assert.throws(() => restoreText(protectedText.masked + "⟦PP0⟧", protectedText.protectedValues));
   assert.equal(restoreText("⟦PP1⟧ ⟦PP0⟧", ["a", "b"]), "b a");
+  assert.throws(() => restoreText("⟦PP1⟧ ⟦PP1⟧ ⟦PP9⟧", ["a", "b"]), /missing: ⟦PP0⟧; duplicate: ⟦PP1⟧; unexpected: ⟦PP9⟧/);
   assert.deepEqual(protectText("55.6万本场点赞，12.3w viewers and 68.7萬總計").protectedValues, ["55.6万", "12.3w", "68.7萬"]);
 });
 test("Skill frontmatter and fenced implementation remain opaque", () => {

@@ -7,7 +7,7 @@ import { chooseHistoryLeads, historyBatchSchema, historyCatalogSchema, historyBa
 import { convertXDiscovery } from "./x-intake.ts";
 import { translationFingerprint, translationLocales } from "./translation.ts";
 import type { Prompt } from "../packages/schema/catalog.ts";
-import { runHistoryBatch } from "./history-batch.ts";
+import { runHistoryBatch, acceptHistoryTranslations } from "./history-batch.ts";
 import { atomic, json } from "./publication.ts";
 
 const lead = (n: number, author = String(n)) => ({ id: String(n), authorID: author, reason: "prompt" as const, kind: "image" as const,
@@ -53,6 +53,14 @@ test("completion does not count incomplete translations, unclassified or stale s
   assert.equal(completeHistoryItem({ ...complete, source: { ...source.source, acquiredVia: undefined } }), false);
   assert.equal(completeHistoryItem(complete, Date.now() + 25 * 3600_000), false);
   assert.equal(completeHistoryItem({ ...complete, localization: { ...complete.localization, sourceFingerprint: "0".repeat(64) } }), false);
+  const status = { version: "prompix-translation-1", provider: "codex", attempted: 10, succeeded: 50, rejected: 3, failed: 0, pendingSegments: 1,
+    reservedUSD: 0, measuredUSD: null, inputTokens: 100, outputTokens: 100, failures: [] };
+  const partial = { ...source, id: "incomplete-source" };
+  const accepted = acceptHistoryTranslations([complete, partial], status);
+  assert.deepEqual(accepted.complete.map(p => p.id), [complete.id]);
+  assert.deepEqual(accepted.deferred.map(p => p.id), [partial.id]);
+  assert.throws(() => acceptHistoryTranslations([complete, partial], { ...status, failed: 1 }), /provider failed/);
+  assert.throws(() => acceptHistoryTranslations([complete, partial], { ...status, attempted: 200 }), /allowance exhausted/);
 });
 test("an interrupted historical acquisition stays blocked across calendar days without HTTP", async () => {
   const directory = await mkdtemp(join(tmpdir(), "prompix-history-test-"));
