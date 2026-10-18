@@ -599,6 +599,30 @@ test("daily inherits the validated completed local artifact with absent cache an
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
+test("daily translation reuses the full private library beyond the legacy download limit", async () => {
+  const { mkdtemp, mkdir, writeFile, rm } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os"); const { join } = await import("node:path");
+  const { prepareDailyTranslations } = await import("./translation-daily.ts");
+  const root = await mkdtemp(join(tmpdir(), "prompix-large-translations-"));
+  try {
+    const originals = Array.from({ length: 1201 }, (_, index) => ({ ...item, id: `large-${index}` }));
+    const prompts = attachTranslations(originals, fillCache());
+    const catalog = { schemaVersion: 1, version: "large-fixture", prompts, removedIDs: [] };
+    assert.throws(() => catalogSchema.parse(catalog), "Legacy network bounds must remain unchanged");
+    await mkdir(join(root, "translations"));
+    const path = join(root, "translations/catalog.localized.json");
+    await writeFile(path, JSON.stringify(catalog));
+    const result = await prepareDailyTranslations(originals, root, { PROMPIX_TRANSLATION_PROVIDER: "codex", PROMPIX_CODEX: "/must-not-run" }, false);
+    assert.equal(result.report.status, "cached"); assert.equal(result.report.total, 1201);
+    assert.equal(result.report.coverage.en, 1201); assert.equal(result.report.pendingRecords.en, 0);
+    assert.deepEqual(result.prompts.at(-1)?.localization, prompts.at(-1)?.localization);
+    await writeFile(path, JSON.stringify({ ...catalog, prompts: [...prompts, prompts[0]] }));
+    await assert.rejects(prepareDailyTranslations(originals, root, {}, false), /Duplicate or removed content ID/);
+    await writeFile(path, JSON.stringify({ ...catalog, removedIDs: [prompts[0].id] }));
+    await assert.rejects(prepareDailyTranslations(originals, root, {}, false), /Duplicate or removed content ID/);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
 test("daily translation default leaves only the unspent part of 36 requests and preserves explicit lower limits", async () => {
   const { mkdtemp, mkdir, writeFile, rm, chmod } = await import("node:fs/promises");
   const { tmpdir } = await import("node:os");
