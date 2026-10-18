@@ -123,3 +123,50 @@ test("expired campaign and authority above the user ceiling fail before requests
   await assert.rejects(new XSpendBudget(root, 100, 100, time, false, terms).reserve("twitterapi", "search", "expired", 20), /inactive/);
   assert.throws(() => new XSpendBudget(root, 101, 100, time, false, { ...terms, totalUSD: 101 }));
 }));
+
+const maintenanceAuthorization = { version: 1 as const, id: "history-maintenance", startMonth: "2026-10",
+  expiresAt: "2026-11-03T00:00:00Z", totalUSD: 90 };
+test("temporary maintenance allowance preserves growth cap, shared ledger and unknown charges", () => fixture(async root => {
+  const path = join(root, "2026-10.json");
+  await atomic(path, { version: 1, month: "2026-10", opening: 20_000_000, entries: [] });
+  const budget = new XSpendBudget(root, 20, 1, time, false, undefined, maintenanceAuthorization);
+  await assert.rejects(budget.reserve("twitterapi", "search", "new", 1), XBudgetExceeded);
+  await assert.rejects(budget.reserve("twitterapi", "lookup", "new-draft", 1), XBudgetExceeded);
+  await assert.rejects(budget.reserve("twitterapi", "search", "false-maintenance", 1, "maintenance"), /Only verified/);
+  await (await budget.reserve("twitterapi", "lookup", "existing", 1000, "maintenance")).finish();
+  const ledger = await json<any>(path, null);
+  assert.equal(ledger.opening, 20_000_000);
+  assert.equal(ledger.entries[0].accounted, 150_000);
+  assert.equal(ledger.entries[0].state, "uncertain");
+  await assert.rejects(new XSpendBudget(root, 20, 0.15, time, false, undefined, maintenanceAuthorization)
+    .reserve("twitterapi", "lookup", "daily-full", 1, "maintenance"), XBudgetExceeded);
+  assert.deepEqual(await json(path, null), ledger);
+}));
+
+test("maintenance allowance enforces cumulative campaign cost across months and restarts", () => fixture(async root => {
+  await atomic(join(root, "2026-10.json"), { version: 1, month: "2026-10", opening: 20_000_000, entries: [] });
+  const small = { ...maintenanceAuthorization, totalUSD: 20.00015 };
+  const nextMonth = () => new Date("2026-11-01T01:00:00Z");
+  await (await new XSpendBudget(root, 20, 1, nextMonth, false, undefined, small)
+    .reserve("twitterapi", "lookup", "one", 1, "maintenance")).finish();
+  await assert.rejects(new XSpendBudget(root, 20, 1, nextMonth, false, undefined, small)
+    .reserve("twitterapi", "lookup", "two", 1, "maintenance"), /Campaign total/);
+  await assert.rejects(new XSpendBudget(root, 20, 1, nextMonth, false, undefined, small)
+    .reserve("twitterapi", "search", "growth-after-campaign-total", 1), /Campaign total/);
+}));
+
+test("future or expired maintenance authorization falls back to unchanged ordinary limits", () => fixture(async root => {
+  const path = join(root, "2026-10.json");
+  await atomic(path, { version: 1, month: "2026-10", opening: 20_000_000, entries: [] });
+  for (const authorization of [{ ...maintenanceAuthorization, startMonth: "2026-11" },
+    { ...maintenanceAuthorization, expiresAt: time().toISOString() }]) {
+    await assert.rejects(new XSpendBudget(root, 20, 1, time, false, undefined, authorization)
+      .reserve("twitterapi", "lookup", "inactive", 1, "maintenance"), XBudgetExceeded);
+  }
+  await atomic(path, { version: 1, month: "2026-10", opening: 0, entries: [] });
+  await (await new XSpendBudget(root, 20, 1, time, false, undefined,
+    { ...maintenanceAuthorization, expiresAt: time().toISOString() })
+    .reserve("twitterapi", "lookup", "ordinary", 1, "maintenance")).finish(1);
+  assert.throws(() => new XSpendBudget(root, 90, 1, time, false, undefined, maintenanceAuthorization), /Invalid/);
+  assert.throws(() => new XSpendBudget(root, 20, 1, time, false, maintenanceAuthorization, maintenanceAuthorization), /one X campaign/);
+}));

@@ -117,3 +117,19 @@ test("maintenance protection requires a configured budget and an explicit valid 
   assert.throws(() => configuredXSpendBudget({ PROMPIX_X_MONTHLY_USD: "20", PROMPIX_X_MAINTENANCE_RESERVE: "yes" }), /switch/);
   assert.equal(configuredXSpendBudget({ PROMPIX_X_MONTHLY_USD: "20", PROMPIX_X_MAINTENANCE_RESERVE: "1" })?.protectMaintenance, true);
 });
+
+test("maintenance campaign configuration requires a valid explicit file and ordinary budget", t => fixture(t, async (root) => {
+  const path = join(root, "campaign.json");
+  const env = { PROMPIX_X_MONTHLY_USD: "20", PROMPIX_X_MAINTENANCE_CAMPAIGN_FILE: path };
+  assert.throws(() => configuredXSpendBudget({ PROMPIX_X_MAINTENANCE_CAMPAIGN_FILE: path }), /Monthly/);
+  assert.throws(() => configuredXSpendBudget(env));
+  await atomic(path, { version: 1, id: "test", startMonth: "2026-10", expiresAt: "2026-10-21T00:00:00Z", totalUSD: 90 });
+  const budget = configuredXSpendBudget(env)!;
+  assert.equal(budget.monthlyUSD, 20);
+  assert.equal(budget.maintenanceCampaign?.totalUSD, 90);
+  assert.equal(budget.campaign, undefined);
+  assert.throws(() => configuredXSpendBudget({ ...env, PROMPIX_X_MONTHLY_USD: "90" }), /Invalid/);
+  assert.throws(() => configuredXSpendBudget({ ...env, PROMPIX_X_CAMPAIGN_BUDGET_FILE: path }), /one X campaign/);
+  await atomic(path, { version: 1, id: "test", startMonth: "2026-10", expiresAt: "2026-10-21T00:00:00Z", totalUSD: 101 });
+  assert.throws(() => configuredXSpendBudget(env));
+}));

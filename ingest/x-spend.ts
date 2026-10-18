@@ -50,21 +50,25 @@ export function configuredXSpendBudget(environment: NodeJS.ProcessEnv = process.
   const reserve = environment.PROMPIX_X_MAINTENANCE_RESERVE;
   if (reserve !== undefined && reserve !== "1" && reserve !== "0") throw new Error("Invalid X maintenance reserve switch");
   if (environment.PROMPIX_X_MONTHLY_USD === undefined) {
-    if (environment.PROMPIX_X_DAILY_USD !== undefined || reserve === "1") throw new Error("Monthly X budget is required with a daily budget or maintenance reserve");
+    if (environment.PROMPIX_X_DAILY_USD !== undefined || reserve === "1" || environment.PROMPIX_X_MAINTENANCE_CAMPAIGN_FILE !== undefined) throw new Error("Monthly X budget is required with a daily budget or maintenance reserve");
     return undefined;
   }
   const monthly = Number(environment.PROMPIX_X_MONTHLY_USD);
   const campaign = environment.PROMPIX_X_CAMPAIGN_BUDGET_FILE
     ? campaignBudgetSchema.parse(JSON.parse(readFileSync(environment.PROMPIX_X_CAMPAIGN_BUDGET_FILE, "utf8"))) : undefined;
+  const maintenanceCampaign = environment.PROMPIX_X_MAINTENANCE_CAMPAIGN_FILE
+    ? campaignBudgetSchema.parse(JSON.parse(readFileSync(environment.PROMPIX_X_MAINTENANCE_CAMPAIGN_FILE, "utf8"))) : undefined;
   return new XSpendBudget(environment.PROMPIX_X_SPEND_DIR ?? join(homedir(), ".local/share/prompix/x-spend"), monthly,
-    Number(environment.PROMPIX_X_DAILY_USD ?? monthly), () => new Date(), reserve === "1", campaign);
+    Number(environment.PROMPIX_X_DAILY_USD ?? monthly), () => new Date(), reserve === "1", campaign, maintenanceCampaign);
 }
 
 /** Shared account ledger. Never stores credentials or source text. */
 export class XSpendBudget {
   constructor(readonly root: string, readonly monthlyUSD = 20, readonly dailyUSD = 1,
-    readonly now: () => Date = () => new Date(), readonly protectMaintenance = false, readonly campaign?: CampaignBudget) {
+    readonly now: () => Date = () => new Date(), readonly protectMaintenance = false, readonly campaign?: CampaignBudget, readonly maintenanceCampaign?: CampaignBudget) {
     if (campaign) campaignBudgetSchema.parse(campaign);
+    if (maintenanceCampaign) campaignBudgetSchema.parse(maintenanceCampaign);
+    if (campaign && maintenanceCampaign) throw new Error("Choose one X campaign authorization scope");
     if (!Number.isFinite(monthlyUSD) || monthlyUSD <= 0 || monthlyUSD > (campaign?.totalUSD ?? 20) ||
         !Number.isFinite(dailyUSD) || dailyUSD <= 0 || dailyUSD > monthlyUSD) throw new Error("Invalid X dollar budget");
   }
@@ -105,18 +109,24 @@ export class XSpendBudget {
     await this.transaction(async () => {
       const ledger = ledgerSchema.parse(await json(path, { version: 1, month, opening: 0, entries: [] }));
       if (ledger.month !== month) throw new Error("X spend ledger month mismatch");
-      if (this.campaign) {
-        if (month < this.campaign.startMonth || Date.parse(at) >= Date.parse(this.campaign.expiresAt))
+      // An active, explicit allowance may cover existing-source maintenance only.
+      // Expiry restores normal limits without changing or subtracting shared spend.
+      const activeMaintenanceCampaign = this.maintenanceCampaign &&
+        month >= this.maintenanceCampaign.startMonth && Date.parse(at) < Date.parse(this.maintenanceCampaign.expiresAt)
+        ? this.maintenanceCampaign : undefined;
+      const campaign = this.campaign ?? activeMaintenanceCampaign;
+      if (campaign) {
+        if (month < campaign.startMonth || Date.parse(at) >= Date.parse(campaign.expiresAt))
           throw new XBudgetExceeded("Campaign authorization is inactive; no request sent");
         // Include previous tests, ordinary jobs and unknown charges. A month rollover
         // or different campaign ID cannot reset this cumulative authorization.
         let total = ledger.opening + ledger.entries.reduce((sum, e) => sum + e.accounted, 0);
-        for (const file of (await readdir(this.root)).filter(f => /^\d{4}-\d{2}\.json$/.test(f) && f.slice(0, 7) >= this.campaign!.startMonth && f.slice(0, 7) < month)) {
+        for (const file of (await readdir(this.root)).filter(f => /^\d{4}-\d{2}\.json$/.test(f) && f.slice(0, 7) >= campaign.startMonth && f.slice(0, 7) < month)) {
           const old = ledgerSchema.parse(await json(join(this.root, file), null));
           if (old.month !== file.slice(0, 7)) throw new Error("Campaign ledger month mismatch");
           total += old.opening + old.entries.reduce((sum, e) => sum + e.accounted, 0);
         }
-        if (total + reserved > Math.round(this.campaign.totalUSD * 1e6)) throw new XBudgetExceeded("Campaign total dollar budget reached; no request sent");
+        if (total + reserved > Math.round(campaign.totalUSD * 1e6)) throw new XBudgetExceeded("Campaign total dollar budget reached; no request sent");
       }
       if (provider === "rapidapi") {
         const fees = ledger.entries.filter(e => e.provider === "rapidapi" && e.operation === "subscription");
@@ -140,7 +150,9 @@ export class XSpendBudget {
       }
       const monthly = ledger.opening + ledger.entries.reduce((sum, e) => sum + e.accounted, 0);
       const daily = ledger.entries.filter(e => e.at.startsWith(day)).reduce((sum, e) => sum + e.accounted, 0);
-      if (monthly + reserved > Math.round(this.monthlyUSD * 1e6) || daily + reserved > Math.round(this.dailyUSD * 1e6))
+      const monthlyLimit = purpose === "maintenance" && activeMaintenanceCampaign
+        ? Math.max(this.monthlyUSD, activeMaintenanceCampaign.totalUSD) : this.monthlyUSD;
+      if (monthly + reserved > Math.round(monthlyLimit * 1e6) || daily + reserved > Math.round(this.dailyUSD * 1e6))
         throw new XBudgetExceeded("X dollar budget reached; no request sent");
       if (this.protectMaintenance && purpose === "growth") {
         const plan = maintenanceReserveSchema.safeParse(await json(join(this.root, "maintenance-reserve.json"), null).catch(() => null));
