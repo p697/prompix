@@ -979,3 +979,21 @@ test("decimal quantities keep their fractional part before attached units", () =
   assert.equal(validLocalizedText(source, 'en', localized), true);
   assert.equal(validLocalizedText(source, 'en', { ...localized, prompt: localized.prompt.replace('1.5m', '1m') }), false);
 });
+
+test("declared screenplay character lines stay literal without freezing style descriptions", () => {
+  const source = 'CHARACTER\nLENA — adult cyclist.\n\nLENA:\n“Meet me by the river.”\n\nShe laughs.\n\nLENA:\n“Ready?”\n\nMOOD:\n“gentle and playful”';
+  const masked = protectText(source, true);
+  assert.deepEqual(masked.protectedValues, ['“Meet me by the river.”', '“Ready?”']);
+  assert.match(masked.masked, /gentle and playful/);
+  assert.equal(restoreText(masked.masked, masked.protectedValues), source);
+  assert.throws(() => validateSegment(masked.masked, masked.masked.replace('⟦PP0⟧', '« Rendez-vous au bord de la rivière. »'), 'fr'), /token|protected/i);
+  assert.equal(protectText(source, false).protectedValues.length, 0);
+});
+
+test("Korean ultra-realistic and hyphenated hyper-realistic styles cannot become surreal", () => {
+  for (const source of ['Ultra-realistic photography.', 'Ultra realistic photography.', 'Hyper-realistic photography.', 'Hyper realistic photography.']) {
+    assert.throws(() => validateSegment(source, '초현실적인 사진.', 'ko'), /Hyperrealism/);
+    assert.doesNotThrow(() => validateSegment(source, '극사실적인 사진.', 'ko'));
+  }
+  assert.doesNotThrow(() => validateSegment('A surreal scene with ultra-realistic textures.', '극사실적인 질감의 초현실적인 장면.', 'ko'));
+});
