@@ -902,3 +902,7 @@ The historical acceptance trial is constrained by nine-language processing laten
 ### 2026-10-18 — Preserve list semantics and template identifiers
 
 Historical semantic checks exposed a list-number/quantity confusion and translated JSON field-reference identifiers. Preserve ordinal structure, uppercase snake-case template identifiers, explicit labeled image lettering and standalone generation command labels. Revalidate inherited text under the same rules; retain original source bytes and attempt ledgers. This strengthens correctness without adding official X fallback or changing any processing/publication allowance.
+
+## 2026-10-18 — Preserve quoted copy in spaced typography blocks
+
+Explicit visual typography blocks can contain template placeholders and blank lines before a quoted tagline. Preserve that exact tagline with bounded context across those lines, while ending the context at ordinary intervening prose. Revalidate affected history translations using retained source evidence and cumulative request ledgers; do not count uncorrected samples or reset attempts.
