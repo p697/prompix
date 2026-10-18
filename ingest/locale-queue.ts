@@ -46,9 +46,9 @@ export async function processLocaleStage(root: string, shared: string, job: Queu
   if (!text || !validLocalizedText(original, payload.locale, text, reviews)) return { ready: false, state: "validation-held", report };
   const review = overrides.review ? await overrides.review([localized], payload.locale, join(directory, "semantic"))
     : await reviewTranslationSemantics([localized], payload.locale, join(directory, "semantic"), process.env.PROMPIX_CODEX ?? "codex");
-  verifySemanticResult({ reviews: review.reviews }, [localized], payload.locale);
   await atomic(join(directory, "semantic-result.json"), review);
   if (review.reviews.some(r => r.verdict !== "pass")) return { ready: false, state: "semantic-held", report };
+  verifySemanticResult({ reviews: review.reviews }, [localized], payload.locale);
   const latest = await current(payload.id);
   const currentReviews = await readTranslationReviews(join(shared, "translations", "semantic-rejections.json"));
   if (!latest || translationFingerprint(latest) !== payload.fingerprint || !validLocalizedText(latest, payload.locale, text, currentReviews)) return { ready: false, state: "superseded", report };

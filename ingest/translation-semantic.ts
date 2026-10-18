@@ -44,6 +44,22 @@ export function verifySemanticResult(raw: unknown, items: readonly Prompt[], loc
   }
   return result;
 }
+/** A malformed finding holds only that item; verified sibling decisions remain usable. */
+export function partitionSemanticResult(raw: unknown, items: readonly Prompt[], locale: TranslationLocale) {
+  const reviews = z.object({ reviews: z.array(verdictSchema) }).strict().parse(raw).reviews;
+  if (reviews.length !== items.length || new Set(reviews.map(r => r.id)).size !== items.length || reviews.some(r => !items.some(p => p.id === r.id))) throw new Error("Incomplete semantic review");
+  const unverifiedEvidence: string[] = [];
+  for (const review of reviews) {
+    const item = items.find(p => p.id === review.id)!;
+    try { verifySemanticResult({ reviews: [review] }, [item], locale); }
+    catch {
+      // A pass with contradictory issues or malformed evidence cannot be accepted.
+      review.verdict = "needs-review";
+      unverifiedEvidence.push(review.id);
+    }
+  }
+  return { reviews, unverifiedEvidence };
+}
 export async function reviewTranslationSemantics(items: readonly Prompt[], locale: TranslationLocale, directory: string, executable: string, effort: "low" | "medium" = "medium") {
   if (items.length < 1 || items.length > 4 || new Set(items.map(p => p.id)).size !== items.length) throw new Error("Invalid semantic batch");
   const input = semanticInput(items, locale), identity = queueIdentity({ instructions: semanticInstructions, input, model: "gpt-6-luna", effort });
@@ -68,10 +84,10 @@ export async function reviewTranslationSemantics(items: readonly Prompt[], local
       child.on("exit", code => { cleanup(); failure || code !== 0 ? reject(failure ?? new Error(`Semantic provider exited ${code}`)) : resolve(); });
       child.stdin.end(semanticInstructions + "\n" + JSON.stringify(input));
     });
-    const reviews = verifySemanticResult(JSON.parse(await readFile(join(directory, "output.json"), "utf8")), items, locale);
+    const { reviews, unverifiedEvidence } = partitionSemanticResult(JSON.parse(await readFile(join(directory, "output.json"), "utf8")), items, locale);
     let usage: { input_tokens?: number; output_tokens?: number } = {};
     for (const line of events.split("\n")) { try { const event = JSON.parse(line); if (event.type === "turn.completed") usage = event.usage; } catch {} }
-    return { identity, reviews, usage };
+    return { identity, reviews, usage, unverifiedEvidence };
   } finally {
     await writeImmutableBytes(join(directory, "events.jsonl"), Buffer.from(events));
     await writeImmutableBytes(join(directory, "diagnostic.json"), Buffer.from(JSON.stringify({ diagnostic })));

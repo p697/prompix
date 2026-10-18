@@ -4,7 +4,7 @@ import { readFile } from "node:fs/promises";
 import { catalogSchema } from "../packages/schema/catalog.ts";
 import { originalAndChinese, hasRequiredTranslations, seedApprovedChineseMetadata } from "./ingest-language-policy.ts";
 import { emptyTranslationCache, promptSegments, translationFingerprint, translationText } from "./translation.ts";
-import { verifySemanticResult } from "./translation-semantic.ts";
+import { verifySemanticResult, partitionSemanticResult } from "./translation-semantic.ts";
 const fixture = catalogSchema.parse(JSON.parse(await readFile(new URL("../ios/Prompix/Resources/catalog.json", import.meta.url), "utf8"))).prompts[0];
 const item = { ...fixture, title: "纸雕山村", summary: "生成精致纸雕村庄，保持柔和光影。", prompt: "Create a quiet mountain village.", example: "使用建议：先选择构图，再生成图片。", previewLabel: "来源图片", cover: undefined };
 const translated = { ...translationText(item), prompt: "生成安静的山间村落。" };
@@ -32,4 +32,18 @@ test("semantic checks require complete IDs and grounded evidence, accepting only
   assert.equal(verifySemanticResult({ reviews: [{ id: item.id, verdict: "needs-review", issues: [issue] }] }, [localized], "zh-Hans").length, 1);
   assert.throws(() => verifySemanticResult({ reviews: [{ id: item.id, verdict: "needs-review", issues: [{ ...issue, sourceQuote: "invented missing sentence" }] }] }, [localized], "zh-Hans"), /evidence/);
   assert.throws(() => verifySemanticResult({ reviews: [{ id: item.id, verdict: "pass", issues: [issue] }] }, [localized], "zh-Hans"), /Invalid semantic/);
+});
+
+
+test("unverifiable review evidence holds its item without losing a verified sibling", () => {
+  const second = { ...localized, id: "second" };
+  const raw = { reviews: [
+    { id: localized.id, verdict: "needs-review", issues: [{ field: "prompt", sourceQuote: "invented", translatedQuote: "invented", reason: "Unverifiable" }] },
+    { id: second.id, verdict: "pass", issues: [] },
+  ] };
+  const result = partitionSemanticResult(raw, [localized, second], "zh-Hans");
+  assert.deepEqual(result.unverifiedEvidence, [localized.id]);
+  assert.equal(result.reviews[0].verdict, "needs-review");
+  assert.equal(result.reviews[1].verdict, "pass");
+  assert.throws(() => partitionSemanticResult({ reviews: [raw.reviews[1]] }, [localized, second], "zh-Hans"), /Incomplete/);
 });
