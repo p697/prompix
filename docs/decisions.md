@@ -947,3 +947,7 @@ A fully received, retained visual response can repeat candidate or attachment id
 ### 2026-10-19 — Keep existing-source checks within the temporary backfill budget
 
 补库与日常复查共享累计账本，历史补库超过普通月限额会阻断旧来源检查。增加显式、限时且仅 maintenance lookup 可用的补库授权入口；保留普通增长月限额、每日总限额和失败收费记录，不重置账本，也不扩大长期订阅预算。授权过期恢复普通限制。
+
+### 2026-10-19 — Resume classified transient searches at invocation boundaries
+
+有界搜索最后一个请求发生临时故障时，沿用既有退避与累计三次上限跨调用续跑，避免把可恢复的网络故障升级成全队列停机。先重读留存响应，保留失败收费；未知、损坏或耗尽的请求继续阻断并要求核对。

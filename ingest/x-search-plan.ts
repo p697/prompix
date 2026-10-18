@@ -120,6 +120,21 @@ export async function readXSearchPlan(directory: string, input: XSearchPlan) {
       globalRecallProven: false, publishableAcquisitions: 0 } };
 }
 
+/** Schedule only retries already classified by the transport layer, after replaying retained evidence.
+ * Unknown failures, malformed captures and exhausted retries still require inspection. */
+export function searchPlanReadiness(run: Awaited<ReturnType<typeof readXSearchPlan>>, now = Date.now()):
+  "ready" | "backoff" | "blocked" | "complete" {
+  if (run.pending.size) {
+    if (run.pending.size !== 1) return "blocked";
+    const query = [...run.pending][0], attempts = run.state.attempts.filter(a => a.query === query);
+    const last = attempts.at(-1);
+    if (!last || last.state !== "retryable" || !last.retryAfter ||
+        attempts.filter(a => a.cursor === last.cursor && a.state !== "budget-blocked").length >= 3) return "blocked";
+    return Date.parse(last.retryAfter) <= now ? "ready" : "backoff";
+  }
+  return run.report.queries.some(q => q.status === "pending") ? "ready" : "complete";
+}
+
 /** Caller holds the plan lock and has inspected the outage. Never edits attempts, captures or spend. */
 export async function deferXSearchQuery(directory: string, input: XSearchPlan, query: number, reason: string, at = new Date().toISOString()) {
   const run = await readXSearchPlan(directory, input), attempts = run.state.attempts.filter(a => a.query === query);
