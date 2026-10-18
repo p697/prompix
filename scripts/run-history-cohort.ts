@@ -3,7 +3,7 @@ import { isAbsolute, join, relative, resolve } from "node:path";
 import { z } from "zod";
 import { catalogSchema, type Prompt } from "../packages/schema/catalog.ts";
 import { atomic, json, lockContent, repo, writeImmutableBytes } from "../ingest/publication.ts";
-import { historyBaseline, historyCatalogSchema, historyBatchSchema, historyLeadSchema, historyLimits, chooseHistoryLeads, currentHistoryAcceptance } from "../ingest/history-cohort.ts";
+import { historyBaseline, historyCatalogSchema, historyBatchSchema, historyLeadSchema, historyLimits, chooseHistoryLeads, currentHistoryAcceptance, historyPublicationExclusions } from "../ingest/history-cohort.ts";
 import { readQualityHolds } from "../ingest/quality-holds.ts";
 import { readTranslationReviews } from "../ingest/translation-review.ts";
 import { runHistoryBatch } from "../ingest/history-batch.ts";
@@ -44,6 +44,7 @@ try {
   let processed = 0;
   try {
     for (;;) {
+      const previous = await historyPublicationExclusions(config.sharedRoot, baseline.prompts);
       const folders = (await readdir(join(directory, "batches")).catch(e => { if (e.code === "ENOENT") return []; throw e; })).filter(n => /^batch-\d{4}$/.test(n)).sort();
       const batches = await Promise.all(folders.map(async name => ({ directory: join(directory, "batches", name),
         manifest: historyBatchSchema.parse(await json(join(directory, "batches", name, "manifest.json"), null)),
@@ -55,7 +56,7 @@ try {
       const moderation = await json<{ removedIDs: string[] }>(join(config.sharedRoot, "moderation.json"), { removedIDs: [] });
       const reviews = await readTranslationReviews(join(config.sharedRoot, "translations", "semantic-rejections.json"));
       const currentAcceptance = (prompts: Prompt[], previous: Prompt[] = []) => currentHistoryAcceptance(prompts, previous, holds, moderation.removedIDs, Date.now(), reviews);
-      const staged = currentAcceptance(batches.flatMap(b => b.catalog ? historyCatalogSchema.parse(b.catalog).prompts : []), baseline.prompts);
+      const staged = currentAcceptance(batches.flatMap(b => b.catalog ? historyCatalogSchema.parse(b.catalog).prompts : []), previous);
       if (staged.length > config.target) throw new Error("Acceptance target exceeded");
       await atomic(join(directory, "catalog.staged.json"), { schemaVersion: 1, version: "history-cohort500", prompts: staged, removedIDs: [] });
       await save(execute ? "running" : "dry-run", { staged: staged.length, assigned: assigned.length, published: 0,
@@ -68,7 +69,7 @@ try {
       if (pending) {
         await save("processing", { batch: pending.manifest.id });
         const ownIDs = new Set(pending.manifest.leads.map(lead => `x-post-${lead.id}`));
-        await runHistoryBatch(pending.directory, pending.manifest, [...baseline.prompts, ...staged.filter(p => !ownIDs.has(p.id))], config.sharedRoot, config.seedTranslations, Boolean(pending.catalog));
+        await runHistoryBatch(pending.directory, pending.manifest, [...previous, ...staged.filter(p => !ownIDs.has(p.id))], config.sharedRoot, config.seedTranslations, Boolean(pending.catalog));
         processed++;
         continue;
       }
@@ -82,7 +83,7 @@ try {
       const extras = config.extraLeads ? z.array(historyLeadSchema).parse(await json(config.extraLeads, [])) : [];
       const leads: XSearchLead[] = [...extras];
       for (let i = 0; scans.some(s => i < s.leads.length); i++) for (const scan of scans) if (scan.leads[i]) leads.push(scan.leads[i]);
-      const used = new Set([...assigned, ...baseline.prompts.flatMap(p => p.source.post ? [p.source.post.id] : [])]);
+      const used = new Set([...assigned, ...previous.flatMap(p => p.source.post ? [p.source.post.id] : [])]);
       const chosen = chooseHistoryLeads(leads, used, Math.min(historyLimits.batch, config.maximumSources - assigned.length, config.target - staged.length));
       await save("discovered", { searches, leads: leads.length });
       if (chosen.length) {

@@ -1,15 +1,16 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { chooseHistoryLeads, historyBatchSchema, historyCatalogSchema, historyBaseline, uniqueHistoryItems, completeHistoryItem, currentHistoryAcceptance } from "./history-cohort.ts";
+import { chooseHistoryLeads, historyBatchSchema, historyCatalogSchema, historyBaseline, uniqueHistoryItems, completeHistoryItem, currentHistoryAcceptance, historyPublicationExclusions } from "./history-cohort.ts";
 import { convertXDiscovery } from "./x-intake.ts";
 import { translationFingerprint, translationLocales } from "./translation.ts";
-import type { Prompt } from "../packages/schema/catalog.ts";
+import { catalogSchema, type Prompt } from "../packages/schema/catalog.ts";
 import { runHistoryBatch, acceptHistoryTranslations } from "./history-batch.ts";
 import { atomic, json } from "./publication.ts";
+import { splitLanguagePacks } from "./language-packs.ts";
 
 const lead = (n: number, author = String(n)) => ({ id: String(n), authorID: author, reason: "prompt" as const, kind: "image" as const,
   visual: true, sourceDate: "2026-08-10T00:00:00.000Z", evidence: "captured-response.json" });
@@ -22,6 +23,22 @@ function item(): Prompt {
   assert.ok(candidate);
   return { ...candidate, presentation: "general", media: { ...candidate.media!, imageURL: `https://api.prompix.dev/media/${"a".repeat(64)}.jpg` } };
 }
+test("daily publications become exclusions without losing the frozen source version", async () => {
+  const root = await mkdtemp(join(tmpdir(), "prompix-history-publication-"));
+  try {
+    const old = item(), updated = { ...old, prompt: old.prompt + " Use blue paper." };
+    assert.deepEqual(await historyPublicationExclusions(root, [old]), [old]);
+    const bundle = splitLanguagePacks(catalogSchema.parse({ schemaVersion: 1, version: "test-history-daily", publishedAt: now, prompts: [updated], removedIDs: [] }));
+    const folder = join(root, "releases", bundle.manifest.version, "v2"); await mkdir(folder, { recursive: true });
+    await writeFile(join(folder, "base.json"), bundle.baseBytes); await writeFile(join(root, "v2-latest.json"), bundle.manifestBytes);
+    const exclusions = await historyPublicationExclusions(root, [old]);
+    assert.equal(exclusions.length, 2);
+    assert.deepEqual(uniqueHistoryItems([{ ...updated, id: "another-id" }], exclusions), []);
+    assert.deepEqual(uniqueHistoryItems([{ ...old, id: "old-body-copy" }], exclusions), []);
+    await writeFile(join(folder, "base.json"), Buffer.concat([bundle.baseBytes, Buffer.from(" ")]));
+    await assert.rejects(historyPublicationExclusions(root, [old]), /checksum/);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
 test("historical assignment preserves prior attempts, visual focus and creator diversity", () => {
   const input = [...Array.from({ length: 10 }, (_, i) => lead(i + 1, "7")), lead(20), lead(21), lead(20), { ...lead(22), visual: false }, { ...lead(23), reason: "reply" as const }];
   const chosen = chooseHistoryLeads(input, new Set(["1", "20"]), 50);

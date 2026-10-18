@@ -910,3 +910,11 @@ Explicit visual typography blocks can contain template placeholders and blank li
 ### 2026-10-18：完整多图引用与明确对白列表
 
 视觉提示词中的双层／三层尖括号是引用语法的一部分，翻译须完整保留，不能只验证内层标签。明确 `Spoken lines:` 列表及其重复出现的对白保留原始字面文字，场景说明正常翻译；继续以九语结构检查及独立语义对照复核实际样本。
+
+### 2026-10-18 — Pace all third-party requests across concurrent collectors
+
+Historical backfill and daily collection share the TwitterAPI.io account, so process-local sleeps cannot enforce its request interval. Serialize search and lookup through a durable lane in the shared spend directory, preserving 6.5-second spacing and transient cooldown. Do not retry HTTP, reclaim unresolved locks automatically, clear failed financial records or use the official API. A rate-limited candidate may be explicitly deferred with immutable operator evidence and zero accepted items; its source assignment and original accounting remain consumed.
+
+Reconcile the historical acceptance count with the latest verified local publication window at each checkpoint, in addition to the frozen baseline. Independent daily publications reduce the pending-addition count and must be replaced by other qualified items. Preserve both old and updated source variants for deduplication; do not assume a capped compatibility window represents a larger database.
+
+Preserve complete decimal quantities before attached units. An unfamiliar unit must not cause the opaque-token matcher to backtrack from a fractional measurement to its integer prefix; model hints must describe the actual source quantity. Revalidate affected cached translations.

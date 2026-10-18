@@ -7,6 +7,9 @@ import { originalBaseSchema } from "../packages/schema/language-packs.ts";
 import { nativeXSourceIssue } from "./x-source.ts";
 import { applyQualityHolds, type QualityHolds } from "./quality-holds.ts";
 import type { TranslationRejection } from "./translation-review.ts";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
+import { verifyLanguagePackManifest, verifyOriginalBase } from "./language-packs.ts";
 
 export const historyLimits = { target: 500, sources: 1500, searches: 750, batch: 50, editorial: 64, visual: 64, translation: 200 } as const;
 export const historyLeadSchema = z.object({ id: z.string().regex(/^\d{1,19}$/), authorID: z.string().regex(/^\d{1,19}$/),
@@ -60,4 +63,17 @@ export function historyBaseline(input: unknown): Catalog {
   const base = originalBaseSchema.safeParse(input);
   if (!base.success) return catalogSchema.parse(input);
   return catalogSchema.parse({ ...base.data, schemaVersion: 1, prompts: base.data.prompts.map(({ localization, ...item }) => item) });
+}
+
+/** Add the verified local published window without replacing the frozen baseline.
+ * These are exclusions, not an assertion that the compatibility window is the full DB. */
+export async function historyPublicationExclusions(root: string, frozen: readonly Prompt[]): Promise<Prompt[]> {
+  let bytes: Buffer;
+  try { bytes = await readFile(join(root, "v2-latest.json")); }
+  catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return [...frozen]; throw error; }
+  const manifest = verifyLanguagePackManifest(bytes);
+  const base = verifyOriginalBase(manifest, await readFile(join(root, "releases", manifest.version, "v2", "base.json")));
+  // Keep both versions of an ID: an old body or cover must not reappear as a new
+  // item after a daily update changes that item's source content.
+  return [...frozen, ...historyBaseline(base).prompts];
 }

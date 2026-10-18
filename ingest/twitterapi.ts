@@ -3,6 +3,7 @@ import { readResponseBytes } from "./network.ts";
 import { parseXUsers, TransientXReadError } from "./x.ts";
 import { xMediaSchema, xPostSchema, type XMedia, type XPost } from "./x-intake.ts";
 import { XSpendBudget, type XSpendPurpose } from "./x-spend.ts";
+import { paceTwitterAPI } from "./twitterapi-pacing.ts";
 
 const id = z.string().regex(/^\d{1,19}$/);
 const optionalReplyID = z.union([id, z.literal("")]).nullish();
@@ -127,6 +128,9 @@ export class TwitterAPIClient {
     if (!key.trim() || /\s/.test(key)) throw new Error("Missing or invalid TwitterAPI key");
   }
   private async read(url: URL, operation: "search" | "lookup", units: number, capture?: CaptureResponse, purpose: XSpendPurpose = "growth") {
+    return paceTwitterAPI(this.budget.root, () => this.readOnce(url, operation, units, capture, purpose));
+  }
+  private async readOnce(url: URL, operation: "search" | "lookup", units: number, capture?: CaptureResponse, purpose: XSpendPurpose = "growth") {
     const reservation = await this.budget.reserve("twitterapi", operation, url.toString(), units, purpose);
     try {
       let response: Response;

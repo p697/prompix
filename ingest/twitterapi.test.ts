@@ -138,9 +138,10 @@ test("ambiguous quote and retweet relationships are never silently converted to 
 test("rate limits preserve long Retry-After periods and capture errors without retrying", async () => {
   const root = await mkdtemp(join(tmpdir(), "prompix-twitterapi-retry-"));
   try {
-    for (const retry of ["3600", new Date(Date.now() + 3600_000).toUTCString()]) {
+    for (const [index, retry] of ["3600", new Date(Date.now() + 3600_000).toUTCString()].entries()) {
       let captured: any, calls = 0;
-      const client = new TwitterAPIClient("fixture-secret", new XSpendBudget(root), (async () => {
+      const account = join(root, String(index)), budget = new XSpendBudget(account);
+      const client = new TwitterAPIClient("fixture-secret", budget, (async () => {
         calls++; return new Response("rate limited", { status: 429, headers: { "retry-after": retry } });
       }) as typeof fetch);
       await assert.rejects(client.search("prompt", undefined, async raw => { captured = raw; }), error =>
@@ -148,6 +149,11 @@ test("rate limits preserve long Retry-After periods and capture errors without r
       assert.equal(calls, 1);
       assert.equal(captured.httpError.status, 429);
       assert.equal(captured.httpError.retryAfter, retry);
+      const ledgerPath = join(account, `${budget.now().toISOString().slice(0, 7)}.json`);
+      const before = await json(ledgerPath, null);
+      await assert.rejects(client.search("another prompt"), /cooldown/);
+      assert.equal(calls, 1);
+      assert.deepEqual(await json(ledgerPath, null), before);
     }
   } finally { await rm(root, { recursive: true, force: true }); }
 });
