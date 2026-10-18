@@ -906,3 +906,7 @@ Historical semantic checks exposed a list-number/quantity confusion and translat
 ## 2026-10-18 — Preserve quoted copy in spaced typography blocks
 
 Explicit visual typography blocks can contain template placeholders and blank lines before a quoted tagline. Preserve that exact tagline with bounded context across those lines, while ending the context at ordinary intervening prose. Revalidate affected history translations using retained source evidence and cumulative request ledgers; do not count uncorrected samples or reset attempts.
+
+### 2026-10-18：完整多图引用与明确对白列表
+
+视觉提示词中的双层／三层尖括号是引用语法的一部分，翻译须完整保留，不能只验证内层标签。明确 `Spoken lines:` 列表及其重复出现的对白保留原始字面文字，场景说明正常翻译；继续以九语结构检查及独立语义对照复核实际样本。
