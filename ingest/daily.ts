@@ -33,9 +33,9 @@ import { applyEditorialReviews, reviewsSchema } from "./editorial.ts";
 import { prepareDailyEditorial } from "./editorial-daily.ts";
 import type { EditorialReport } from "./editorial-runner.ts";
 import { applyDailyVisualPresentation, prepareDailyVisualReview } from "./visual-daily.ts";
-import { websiteMediaNeedsMirroring } from "./website-review.ts";
+import { mirrorPromptMedia } from "./mirror-media.ts";
 import type { VisualReport } from "./visual-review.ts";
-import { aspectRatio, prepareJPEG, publishStudioImages } from "./images.ts";
+import { prepareJPEG, publishStudioImages } from "./images.ts";
 import { publicationText } from "./templates.ts";
 import { countByKind, interleaveLibrary, libraryDelta, retainPublishedLibrary, selectLibrary, type KindCounts, type RetentionReport } from "./library.ts";
 import { beginDailyPublication, clearMatchingPublicationHold, prepareDailyStaging, publishDailyCatalog } from "./daily-publication.ts";
@@ -45,17 +45,6 @@ import { applyQualityHolds, assertNoQualityHolds, readQualityHolds } from "./qua
 const publishing = process.argv.includes("--publish");
 const resumePublishing = process.argv.includes("--resume-publishing");
 if (resumePublishing && !publishing) throw new Error("--resume-publishing requires --publish");
-const mediaHosts = [
-  "api.prompix.dev",
-  "pbs.twimg.com",
-  "video.twimg.com",
-  "cms-assets.youmind.com",
-  "cdn.youmind.com",
-  "customer-qs6wnyfuv0gcybzj.cloudflarestream.com",
-  "github.com",
-  "release-assets.githubusercontent.com",
-  "objects.githubusercontent.com",
-];
 async function run() {
   const report: {
     startedAt: string;
@@ -244,85 +233,11 @@ async function run() {
       join(root, "media-map.json"),
       {},
     );
-    const aspects = await json<Record<string,number>>(join(root,"media-aspects.json"),{});
     const published: Prompt[] = [];
     const mediaFailedIDs = new Set<string>();
     for (const prompt of planned) {
       try {
-        if (prompt.media && publishing && websiteMediaNeedsMirroring(prompt)) {
-          const media = { ...prompt.media, ...(prompt.media.imageURLs ? { imageURLs: [...prompt.media.imageURLs] } : {}) };
-          const targets = [
-            ...(["imageURL", "videoURL"] as const).flatMap(field => media[field] ? [{
-              url: media[field]!, video: field === "videoURL", cover: field === "imageURL",
-              assign: (url: string) => { media[field] = url; },
-            }] : []),
-            ...(media.imageURLs ?? []).map((url, index) => ({
-              url, video: false, cover: false,
-              assign: (mirrored: string) => { media.imageURLs![index] = mirrored; },
-            })),
-          ];
-          for (const target of targets) {
-            const { url, video, cover } = target;
-            if (mediaMap[url]) {
-              target.assign(mediaMap[url]);
-              if (cover) {
-                if (!aspects[url]) {
-                  const cached = await download(mediaMap[url], ['api.prompix.dev'], 8_000_000);
-                  const file = join(root, `aspect-${process.pid}.jpg`);
-                  try { await writeFile(file,cached.bytes); aspects[url] = await aspectRatio(file); }
-                  finally { await rm(file,{force:true}); }
-                  await atomic(join(root,'media-aspects.json'),aspects);
-                }
-                media.aspectRatio = aspects[url];
-              }
-              continue;
-            }
-            const data = await download(
-              url,
-              mediaHosts,
-              video ? 60_000_000 : 20_000_000,
-            );
-            if (video && data.bytes.subarray(4, 8).toString() !== "ftyp")
-              throw new Error("Invalid MP4 signature");
-            if (
-              video
-                ? data.type !== "video/mp4" &&
-                  data.type !== "application/octet-stream"
-                : !["image/jpeg", "image/png", "image/webp"].includes(data.type)
-            )
-              throw new Error("Unexpected media type");
-            await mkdir(join(root, "tmp"), { recursive: true });
-            const input = join(
-              root,
-              "tmp",
-              `media-${process.pid}.${video ? "mp4" : data.type === "image/png" ? "png" : data.type === "image/webp" ? "webp" : "jpg"}`,
-            );
-            const output = video
-              ? input
-              : join(root, "tmp", `preview-${process.pid}.jpg`);
-            try {
-              await writeFile(input, data.bytes);
-              if (!video) await prepareJPEG(input, output);
-              if (!video) {
-                aspects[url] = await aspectRatio(output); if (cover) media.aspectRatio = aspects[url];
-                await atomic(join(root,'media-aspects.json'),aspects);
-              }
-              const hash = createHash("sha256")
-                .update(await readFile(output))
-                .digest("hex");
-              const key = `media/${hash}.${video ? "mp4" : "jpg"}`;
-              await upload(key, output, video ? "video/mp4" : "image/jpeg");
-              mediaMap[url] = `${base}/${key}`;
-              target.assign(mediaMap[url]);
-              await atomic(join(root, "media-map.json"), mediaMap);
-            } finally {
-              await rm(input, { force: true });
-              if (output !== input) await rm(output, { force: true });
-            }
-          }
-          prompt.media = media;
-        }
-        published.push(prompt);
+        published.push(publishing ? await mirrorPromptMedia(prompt, root) : prompt);
       } catch (e) {
         mediaFailedIDs.add(prompt.id);
         report.mediaErrors.push(`${prompt.id}: ${String(e)}`);
@@ -330,6 +245,7 @@ async function run() {
         report.counts.mediaFailed[prompt.kind]++;
       }
     }
+    Object.assign(mediaMap, await json<Record<string, string>>(join(root, "media-map.json"), {}));
     const visual = await prepareDailyVisualReview(published, previous?.prompts ?? [], root, publishing);
     report.visualReview = visual.report;
     for (const id of visual.blockedIDs) excluded.add(id);

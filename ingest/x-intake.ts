@@ -114,7 +114,7 @@ function resolveBodyLinks(body: string, post: XPost, media: readonly XMedia[], e
 function inferModality(label: string, context: string, body: string, post: XPost, media: readonly XMedia[]): { kind: Prompt["kind"]; model?: string } | { reason: string } {
   const explicit = /image|图片|画像/.test(label) ? "image" : /video|视频|動画/.test(label) ? "video" : /website|web|网页|ウェブ/.test(label) ? "web" : /text|文本|テキスト/.test(label) ? "text" : undefined;
   const models: { pattern: RegExp; kind: Prompt["kind"] }[] = [
-    { pattern: /\b(?:Nano Banana(?: Pro)?|GPT[- ]Image(?:[- ]\d+(?:\.\d+)*)?|Midjourney|FLUX(?:\.\d+)?|Stable Diffusion)\b/i, kind: "image" },
+    { pattern: /\b(?:Nano Banana(?: Pro)?|ChatGPT\s+(?:images|image generation)|GPT[- ]Image(?:[- ]\d+(?:\.\d+)*)?|Midjourney|FLUX(?:\.\d+)?|Stable Diffusion)\b/i, kind: "image" },
     { pattern: /\b(?:Seedance(?:\s+\d+(?:\.\d+)*)?|Sora(?:\s+\d+)?|Veo(?:\s+\d+(?:\.\d+)*)?|Kling(?:\s+\d+(?:\.\d+)*)?|Runway Gen[- ]\d+)\b/i, kind: "video" },
     { pattern: /\b(?:Claude(?:\s+(?:Opus|Sonnet|Haiku))?(?:\s+\d+(?:\.\d+)*)?|ChatGPT|GPT[- ]\d+(?:\.\d+)*)\b/i, kind: "text" },
   ];
@@ -127,11 +127,17 @@ function inferModality(label: string, context: string, body: string, post: XPost
   const evidence = new Set(matched.filter(model => model.kind !== "text").map(model => model.kind));
   if (/\b(?:write|draft|rewrite)\b[^\n.!?]{0,80}\b(?:story|stories|essay|email|letter|article|poem|response|reply|summary|outline|report|paragraph|blog post)\b|\b(?:summari[sz]e|translate|proofread)\b|\b(?:answer|respond to)\s+(?:my|the|these|each)\s+questions?\b|(?:撰写|改写|翻译|总结|概括|润色|回答)[^\n。！？]{0,40}(?:文本|文章|故事|邮件|问题|内容|段落)/iu.test(body)) evidence.add("text");
   if (/\b(?:build|create|implement|design|code)\b[^\n.!?]{0,80}\b(?:website|web page|landing page|web app)\b|(?:创建|搭建|开发|设计)[^\n。！？]{0,40}(?:网页|网站)/iu.test(body)) evidence.add("web");
+  // A general chat host does not determine the final output. Require an explicit
+  // creation instruction plus matching attachments before inferring visual output.
+  const attachedKinds = new Set(verifiedMedia(post, media).map(item => item.type === "photo" ? "image" as const : "video" as const));
+  const imageInstruction = /\b(?:create|generate|render|draw|paint|design)\b[^\n.!?]{0,100}\b(?:image|portrait|photograph|photo|illustration|poster|logo|sculpture|artwork|picture|sketch)\b/iu.test(body);
+  const videoInstruction = /\b(?:opening shot|final shot|slow.motion|camera movements?|animated (?:film|video)|video clip)\b/iu.test(body);
+  if (attachedKinds.has("video") && videoInstruction) evidence.add("video");
+  else if (attachedKinds.has("image") && imageInstruction) evidence.add("image");
   if (evidence.size > 1) return { reason: "conflicting-modality-evidence" };
   if (evidence.size === 1) { const kind = [...evidence][0]; return { kind, ...(matched.find(model => model.kind === kind) ?? {}) }; }
   const textModel = matched.find(model => model.kind === "text");
   if (textModel) return { kind: "text", model: textModel.model };
-  const attachedKinds = new Set(verifiedMedia(post, media).map(item => item.type === "photo" ? "image" as const : "video" as const));
   return attachedKinds.size === 1 ? { kind: [...attachedKinds][0] } : { reason: "ambiguous-modality" };
 }
 
