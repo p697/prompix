@@ -11,6 +11,7 @@ import { editorialCacheSchema, editorialLedgerSchema, editorialVersion, runEdito
 import { codexEditorialProvider } from "./editorial-provider.ts";
 import { selectLibrary } from "./library.ts";
 import { publicationText } from "./templates.ts";
+import { websiteReviewer } from "./website-review.ts";
 import { mirrorPromptMedia } from "./mirror-media.ts";
 import { runVisualReview, applyVisualPresentation, visualCacheSchema, visualLedgerSchema, visualReviewVersion } from "./visual-review.ts";
 import { codexVisualProvider } from "./visual-provider.ts";
@@ -68,6 +69,10 @@ export async function runHistoryBatch(directory: string, input: HistoryBatch, pr
     }), previous);
     report.editorialEligible = planned.length;
     await phase("media");
+    // Reuse previously mirrored objects without replacing any batch progress.
+    for (const name of ["media-map.json", "media-aspects.json"]) {
+      if (await json(join(directory, name), null) === null) await atomic(join(directory, name), await json(join(sharedRoot, name), {}));
+    }
     const mirrored: Prompt[] = [], mediaErrors: { id: string; error: string }[] = [];
     for (const item of planned) {
       try { mirrored.push(await mirrorPromptMedia(item, directory)); }
@@ -81,9 +86,10 @@ export async function runHistoryBatch(directory: string, input: HistoryBatch, pr
     if (visualLedger && visualLedger.day !== day) throw new Error("History visual ledger identity changed");
     let visualSequence = visualLedger?.requests ?? 0;
     const temporary = await mkdtemp(join(tmpdir(), "prompix-history-review-"));
+    const reviewWebsite = mirrored.some(p => p.kind === "web") ? await websiteReviewer(sharedRoot) : undefined;
     let visual;
     try {
-      visual = await runVisualReview({ prompts: mirrored, previous: [], cache: visualCache, ledger: visualLedger, day, maxRequests: historyLimits.visual,
+      visual = await runVisualReview({ prompts: mirrored, previous: [], cache: visualCache, ledger: visualLedger, day, maxRequests: historyLimits.visual, reviewWebsite,
         prepareMedia: item => prepareVisualMedia(item, temporary),
         provider: async items => codexVisualProvider(env.PROMPIX_CODEX, response => atomic(join(directory, "visual-responses", `${visualSequence}.json`), response))(items),
         persistCache: value => atomic(visualPath, value), persistLedger: async value => { await atomic(visualLedgerPath, value); visualSequence = value.requests; } });

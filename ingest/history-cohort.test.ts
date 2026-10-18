@@ -70,3 +70,8 @@ test("a fully rejected batch remains a durable empty result, without weakening p
   assert.deepEqual(historyCatalogSchema.parse({ schemaVersion: 1, version: "empty-batch", prompts: [] }).prompts, []);
   assert.throws(() => historyBaseline({ schemaVersion: 1, version: "empty", prompts: [] }));
 });
+
+test("an identical visible cover cannot inflate the unique acceptance sample", () => {
+  const first = item(), other = { ...first, id: "different-source", prompt: "A completely different description of this same image." };
+  assert.equal(uniqueHistoryItems([other], [first]).length, 0);
+});

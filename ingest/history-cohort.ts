@@ -32,8 +32,9 @@ export function chooseHistoryLeads(leads: readonly XSearchLead[], used: Readonly
 }
 export function uniqueHistoryItems(items: readonly Prompt[], previous: readonly Prompt[]): Prompt[] {
   const ids = new Set(previous.map(p => p.id)), hashes = new Set(previous.map(p => fingerprint(p.prompt)));
-  return items.filter(item => { const hash = fingerprint(item.prompt); if (ids.has(item.id) || hashes.has(hash)) return false;
-    ids.add(item.id); hashes.add(hash); return true; });
+  const covers = new Set(previous.flatMap(p => p.media?.imageURL ? [p.media.imageURL] : []));
+  return items.filter(item => { const hash = fingerprint(item.prompt); if (ids.has(item.id) || hashes.has(hash) || (item.media?.imageURL && covers.has(item.media.imageURL))) return false;
+    ids.add(item.id); hashes.add(hash); if (item.media?.imageURL) covers.add(item.media.imageURL); return true; });
 }
 export function completeHistoryItem(item: Prompt, now = Date.now()): boolean {
   if (item.source.acquiredVia !== "twitterapi" || nativeXSourceIssue(item, now) ||
