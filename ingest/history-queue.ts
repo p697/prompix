@@ -29,7 +29,7 @@ export async function enqueueHistoryPipeline(queue: StageQueue, root: string, ru
   for (let start = 0; start < batch.leads.length; start += 4) await queue.enqueue({ id: `${prefix}:semantic:${start}`, run, stage: "semantic", dependency: `${prefix}:translate`, payload: { ...payload, start } });
 }
 
-export async function processHistoryStage(queue: StageQueue, root: string, shared: string, job: QueueJob) {
+export async function processHistoryStage(queue: StageQueue, root: string, shared: string, job: QueueJob, options: { beforeRequest?: () => Promise<void> } = {}) {
   const run = runName.parse(job.run_id), payload = payloadSchema.parse(job.payload), directory = join(root, run, payload.batch);
   const batch = historyBatchSchema.parse(await json(join(directory, "manifest.json"), null));
   if (queueIdentity(batch) !== payload.manifestSHA || batch.id !== payload.batch) throw new Error("Queue batch identity changed");
@@ -43,7 +43,7 @@ export async function processHistoryStage(queue: StageQueue, root: string, share
         if (!source || predecessor?.output.sourceSHA !== queueIdentity(source)) throw new Error("Reviewed stage artifact changed");
       }
       const items = await runHistoryBatch(directory, batch, prior, shared, undefined, false, {
-        stage: job.stage === "collect" ? "source" : job.stage === "review" ? "review" : "translation", chineseOnly: true, translationConcurrency: 1, checkLease: () => queue.renew(job) });
+        stage: job.stage === "collect" ? "source" : job.stage === "review" ? "review" : "translation", chineseOnly: true, translationConcurrency: 1, checkLease: async () => { await options.beforeRequest?.(); await queue.renew(job); } });
       const source = await json(join(directory, "source-catalog.json"), null);
       const complete = await json(join(directory, "complete.json"), null);
       return { count: items.length, sourceSHA: source ? queueIdentity(source) : null, translatedSHA: complete ? queueIdentity(complete) : null, published: 0 };
@@ -57,6 +57,7 @@ export async function processHistoryStage(queue: StageQueue, root: string, share
     await verifyReviewedHistory(directory, shared, items);
     if (!items.every(item => completeHistoryItem(item, Date.now(), requiredIngestLocales))) throw new Error("Required history quality changed");
     const reviewDirectory = join(directory, "semantic", `${payload.start}-${job.attempts}`);
+    await options.beforeRequest?.();
     await queue.renew(job);
     const review = await reviewTranslationSemantics(items, "zh-Hans", reviewDirectory, process.env.PROMPIX_CODEX ?? "codex");
     await atomic(join(reviewDirectory, "result.json"), review);

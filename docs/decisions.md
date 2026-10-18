@@ -926,3 +926,8 @@ A common transport outage must stop historical searching instead of draining all
 ## 2026-10-18 — Original + Chinese and independent ingest stages
 
 New history queue ingestion requires original content plus validated Simplified Chinese. Other locales are separate revision-bound requests; missing optional languages do not block acceptance, and rejected optional outputs remain unavailable. Collection, exact-source/full-media review, Chinese translation and independent semantic review use durable private Postgres jobs with fenced leases, global concurrency and retained attempts. Unknown external results require reconciliation rather than automatic replay. Test existing data with cold Chinese/model checks before approving any 10,000-item run; keep daily publication limits and the paused original cohort intact.
+
+
+## 2026-10-19：历史补库按独立队列恢复
+
+用户批准先总量2000，质量与费用正常后继续10000，总预算100美元，充值仍需用户完成。保留原文＋简中与独立审核；计数区分生产与暂存，不恢复旧九语串行任务。新增有期限的专项预算，保守包含共享账本既有费用和跨月费用；默认日常预算保持20美元。2000处由owner保存抽检与成本/额度证据后继续，不自动以数量达标代替质量验收。

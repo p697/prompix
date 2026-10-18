@@ -104,3 +104,22 @@ test("unparseable census is a preflight refusal and never creates a charge", () 
   await assert.rejects(new XSpendBudget(root, 20, 1, time, true).reserve("twitterapi", "search", "growth", 1), XBudgetExceeded);
   assert.equal(await json(join(root, "2026-10.json"), null), null);
 }));
+
+test("campaign requires explicit authority and retains prior and uncertain spend across months", () => fixture(async root => {
+  assert.throws(() => new XSpendBudget(root, 100, 10));
+  const terms = { version: 1 as const, id: "history-2000", startMonth: "2026-06", expiresAt: "2026-12-01T00:00:00Z", totalUSD: 100 };
+  const first = new XSpendBudget(root, 100, 100, time, false, terms);
+  for (const month of ["2026-06", "2026-07", "2026-08", "2026-09"]) await atomic(join(root, `${month}.json`), { version: 1, month, opening: 20_000_000, entries: [] });
+  await atomic(join(root, "2026-10.json"), { version: 1, month: "2026-10", opening: 19_999_700, entries: [] });
+  await (await first.reserve("twitterapi", "lookup", "unknown", 1)).finish();
+  const november = new XSpendBudget(root, 100, 100, () => new Date("2026-11-01T00:00:00Z"), false, { ...terms, id: "renamed" });
+  await (await november.reserve("twitterapi", "lookup", "last", 1)).finish(1);
+  await assert.rejects(november.reserve("twitterapi", "lookup", "over", 1), /Campaign total/);
+  const old = await json<any>(join(root, "2026-10.json"), null);
+  assert.equal(old.entries[0].state, "uncertain"); assert.equal(old.opening, 19_999_700);
+}));
+test("expired campaign and authority above the user ceiling fail before requests", () => fixture(async root => {
+  const terms = { version: 1 as const, id: "history", startMonth: "2026-10", expiresAt: "2026-10-16T00:00:00Z", totalUSD: 100 };
+  await assert.rejects(new XSpendBudget(root, 100, 100, time, false, terms).reserve("twitterapi", "search", "expired", 20), /inactive/);
+  assert.throws(() => new XSpendBudget(root, 101, 100, time, false, { ...terms, totalUSD: 101 }));
+}));

@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
-import { mkdir, rm } from "node:fs/promises";
+import { mkdir, rm, readdir } from "node:fs/promises";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
 import { z } from "zod";
@@ -19,6 +20,10 @@ const ledgerSchema = z.object({ version: z.literal(1), month: z.string().regex(/
   .refine(ledger => new Set(ledger.entries.map(e => e.id)).size === ledger.entries.length &&
     ledger.entries.every(e => e.at.startsWith(`${ledger.month}-`)), "Invalid X ledger entries");
 export class XBudgetExceeded extends Error {}
+export const campaignBudgetSchema = z.object({ version: z.literal(1), id: z.string().regex(/^[a-z0-9-]{1,80}$/),
+  startMonth: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/), expiresAt: z.iso.datetime(),
+  totalUSD: z.number().positive().max(100) }).strict();
+export type CampaignBudget = z.infer<typeof campaignBudgetSchema>;
 export const xUnitMicroUSD = { official: { post: 5000, user: 10000 }, twitterapi: { post: 150, user: 180 } } as const;
 // TweetAPI's bulk lookup bills one call, including empty results, at the PAYG rate.
 export const tweetAPICallMicroUSD = 500;
@@ -49,15 +54,18 @@ export function configuredXSpendBudget(environment: NodeJS.ProcessEnv = process.
     return undefined;
   }
   const monthly = Number(environment.PROMPIX_X_MONTHLY_USD);
+  const campaign = environment.PROMPIX_X_CAMPAIGN_BUDGET_FILE
+    ? campaignBudgetSchema.parse(JSON.parse(readFileSync(environment.PROMPIX_X_CAMPAIGN_BUDGET_FILE, "utf8"))) : undefined;
   return new XSpendBudget(environment.PROMPIX_X_SPEND_DIR ?? join(homedir(), ".local/share/prompix/x-spend"), monthly,
-    Number(environment.PROMPIX_X_DAILY_USD ?? monthly), () => new Date(), reserve === "1");
+    Number(environment.PROMPIX_X_DAILY_USD ?? monthly), () => new Date(), reserve === "1", campaign);
 }
 
 /** Shared account ledger. Never stores credentials or source text. */
 export class XSpendBudget {
   constructor(readonly root: string, readonly monthlyUSD = 20, readonly dailyUSD = 1,
-    readonly now: () => Date = () => new Date(), readonly protectMaintenance = false) {
-    if (!Number.isFinite(monthlyUSD) || monthlyUSD <= 0 || monthlyUSD > 20 ||
+    readonly now: () => Date = () => new Date(), readonly protectMaintenance = false, readonly campaign?: CampaignBudget) {
+    if (campaign) campaignBudgetSchema.parse(campaign);
+    if (!Number.isFinite(monthlyUSD) || monthlyUSD <= 0 || monthlyUSD > (campaign?.totalUSD ?? 20) ||
         !Number.isFinite(dailyUSD) || dailyUSD <= 0 || dailyUSD > monthlyUSD) throw new Error("Invalid X dollar budget");
   }
   private async transaction<T>(operation: () => Promise<T>) {
@@ -97,6 +105,19 @@ export class XSpendBudget {
     await this.transaction(async () => {
       const ledger = ledgerSchema.parse(await json(path, { version: 1, month, opening: 0, entries: [] }));
       if (ledger.month !== month) throw new Error("X spend ledger month mismatch");
+      if (this.campaign) {
+        if (month < this.campaign.startMonth || Date.parse(at) >= Date.parse(this.campaign.expiresAt))
+          throw new XBudgetExceeded("Campaign authorization is inactive; no request sent");
+        // Include previous tests, ordinary jobs and unknown charges. A month rollover
+        // or different campaign ID cannot reset this cumulative authorization.
+        let total = ledger.opening + ledger.entries.reduce((sum, e) => sum + e.accounted, 0);
+        for (const file of (await readdir(this.root)).filter(f => /^\d{4}-\d{2}\.json$/.test(f) && f.slice(0, 7) >= this.campaign!.startMonth && f.slice(0, 7) < month)) {
+          const old = ledgerSchema.parse(await json(join(this.root, file), null));
+          if (old.month !== file.slice(0, 7)) throw new Error("Campaign ledger month mismatch");
+          total += old.opening + old.entries.reduce((sum, e) => sum + e.accounted, 0);
+        }
+        if (total + reserved > Math.round(this.campaign.totalUSD * 1e6)) throw new XBudgetExceeded("Campaign total dollar budget reached; no request sent");
+      }
       if (provider === "rapidapi") {
         const fees = ledger.entries.filter(e => e.provider === "rapidapi" && e.operation === "subscription");
         if (operation === "subscription" && fees.length) {
