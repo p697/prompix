@@ -105,3 +105,5 @@ Independent semantic comparison found numbered instructions translated into obje
 ### Spaced typography blocks
 
 A quoted tagline below a displayed typography cue can be separated from that cue by blank lines and placeholder-only lines. Translation now retains that literal copy across this bounded block; intervening scene prose ends the context and stays translatable. Synthetic regression coverage checks exact restoration, rejection of altered copy, and ordinary style quotations. An offline comparison against 243 retained historical items identifies only the eight translated localizations of the observed poster; those must be revalidated under their original request allowances. This is not a claim that all 500 items have passed acceptance.
+
+多图视频提示词的双层、三层尖括号引用现在整体保护，避免译文保留内层标记却丢失外层分隔符。明确列出的 `Spoken lines:` 对白也整体保留，包含 Markdown 强调和后续同句复用；普通场景形容词仍可翻译。新增合成回归覆盖原样还原、既有译文分隔符缺失拒绝及非对白边界。历史问题按原批次登记精确拒绝与复核，不清零调用记录。

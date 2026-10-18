@@ -940,3 +940,28 @@ test("multiline typography preserves quoted copy after template fields without f
     assert.ok(!protectText(separated, true).protectedValues.includes('“dreamlike”'));
   }
 });
+
+test("multi-angle image references survive translation and reject incomplete inherited delimiters", () => {
+  const source = { ...item, kind: 'video' as const, prompt: 'A traveler <<<image_1>>> enters a station <<image_2>>. Keep <style> soft. Show <<<image_1>>> again.' };
+  const mask = protectText(source.prompt, true);
+  assert.deepEqual(mask.protectedValues, ['<<<image_1>>>', '<<image_2>>', '<style>', '<<<image_1>>>']);
+  assert.equal(restoreText(mask.masked, mask.protectedValues), source.prompt);
+  const cache = emptyTranslationCache();
+  cache.segments.en = Object.fromEntries(promptSegments(source).map(s => [s.id, s.text]));
+  const translated = localizePrompt(source, 'en', cache)!;
+  assert.equal(validLocalizedText(source, 'en', translated), true);
+  for (const broken of ['<image_1>', '<<image_1>>'])
+    assert.equal(validLocalizedText(source, 'en', { ...translated, prompt: translated.prompt.replace('<<<image_1>>>', broken) }), false);
+});
+
+test("explicit spoken-line lists preserve all dialogue and repeated script occurrences", () => {
+  const source = 'She smiles: *"Good morning!"*\nA friend replies: *"Shall we go?"*\n\n**Spoken lines**: *"Good morning!"* / *"Shall we go?"* (friend) / *"After you."*\nUse a "dreamlike" visual mood.';
+  const mask = protectText(source, true);
+  for (const line of ['"Good morning!"', '"Shall we go?"', '"After you."']) assert.ok(mask.protectedValues.includes(line));
+  assert.equal(mask.protectedValues.filter(v => v === '"Good morning!"').length, 2);
+  assert.equal(mask.protectedValues.filter(v => v === '"Shall we go?"').length, 2);
+  assert.ok(mask.masked.includes('"dreamlike"'));
+  assert.equal(restoreText(mask.masked, mask.protectedValues), source);
+  assert.equal(protectText(source).protectedValues.includes('"Good morning!"'), false);
+  assert.ok(protectText('The spoken lines should sound "natural".', true).masked.includes('"natural"'));
+});
