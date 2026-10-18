@@ -73,6 +73,13 @@ function renderedLiterals(text: string, preserveLettering: boolean): { start: nu
   // references to a caption. Otherwise a whole-quote token overlaps an inner placeholder.
   const literals = new Set(ranges.map(range => text.slice(range.start, range.end)));
   for (const match of text.matchAll(quotes)) if (literals.has(match[0]) && !ranges.some(range => range.start === match.index)) ranges.push({ start: match.index!, end: match.index! + match[0].length });
+  if (preserveLettering) for (const match of text.matchAll(/^(\[[A-Z][A-Z0-9_]*\])[ \t]*=[ \t]*([^\r\n]+)$/gm)) {
+    const end = match.index! + match[0].length, start = end - match[2].length;
+    const usedAsLettering = text.slice(end).split(/\n\s*\n/).some(paragraph => paragraph.length <= 2000 && paragraph.includes(match[1])
+      && /\b(?:typography|lettering|caption|font|serif|uppercase|lowercase|slogan|headline)\b|字体|字體|字样|字樣|排版|标语|標語/iu.test(paragraph)
+      && /\b(?:show|display|write|render|place|print|add)\b|显示|顯示|写|寫|呈现|呈現|添加/iu.test(paragraph));
+    if (usedAsLettering) ranges.push({ start, end });
+  }
   return ranges;
 }
 /** Clear fill-in instructions are prose; short labels and identifier-like forms stay opaque. */
@@ -105,6 +112,10 @@ export function protectText(text: string, preserveLettering = false) {
   const collectRanges = (part: string, offset = 0): { start: number; end: number }[] => [...part.matchAll(opaque)].flatMap(match => {
     const start = offset + match.index!;
     if (match[0].startsWith("[") && humanBracket(match[0].slice(1, -1), start, start + match[0].length)) return collectRanges(match[0].slice(1, -1), start + 1);
+    // In age/decade prose, the suffix is plural grammar, not a seconds unit.
+    // Protect the numeral while allowing "early 20s" to become "20岁出头".
+    if (/^(?:[2-9]0|[12]\d{2}0)s$/i.test(match[0]) && /\b(?:(?:early|mid|late)[ -]?|(?:her|his|their|the)\s+)$/i.test(text.slice(Math.max(0, start - 20), start)))
+      return [{ start, end: start + match[0].length - 1 }];
     return [{ start, end: start + match[0].length }];
   });
   const ranges = collectRanges(text);
@@ -122,7 +133,12 @@ export function protectText(text: string, preserveLettering = false) {
 export function restoreText(masked: string, protectedValues: readonly string[]): string {
   const tokens = [...masked.matchAll(/⟦PP(\d+)⟧/g)].map(m => Number(m[1])).sort((a, b) => a - b);
   if (tokens.length !== protectedValues.length || tokens.some((token, index) => token !== index)) {
-    throw new Error("Translation changed, reordered or duplicated protected syntax");
+    const expected = Array.from({ length: protectedValues.length }, (_, index) => index);
+    const missing = expected.filter(index => !tokens.includes(index));
+    const duplicate = [...new Set(tokens.filter((token, index) => tokens.indexOf(token) !== index))];
+    const unexpected = [...new Set(tokens.filter(token => token >= protectedValues.length))];
+    const describe = (values: number[]) => values.slice(0, 20).map(value => `⟦PP${value}⟧`).join(", ") || "none";
+    throw new Error(`Translation changed or duplicated protected syntax; missing: ${describe(missing)}; duplicate: ${describe(duplicate)}; unexpected: ${describe(unexpected)}`);
   }
   return masked.replace(/⟦PP(\d+)⟧/g, (_, index) => protectedValues[Number(index)]);
 }

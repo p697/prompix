@@ -39,6 +39,7 @@ test("opaque syntax is preserved exactly and natural word order may reorder it",
   assert.throws(() => restoreText(protectedText.masked.replace("⟦PP0⟧", "broken"), protectedText.protectedValues));
   assert.throws(() => restoreText(protectedText.masked + "⟦PP0⟧", protectedText.protectedValues));
   assert.equal(restoreText("⟦PP1⟧ ⟦PP0⟧", ["a", "b"]), "b a");
+  assert.throws(() => restoreText("⟦PP1⟧ ⟦PP1⟧ ⟦PP9⟧", ["a", "b"]), /missing: ⟦PP0⟧; duplicate: ⟦PP1⟧; unexpected: ⟦PP9⟧/);
   assert.deepEqual(protectText("55.6万本场点赞，12.3w viewers and 68.7萬總計").protectedValues, ["55.6万", "12.3w", "68.7萬"]);
 });
 test("Skill frontmatter and fenced implementation remain opaque", () => {
@@ -47,6 +48,25 @@ test("Skill frontmatter and fenced implementation remain opaque", () => {
   assert.equal(protectedText.protectedValues[0], text.split("\nExplain")[0]);
   assert.match(protectedText.masked, /Explain the workflow/);
   assert.equal(restoreText(protectedText.masked, protectedText.protectedValues), text);
+});
+
+test("age and decade plurals remain translatable without changing actual seconds units", () => {
+  const source = "A woman in her early 20s, styled like the late 1950s. Hold for 20s at 24fps.";
+  const result = protectText(source);
+  assert.deepEqual(result.protectedValues, ["20", "1950", "20s", "24fps"]);
+  assert.equal(restoreText(result.masked, result.protectedValues), source);
+  assert.equal(restoreText("一位⟦PP0⟧岁出头的女性，采用⟦PP1⟧年代末的风格。保持⟦PP2⟧，帧率为⟦PP3⟧。", result.protectedValues), "一位20岁出头的女性，采用1950年代末的风格。保持20s，帧率为24fps。");
+});
+
+test("values assigned to rendered visual lettering stay literal while descriptive inputs remain prose", () => {
+  const source = "[CITY] = KYOTO\n[QUOTE] = Follow the quiet river.\n[SUBJECT] = a small paper boat\n\nDepict [SUBJECT] floating through [CITY].\n\nPlace elegant typography at the top. Show [CITY] in uppercase serif, with [QUOTE] beneath it in smaller type.";
+  const protectedText = protectText(source, true);
+  assert.ok(protectedText.protectedValues.includes("KYOTO"));
+  assert.ok(protectedText.protectedValues.includes("Follow the quiet river."));
+  assert.ok(!protectedText.protectedValues.includes("a small paper boat"));
+  assert.equal(restoreText(protectedText.masked, protectedText.protectedValues), source);
+  assert.ok(!protectText(source, false).protectedValues.includes("KYOTO"));
+  assert.ok(!protectText("[CITY] = KYOTO\n\nDepict [CITY] at sunrise.", true).protectedValues.includes("KYOTO"));
 });
 test("JSON keys, nesting and non-string parameters survive translated values", () => {
   const jsonItem = { ...item, prompt: JSON.stringify({ prompt: "Create a portrait of {subject}", seed: 42, model: "custom_model_v2", aspect_ratio: "16:9", style_preset: "cinematic", html: "<h1>Hello</h1>", style: ["Soft light", { color_space: "sRGB", enabled: true }] }) };

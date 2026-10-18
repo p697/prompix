@@ -3,7 +3,8 @@ import { isAbsolute, join, relative, resolve } from "node:path";
 import { z } from "zod";
 import { catalogSchema, type Prompt } from "../packages/schema/catalog.ts";
 import { atomic, json, lockContent, repo, writeImmutableBytes } from "../ingest/publication.ts";
-import { historyBaseline, historyCatalogSchema, historyBatchSchema, historyLeadSchema, historyLimits, chooseHistoryLeads, completeHistoryItem, uniqueHistoryItems } from "../ingest/history-cohort.ts";
+import { historyBaseline, historyCatalogSchema, historyBatchSchema, historyLeadSchema, historyLimits, chooseHistoryLeads, currentHistoryAcceptance } from "../ingest/history-cohort.ts";
+import { readQualityHolds } from "../ingest/quality-holds.ts";
 import { runHistoryBatch } from "../ingest/history-batch.ts";
 import { searchPlanSchema, readXSearchPlan, runXSearchPlan } from "../ingest/x-search-plan.ts";
 import { selectXSearchLeads, type XSearchLead } from "../ingest/x-search-admission.ts";
@@ -30,6 +31,10 @@ try {
   if (!budget || budget.monthlyUSD > 20) throw new Error("History must use the existing shared monthly budget, at most $20");
   const execute = process.argv.includes("--execute");
   const report: Record<string, unknown> = await json(join(directory, "progress.json"), { startedAt: new Date().toISOString(), staged: 0, published: 0 });
+  if (execute && report.error) {
+    report.priorErrors = [...(Array.isArray(report.priorErrors) ? report.priorErrors : []), { at: report.updatedAt, error: report.error }];
+    delete report.error;
+  }
   const save = async (status: string, extra: Record<string, unknown> = {}) => {
     Object.assign(report, extra, { status, updatedAt: new Date().toISOString() }); await atomic(join(directory, "progress.json"), report);
     console.log(JSON.stringify({ status, staged: report.staged, assigned: report.assigned, searches: report.searches, batch: report.batch }));
@@ -45,7 +50,9 @@ try {
       if (batches.some(b => b.manifest.id !== b.directory.split("/").at(-1))) throw new Error("Batch identity does not match directory");
       const assigned = batches.flatMap(b => b.manifest.leads.map(l => l.id));
       if (new Set(assigned).size !== assigned.length || assigned.length > config.maximumSources) throw new Error("Historical source assignment budget or uniqueness violated");
-      const staged = uniqueHistoryItems(batches.flatMap(b => b.catalog ? historyCatalogSchema.parse(b.catalog).prompts : []), baseline.prompts).filter(p => completeHistoryItem(p));
+      const holds = await readQualityHolds(config.sharedRoot);
+      const moderation = await json<{ removedIDs: string[] }>(join(config.sharedRoot, "moderation.json"), { removedIDs: [] });
+      const staged = currentHistoryAcceptance(batches.flatMap(b => b.catalog ? historyCatalogSchema.parse(b.catalog).prompts : []), baseline.prompts, holds, moderation.removedIDs);
       if (staged.length > config.target) throw new Error("Acceptance target exceeded");
       await atomic(join(directory, "catalog.staged.json"), { schemaVersion: 1, version: "history-cohort500", prompts: staged, removedIDs: [] });
       await save(execute ? "running" : "dry-run", { staged: staged.length, assigned: assigned.length, published: 0,
