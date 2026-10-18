@@ -15,6 +15,7 @@ test("locale requests share one immutable job across callers and reject stale co
     const queue = new StageQueue(writer);
     const a = await requestLocaleTranslation(queue, root, source, "zh-Hans"), b = await requestLocaleTranslation(queue, root, source, "zh-Hans");
     assert.equal(a, b);
+    assert.equal(await requestLocaleTranslation(queue, root, { ...source, source: { ...source.source, method: source.source.method + " refreshed" } }, "zh-Hans"), a);
     const job = (await queue.claim("locales", ["locale"]))!;
     let calls = 0;
     const result = await processLocaleStage(root, root, job, async () => source, {
