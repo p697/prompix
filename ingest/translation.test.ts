@@ -57,6 +57,17 @@ test("age and decade plurals remain translatable without changing actual seconds
   assert.equal(restoreText(result.masked, result.protectedValues), source);
   assert.equal(restoreText("一位⟦PP0⟧岁出头的女性，采用⟦PP1⟧年代末的风格。保持⟦PP2⟧，帧率为⟦PP3⟧。", result.protectedValues), "一位20岁出头的女性，采用1950年代末的风格。保持20s，帧率为24fps。");
 });
+
+test("values assigned to rendered visual lettering stay literal while descriptive inputs remain prose", () => {
+  const source = "[CITY] = KYOTO\n[QUOTE] = Follow the quiet river.\n[SUBJECT] = a small paper boat\n\nDepict [SUBJECT] floating through [CITY].\n\nPlace elegant typography at the top. Show [CITY] in uppercase serif, with [QUOTE] beneath it in smaller type.";
+  const protectedText = protectText(source, true);
+  assert.ok(protectedText.protectedValues.includes("KYOTO"));
+  assert.ok(protectedText.protectedValues.includes("Follow the quiet river."));
+  assert.ok(!protectedText.protectedValues.includes("a small paper boat"));
+  assert.equal(restoreText(protectedText.masked, protectedText.protectedValues), source);
+  assert.ok(!protectText(source, false).protectedValues.includes("KYOTO"));
+  assert.ok(!protectText("[CITY] = KYOTO\n\nDepict [CITY] at sunrise.", true).protectedValues.includes("KYOTO"));
+});
 test("JSON keys, nesting and non-string parameters survive translated values", () => {
   const jsonItem = { ...item, prompt: JSON.stringify({ prompt: "Create a portrait of {subject}", seed: 42, model: "custom_model_v2", aspect_ratio: "16:9", style_preset: "cinematic", html: "<h1>Hello</h1>", style: ["Soft light", { color_space: "sRGB", enabled: true }] }) };
   const cache = emptyTranslationCache();

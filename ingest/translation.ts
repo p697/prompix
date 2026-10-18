@@ -73,6 +73,13 @@ function renderedLiterals(text: string, preserveLettering: boolean): { start: nu
   // references to a caption. Otherwise a whole-quote token overlaps an inner placeholder.
   const literals = new Set(ranges.map(range => text.slice(range.start, range.end)));
   for (const match of text.matchAll(quotes)) if (literals.has(match[0]) && !ranges.some(range => range.start === match.index)) ranges.push({ start: match.index!, end: match.index! + match[0].length });
+  if (preserveLettering) for (const match of text.matchAll(/^(\[[A-Z][A-Z0-9_]*\])[ \t]*=[ \t]*([^\r\n]+)$/gm)) {
+    const end = match.index! + match[0].length, start = end - match[2].length;
+    const usedAsLettering = text.slice(end).split(/\n\s*\n/).some(paragraph => paragraph.length <= 2000 && paragraph.includes(match[1])
+      && /\b(?:typography|lettering|caption|font|serif|uppercase|lowercase|slogan|headline)\b|字体|字體|字样|字樣|排版|标语|標語/iu.test(paragraph)
+      && /\b(?:show|display|write|render|place|print|add)\b|显示|顯示|写|寫|呈现|呈現|添加/iu.test(paragraph));
+    if (usedAsLettering) ranges.push({ start, end });
+  }
   return ranges;
 }
 /** Clear fill-in instructions are prose; short labels and identifier-like forms stay opaque. */
