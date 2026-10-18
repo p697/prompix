@@ -145,3 +145,31 @@ test("large history stops before exceeding checkpoint capacity or buying an unre
   assert.equal(result.status, "checkpoint-limit"); assert.equal(result.requestsThisRun, 0);
   assert.equal((await readXSearchPlan(directory, p)).state.attempts.length, 10000);
 }));
+
+test("owner deferral preserves exhausted failures and charges while other queries continue", async () => fixture(async root => {
+  const { deferXSearchQuery } = await import('./x-search-plan.ts');
+  const directory = join(root, 'deferred'), p = plan(2), budgetRoot = join(root, 'spend');
+  let time = Date.parse(at), calls = 0;
+  const clock = () => new Date(time), wait = async (ms: number) => { time += ms; };
+  const budget = new XSpendBudget(budgetRoot, 20, 1, clock);
+  const failing = new TwitterAPIClient('fixture-key', budget, (async () => { calls++; return new Response('busy', { status: 503 }); }) as typeof fetch);
+  await assert.rejects(deferXSearchQuery(directory, p, 0, 'Inspected transport outage; defer this query.'), /Only inspected/);
+  await runXSearchPlan(directory, p, { search: failing.search.bind(failing), maxRequests: 3, now: clock, sleep: wait });
+  const before = await readFile(join(directory, 'progress.json'), 'utf8'), fees = await readFile(join(budgetRoot, '2026-10.json'), 'utf8');
+  await deferXSearchQuery(directory, p, 0, 'Inspected shared network outage; preserve all three attempts and defer this one query.', clock().toISOString());
+  assert.equal(await readFile(join(directory, 'progress.json'), 'utf8'), before);
+  assert.equal(await readFile(join(budgetRoot, '2026-10.json'), 'utf8'), fees);
+  const resumed = await readXSearchPlan(directory, p);
+  assert.equal(resumed.report.queries[0].status, 'owner-deferred'); assert.equal(resumed.pending.size, 0);
+  const working = new TwitterAPIClient('fixture-key', budget, (async () => { calls++; return Response.json(page([tweet()])); }) as typeof fetch);
+  const result = await runXSearchPlan(directory, p, { search: working.search.bind(working), maxRequests: 4, now: clock, sleep: wait });
+  assert.equal(calls, 4); assert.equal(result.requests, 4); assert.equal(result.requestsThisRun, 1);
+  assert.equal(result.status, 'partial'); assert.equal(result.globalRecallProven, false);
+  const final = await readXSearchPlan(directory, p);
+  assert.equal(final.state.attempts.at(-1)?.query, 1);
+  assert.deepEqual(final.state.attempts.slice(0, 3), JSON.parse(before).attempts);
+  await assert.rejects(deferXSearchQuery(directory, p, 0, 'Do not create another deferral.'), /Only inspected/);
+  const records = await json<any[]>(join(directory, 'owner-deferrals.json'), []);
+  records[0].attemptsSHA256 = '0'.repeat(64); await atomic(join(directory, 'owner-deferrals.json'), records);
+  await assert.rejects(readXSearchPlan(directory, p), /does not match exhausted/);
+}));

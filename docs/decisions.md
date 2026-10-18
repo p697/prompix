@@ -918,3 +918,7 @@ Historical backfill and daily collection share the TwitterAPI.io account, so pro
 Reconcile the historical acceptance count with the latest verified local publication window at each checkpoint, in addition to the frozen baseline. Independent daily publications reduce the pending-addition count and must be replaced by other qualified items. Preserve both old and updated source variants for deduplication; do not assume a capped compatibility window represents a larger database.
 
 Preserve complete decimal quantities before attached units. An unfamiliar unit must not cause the opaque-token matcher to backtrack from a fractional measurement to its integer prefix; model hints must describe the actual source quantity. Revalidate affected cached translations.
+
+## 2026-10-18 — Preserve failed search accounting during network recovery
+
+A common transport outage must stop historical searching instead of draining all month plans' retry allowances. An inspected query that exhausted its three transient attempts may be explicitly deferred with a plan/attempt hash-bound record; other queries may continue. Retain failed requests and charges, report the skipped coverage, and keep all acceptance and budget limits unchanged.

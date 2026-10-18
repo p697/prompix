@@ -50,6 +50,8 @@ const attemptSchema = z.object({ state: z.enum(["reserved", "failed", "completed
   response: z.string().regex(/^response-\d{5}\.json$/), error: z.string().max(300).optional(), retryAfter: z.iso.datetime().optional() }).strict();
 const progressSchema = z.object({ planID: z.string().regex(/^[a-f0-9]{64}$/), nextQuery: z.number().int().nonnegative(),
   attempts: z.array(attemptSchema).max(10000) }).strict();
+const deferralSchema = z.object({ planID: z.string().regex(/^[a-f0-9]{64}$/), query: z.number().int().nonnegative(),
+  attemptsSHA256: z.string().regex(/^[a-f0-9]{64}$/), at: z.iso.datetime(), reason: z.string().min(20).max(1000) }).strict();
 type Page = { query: number; response: string; at: string; result: TwitterAPIResult };
 
 /** All source evidence is private to this directory: it cannot become a publishable X acquisition. */
@@ -85,8 +87,18 @@ export async function readXSearchPlan(directory: string, input: XSearchPlan) {
     if (attempt.state !== "completed") { attempt.state = "completed"; delete attempt.error; recovered++; }
     pages.push({ query: attempt.query, response: attempt.response, at: capture.at, result });
   }
+  const deferred = new Set<number>();
+  const deferrals = z.array(deferralSchema).max(5000).parse(await json(join(directory, "owner-deferrals.json"), []));
+  for (const deferral of deferrals) {
+    const attempts = state.attempts.filter(a => a.query === deferral.query);
+    // This is an explicit operator decision to leave a failed query unresolved, not retry or approve it.
+    if (deferral.planID !== planID || deferred.has(deferral.query) || !pending.has(deferral.query) ||
+        attempts.at(-1)?.state !== "retryable" || attempts.filter(a => a.cursor === attempts.at(-1)?.cursor && a.state !== "budget-blocked").length < 3 ||
+        deferral.attemptsSHA256 !== hash(attempts)) throw new Error("X search deferral does not match exhausted transient attempts");
+    deferred.add(deferral.query); pending.delete(deferral.query);
+  }
   const queries = plan.queries.map((query, index) => ({ id: query.id, lane: query.lane, pages: cursors[index].pages,
-    status: pending.has(index) ? "unresolved" : cursors[index].done ? "complete" : cursors[index].pages >= plan.maxPagesPerQuery ? "page-limit" : "pending" }));
+    status: deferred.has(index) ? "owner-deferred" : pending.has(index) ? "unresolved" : cursors[index].done ? "complete" : cursors[index].pages >= plan.maxPagesPerQuery ? "page-limit" : "pending" }));
   const unique = new Map<string, { result: TwitterAPIResult; page: Page }>();
   const violations: { id: string; issues: string[]; query: string }[] = [];
   let returned = 0, duplicates = 0;
@@ -101,11 +113,23 @@ export async function readXSearchPlan(directory: string, input: XSearchPlan) {
       unique.set(post.id, { result: { ...page.result, posts: [post], nextToken: undefined }, page });
     }
   }
-  return { plan, planID, state, pages, cursors, pending, recovered, unique,
+  return { plan, planID, state, pages, cursors, pending, deferred, recovered, unique,
     report: { planID, status: pending.size ? "unresolved" : queries.every(q => q.status === "complete") ? "complete" : "partial",
       requests: state.attempts.length, returned, unique: unique.size, duplicates, violations, queries,
       // Exhausted pagination is provider completeness only; it does not establish global X recall.
       globalRecallProven: false, publishableAcquisitions: 0 } };
+}
+
+/** Caller holds the plan lock and has inspected the outage. Never edits attempts, captures or spend. */
+export async function deferXSearchQuery(directory: string, input: XSearchPlan, query: number, reason: string, at = new Date().toISOString()) {
+  const run = await readXSearchPlan(directory, input), attempts = run.state.attempts.filter(a => a.query === query);
+  if (!run.pending.has(query) || attempts.at(-1)?.state !== "retryable" ||
+      attempts.filter(a => a.cursor === attempts.at(-1)?.cursor && a.state !== "budget-blocked").length < 3)
+    throw new Error("Only inspected, exhausted transient queries may be deferred");
+  const record = deferralSchema.parse({ planID: run.planID, query, attemptsSHA256: hash(attempts), at, reason });
+  const previous = z.array(deferralSchema).parse(await json(join(directory, "owner-deferrals.json"), []));
+  await atomic(join(directory, "owner-deferrals.json"), [...previous, record]);
+  return record;
 }
 
 /** Caller holds the content lock. Every bounded transport retry keeps the earlier charge and reserves again. */
@@ -131,7 +155,7 @@ export async function runXSearchPlan(directory: string, input: XSearchPlan, opti
       run = await readXSearchPlan(directory, input);
     }
     const index = Array.from({ length: run.plan.queries.length }, (_, n) => (run.state.nextQuery + n) % run.plan.queries.length)
-      .find(i => !run.cursors[i].done && run.cursors[i].pages < run.plan.maxPagesPerQuery);
+      .find(i => !run.deferred.has(i) && !run.cursors[i].done && run.cursors[i].pages < run.plan.maxPagesPerQuery);
     if (index === undefined) break;
     const attempt: z.infer<typeof attemptSchema> = { state: "reserved", at: now().toISOString(), query: index,
       cursor: run.cursors[index].cursor, response: `response-${String(run.state.attempts.length + 1).padStart(5, "0")}.json` };
