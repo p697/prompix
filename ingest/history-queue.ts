@@ -43,7 +43,7 @@ export async function processHistoryStage(queue: StageQueue, root: string, share
         if (!source || predecessor?.output.sourceSHA !== queueIdentity(source)) throw new Error("Reviewed stage artifact changed");
       }
       const items = await runHistoryBatch(directory, batch, prior, shared, undefined, false, {
-        stage: job.stage === "collect" ? "source" : job.stage === "review" ? "review" : "translation", chineseOnly: true, translationConcurrency: 1 });
+        stage: job.stage === "collect" ? "source" : job.stage === "review" ? "review" : "translation", chineseOnly: true, translationConcurrency: 1, checkLease: () => queue.renew(job) });
       const source = await json(join(directory, "source-catalog.json"), null);
       const complete = await json(join(directory, "complete.json"), null);
       return { count: items.length, sourceSHA: source ? queueIdentity(source) : null, translatedSHA: complete ? queueIdentity(complete) : null, published: 0 };
@@ -57,6 +57,7 @@ export async function processHistoryStage(queue: StageQueue, root: string, share
     await verifyReviewedHistory(directory, shared, items);
     if (!items.every(item => completeHistoryItem(item, Date.now(), requiredIngestLocales))) throw new Error("Required history quality changed");
     const reviewDirectory = join(directory, "semantic", `${payload.start}-${job.attempts}`);
+    await queue.renew(job);
     const review = await reviewTranslationSemantics(items, "zh-Hans", reviewDirectory, process.env.PROMPIX_CODEX ?? "codex");
     await atomic(join(reviewDirectory, "result.json"), review);
     const approved = new Set(review.reviews.filter(r => r.verdict === "pass").map(r => r.id));

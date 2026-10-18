@@ -141,3 +141,14 @@ test("historical translation repair retains spent requests and stops at the shar
     provider: async () => { calls++; return { translations: [] }; } });
   assert.equal(calls, 1); assert.equal(blocked.attempted, 1); assert.ok(blocked.pendingSegments > 0);
 });
+
+test("Chinese-only completion changes only the locale requirement, retaining media, freshness and moderation gates", () => {
+  const source = { ...item(), title: "Paper village", summary: "A beautiful paper village", example: "Use an image generator", previewLabel: "Source image", cover: undefined };
+  const text = { title: "纸雕村庄", summary: "纸雕村庄", prompt: "一座山间村庄的精巧粉彩色纸雕，温暖的日出光线照亮微型几何房屋，它们环绕安静的广场排列。", example: "使用图片工具。", previewLabel: "来源图片" };
+  const localized = { ...source, localization: { sourceLanguage: "en", sourceFingerprint: translationFingerprint(source), translations: { "zh-Hans": text } } };
+  assert.equal(completeHistoryItem(localized), false, "legacy nine-language acceptance is preserved");
+  assert.equal(completeHistoryItem(localized, Date.now(), ["zh-Hans"]), true);
+  assert.equal(completeHistoryItem({ ...localized, presentation: undefined }, Date.now(), ["zh-Hans"]), false);
+  assert.equal(completeHistoryItem({ ...localized, media: undefined }, Date.now(), ["zh-Hans"]), false);
+  assert.equal(completeHistoryItem(localized, Date.now() + 25 * 3600_000, ["zh-Hans"]), false);
+});

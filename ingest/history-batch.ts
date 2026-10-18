@@ -27,7 +27,7 @@ import { verifyReviewedHistory } from "./history-stage-verification.ts";
 import { codexTranslationProvider } from "./translation-provider.ts";
 
 /** Run under the cohort lock. This stages artifacts only, and never activates a public release. */
-export async function runHistoryBatch(directory: string, input: HistoryBatch, previous: Prompt[], sharedRoot: string, seedTranslations?: string, revalidate = false, options: { stage?: "source" | "review" | "translation"; chineseOnly?: boolean; translationConcurrency?: number } = {}) {
+export async function runHistoryBatch(directory: string, input: HistoryBatch, previous: Prompt[], sharedRoot: string, seedTranslations?: string, revalidate = false, options: { stage?: "source" | "review" | "translation"; chineseOnly?: boolean; translationConcurrency?: number; checkLease?: () => Promise<void> } = {}) {
   const batch = historyBatchSchema.parse(input), day = batch.createdAt.slice(0, 10), env = process.env;
   if (env.PROMPIX_X_DISCOVERY_PROVIDER !== "third-party" || env.PROMPIX_X_OFFICIAL_ENABLED !== "0" || env.X_BEARER_TOKEN ||
       env.PROMPIX_TRANSLATION_MODEL !== "gpt-6-luna" || env.PROMPIX_TRANSLATION_PROVIDER !== "codex" || !env.PROMPIX_CODEX)
@@ -51,6 +51,7 @@ export async function runHistoryBatch(directory: string, input: HistoryBatch, pr
     report.stage = stage; report.updatedAt = at; await atomic(reportPath, report);
   };
   try {
+    await options.checkLease?.();
     if (!options.stage || options.stage === "source") {
     await phase("source");
     const ledgers = await readdir(join(directory, "x-lead-acquisitions")).catch(e => { if (e.code === "ENOENT") return []; throw e; });
@@ -79,7 +80,7 @@ export async function runHistoryBatch(directory: string, input: HistoryBatch, pr
     if (ledger && ledger.day !== day) throw new Error("History editorial ledger identity changed");
     let sequence = ledger?.requests ?? 0;
     const editorial = await runEditorialReview({ candidates, previous: [], reviews, cache, ledger, day, maxRequests: historyLimits.editorial,
-      provider: async items => codexEditorialProvider(env.PROMPIX_CODEX, response => atomic(join(directory, "editorial-responses", `${sequence}.json`), response))(items),
+      provider: async items => { await options.checkLease?.(); return codexEditorialProvider(env.PROMPIX_CODEX, response => atomic(join(directory, "editorial-responses", `${sequence}.json`), response))(items); },
       persistReviews: value => atomic(join(directory, "editorial.json"), value), persistCache: value => atomic(cachePath, value),
       persistLedger: async value => { await atomic(ledgerPath, value); sequence = value.requests; } });
     report.editorial = editorial.report;
@@ -108,7 +109,7 @@ export async function runHistoryBatch(directory: string, input: HistoryBatch, pr
     try {
       visual = await runVisualReview({ prompts: mirrored, previous: [], cache: visualCache, ledger: visualLedger, day, maxRequests: historyLimits.visual, reviewWebsite,
         prepareMedia: item => prepareVisualMedia(item, temporary),
-        provider: async items => codexVisualProvider(env.PROMPIX_CODEX, response => atomic(join(directory, "visual-responses", `${visualSequence}.json`), response))(items),
+        provider: async items => { await options.checkLease?.(); return codexVisualProvider(env.PROMPIX_CODEX, response => atomic(join(directory, "visual-responses", `${visualSequence}.json`), response))(items); },
         persistCache: value => atomic(visualPath, value), persistLedger: async value => { await atomic(visualLedgerPath, value); visualSequence = value.requests; } });
     } finally { await rm(temporary, { recursive: true, force: true }); }
     report.visual = visual.report;
@@ -134,6 +135,7 @@ export async function runHistoryBatch(directory: string, input: HistoryBatch, pr
     let translationSequence = priorTranslation?.attempted ?? 0;
     const translationReport = await runHistoryTranslations({ items: ready, cache: translationCache, reviews: translationReviews,
       provider: async (locale, segments) => {
+        await options.checkLease?.();
         const attempt = ++translationSequence;
         const response = await translate(locale, segments);
         await writeImmutableBytes(join(translations, "responses", `${attempt}.json`), Buffer.from(JSON.stringify({ locale, ids: segments.map(s => s.id), response }) + "\n"));
