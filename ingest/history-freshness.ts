@@ -10,3 +10,10 @@ export function checkedHistorySeeds(items: readonly Prompt[], state: XAvailabili
     return filterXAvailability([item], state, now).prompts;
   });
 }
+
+/** Explicit holds/removals and failed source rechecks reduce the count, not the target.
+ * Unknown expiry or malformed content must still stop for inspection. */
+export function unresolvedHistorySeeds(originals: readonly Prompt[], eligible: readonly Prompt[], state: XAvailabilityState, excludedIDs: ReadonlySet<string>): string[] {
+  const accepted = new Set(eligible.map(item => item.id));
+  return originals.filter(item => !accepted.has(item.id) && !excludedIDs.has(item.id) && state[item.id]?.status !== 'withheld').map(item => item.id);
+}

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
-import {checkedHistorySeeds} from './history-freshness.ts';
+import {checkedHistorySeeds,unresolvedHistorySeeds} from './history-freshness.ts';
 import {convertXDiscovery} from './x-intake.ts';
 import {nativeXSourceIssue} from './x-source.ts';
 import type {XAvailabilityState} from './x-availability.ts';
@@ -18,4 +18,11 @@ test('missing evidence never renews a seed; invalid or withheld checks fail clos
 test('thread seed cannot reuse a standalone provider check',()=>{
  const item=fixture();item.source.post!.parentID='122';item.source.mediaPostID='123';item.source.context=[{...item.source.post!,id:'122',parentID:undefined}];
  assert.deepEqual(checkedHistorySeeds([item],{[item.id]:{status:'ready',checkedAt:now,checkedBy:'twitterapi',revision:item.source.revision}},Date.parse(now)),[]);
+});
+
+test('explicit seed holds reduce eligible count but unknown expiry remains a blocker',()=>{
+ const item=fixture();assert.deepEqual(unresolvedHistorySeeds([item],[],{},new Set()),[item.id]);
+ assert.deepEqual(unresolvedHistorySeeds([item],[],{},new Set([item.id])),[]);
+ assert.deepEqual(unresolvedHistorySeeds([item],[],{[item.id]:{status:'withheld',checkedAt:now,checkedBy:'twitterapi'}},new Set()),[]);
+ assert.deepEqual(unresolvedHistorySeeds([item],[item],{},new Set()),[]);
 });
