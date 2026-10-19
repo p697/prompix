@@ -482,7 +482,7 @@ test("prompt heading scans emoji-only lines without exponential backtracking", a
       const plain = extractMarkedXPrompt({id:'123',text:line});
       if (plain.reason !== 'missing-prompt-boundary') throw Error('Unexpected boundary');
       const body = 'Create an image of a mountain lake in soft morning light.';
-      const marked = extractMarkedXPrompt({id:'123',text:line+'Prompt:\n'+body});
+      const marked = extractMarkedXPrompt({id:'123',text:line+'Image Prompt:\n'+body});
       if (marked.body !== body) throw Error('Lost valid heading or body');
     }`;
   await promisify(execFile)(process.execPath, ['--import', 'tsx', '--input-type=module', '-e', script], { timeout: 5000 });
