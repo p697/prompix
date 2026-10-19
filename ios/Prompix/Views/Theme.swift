@@ -31,6 +31,22 @@ enum Palette {
     static let spectrumIce = Color(red: 0.702, green: 0.816, blue: 0.984)
     static let spectrumPetal = Color(red: 0.933, green: 0.769, blue: 0.906)
 
+    // The icon's icy top, violet body and blue base stay continuous across all seven pages.
+    static func onboardingGlass(at fraction: Double) -> LinearGradient {
+        let t = min(1, max(0, fraction))
+        func blend(_ start: (Double, Double, Double), _ end: (Double, Double, Double)) -> Color {
+            Color(red: start.0 + (end.0 - start.0) * t,
+                  green: start.1 + (end.1 - start.1) * t,
+                  blue: start.2 + (end.2 - start.2) * t)
+        }
+        return LinearGradient(stops: [
+            .init(color: blend((0.88, 0.95, 0.98), (0.91, 0.92, 0.97)), location: 0),
+            .init(color: blend((0.68, 0.81, 0.97), (0.88, 0.70, 0.83)), location: 0.35),
+            .init(color: blend((0.49, 0.65, 0.96), (0.65, 0.58, 0.87)), location: 0.75),
+            .init(color: blend((0.36, 0.52, 0.93), (0.34, 0.39, 0.71)), location: 1)
+        ], startPoint: .topLeading, endPoint: .bottomTrailing)
+    }
+
 }
 
 enum Typography {

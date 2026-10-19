@@ -6,9 +6,9 @@
 
 首页及图片、视频、网页、文本、Skill、用途和创作者内的内容流使用推荐；搜索仍按相关性。首页保留「最新收录」供明确选择，移除首页与设置中的全库数量。每次冷启动、主动下拉刷新建立新的推荐会话；返回分类的暖缓存和从详情返回保持位置。浏览过程中的曝光、点击和收藏不能重排已经显示的卡片。
 
-首次引导新增一页兴趣多选，建议三项而不强制，不替用户勾选。设置中可修改兴趣、关闭行为学习、清除推荐偏好；收藏和草稿保留。「不感兴趣」立即退出推荐展示，并产生有限的相关主题负反馈。
+首次引导第四页选择兴趣：0.14.0 起按用户最新要求必须恰好选择三项后进入，不替用户勾选。设置内数量不限。设置中可修改兴趣、关闭行为学习、清除推荐偏好；收藏和草稿保留。「不感兴趣」立即退出推荐展示，并产生有限的相关主题负反馈。
 
-依据：[Apple Onboarding](https://developer.apple.com/design/human-interface-guidelines/onboarding) 建议快速、可跳过的引导；[X 推荐说明](https://help.x.com/en/rules-and-policies/recommendations) 将主动兴趣和媒体控制作为不同的用户控制。实现使用原生 SwiftUI 选择、滚动、导航及当前光谱色板，不复制竞品界面。
+初版参考依据（0.14.0 的强制三项为后续用户决策）：[Apple Onboarding](https://developer.apple.com/design/human-interface-guidelines/onboarding) 建议快速、可跳过的引导；[X 推荐说明](https://help.x.com/en/rules-and-policies/recommendations) 将主动兴趣和媒体控制作为不同的用户控制。实现使用原生 SwiftUI 选择、滚动、导航及当前光谱色板，不复制竞品界面。
 
 ## 内容标签与画面尺度
 

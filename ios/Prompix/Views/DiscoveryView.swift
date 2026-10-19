@@ -3,6 +3,7 @@ import SwiftUI
 private enum MainTab: Hashable { case discover, saved, search }
 
 struct RootView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var showsOnboarding = !UserDefaults.standard.bool(forKey: "hasCompletedOnboarding")
     @State private var tab = MainTab.discover
     @State private var searchActivation = 0
@@ -13,14 +14,19 @@ struct RootView: View {
         })
     }
     var body: some View {
-        tabs.tint(Palette.accent)
-            .environment(\.recommendationSurfaceVisible, !showsOnboarding)
-            .fullScreenCover(isPresented: $showsOnboarding) {
+        ZStack {
+            if showsOnboarding {
                 PrompixOnboarding {
                     UserDefaults.standard.set(true, forKey: "hasCompletedOnboarding")
-                    showsOnboarding = false
-                }.interactiveDismissDisabled()
+                    withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.3)) { showsOnboarding = false }
+                }
+                .environment(\.recommendationSurfaceVisible, false)
+                .transition(.opacity)
+            } else {
+                tabs.transition(.opacity)
             }
+        }
+        .tint(Palette.accent).background(Palette.paper)
     }
     @ViewBuilder private var tabs: some View {
         if #available(iOS 18, *) {

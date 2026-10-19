@@ -1029,3 +1029,12 @@ The per-item semantic audit must also check ordinary untranslated words and malf
 ### 2026-10-19 — Preserve historical visual evidence across daily publication
 
 The daily retention pass only read its shared visual cache; historical batch decisions were isolated, causing known presentation labels to regress to `unknown`. Historical publication now copies exact, fully covered media decisions to shared storage under the publisher lock. Newer evidence takes precedence; conflicting equal-time decisions fail closed. Restore affected metadata only from retained decisions, using normal transactional publication; do not infer approval from old labels or rerun paid review requests.
+
+### 2026-10-19：四屏视觉引导与强制三项兴趣
+
+用户要求提高引导的视觉表现，并明确取消跳过、必须选三项。0.14.0 采用随包原创作品、七色玻璃展开、轻浮动和逐层入场；不新增远端媒体依赖。第三屏把复杂试用面板收敛为复制完整 Prompt 并打开 ChatGPT，明确需粘贴；详情的完整编辑和工具选择能力保留。首次和设置重放都在兴趣成功持久化后完成，已有完成标记不失效，设置兴趣仍不限数量。隐私说明移回设置，不改本机推荐存储边界。首次引导作为根画面直接显示，避免首页先闪出再覆盖，也避免提前记录曝光。动态遵守减少动态效果、低电量、前后台及离屏限制；不会声称达到苹果编辑推荐的客观门槛。
+
+
+### 2026-10-19：引导与 App Icon 同源，收敛常规字号验收
+
+用户指出新开场与现有图标不一致。引导玻璃以实际 AppIcon／AppIconDark 的冰蓝、蓝紫、粉紫渐变、细白边和叠页比例为准，七片只做连续色阶与展开动效，不引入暖橙色品牌或替换图标资产。后续不常规测试超大字号，把验证时间集中在默认字号与实际手机体验；保留已有可访问性实现。
