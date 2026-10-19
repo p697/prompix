@@ -4,7 +4,7 @@ import { mkdtemp, rm, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { catalogSchema } from "../packages/schema/catalog.ts";
-import { processHistoryStage, enqueueHistoryPipeline } from "./history-queue.ts";
+import { processHistoryStage, enqueueHistoryPipeline, exportQueueReady } from "./history-queue.ts";
 import { StageQueue, queueIdentity, type QueueJob } from "./stage-queue.ts";
 import { atomic } from "./publication.ts";
 import { verifyReviewedHistory } from "./history-stage-verification.ts";
@@ -62,5 +62,31 @@ test("resumed enqueue preserves exclusion bytes across key normalization and rej
     await assert.rejects(enqueueHistoryPipeline(queue, root, run, { ...batch, id: "batch-0004" }, [{ ...normalized[0], title: "Changed" }]), /Immutable queue exclusions changed/);
     assert.equal(jobs.length, 8);
     assert.deepEqual(await readFile(path), before);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+
+test("owner holds exclude ready items while immutable evidence and surviving approvals remain mandatory", async () => {
+  const root = await mkdtemp(join(tmpdir(), "prompix-ready-hold-"));
+  try {
+    const run = "hold-test", batch = "batch-0001";
+    const ready = [{ id: "held", prompt: "Draw two circles." }];
+    const path = join(root, run, batch, "ready-0.json");
+    await atomic(path, ready);
+    await atomic(join(root, run, "exclusions.json"), []);
+    const hold = { schemaVersion: 1, holds: { held: { sourceIdentitySHA256: "a".repeat(64), evidenceSHA256: "b".repeat(64),
+      reason: "Owner found an inconsistent requirement", reviewerID: "owner", reviewedAt: "2026-10-01T00:00:00Z" } } };
+    await atomic(join(root, "quality-holds.json"), hold);
+    const queue = new StageQueue({ query: async () => ({ rows: [{ payload: { batch, start: 0, manifestSHA: "c".repeat(64), policy: ingestLanguagePolicy }, output: { pass: 1, readySHA: queueIdentity(ready) } }] }) } as any);
+    const before = await readFile(path);
+    assert.deepEqual(await exportQueueReady(queue, root, root, run), []);
+    assert.deepEqual(await readFile(path), before, "A hold must not rewrite the original approved evidence");
+    await atomic(path, [{ ...ready[0], prompt: "Tampered" }]);
+    await assert.rejects(exportQueueReady(queue, root, root, run), /Ready evidence changed/);
+    await atomic(path, ready);
+    await atomic(join(root, "quality-holds.json"), { schemaVersion: 1, holds: {} });
+    await assert.rejects(exportQueueReady(queue, root, root, run), /History editorial\/source approval changed|ENOENT/, "Without a hold full source/media approval is still mandatory");
+    await atomic(join(root, "quality-holds.json"), { invalid: true });
+    await assert.rejects(exportQueueReady(queue, root, root, run));
   } finally { await rm(root, { recursive: true, force: true }); }
 });

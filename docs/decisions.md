@@ -951,3 +951,7 @@ A fully received, retained visual response can repeat candidate or attachment id
 ### 2026-10-19 — Resume classified transient searches at invocation boundaries
 
 有界搜索最后一个请求发生临时故障时，沿用既有退避与累计三次上限跨调用续跑，避免把可恢复的网络故障升级成全队列停机。先重读留存响应，保留失败收费；未知、损坏或耗尽的请求继续阻断并要求核对。
+
+### 2026-10-19：补库抽检暂缓按条目隔离
+
+合格导出必须排除owner新加的quality hold，同时保留原始ready文件及SHA证据，其他条目继续完整校验；不因单条待修正而把整个历史补库视为无效，也不将暂缓内容计入目标。
