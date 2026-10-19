@@ -1,3 +1,4 @@
+import { historyPublicationRun, publishQualifiedHistory, type HistoryPublicationReport } from "./history-publication.ts";
 import { prepareXMaintenanceAdmission } from "./x-maintenance-admission.ts";
 import { limitNewPublications } from "./publication-quota.ts";
 import { withPublisherDatabase } from "./database-publication.ts";
@@ -41,7 +42,7 @@ import { countByKind, interleaveLibrary, libraryDelta, retainPublishedLibrary, s
 import { beginDailyPublication, clearMatchingPublicationHold, prepareDailyStaging, publishDailyCatalog } from "./daily-publication.ts";
 import { languagePackEditionVersion, preserveCatalogText, stageRelease } from "./release-publication.ts";
 import { databaseLibraryLimit, preservePublicationInput } from "../services/feed/publication.ts";
-import { applyQualityHolds, assertNoQualityHolds, readQualityHolds } from "./quality-holds.ts";
+import { applyQualityHolds, assertNoQualityHolds, readQualityHolds, registerQualityHoldScope } from "./quality-holds.ts";
 const publishing = process.argv.includes("--publish");
 const resumePublishing = process.argv.includes("--resume-publishing");
 if (resumePublishing && !publishing) throw new Error("--resume-publishing requires --publish");
@@ -84,6 +85,9 @@ async function run() {
     counts: { candidates: null, reviewed: null, eligible: null, bundled: null, prepared: null, published: null, mediaFailed: countByKind([]) },
   };
   await withDailyStatus(root, report, async () => {
+    const historyCampaign = publishing ? process.env.PROMPIX_HISTORY_CAMPAIGN : undefined;
+    const historyRun = historyCampaign ? await historyPublicationRun(root, historyCampaign) : undefined;
+    if (historyCampaign) await registerQualityHoldScope(root, historyCampaign);
     const qualityHolds = await readQualityHolds(root);
     // Registry availability must be fresh even when resuming a retained target.
     const admission = publishing && (process.env.X_BEARER_TOKEN || process.env.PROMPIX_X_DISCOVERY_PROVIDER === "third-party") ? await prepareXMaintenanceAdmission(root) : undefined;
@@ -113,6 +117,20 @@ async function run() {
       return;
     }
     if (publication?.held !== undefined) { report.publicationHold = publication.held; return; }
+    // Drain completed history before collecting or retranslating more content.
+    // This shares the daily allowance; source maintenance above remains mandatory.
+    if (historyCampaign && historyRun) {
+      const historyReport: HistoryPublicationReport = { startedAt: new Date().toISOString(), published: false };
+      const result = await publishQualifiedHistory(root, historyCampaign, historyRun, historyReport, { begin: async () => publication });
+      report.sources["history-publication"] = historyReport;
+      await atomic(join(historyCampaign, "publication-report.json"), historyReport);
+      if (result) {
+        report.published = true; report.version = result.authoritative.version;
+        report.counts.published = countByKind(result.authoritative.prompts);
+        report.channels = { v1: result.v1.manifest.version, v2: result.v2!.manifest.version, v1Frozen: result.state.v1Frozen };
+        return;
+      }
+    }
     const publisherSkills = await preparePublisherSkills(root);
     report.sources["publisher-skills"] = publisherSkills.report;
     const all: Candidate[] = [...communitySkills.candidates, ...publisherSkills.candidates];

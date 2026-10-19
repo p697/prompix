@@ -258,3 +258,23 @@ test("new holds or removals introduced during uploads prevent pointer activation
     } finally { await f.cleanup(); }
   }
 });
+
+test("campaign holds arriving during upload block both initial activation and ordinary daily recovery", async () => {
+  const { registerQualityHoldScope, qualityHoldIdentity } = await import("./quality-holds.ts");
+  const f = await fixture(), campaign = await mkdtemp(join(tmpdir(), "prompix-live-campaign-hold-"));
+  try {
+    await atomic(join(campaign, "quality-holds.json"), { schemaVersion: 1, holds: {} });
+    await registerQualityHoldScope(f.root, campaign);
+    const preparation = await f.start(), held = f.next.prompts.at(-1)!;
+    f.failUpload(async key => {
+      if (key.endsWith("/catalog.json")) await atomic(join(campaign, "quality-holds.json"), { schemaVersion: 1, holds: {
+        [held.id]: { sourceIdentitySHA256: qualityHoldIdentity(held), evidenceSHA256: "a".repeat(64), reason: "Late owner finding", reviewerID: "test", reviewedAt: new Date().toISOString() },
+      } });
+    });
+    await assert.rejects(publishDailyCatalog(f.root, f.next, preparation, f.transport), /quality hold/);
+    assert.equal(f.calls.some(value => /^upload:v[12]\/latest.json$/.test(value)), false);
+    f.failUpload();
+    await assert.rejects(f.start(), /quality hold/);
+    assert.ok((await loadPublicationState(f.root)).pending);
+  } finally { await f.cleanup(); await rm(campaign, { recursive: true, force: true }); }
+});

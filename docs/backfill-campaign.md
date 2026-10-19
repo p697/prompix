@@ -65,3 +65,38 @@ Isolated batches do not fill the three-active-batch scheduling window. The datab
 Rollback to the previous runtime requires no SQL or ledger migration: it stops on the retained reconcile jobs. Do not remove those jobs or the isolation proofs to make the old runtime continue.
 
 Campaign-local `quality-holds.json` uses the campaign lock and is unioned with shared holds for seeds and qualified exports. This lets an owner exclude a confirmed finding while the independent daily publisher owns the shared lock. Neither scope clears the other, originals remain immutable, and malformed records stop export. Copy the finding to shared holds under the shared lock when available; local campaign holds must remain until an explicit reviewed clearance.
+
+
+## Qualified history publication
+
+Historical collection remains private and never activates a public release. The separate
+`scripts/publish-history-queue.ts /absolute/campaign-root` command drains verified semantic
+outputs under the shared content `daily.lock`. Set `PROMPIX_HISTORY_CAMPAIGN` on the daily
+publisher to consume the same queue after existing source maintenance and pending-release
+recovery, before fresh collection. The campaign configuration must name the same shared root.
+The initial bridge consumes independent-queue outputs; older standalone seed artifacts need
+separate provenance verification and are not silently imported.
+
+The bridge revalidates immutable output hashes, editorial and complete-media evidence,
+Chinese translation, semantic rejection overrides, source identity and owner holds. It
+accepts only source checks younger than twelve hours, deferring older rows without replaying
+paid reads. This is not a new freshness timestamp. Deduplication compares with the current
+full database publication, not a frozen campaign baseline. It preserves original and Chinese
+text and existing published rows, removal tombstones and the current generation. Only selected
+creator avatars may need mirroring; no collection, translation or review model runs in this
+command. Normal public quota (100/day, cumulative six-hour windows, visual priority) and the
+transactional database quota remain unchanged. An empty allowance means defer, not publish.
+
+Before staging, register the campaign's `quality-holds.json` through the public root's
+`quality-hold-scopes.json`. Existing stage, activation and recovery checks read these live,
+flat scopes; a missing registered file fails closed. Do not delete the campaign directory while
+registered. Local owner holds therefore remain effective even if they arrive during upload.
+A new defect stops activation without rewriting immutable release artifacts. Existing pending
+release reconciliation and rollback procedures still apply.
+
+Deployment: enable only after tests/CI, preserve the prior runtime, and wait for the active
+public lock owner to finish. First run records `publication-report.json`; verify the database
+count/generation, v1/v2 manifests and new v3 details. Moving a row from staged to published is
+not another collected item: report campaign-qualified total separately from unpublished count.
+Disable `PROMPIX_HISTORY_CAMPAIGN` to stop draining; do not remove registered hold scopes as
+a rollback shortcut. The prior publisher must receive equivalent shared holds before rollback.

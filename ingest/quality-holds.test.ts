@@ -140,3 +140,23 @@ test("a valid addition that exceeds stored UTF-8 bytes preserves the prior reada
     assert.deepEqual(await readQualityHolds(root), prior);
   } finally { await rm(root, { recursive: true, force: true }); }
 });
+
+test("registered campaign holds are live across publication recovery and missing evidence fails closed", async () => {
+  const { registerQualityHoldScope } = await import("./quality-holds.ts");
+  const root = await mkdtemp(join(tmpdir(), "prompix-scoped-holds-"));
+  const campaign = await mkdtemp(join(tmpdir(), "prompix-campaign-holds-"));
+  try {
+    await atomic(join(campaign, "quality-holds.json"), { schemaVersion: 1, holds: {} });
+    await registerQualityHoldScope(root, campaign); await registerQualityHoldScope(root, campaign);
+    assert.deepEqual((await readQualityHolds(root)).holds, {});
+    await atomic(join(campaign, "quality-holds.json"), holds());
+    assert.throws(() => assertNoQualityHolds({ prompts: [item] }, holds()));
+    assert.deepEqual((await readQualityHolds(root)).holds, holds().holds);
+    const another = { ...item, id: "another" };
+    await saveQualityHold(root, another, { ...record(), sourceIdentitySHA256: qualityHoldIdentity(another) });
+    assert.deepEqual(Object.keys(JSON.parse(await readFile(join(root, "quality-holds.json"), "utf8")).holds), ["another"]);
+    assert.equal(Object.keys((await readQualityHolds(root)).holds).length, 2);
+    await rm(join(campaign, "quality-holds.json"));
+    await assert.rejects(readQualityHolds(root), /ENOENT/);
+  } finally { await rm(root, { recursive: true, force: true }); await rm(campaign, { recursive: true, force: true }); }
+});
