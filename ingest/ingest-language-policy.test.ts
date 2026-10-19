@@ -47,3 +47,19 @@ test("unverifiable review evidence holds its item without losing a verified sibl
   assert.equal(result.reviews[1].verdict, "pass");
   assert.throws(() => partitionSemanticResult({ reviews: [raw.reviews[1]] }, [localized, second], "zh-Hans"), /Incomplete/);
 });
+
+test("metadata audit binds location and duration claims to original prompt evidence", () => {
+  for (const [title, prompt, quote] of [
+    ["香港晨间散步", "Create a morning walk in an older Seoul residential neighborhood.", "Seoul"],
+    ["一分钟花瓣短片", "Storyboard: 00:00–00:03 walk; 00:03–00:15 watch petals and finish.", "00:03–00:15"],
+  ]) {
+    const source = { ...item, title, prompt };
+    const reviewed = { ...source, localization: { sourceLanguage: "en", sourceFingerprint: translationFingerprint(source),
+      translations: { "zh-Hans": { ...translationText(source), prompt: "按原始分镜生成短片，保留位置、时长与所有约束。" } } } };
+    const issue = { field: "title", sourceField: "prompt", sourceQuote: quote, translatedQuote: title, reason: "Metadata contradicts the original prompt." };
+    const result = verifySemanticResult({ reviews: [{ id: source.id, verdict: "needs-review", issues: [issue] }] }, [reviewed], "zh-Hans");
+    assert.equal(result[0].issues[0].sourceField, "prompt");
+    assert.throws(() => verifySemanticResult({ reviews: [{ id: source.id, verdict: "needs-review", issues: [{ ...issue, sourceQuote: "invented source evidence" }] }] }, [reviewed], "zh-Hans"), /evidence/);
+    assert.throws(() => verifySemanticResult({ reviews: [{ id: source.id, verdict: "needs-review", issues: [{ ...issue, translatedQuote: "invented title" }] }] }, [reviewed], "zh-Hans"), /evidence/);
+  }
+});
