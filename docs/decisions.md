@@ -1020,3 +1020,8 @@ A completed model result must not be discarded solely because an earlier lease h
 ## 2026-10-19 — Check localized prose completeness separately from semantic fidelity
 
 The per-item semantic audit must also check ordinary untranslated words and malformed mixed-language prose in all localized fields, including unchanged generated metadata. This uses the existing bounded gpt-6.1-sol call and exact source/translation evidence, preserving names, units, code, placeholders and explicitly required lettering/dialogue. Existing artifacts and owner holds remain immutable; this policy affects new review identities and does not retroactively approve held content.
+
+
+## 2026-10-19 — 收拢补库，保留可重复的按量阶段
+
+用户决定基于已有两千多条线上内容转入推荐/标签验证，暂停本轮扩量与补库heartbeat，日常launchd保持独立。新增stage ID、实际合格基线、指定增量与哈希证据；旧阶段不可覆盖，后续500/1000条请求不修改旧continuation或清空队列/账本。新阶段仅准备授权，须显式恢复运行；公开发布仍独立、使用冻结ID授权且保留所有质量与时效检查。

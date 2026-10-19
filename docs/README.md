@@ -1,3 +1,5 @@
+**当前数据运维入口**：[日常更新与按量补库](data-pipelines.md)。本轮按用户要求停止扩量，保留队列与证据；下方2000/10000及再新增1000是历史记录，不能自动恢复。推荐与标签的现状及验证边界见[推荐能力](local-first-recommendations.md)。
+
 **历史库存批量发布**：owner已授权符合质量与来源检查的库存直接发布；以私有、限时、冻结ID授权区别于每日100条新发现额度，审核与原文＋中文保持不变。见[运维说明](backfill-campaign.md#authorized-historical-inventory-publication)。
 
 **发布传输优化**：导出按行数与字节双重分批，内容哈希校验的本地发布缓存仍实时读取下架记录；新版本仅传输新修订正文，避免反复传送整库原文和九语翻译。见[运维说明](backfill-campaign.md#publisher-transfer-bounds)。
