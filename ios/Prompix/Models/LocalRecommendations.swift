@@ -64,7 +64,11 @@ enum InterestCatalog {
     var interests: Set<String> { state.interests }
     var learningEnabled: Bool { state.learningEnabled }
     var reduceSuggestive: Bool { state.reduceSuggestive ?? true }
-    func allowsRecommended(_ card: FeedCard) -> Bool { state.entries[card.id]?.dismissed != true && (!reduceSuggestive || card.presentation != "suggestive") }
+    func allowsRecommended(_ card: FeedCard) -> Bool { allowsRecommended(id: card.id, presentation: card.presentation) }
+    func allowsRecommended(_ prompt: Prompt) -> Bool { allowsRecommended(id: prompt.id, presentation: prompt.presentation) }
+    private func allowsRecommended(id: String, presentation: String?) -> Bool {
+        presentation != "explicit" && state.entries[id]?.dismissed != true && (!reduceSuggestive || presentation != "suggestive")
+    }
     var hiddenIDs: Set<String> { Set(state.entries.filter { $0.value.dismissed }.map(\.key)) }
 
     init(directory: URL? = nil, now: Date = Date()) {

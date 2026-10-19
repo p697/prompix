@@ -123,6 +123,31 @@ import XCTest
         XCTAssertFalse(profile.allowsRecommended(revealing), "Explicit negative feedback still applies")
     }
 
+    func testOfflinePromptPreferencesSurviveRestartAndKeepComfortIndependentOfLearning() throws {
+        let profile = LocalRecommendations(directory: directory, now: now)
+        var prompt = FeedFixture.prompt()
+        prompt.presentation = "suggestive"
+        XCTAssertFalse(profile.allowsRecommended(prompt))
+        profile.setInterests(["portrait", "fashion", "illustration"])
+        XCTAssertFalse(profile.allowsRecommended(prompt), "Interest selection never opts into revealing imagery")
+        profile.setReduceSuggestive(false)
+        XCTAssertTrue(profile.allowsRecommended(prompt))
+        profile.record(.dismiss, prompt: prompt, now: now)
+        profile.flush()
+        let restored = LocalRecommendations(directory: directory, now: now)
+        restored.setLearning(false)
+        XCTAssertFalse(restored.allowsRecommended(prompt), "Explicit dismissal survives restart and disabling learning")
+        restored.reset()
+        XCTAssertFalse(restored.allowsRecommended(prompt), "Reset restores the default comfort preference")
+        prompt.presentation = "general"
+        XCTAssertTrue(restored.allowsRecommended(prompt))
+        prompt.presentation = "unknown"
+        XCTAssertTrue(restored.allowsRecommended(prompt), "Unknown remains unknown, not a fabricated approval")
+        restored.setReduceSuggestive(false)
+        prompt.presentation = "explicit"
+        XCTAssertFalse(restored.allowsRecommended(prompt), "Explicit material is never an opt-in recommendation")
+    }
+
     /// Opt-in replay of frozen public candidate pools. It measures ranking behavior,
     /// not human relevance or engagement, and never reads a user's preference file.
     func testPublishedCandidatePoolsMeasureInterestLiftAndExposureSuppression() throws {
