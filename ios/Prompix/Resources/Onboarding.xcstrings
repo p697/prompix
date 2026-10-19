@@ -60,65 +60,6 @@
         }
       }
     },
-    "onboarding.skip": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "跳过"
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "略過"
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Skip"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "スキップ"
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "건너뛰기"
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Saltar"
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Pular"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Passer"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Überspringen"
-          }
-        }
-      }
-    },
     "onboarding.next": {
       "extractionState": "manual",
       "localizations": {
@@ -184,19 +125,19 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "开始探索"
+            "value": "开始发现"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "開始探索"
+            "value": "開始發現"
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Start exploring"
+            "value": "Start discovering"
           }
         },
         "ja": {
@@ -208,19 +149,19 @@
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "둘러보기 시작"
+            "value": "발견 시작하기"
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Empezar a explorar"
+            "value": "Empezar a descubrir"
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Começar a explorar"
+            "value": "Começar a descobrir"
           }
         },
         "fr": {
@@ -232,7 +173,7 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Jetzt entdecken"
+            "value": "Entdecken starten"
           }
         }
       }
@@ -362,55 +303,55 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "发现值得一试的 Prompt"
+            "value": "让灵感，展开"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "發現值得一試的 Prompt"
+            "value": "讓靈感，展開"
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Discover prompts worth trying"
+            "value": "Unfold your inspiration"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "試してみたいプロンプトに出会う"
+            "value": "ひらく、ひらめき"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "써 보고 싶은 프롬프트를 발견하세요"
+            "value": "영감을 펼쳐보세요"
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Descubre prompts que vale la pena probar"
+            "value": "Despliega tu inspiración"
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Descubra prompts que vale a pena experimentar"
+            "value": "Abra espaço à inspiração"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Découvrez des prompts à essayer"
+            "value": "Déployez votre inspiration"
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Entdecke Prompts, die du ausprobieren möchtest"
+            "value": "Entfalte deine Inspiration"
           }
         }
       }
@@ -421,55 +362,55 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "文字、图像、视频与网页灵感。无需账号，随时开始探索。"
+            "value": "好作品，是下一次创作的开始"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "文字、圖像、影片與網頁靈感。無需帳號，隨時開始探索。"
+            "value": "好作品，是下一次創作的開始"
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ideas for text, images, video and websites. Explore freely, without an account."
+            "value": "Your next creation starts with a little inspiration."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "文章、画像、動画、ウェブサイトのアイデアを。アカウントなしで、いつでも探せます。"
+            "value": "素敵な作品から、次の創作がはじまる。"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "글, 이미지, 동영상, 웹사이트를 위한 아이디어. 계정 없이 자유롭게 둘러보세요."
+            "value": "멋진 작품에서 다음 창작이 시작됩니다."
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ideas para textos, imágenes, vídeos y sitios web. Explora libremente, sin cuenta."
+            "value": "Una gran obra puede ser el inicio de la tuya."
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ideias para textos, imagens, vídeos e sites. Explore à vontade, sem precisar de uma conta."
+            "value": "Uma bela criação pode inspirar a sua próxima."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Des idées pour vos textes, images, vidéos et sites web. Explorez librement, sans compte."
+            "value": "Une belle création peut inspirer la vôtre."
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ideen für Texte, Bilder, Videos und Websites. Entdecke sie ganz ohne Konto."
+            "value": "Eine schöne Idee ist der Anfang deiner nächsten Kreation."
           }
         }
       }
@@ -480,55 +421,55 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "留住灵感，认识创作者"
+            "value": "发现，让你心动的"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "留住靈感，認識創作者"
+            "value": "發現，讓你心動的"
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Save ideas. Discover their creators."
+            "value": "Find what moves you"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "アイデアを保存。作り手を知る。"
+            "value": "心が動くものに出会う"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "아이디어를 모으고 창작자를 만나세요"
+            "value": "마음이 끌리는 발견"
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Guarda ideas y descubre a sus creadores"
+            "value": "Encuentra lo que te inspira"
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Guarde ideias e descubra seus criadores"
+            "value": "Encontre o que te inspira"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Gardez vos idées, découvrez leurs créateurs"
+            "value": "Trouvez ce qui vous inspire"
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Bewahre Ideen und entdecke ihre Kreativen"
+            "value": "Finde, was dich begeistert"
           }
         }
       }
@@ -539,55 +480,55 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "收藏喜欢的 Prompt，也能收藏创作者。保存在本机，方便下次接着看。"
+            "value": "图片、视频、网页，还有意想不到的 Skills"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "收藏喜歡的 Prompt，也能收藏創作者。儲存在本機，方便下次接著看。"
+            "value": "圖片、影片、網頁，還有意想不到的 Skills"
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Save your favorite prompts and creators on this device, ready to return to later."
+            "value": "Images, videos, websites. And unexpected Skills."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "気になるプロンプトや作り手を端末に保存して、いつでも見返せます。"
+            "value": "画像、動画、ウェブサイト。新しいSkillsも。"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "마음에 드는 프롬프트와 창작자를 이 기기에 저장하고 언제든 다시 찾아보세요."
+            "value": "이미지, 영상, 웹사이트. 그리고 새로운 Skills."
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Guarda tus prompts y creadores favoritos en este dispositivo para volver a ellos cuando quieras."
+            "value": "Imágenes, vídeos, sitios web y Skills sorprendentes."
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Salve seus prompts e criadores favoritos neste dispositivo para voltar a eles quando quiser."
+            "value": "Imagens, vídeos, sites e Skills surpreendentes."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Enregistrez vos prompts et créateurs favoris sur cet appareil pour les retrouver plus tard."
+            "value": "Images, vidéos, sites web et Skills à découvrir."
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Speichere deine liebsten Prompts und Kreativen auf diesem Gerät, um sie später wiederzufinden."
+            "value": "Bilder, Videos, Websites und überraschende Skills."
           }
         }
       }
@@ -598,55 +539,55 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "带到你的工具中使用"
+            "value": "喜欢，就试一下"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "帶到你的工具中使用"
+            "value": "喜歡，就試一下"
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Take an idea into your tools"
+            "value": "Love it? Try it."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "いつものツールで使ってみる"
+            "value": "気になったら、試そう"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "즐겨 쓰는 도구에서 이어 가세요"
+            "value": "마음에 들면, 바로 시도"
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Lleva tus ideas a tus herramientas"
+            "value": "¿Te gusta? Pruébalo."
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Leve suas ideias para suas ferramentas"
+            "value": "Gostou? Experimente."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Utilisez vos idées dans vos outils"
+            "value": "Ça vous plaît ? Essayez."
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Nutze Ideen in deinen Tools"
+            "value": "Gefällt dir? Probier’s aus."
           }
         }
       }
@@ -657,173 +598,55 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "复制或编辑 Prompt，在 ChatGPT 等工具中继续。由你确认并发送。"
+            "value": "把完整 Prompt 带到 ChatGPT，粘贴后开始创作"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "複製或編輯 Prompt，在 ChatGPT 等工具中繼續。由你確認並傳送。"
+            "value": "把完整 Prompt 帶到 ChatGPT，貼上後開始創作"
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Copy or edit a prompt, then continue in tools like ChatGPT. You review and send it."
+            "value": "Take the full prompt to ChatGPT. Paste it to get started."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "プロンプトをコピー・編集して、ChatGPT などのツールへ。内容を確認してから、自分で送信します。"
+            "value": "PromptをChatGPTへ。貼り付けて創作をはじめよう。"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "프롬프트를 복사하거나 편집한 뒤 ChatGPT 같은 도구에서 이어 가세요. 내용을 확인하고 직접 보내면 됩니다."
+            "value": "전체 프롬프트를 ChatGPT에 붙여넣고 시작하세요."
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Copia o edita un prompt y continúa en herramientas como ChatGPT. Tú lo revisas y lo envías."
+            "value": "Lleva el prompt completo a ChatGPT. Pégalo para empezar."
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Copie ou edite um prompt e continue em ferramentas como o ChatGPT. Você confere e envia."
+            "value": "Leve o prompt completo ao ChatGPT. Cole para começar."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Copiez ou modifiez un prompt, puis continuez dans un outil comme ChatGPT. Vous le vérifiez et l’envoyez."
+            "value": "Emportez le prompt complet dans ChatGPT. Collez-le pour commencer."
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Kopiere oder bearbeite einen Prompt und nutze ihn in Tools wie ChatGPT. Du prüfst und sendest ihn selbst."
-          }
-        }
-      }
-    },
-    "onboarding.use.skills": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Skills 可带到编程助手，按说明安装与使用。"
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Skills 可帶到程式助理，依說明安裝與使用。"
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Take Skills to your coding assistant and follow their installation and usage instructions."
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Skills はコーディングアシスタントへ。説明に沿ってインストールし、使えます。"
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Skills는 코딩 도우미로 가져가 안내에 따라 설치하고 사용할 수 있어요."
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Lleva los Skills a tu asistente de programación y sigue sus instrucciones de instalación y uso."
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Leve os Skills ao seu assistente de programação e siga as instruções de instalação e uso."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Transférez les Skills à votre assistant de programmation et suivez leurs instructions d’installation et d’utilisation."
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Nutze Skills in deinem Programmierassistenten und folge der Anleitung zur Installation und Verwendung."
-          }
-        }
-      }
-    },
-    "onboarding.use.preview": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "从一个好想法开始"
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "從一個好想法開始"
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Start with an idea"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "アイデアから始めよう"
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "아이디어에서 시작해 보세요"
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Empieza con una idea"
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Comece com uma ideia"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Commencez par une idée"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Beginne mit einer Idee"
+            "value": "Nimm den ganzen Prompt mit zu ChatGPT. Füge ihn dort ein und leg los."
           }
         }
       }
@@ -887,120 +710,356 @@
         }
       }
     },
-    "onboarding.trial.action": {
+    "onboarding.begin": {
       "extractionState": "manual",
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "试试这个 Prompt"
+            "value": "展开灵感"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "試試這個 Prompt"
+            "value": "展開靈感"
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Try this prompt"
+            "value": "Let’s explore"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "このプロンプトを試す"
+            "value": "はじめる"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "이 프롬프트 사용해 보기"
+            "value": "둘러보기"
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Prueba este prompt"
+            "value": "Explorar"
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Experimente este prompt"
+            "value": "Explorar"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Essayer ce prompt"
+            "value": "Explorer"
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Diesen Prompt ausprobieren"
+            "value": "Entdecken"
           }
         }
       }
     },
-    "onboarding.trial.hint": {
+    "onboarding.interests.title": {
       "extractionState": "manual",
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "先查看内容，再选择工具。"
+            "value": "选 3 个，你喜欢的"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "先查看內容，再選擇工具。"
+            "value": "選 3 個，你喜歡的"
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Preview the prompt, then choose a tool."
+            "value": "Pick 3 things you love"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "内容を確認してから、ツールを選びます。"
+            "value": "好きなものを3つ"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "내용을 미리 본 후 도구를 선택하세요."
+            "value": "좋아하는 주제 3가지"
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Revisa el prompt y elige una herramienta."
+            "value": "Elige 3 que te gusten"
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Confira o prompt e escolha uma ferramenta."
+            "value": "Escolha 3 interesses"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Consultez le prompt, puis choisissez un outil."
+            "value": "Choisissez 3 envies"
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Sieh dir den Prompt an und wähle dann ein Tool."
+            "value": "Wähle 3 Interessen"
+          }
+        }
+      }
+    },
+    "onboarding.interests.body": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "让第一屏，就更懂你"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "讓第一屏，就更懂你"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Make your first feed feel like you."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "最初のフィードを、あなたらしく。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "첫 화면부터 나답게."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Un inicio más a tu medida."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Um início com a sua cara."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Un premier fil qui vous ressemble."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Damit dein erster Feed zu dir passt."
+          }
+        }
+      }
+    },
+    "onboarding.interests.count": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已选择 %lld / 3"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已選擇 %lld / 3"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld / 3 selected"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld / 3 選択済み"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld / 3 선택"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld / 3 seleccionados"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld / 3 selecionados"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld / 3 sélectionnés"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld / 3 ausgewählt"
+          }
+        }
+      }
+    },
+    "onboarding.handoff.action": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "复制并打开 ChatGPT"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "複製並開啟 ChatGPT"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copy & open ChatGPT"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "コピーしてChatGPTを開く"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "복사하고 ChatGPT 열기"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copiar y abrir ChatGPT"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copiar e abrir ChatGPT"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copier et ouvrir ChatGPT"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kopieren und ChatGPT öffnen"
+          }
+        }
+      }
+    },
+    "onboarding.handoff.failed": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已复制。暂时无法打开，请稍后在 ChatGPT 中粘贴。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已複製。暫時無法開啟，請稍後在 ChatGPT 中貼上。"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copied. Couldn’t open ChatGPT. You can paste it there later."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "コピーしました。ChatGPTを開けませんでした。後で貼り付けられます。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "복사했지만 ChatGPT를 열지 못했어요. 나중에 붙여넣을 수 있어요."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copiado. No se pudo abrir ChatGPT. Puedes pegarlo allí más tarde."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copiado. Não foi possível abrir o ChatGPT. Cole lá mais tarde."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copié. Impossible d’ouvrir ChatGPT. Vous pourrez le coller plus tard."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kopiert. ChatGPT lässt sich gerade nicht öffnen. Du kannst den Prompt später dort einfügen."
           }
         }
       }

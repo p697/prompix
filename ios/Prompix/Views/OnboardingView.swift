@@ -1,291 +1,162 @@
 import SwiftUI
 
+/// A short, offline-ready introduction. Only explicit interest completion exits it.
 struct PrompixOnboarding: View {
     let onComplete: () -> Void
     @Environment(Library.self) private var library
     @Environment(\.dynamicTypeSize) private var typeSize
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.openURL) private var openURL
     @State private var page = 0
-    @State private var pagesUnfolded = false
-    @State private var examples: [Prompt] = []
-    @State private var writingExample: Prompt?
-    @State private var capturedExamples = false
-    @State private var trial: Trial?
+    @State private var example: Prompt?
+    @State private var openFailed = false
     @AccessibilityFocusState private var focusedPage: Int?
 
-    private struct Trial: Identifiable {
-        let id = UUID()
-        let item: Prompt
-        let language: String?
-        let content: Prompt.TranslatedContent
-        let text: String
+    private var canComplete: Bool {
+        library.recommendations.interests.count == 3 && !library.recommendations.storageFailed
     }
 
     var body: some View {
         VStack(spacing: 0) {
-            navigation
+            HStack {
+                Button { move(to: page - 1) } label: {
+                    Image(systemName: "chevron.left").font(.system(size: 18, weight: .medium))
+                        .frame(width: 44, height: 44).contentShape(Circle())
+                }
+                .accessibilityLabel(copy("onboarding.back"))
+                .accessibilityIdentifier("onboardingBack")
+                .disabled(page == 0).opacity(page == 0 ? 0 : 1).accessibilityHidden(page == 0)
+                Spacer()
+                Text("Prompix").font(.system(size: 17, weight: .medium)).tracking(-0.4)
+                    .opacity(page == 0 ? 0 : 1).accessibilityHidden(true)
+                Spacer()
+                Color.clear.frame(width: 44, height: 44).accessibilityHidden(true)
+            }
+            .buttonStyle(.plain).padding(.horizontal, 16)
             GeometryReader { viewport in
                 TabView(selection: $page) {
                     ForEach(0..<4) { index in
-                        Group {
-                            if index == 3 {
-                                ScrollView {
-                                    VStack(alignment: .leading, spacing: 20) {
-                                        Text(RecommendationCopy.text("interests.title")).font(.title)
-                                            .accessibilityIdentifier("onboarding-title-3")
-                                            .accessibilityAddTraits(.isHeader)
-                                            .accessibilityFocused($focusedPage, equals: 3)
-                                        InterestSelection()
-                                    }.padding(24).frame(maxWidth: 560).frame(maxWidth: .infinity)
-                                }.accessibilityIdentifier("onboarding-page-3")
-                            } else { pageContent(index, viewport: viewport.size) }
-                        }.tag(index)
+                        pageContent(index, viewport: viewport.size).tag(index)
                     }
-                }
-                .tabViewStyle(.page(indexDisplayMode: .never))
+                }.tabViewStyle(.page(indexDisplayMode: .never))
             }
             controls
         }
-        .background(Palette.paper)
-        .foregroundStyle(Palette.ink)
-        .onAppear(perform: captureExamples)
+        .background(Palette.paper).foregroundStyle(Palette.ink)
+        .interactiveDismissDisabled()
         .onChange(of: page) { _, value in focusedPage = value }
-        .sheet(item: $trial, onDismiss: { focusedPage = 2 }) { trial in
-            PromptUseSheet(item: trial.item, text: trial.text, sourceText: trial.content.prompt, title: trial.content.title, language: trial.language, onPrepared: { prepared in
-                let saved = library.saveDraft(prepared, for: trial.item, language: trial.language)
-                if !saved { library.dismissError() }
-                return saved
-            })
+        .task {
+            // Original Prompix Studio artwork and its complete prompt ship together.
+            // Live catalog order, connectivity and downloaded media cannot change this story.
+            guard let url = Bundle.main.url(forResource: "catalog", withExtension: "json"),
+                  let data = try? Data(contentsOf: url),
+                  let catalog = try? JSONDecoder().decode(Catalog.self, from: data) else { return }
+            example = catalog.prompts.first { $0.id == "summer-citrus" }
         }
-    }
-
-    private var navigation: some View {
-        HStack(spacing: 12) {
-            Button { move(to: page - 1) } label: {
-                Image(systemName: "chevron.left")
-                    .font(.body.weight(.medium))
-                    .frame(minWidth: 44, minHeight: 44)
-                    .contentShape(Rectangle())
-            }
-            .accessibilityLabel(String(localized: "onboarding.back", table: "Onboarding"))
-            .accessibilityIdentifier("onboardingBack")
-            .disabled(page == 0).opacity(page == 0 ? 0 : 1)
-            .accessibilityHidden(page == 0)
-            Spacer(minLength: 0)
-            Button(action: onComplete) {
-                Text(String(localized: "onboarding.skip", table: "Onboarding"))
-                    .font(.subheadline)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(minWidth: 44, minHeight: 44)
-                    .contentShape(Rectangle())
-            }
-            .accessibilityIdentifier("onboardingSkip")
-        }
-        .buttonStyle(.plain)
-        .foregroundStyle(Palette.muted)
-        .padding(.horizontal, 20)
     }
 
     private func pageContent(_ index: Int, viewport: CGSize) -> some View {
         ScrollView {
-            VStack(spacing: 0) {
-                Text(title(for: index))
-                    .font(.system(.title, design: .default, weight: .regular))
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .accessibilityAddTraits(.isHeader)
-                    .accessibilityFocused($focusedPage, equals: index)
-                    .accessibilityIdentifier("onboarding-title-\(index)")
-                Spacer(minLength: 24)
-                if index == 2 {
-                    usePreview.frame(maxWidth: 360)
-                    Spacer(minLength: 24)
-                } else if !typeSize.isAccessibilitySize {
-                    illustration(for: index, viewport: viewport)
-                        .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
-                        .accessibilityHidden(true)
-                        .allowsHitTesting(false)
-                    Spacer(minLength: 24)
-                }
-                Text(description(for: index))
-                    .font(.body)
-                    .foregroundStyle(Palette.muted)
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .accessibilityIdentifier("onboarding-body-\(index)")
-                if index == 2 {
-                    Text(String(localized: "onboarding.use.skills", table: "Onboarding"))
-                        .font(.subheadline)
-                        .foregroundStyle(Palette.muted)
-                        .multilineTextAlignment(.center)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .padding(.top, 12)
+            VStack(spacing: index == 3 ? 24 : 0) {
+                if index == 3 {
+                    VStack(alignment: .leading, spacing: 10) {
+                        heading(index)
+                        Text(copy("onboarding.interests.body"))
+                            .font(.subheadline).foregroundStyle(Palette.muted)
+                    }.frame(maxWidth: .infinity, alignment: .leading)
+                    InterestSelection(requiredCount: 3)
+                } else {
+                    JourneyEntrance(active: page == index, delay: 0.12) {
+                        heading(index).multilineTextAlignment(.center)
+                    }
+                    Spacer(minLength: 16)
+                    JourneyMotion(active: page == index) { elapsed, entered in
+                        let width = min(viewport.width - 48, 400)
+                        let height = typeSize.isAccessibilitySize ? 220 : min(width * 1.12, max(250, viewport.height * 0.65))
+                        Group {
+                            switch index {
+                            case 0: JourneyGlass(elapsed: elapsed, entered: entered)
+                            case 1: JourneyCollage(elapsed: elapsed, entered: entered)
+                            default: JourneyHandoff(elapsed: elapsed, entered: entered)
+                            }
+                        }.frame(width: width, height: height)
+                    }
+                    .accessibilityHidden(true).allowsHitTesting(false)
+                    Spacer(minLength: 18)
+                    JourneyEntrance(active: page == index, delay: 0.24) {
+                        VStack(spacing: 14) {
+                            Text(copy(["onboarding.discover.body", "onboarding.save.body", "onboarding.use.body"][index]))
+                                .font(.subheadline).foregroundStyle(Palette.muted)
+                                .multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
+                                .accessibilityIdentifier("onboarding-body-\(index)")
+                            if index == 2 {
+                                Button(action: tryPrompt) {
+                                    Label(copy("onboarding.handoff.action"), systemImage: "arrow.up.right")
+                                        .font(.subheadline.weight(.semibold)).multilineTextAlignment(.center)
+                                        .frame(minHeight: 44).padding(.horizontal, 18)
+                                        .background(Palette.soft, in: Capsule())
+                                }
+                                .buttonStyle(JourneyButtonStyle()).disabled(example == nil)
+                                .accessibilityIdentifier("onboardingTryPrompt")
+                                if openFailed {
+                                    Text(copy("onboarding.handoff.failed")).font(.footnote).foregroundStyle(Palette.muted)
+                                }
+                            }
+                        }
+                    }
                 }
             }
             .frame(maxWidth: 520)
-            .padding(.horizontal, 24)
-            .padding(.vertical, 16)
-            .frame(maxWidth: .infinity, minHeight: viewport.height)
+            .padding(.horizontal, 24).padding(.top, index == 3 ? 20 : 12).padding(.bottom, 20)
+            .frame(maxWidth: .infinity, minHeight: index == 3 ? nil : viewport.height)
         }
-        .scrollIndicators(.hidden)
-        .accessibilityIdentifier("onboarding-page-\(index)")
+        .scrollIndicators(.hidden).accessibilityIdentifier("onboarding-page-\(index)")
     }
 
-    @ViewBuilder private func illustration(for index: Int, viewport: CGSize) -> some View {
-        let width = max(0, min(viewport.width - 48, typeSize.isAccessibilitySize ? 280 : 440))
-        // Artwork scales with its container; larger text scrolls above the fixed actions.
-        let height = min(width * 1.05, max(200, viewport.height * 0.67))
-        if index == 0 {
-            brandIllustration.frame(width: width, height: height)
-        } else {
-            collectionPreview.frame(maxWidth: width)
-        }
-    }
-
-    private var brandIllustration: some View {
-        GeometryReader { space in
-            VStack(spacing: 0) {
-                SpectralPages(openness: reduceMotion || pagesUnfolded ? 1 : 0.06)
-                    .frame(height: space.size.height * 0.84)
-                    .task {
-                        guard !pagesUnfolded else { return }
-                        // Mount the artwork before interpolating its geometry.
-                        // Only this decoration waits; every action is usable now.
-                        if !reduceMotion { try? await Task.sleep(for: .milliseconds(100)) }
-                        withAnimation(reduceMotion || Task.isCancelled ? nil : .spring(duration: 0.85, bounce: 0.12)) {
-                            pagesUnfolded = true
-                        }
-                    }
-                Text("Prompix")
-                    .font(.system(size: min(48, space.size.width * 0.14), weight: .medium))
-                    .tracking(-2)
-            }
-            .frame(maxWidth: .infinity)
-        }
-    }
-
-    private var collectionPreview: some View {
-        HStack(alignment: .top, spacing: 16) {
-            savedExample(at: 0)
-            savedExample(at: 1).padding(.top, 36)
-        }
-    }
-
-    private func savedExample(at index: Int) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            tile(at: index).aspectRatio(0.78, contentMode: .fit)
-                .overlay(alignment: .bottomTrailing) {
-                    Image(systemName: "bookmark.fill")
-                        .font(.body)
-                        .foregroundStyle(Palette.highlightInk)
-                        .padding(10)
-                        .background(Palette.highlight, in: Circle())
-                        .padding(8)
-                }
-            if examples.indices.contains(index) {
-                let item = examples[index]
-                Text(item.displayTitle).font(.subheadline).lineLimit(2)
-                Text(item.creator?.displayName ?? item.source.author ?? item.source.name)
-                    .font(.caption).foregroundStyle(Palette.muted).lineLimit(2)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private var usePreview: some View {
-        VStack(spacing: 16) {
-            VStack(alignment: .leading, spacing: 14) {
-                HStack {
-                    Text("Prompt").font(.caption.weight(.medium))
-                    Spacer()
-                    Image(systemName: "text.alignleft").font(.body).accessibilityHidden(true)
-                }
-                .foregroundStyle(Palette.accent)
-                if let writingExample {
-                    let content = writingExample.content(in: writingExample.preferredTranslation)
-                    Text(content.title).font(.title3)
-                        .fixedSize(horizontal: false, vertical: true)
-                    Text(content.prompt)
-                        .font(.subheadline).foregroundStyle(Palette.muted).lineSpacing(4)
-                        .lineLimit(typeSize.isAccessibilitySize ? 4 : 5)
-                        .accessibilityIdentifier("onboardingTrialExcerpt")
-                } else {
-                    Text(String(localized: "onboarding.use.preview", table: "Onboarding"))
-                        .font(.title3)
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(24)
-            .background(Palette.surface, in: RoundedRectangle(cornerRadius: 12))
-            .overlay(alignment: .top) {
-                LinearGradient(colors: [Palette.spectrumBlue, Palette.spectrumIris, Palette.spectrumRose], startPoint: .leading, endPoint: .trailing)
-                    .frame(height: 2).padding(.horizontal, 24)
-            }
-            .overlay { RoundedRectangle(cornerRadius: 12).strokeBorder(Palette.line, lineWidth: 0.5) }
-            if let writingExample {
-                Button { openTrial(writingExample) } label: {
-                    HStack(spacing: 10) {
-                        Text(String(localized: "onboarding.trial.action", table: "Onboarding"))
-                            .fixedSize(horizontal: false, vertical: true)
-                        Image(systemName: "arrow.right").accessibilityHidden(true)
-                    }
-                    .font(.subheadline.weight(.medium))
-                    .foregroundStyle(Palette.accent)
-                    .frame(maxWidth: .infinity, minHeight: 48)
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("onboardingTryPrompt")
-                .accessibilityHint(String(localized: "onboarding.trial.hint", table: "Onboarding"))
-            }
-        }
-    }
-
-    private func openTrial(_ item: Prompt) {
-        let language = item.preferredTranslation
-        trial = Trial(item: item, language: language, content: item.content(in: language),
-                      text: library.draft(for: item, language: language))
-    }
-
-    @ViewBuilder private func tile(at index: Int) -> some View {
-        if examples.indices.contains(index) {
-            OnboardingArtwork(item: examples[index])
-                .clipShape(RoundedRectangle(cornerRadius: 3))
-        } else {
-            Rectangle().fill(index.isMultiple(of: 2) ? Palette.soft : Palette.noteMint)
-                .overlay {
-                    Image(systemName: ["text.quote", "photo", "play", "safari", "curlybraces", "sparkle"][index % 6])
-                        .font(.title.weight(.ultraLight)).foregroundStyle(Palette.accent)
-                }
-        }
+    private func heading(_ index: Int) -> some View {
+        Text(copy(["onboarding.discover.title", "onboarding.save.title", "onboarding.use.title", "onboarding.interests.title"][index]))
+            .font(.system(.largeTitle, design: .rounded, weight: .semibold))
+            .tracking(-1.2).fixedSize(horizontal: false, vertical: true)
+            .accessibilityAddTraits(.isHeader).accessibilityFocused($focusedPage, equals: index)
+            .accessibilityIdentifier("onboarding-title-\(index)")
     }
 
     private var controls: some View {
-        VStack(spacing: 12) {
-            Button {
-                if page == 3 { onComplete() } else { move(to: page + 1) }
-            } label: {
-                Text(page == 3 ? String(localized: "onboarding.complete", table: "Onboarding") : String(localized: "onboarding.next", table: "Onboarding"))
-                    .font(.body.weight(.medium))
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(minWidth: 160, minHeight: 28)
-                    .padding(.horizontal, 28).padding(.vertical, 13)
-                    .foregroundStyle(Palette.paper)
-                    .background(Palette.accent, in: Capsule())
+        VStack(spacing: 14) {
+            if page == 3 {
+                Text(typeSize.isAccessibilitySize ? "\(library.recommendations.interests.count) / 3" : String(format: copy("onboarding.interests.count"), locale: .current, library.recommendations.interests.count))
+                    .font(.caption.monospacedDigit()).foregroundStyle(Palette.muted)
+                    .contentTransition(.numericText()).accessibilityIdentifier("onboardingInterestCount")
+                    .accessibilityLabel(String(format: copy("onboarding.interests.count"), locale: .current, library.recommendations.interests.count))
             }
-            .buttonStyle(.plain)
+            Button {
+                if page == 3 {
+                    // Check the durable write too: a failed save must never bypass setup.
+                    guard canComplete, library.recommendations.setInterests(library.recommendations.interests) else { return }
+                    onComplete()
+                } else { move(to: page + 1) }
+            } label: {
+                HStack(spacing: 14) {
+                    Text(copy(page == 3 ? "onboarding.complete" : page == 0 ? "onboarding.begin" : "onboarding.next"))
+                        .fixedSize(horizontal: false, vertical: true)
+                    if !typeSize.isAccessibilitySize { Image(systemName: "arrow.right").accessibilityHidden(true) }
+                }
+                .font(.body.weight(.semibold)).multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity, minHeight: 28).padding(.vertical, 16).padding(.horizontal, typeSize.isAccessibilitySize ? 16 : 24)
+                .foregroundStyle(Palette.paper)
+                .background(page == 3 && !canComplete ? Palette.muted.opacity(0.35) : Palette.ink, in: Capsule())
+            }
+            .buttonStyle(JourneyButtonStyle()).disabled(page == 3 && !canComplete)
             .accessibilityIdentifier(page == 3 ? "onboardingComplete" : "onboardingNext")
-            HStack(spacing: 6) {
+            HStack(spacing: 7) {
                 ForEach(0..<4) { index in
-                    Capsule().fill(index == page ? Palette.accent : Palette.line)
-                        .frame(width: index == page ? 22 : 10, height: 4)
+                    Capsule().fill(index == page ? Palette.ink : Palette.line)
+                        .frame(width: index == page ? 24 : 6, height: 5)
                 }
             }
-            .frame(height: 16)
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(String(localized: "onboarding.progress", table: "Onboarding"))
-            .accessibilityValue(String(format: String(localized: "onboarding.progress.format", table: "Onboarding"), locale: .current, page + 1, 4))
+            .frame(height: 12).accessibilityElement(children: .ignore)
+            .accessibilityLabel(copy("onboarding.progress"))
+            .accessibilityValue(String(format: copy("onboarding.progress.format"), locale: .current, page + 1, 4))
             .accessibilityAdjustableAction { direction in
                 switch direction {
                 case .increment: move(to: page + 1)
@@ -294,89 +165,173 @@ struct PrompixOnboarding: View {
                 }
             }
         }
-        .padding(.horizontal, 24).padding(.top, 12).padding(.bottom, 12)
-        .frame(maxWidth: .infinity)
-        .background(Palette.paper)
+        .frame(maxWidth: 440).padding(.horizontal, typeSize.isAccessibilitySize ? 20 : 28).padding(.top, 12).padding(.bottom, 12)
+        .frame(maxWidth: .infinity).background(Palette.paper)
     }
 
     private func move(to destination: Int) {
         guard (0..<4).contains(destination) else { return }
-        withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) { page = destination }
+        withAnimation(reduceMotion ? nil : .smooth(duration: 0.4)) { page = destination }
     }
 
-    private func captureExamples() {
-        guard !capturedExamples else { return }
-        capturedExamples = true
-        // Freeze this presentation's selection so a foreground catalog update cannot
-        // rearrange the examples. Only existing catalog entries are used.
-        let items = library.prompts
-        let localImages = items.filter { item in
-            item.kind == .image && OnboardingArtwork.hasBundledPreview(item)
-        }
-        let localIDs = Set(localImages.map(\.id))
-        let remaining = items.filter { !localIDs.contains($0.id) }
-        let writingCandidates = items.filter {
-            $0.kind == .text && !$0.isSkill && !$0.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                && $0.prompt.count <= 1_200
-        }
-        writingExample = writingCandidates.first { $0.id == "ordinary-museum" } ?? writingCandidates.first
-        // A single real prompt connects discovery, saving and trying. Its text
-        // is already in the catalog; opening the preview needs no network.
-        var seen = Set<String>()
-        let story = Array(localImages.prefix(1)) + [writingExample].compactMap { $0 } + localImages + remaining
-        examples = Array(story.filter { seen.insert($0.id).inserted }.prefix(2))
+    private func tryPrompt() {
+        guard let example, let destination = PromptDestination.choices(for: example).first(where: { $0.id == "chatgpt" }) else { return }
+        let transfer = destination.transfer(example.content(in: example.preferredTranslation).prompt)
+        UIPasteboard.general.string = transfer.text
+        openFailed = false
+        openURL(transfer.url) { accepted in openFailed = !accepted }
     }
 
-    private func title(for index: Int) -> String {
-        switch index {
-        case 0: String(localized: "onboarding.discover.title", table: "Onboarding")
-        case 1: String(localized: "onboarding.save.title", table: "Onboarding")
-        default: String(localized: "onboarding.use.title", table: "Onboarding")
-        }
-    }
+    private func copy(_ key: String) -> String { NSLocalizedString(key, tableName: "Onboarding", comment: "Welcome journey") }
+}
 
-    private func description(for index: Int) -> String {
-        switch index {
-        case 0: String(localized: "onboarding.discover.body", table: "Onboarding")
-        case 1: String(localized: "onboarding.save.body", table: "Onboarding")
-        default: String(localized: "onboarding.use.body", table: "Onboarding")
+/// Gentle decoration runs only for the visible page in an active, full-power app.
+private struct JourneyMotion<Content: View>: View {
+    let active: Bool
+    @ViewBuilder let content: (Double, Bool) -> Content
+    @Environment(\.scenePhase) private var phase
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var lowPower = ProcessInfo.processInfo.isLowPowerModeEnabled
+    @State private var entered = false
+    private var animates: Bool { active && phase == .active && !reduceMotion && !lowPower }
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 30, paused: !animates)) { timeline in
+            content(animates ? timeline.date.timeIntervalSinceReferenceDate : 0, reduceMotion || lowPower || entered)
+        }
+        .task(id: active) {
+            guard active else { entered = false; return }
+            if !reduceMotion && !lowPower { try? await Task.sleep(for: .milliseconds(70)) }
+            guard !Task.isCancelled else { return }
+            withAnimation(reduceMotion || lowPower ? nil : .spring(duration: 1.05, bounce: 0.16)) { entered = true }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .NSProcessInfoPowerStateDidChange)) { _ in
+            lowPower = ProcessInfo.processInfo.isLowPowerModeEnabled
         }
     }
 }
 
-private struct OnboardingArtwork: View {
-    let item: Prompt
-
-    static func hasBundledPreview(_ item: Prompt) -> Bool {
-        if let name = item.media?.image, UIImage(named: name) != nil { return true }
-        // Artwork gives a remote URL precedence over its procedural fallbacks.
-        guard item.media?.imageURL == nil else { return false }
-        if item.kind == .web, UIImage(named: "web-\(item.id)") != nil { return true }
-        return UIImage(named: item.artwork) != nil
-    }
-
+private struct JourneyEntrance<Content: View>: View {
+    let active: Bool
+    let delay: Double
+    @ViewBuilder let content: () -> Content
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var appeared = false
     var body: some View {
-        if item.kind == .text || item.isSkill || Self.hasBundledPreview(item) || item.media?.imageURL == nil {
-            Artwork(item: item, compact: true)
-        } else if let url = item.media?.imageURL, let image = ImageStore.shared.offlineImage(for: url) {
-            Image(uiImage: image).resizable().scaledToFill().clipped()
-        } else {
-            // Remote artwork is optional here: onboarding remains useful offline
-            // and never starts a separate image-download queue.
-            GeometryReader { space in
-                VStack(alignment: .leading, spacing: 10) {
-                    Image(systemName: item.displaySymbol).font(.caption)
-                    Spacer(minLength: 0)
-                    Text(item.displayTitle)
-                        .font(.system(size: max(11, min(18, space.size.width * 0.12))))
-                        .lineLimit(4)
-                    Spacer(minLength: 0)
+        content().opacity(reduceMotion || appeared ? 1 : 0)
+            .offset(y: reduceMotion || appeared ? 0 : 14)
+            .task(id: active) {
+                guard active else { appeared = false; return }
+                withAnimation(reduceMotion ? nil : .easeOut(duration: 0.6).delay(delay)) { appeared = true }
+            }
+    }
+}
+
+private struct JourneyGlass: View {
+    let elapsed: Double
+    let entered: Bool
+    var body: some View {
+        GeometryReader { space in
+            let width = space.size.width
+            let height = space.size.height
+            ZStack {
+                Ellipse().fill(Palette.spectrumIris.opacity(0.1)).blur(radius: 36)
+                    .frame(width: width * 0.72, height: height * 0.4).offset(y: height * 0.12)
+                ForEach(0..<7) { index in
+                    let fraction = Double(index) / 6
+                    RoundedRectangle(cornerRadius: width * 0.045, style: .continuous)
+                        .fill(Palette.onboardingGlass(at: fraction))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: width * 0.045).strokeBorder(
+                                LinearGradient(colors: [.white.opacity(0.95), .white.opacity(0.12), .white.opacity(0.65)], startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 0.7)
+                        }
+                        .shadow(color: Palette.spectrumBlue.opacity(0.08), radius: 9, x: 0, y: 6)
+                        .frame(width: width * 0.40, height: min(width * 0.67, height * 0.73))
+                        .rotationEffect(.degrees(entered ? (fraction - 0.5) * 58 : -12), anchor: .bottom)
+                        .rotation3DEffect(.degrees(entered ? sin(elapsed * 0.55) * 3 : 35), axis: (x: 0, y: 1, z: 0))
+                        .offset(x: entered ? (fraction - 0.5) * width * 0.06 : 0,
+                                y: (entered ? 0 : height * 0.12) + sin(elapsed * 0.65 + fraction * 1.2) * 5)
+                        .scaleEffect(entered ? 1 : 0.72, anchor: .bottom)
                 }
-                .foregroundStyle(Palette.accent)
-                .padding(space.size.width * 0.12)
-                .frame(width: space.size.width, height: space.size.height, alignment: .leading)
-                .background(Palette.soft)
+            }
+            .scaleEffect(0.9)
+            .frame(width: width, height: height * 0.81)
+            Text("Prompix").font(.system(size: min(48, width * 0.13), weight: .semibold, design: .rounded)).tracking(-2)
+                .frame(width: width).position(x: width * 0.5, y: height * 0.91)
+                .opacity(entered ? 1 : 0).offset(y: entered ? 0 : 12)
+        }
+    }
+}
+
+private struct JourneyCollage: View {
+    let elapsed: Double
+    let entered: Bool
+    var body: some View {
+        GeometryReader { space in
+            let w = space.size.width
+            let h = space.size.height
+            ZStack {
+                photo("lake", width: w * 0.53, height: h * 0.44, angle: 9, phase: 1)
+                    .position(x: w * 0.7, y: h * 0.25)
+                photo("citrus", width: w * 0.59, height: h * 0.72, angle: -8, phase: 0)
+                    .position(x: w * 0.32, y: h * 0.51)
+                photo("studio-paper-forms", width: w * 0.44, height: h * 0.47, angle: 8, phase: 2)
+                    .position(x: w * 0.75, y: h * 0.75)
             }
         }
+    }
+    private func photo(_ name: String, width: Double, height: Double, angle: Double, phase: Double) -> some View {
+        Image(name).resizable().scaledToFill().frame(width: width, height: height)
+            .clipShape(RoundedRectangle(cornerRadius: 20))
+            .overlay { RoundedRectangle(cornerRadius: 20).strokeBorder(.white.opacity(0.55), lineWidth: 1) }
+            .shadow(color: .black.opacity(0.12), radius: 14, x: 0, y: 8)
+            .rotationEffect(.degrees(entered ? angle + sin(elapsed * 0.5 + phase) * 2 : 0))
+            .scaleEffect(entered ? 1 : 0.75)
+            .offset(y: entered ? sin(elapsed * 0.6 + phase) * 6 : 45 + phase * 16)
+            .opacity(entered ? 1 : 0)
+    }
+}
+
+private struct JourneyHandoff: View {
+    let elapsed: Double
+    let entered: Bool
+    var body: some View {
+        GeometryReader { space in
+            let width = min(space.size.width * 0.7, 270)
+            VStack(spacing: 12) {
+                Image("citrus").resizable().scaledToFill()
+                    .frame(width: width, height: space.size.height * 0.56)
+                    .clipShape(RoundedRectangle(cornerRadius: 22))
+                    .overlay(alignment: .bottomLeading) {
+                        Label("Prompt", systemImage: "text.alignleft").font(.system(size: 14, weight: .medium))
+                            .padding(.horizontal, 14).padding(.vertical, 9)
+                            .background(.regularMaterial, in: Capsule()).padding(12)
+                    }
+                    .rotationEffect(.degrees(entered ? -5 : -15))
+                    .offset(y: sin(elapsed * 0.6) * 3)
+                Image(systemName: "arrow.down").font(.system(size: 24, weight: .light))
+                    .foregroundStyle(Palette.accent).offset(y: sin(elapsed * 1.6) * 4)
+                    .frame(height: 30)
+                HStack(spacing: 12) {
+                    Image(systemName: "bubble.left.and.bubble.right").font(.system(size: 24, weight: .light))
+                    Text("ChatGPT").font(.system(size: 22, weight: .medium))
+                    Image(systemName: "arrow.up.right").font(.system(size: 14, weight: .medium)).foregroundStyle(Palette.muted)
+                }
+                .padding(.horizontal, 24).frame(height: 64)
+                .background(Palette.surface, in: Capsule())
+                .overlay { Capsule().strokeBorder(Palette.line, lineWidth: 1) }
+                .offset(y: entered ? 0 : 25)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .scaleEffect(entered ? 1 : 0.88).opacity(entered ? 1 : 0)
+        }
+    }
+}
+
+private struct JourneyButtonStyle: ButtonStyle {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label.scaleEffect(configuration.isPressed && !reduceMotion ? 0.96 : 1)
+            .opacity(configuration.isPressed ? 0.8 : 1)
+            .animation(reduceMotion ? nil : .spring(duration: 0.3, bounce: 0.2), value: configuration.isPressed)
     }
 }

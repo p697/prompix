@@ -1,3 +1,5 @@
+**0.14.0 视觉引导**：七色玻璃入场、原创作品拼贴、直接复制到 ChatGPT，以及强制选择三项兴趣；实现与验收见[四屏引导](onboarding-visual-journey-0.14.0.md)。
+
 **当前数据运维入口**：[日常更新与按量补库](data-pipelines.md)。本轮按用户要求停止扩量，保留队列与证据；下方2000/10000及再新增1000是历史记录，不能自动恢复。推荐与标签的现状及验证边界见[推荐能力](local-first-recommendations.md)。
 
 **历史库存批量发布**：owner已授权符合质量与来源检查的库存直接发布；以私有、限时、冻结ID授权区别于每日100条新发现额度，审核与原文＋中文保持不变。见[运维说明](backfill-campaign.md#authorized-historical-inventory-publication)。

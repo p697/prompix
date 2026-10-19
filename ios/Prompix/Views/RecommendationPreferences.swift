@@ -5,20 +5,30 @@ enum RecommendationCopy {
 }
 
 struct InterestSelection: View {
+    var requiredCount: Int? = nil
+    @State private var confirmsRecovery = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(Library.self) private var library
     @Environment(\.dynamicTypeSize) private var typeSize
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
-            Text(RecommendationCopy.text("interests.subtitle"))
-                .font(.subheadline).foregroundStyle(Palette.muted)
-                .fixedSize(horizontal: false, vertical: true)
+            if requiredCount == nil {
+                Text(RecommendationCopy.text("interests.subtitle"))
+                    .font(.subheadline).foregroundStyle(Palette.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: typeSize.isAccessibilitySize ? 1 : 2), spacing: 10) {
                 ForEach(InterestCatalog.topics) { topic in
                     let selected = library.recommendations.interests.contains(topic.id)
                     Button {
                         var values = library.recommendations.interests
-                        if selected { values.remove(topic.id) } else { values.insert(topic.id) }
-                        library.recommendations.setInterests(values)
+                        if selected { values.remove(topic.id) } else {
+                            guard requiredCount.map({ values.count < $0 }) ?? true else { return }
+                            values.insert(topic.id)
+                        }
+                        withAnimation(reduceMotion ? nil : .smooth(duration: 0.2)) {
+                            _ = library.recommendations.setInterests(values)
+                        }
                     } label: {
                         HStack(spacing: 9) {
                             Image(systemName: topic.symbol)
@@ -34,6 +44,7 @@ struct InterestSelection: View {
                             .background(selected ? Palette.accent.opacity(0.09) : Palette.soft.opacity(0.6), in: RoundedRectangle(cornerRadius: 16))
                             .overlay { RoundedRectangle(cornerRadius: 16).strokeBorder(selected ? Palette.accent.opacity(0.45) : .clear, lineWidth: 1) }
                     }.buttonStyle(.plain).foregroundStyle(Palette.ink)
+                        .disabled(!selected && requiredCount.map { library.recommendations.interests.count >= $0 } == true)
                         .accessibilityLabel(topic.title)
                         .accessibilityAddTraits(selected ? .isSelected : [])
                         .accessibilityIdentifier("interest-\(topic.id)")
@@ -42,13 +53,26 @@ struct InterestSelection: View {
             VStack(alignment: .leading, spacing: 8) {
                 Toggle(RecommendationCopy.text("comfort.title"), isOn: Binding(get: { library.recommendations.reduceSuggestive }, set: { library.recommendations.setReduceSuggestive($0) }))
                     .accessibilityIdentifier("reduceSuggestiveRecommendations")
-                Text(RecommendationCopy.text("comfort.description")).font(.footnote).foregroundStyle(Palette.muted)
+                if requiredCount == nil {
+                    Text(RecommendationCopy.text("comfort.description")).font(.footnote).foregroundStyle(Palette.muted)
+                }
             }
-            Text(RecommendationCopy.text("interests.private"))
-                .font(.footnote).foregroundStyle(Palette.muted).fixedSize(horizontal: false, vertical: true)
+            if requiredCount == nil {
+                Text(RecommendationCopy.text("interests.private"))
+                    .font(.footnote).foregroundStyle(Palette.muted).fixedSize(horizontal: false, vertical: true)
+            }
             if library.recommendations.storageFailed {
                 Text(RecommendationCopy.text("preferences.failed")).font(.footnote).foregroundStyle(Palette.muted)
+                if requiredCount != nil {
+                    Button { confirmsRecovery = true } label: {
+                        Text(RecommendationCopy.text("reset.title")).frame(minHeight: 44).contentShape(Rectangle())
+                    }.accessibilityIdentifier("onboardingRecoverPreferences")
+                }
             }
+        }
+        .alert(RecommendationCopy.text("reset.description"), isPresented: $confirmsRecovery) {
+            Button(RecommendationCopy.text("reset.confirm"), role: .destructive) { library.recommendations.reset() }
+            Button(String(localized: "取消"), role: .cancel) { }
         }
     }
 }
