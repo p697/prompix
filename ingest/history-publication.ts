@@ -1,3 +1,5 @@
+import { publicationHistoryInventory } from "./history-publication-inventory.ts";
+import { readHistoryAllowance } from "./history-allowance.ts";
 import { historyPublicationSources } from "./history-publication-sources.ts";
 import { isAbsolute, join } from "node:path";
 import { z } from "zod";
@@ -7,10 +9,7 @@ import { atomic, json, moderationSchema, upload } from "./publication.ts";
 import { beginDailyPublication, publishDailyCatalog } from "./daily-publication.ts";
 import { languagePackEditionVersion, type PublishedState } from "./release-publication.ts";
 import { applyQualityHolds, readQualityHolds, registerQualityHoldScope } from "./quality-holds.ts";
-import { exportQueueReady } from "./history-queue.ts";
 import { uniqueHistoryItems } from "./history-cohort.ts";
-import { StageQueue } from "./stage-queue.ts";
-import { queueDatabase } from "./queue-database.ts";
 import { withPublisherDatabase } from "./database-publication.ts";
 import { limitNewPublications } from "./publication-quota.ts";
 import { adoptFreshXDiscoveries, filterXAvailability, readXAvailability } from "./x-availability.ts";
@@ -41,16 +40,31 @@ export interface HistoryPublicationReport {
 const dependencies = {
   begin: beginDailyPublication,
   sources: historyPublicationSources,
-  ready: (campaign: string, shared: string, run: string) => exportQueueReady(new StageQueue(queueDatabase()), campaign, shared, run, { publicationFreshOnly: true }),
-  limit: (items: Prompt[]) => withPublisherDatabase(db => limitNewPublications(db, items)),
+  ready: publicationHistoryInventory,
+  limit: async (items: Prompt[]) => { const historical = await readHistoryAllowance(); return withPublisherDatabase(db => limitNewPublications(db, items, new Date(), historical)); },
   publish: publishDailyCatalog,
   mirror: async (items: Prompt[], shared: string, errors: string[]) => {
     const cache = await json<Record<string, string>>(join(shared, "media-map.json"), {});
-    return mirrorCreatorAvatars(items, async url => {
-      const mirrored = await publishAvatar(url, shared, cache, upload);
-      await atomic(join(shared, "media-map.json"), cache);
-      return mirrored;
-    }, (id, error) => errors.push(`${id}: ${String(error)}`));
+    const pending = new Map<string, Promise<string>>();
+    let persisted = Promise.resolve(), next = 0;
+    const result: Prompt[] = new Array(items.length);
+    // Bound avatar IO independently of models. Serialize cache writes and reuse
+    // one in-flight request per URL, preserving order and the optional-avatar policy.
+    const worker = async () => {
+      while (next < items.length) {
+        const index = next++;
+        [result[index]] = await mirrorCreatorAvatars([items[index]], url => {
+          if (!pending.has(url)) pending.set(url, (async () => {
+            const mirrored = await publishAvatar(url, shared, cache, upload);
+            persisted = persisted.then(() => atomic(join(shared, "media-map.json"), cache));
+            await persisted; return mirrored;
+          })());
+          return pending.get(url)!;
+        }, (id, error) => errors.push(`${id}: ${String(error)}`));
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(4, items.length) }, worker));
+    return result;
   },
 };
 

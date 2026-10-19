@@ -994,3 +994,7 @@ public API pagination or publication quotas.
 For historical publication, availability adoption uses the exact raw source candidate rather
 than its mirrored presentation. Persist selected original snapshots into the ordinary maintenance
 intake before activation so the published IDs remain eligible for scheduled source rechecks.
+
+## 2026-10-19: Separate historical inventory publication from daily discovery cadence
+
+The owner explicitly authorized publishing all eligible reviewed historical inventory. The 100/day discovery ceiling must not delay this inventory. A private, expiring authorization freezes the allowed content IDs; selection and transaction activation both honor that same set. Unlisted first publications retain the ordinary cap, and historical activations do not consume normal discovery slots. Existing timestamps, failed attempts, quality holds, source checks and review artifacts remain intact. Seed and independent-queue outputs are revalidated against their original editorial, media and translation evidence; verified third-party availability overlays refresh timestamps only in memory. Missing or changed sources remain withheld. No new collection/model spend is implied by bulk publication.

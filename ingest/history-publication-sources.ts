@@ -5,7 +5,7 @@ import type { Prompt } from "../packages/schema/catalog.ts";
 import type { Candidate } from "./sources.ts";
 import { convertXDiscovery, readXIntake } from "./x-intake.ts";
 import { nativeXSourceIssue } from "./x-source.ts";
-import { writeImmutableBytes } from "./publication.ts";
+import { json, writeImmutableBytes } from "./publication.ts";
 
 type RetainedSnapshot = { capturedAt: string; posts: { id: string }[]; [key: string]: unknown };
 /** Recover exact original intake, not the mirrored display media, for source checks.
@@ -16,24 +16,26 @@ export async function historyPublicationSources(campaign: string, run: string, i
   const wanted = new Map(items.map(p => [p.id, p])), found = new Map<string, Candidate>();
   const snapshots: { raw: RetainedSnapshot; ids: string[] }[] = [];
   const batches = (await readdir(join(campaign, run))).filter(name => /^batch-\d{4}$/.test(name)).sort();
+  const files: string[] = await json(join(campaign, "seed-source-files.json"), []);
   for (const batch of batches) {
-    if (found.size === wanted.size) break;
     const directory = join(campaign, run, batch, "x-discovery");
     const names = await readdir(directory).catch(error => { if (error.code === "ENOENT") return []; throw error; });
-    for (const name of names.filter(n => n.endsWith(".json")).sort()) {
-      const path = join(directory, name);
-      if ((await stat(path)).size > 8_000_000) throw new Error("Historical source snapshot exceeds size bound");
-      const raw = JSON.parse(await readFile(path, "utf8")) as RetainedSnapshot;
-      const intake = convertXDiscovery([{ name, data: raw }]);
-      const selected = intake.candidates.filter(candidate => {
-        const expected = wanted.get(candidate.id);
-        return expected && !found.has(candidate.id) && !nativeXSourceIssue(candidate) &&
-          candidate.source.revision === expected.source.revision && candidate.source.post?.checkedAt === expected.source.post?.checkedAt;
-      });
-      if (!selected.length) continue;
-      for (const candidate of selected) found.set(candidate.id, candidate);
-      snapshots.push({ raw, ids: selected.map(p => p.id) });
-    }
+    for (const name of names.filter(n => n.endsWith(".json")).sort()) files.push(join(directory, name));
+  }
+  for (const path of files) {
+    if (found.size === wanted.size) break;
+    const name = path;
+    if ((await stat(path)).size > 8_000_000) throw new Error("Historical source snapshot exceeds size bound");
+    const raw = JSON.parse(await readFile(path, "utf8")) as RetainedSnapshot;
+    const intake = convertXDiscovery([{ name, data: raw }]);
+    const selected = intake.candidates.filter(candidate => {
+      const expected = wanted.get(candidate.id);
+      return expected && !found.has(candidate.id) && !nativeXSourceIssue(candidate, Date.parse(candidate.source.post?.checkedAt ?? "")) &&
+        candidate.source.revision === expected.source.revision;
+    });
+    if (!selected.length) continue;
+    for (const candidate of selected) found.set(candidate.id, candidate);
+    snapshots.push({ raw, ids: selected.map(p => p.id) });
   }
   if (found.size !== wanted.size) throw new Error(`Missing exact historical source intake for ${wanted.size - found.size} items`);
   return {

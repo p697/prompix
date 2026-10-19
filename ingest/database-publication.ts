@@ -1,3 +1,5 @@
+import { readHistoryAllowance } from "./history-allowance.ts";
+import type { HistoryAllowance } from "../services/feed/history-allowance.ts";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { readPublicationCache, storePublicationCache } from "./publication-cache.ts";
@@ -24,7 +26,7 @@ export interface DatabasePublisher {
 }
 
 /** The adapter also lets recovery tests use real SQL without production credentials. */
-export function databasePublisher(using: <T>(operation: (db: TransactionalDatabase) => Promise<T>) => Promise<T>, cacheRoot?: string): DatabasePublisher {
+export function databasePublisher(using: <T>(operation: (db: TransactionalDatabase) => Promise<T>) => Promise<T>, cacheRoot?: string, authorization?: () => Promise<HistoryAllowance | undefined>): DatabasePublisher {
   const pointer = () => using(async db => {
     const row = (await db.query("select active_release as release,generation::text from prompix.state where singleton")).rows[0];
     // Bootstrap is a separate verified migration, never an implicit empty fallback.
@@ -54,7 +56,8 @@ export function databasePublisher(using: <T>(operation: (db: TransactionalDataba
     },
     async activate(intent) {
       await assertDatabaseReconciled(intent, await pointer());
-      await using(db => activatePublication(db, intent.release, intent.observed.generation));
+      const historical = await authorization?.();
+      await using(db => activatePublication(db, intent.release, intent.observed.generation, historical));
       await assertDatabaseActivated(intent, await pointer());
     },
   };
@@ -72,7 +75,7 @@ export async function withPublisherDatabase<T>(operation: (db: TransactionalData
 
 export function configuredDatabasePublisher(environment: NodeJS.ProcessEnv = process.env): DatabasePublisher {
   return databasePublisher(operation => withPublisherDatabase(operation, environment),
-    resolve(environment.PROMPIX_CONTENT_DIR ?? join(homedir(), ".local/share/prompix/content")));
+    resolve(environment.PROMPIX_CONTENT_DIR ?? join(homedir(), ".local/share/prompix/content")), () => readHistoryAllowance(environment));
 }
 
 export function assertDatabaseActivated(intent: DatabaseIntent, current: DatabasePointer): void {

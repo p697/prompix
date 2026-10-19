@@ -1,3 +1,5 @@
+**历史库存批量发布**：owner已授权符合质量与来源检查的库存直接发布；以私有、限时、冻结ID授权区别于每日100条新发现额度，审核与原文＋中文保持不变。见[运维说明](backfill-campaign.md#authorized-historical-inventory-publication)。
+
 **发布传输优化**：导出按行数与字节双重分批，内容哈希校验的本地发布缓存仍实时读取下架记录；新版本仅传输新修订正文，避免反复传送整库原文和九语翻译。见[运维说明](backfill-campaign.md#publisher-transfer-bounds)。
 
 **历史合格队列发布入口**：新增独立发布命令与可配置的日常队列消费，复用原文＋中文及审核证据，共用100条/日额度；待CI与生产验收后启用。见[运行说明](backfill-campaign.md#qualified-history-publication)。

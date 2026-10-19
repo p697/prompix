@@ -83,3 +83,26 @@ test("backup restoration preserves first-publication order and quota history inc
   await assert.rejects(restorePublicationHistory(restored.writer, history), /uninitialized/);
   assert.equal((await limitNewPublications(restored.writer, [prompt("fresh"), prompt("old")])).report.selected, 0);
 });
+
+test("frozen historical authorization publishes beyond daily cap without granting new discovery capacity", async t => {
+  const { pg, writer, reader } = await createTestDatabase(); t.after(() => pg.close());
+  const initial = await stagePublication(writer, input([prompt("baseline")])); await activatePublication(writer, initial, "0");
+  const ordinary = Array.from({ length: 100 }, (_, i) => prompt(`ordinary-${i}`));
+  const daily = await stagePublication(writer, input(ordinary)); await activatePublication(writer, daily, "1");
+  const history = Array.from({ length: 130 }, (_, i) => prompt(`x-post-${1000 + i}`));
+  const authorization = { version: 1 as const, id: "owner-approved-history", approvedAt: new Date(Date.now()-1000).toISOString(),
+    expiresAt: new Date(Date.now()+3600_000).toISOString(), contentIDs: history.map(p => p.id) };
+  const target = await stagePublication(writer, input([...ordinary, ...history]));
+  await assert.rejects(activatePublication(writer, target, "2"), /ceiling/);
+  await assert.rejects(activatePublication(writer, target, "2", { ...authorization, expiresAt: new Date(Date.now()-500).toISOString() }), /expired/);
+  await activatePublication(writer, target, "2", authorization);
+  assert.equal((await getState(reader)).count, 230);
+  assert.equal((await writer.query("select count(*)::int as count from prompix.content where counts_toward_daily_limit")).rows[0].count, 100);
+  const unapproved = await stagePublication(writer, input([...ordinary, ...history, prompt("x-post-999999")]));
+  await assert.rejects(activatePublication(writer, unapproved, "3", authorization), /ceiling/);
+  const selection = await limitNewPublications(writer, [prompt("x-post-999999"), history[0]], new Date(), authorization);
+  assert.deepEqual(selection.prompts.map(p => p.id), [history[0].id]);
+  await activatePublication(writer, daily, "3");
+  await activatePublication(writer, target, "4", authorization);
+  assert.equal((await writer.query("select count(*)::int as count from prompix.content where counts_toward_daily_limit")).rows[0].count, 100);
+});

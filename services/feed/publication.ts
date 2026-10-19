@@ -1,3 +1,4 @@
+import { historyAllowanceIDs, type HistoryAllowance } from "./history-allowance.ts";
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { catalogSchema, localizationLanguages, type Prompt } from "../../packages/schema/catalog.ts";
@@ -140,7 +141,7 @@ export async function removeContent(db: TransactionalDatabase, ids: string[], re
 }
 
 /** The generation protects against stale writers, including an A -> B -> A race. */
-export async function activatePublication(db: TransactionalDatabase, id: string, expectedGeneration: string): Promise<void> {
+export async function activatePublication(db: TransactionalDatabase, id: string, expectedGeneration: string, historical?: HistoryAllowance): Promise<void> {
   contentID.parse(id);
   if (!/^(0|[1-9][0-9]{0,17})$/.test(expectedGeneration)) throw new Error("Invalid generation");
   await db.transaction(async tx => {
@@ -154,18 +155,19 @@ export async function activatePublication(db: TransactionalDatabase, id: string,
     const count = (await tx.query<{ count: number }>(
       "select count(*)::integer as count from prompix.release_entries where release_id=$1", [id])).rows[0].count;
     if (count !== release.item_count) throw new FeedError("conflict", 409);
+    const historicalIDs = historyAllowanceIDs(historical);
     // The state row lock serializes the daily ceiling across concurrent writers and rollback.
     if (state.active_release) {
       const quota = (await tx.query<{ used: number; incoming: number }>(`select
         (select count(*)::integer from prompix.content where counts_toward_daily_limit
           and first_published_at >= (date_trunc('day',now() at time zone 'UTC') at time zone 'UTC')) as used,
         (select count(*)::integer from prompix.release_entries e join prompix.content c on c.id=e.content_id
-          where e.release_id=$1 and c.first_published_at is null and c.removed_at is null) as incoming`, [id])).rows[0];
+          where e.release_id=$1 and c.first_published_at is null and c.removed_at is null and not(c.id=any($2::text[]))) as incoming`, [id, historicalIDs])).rows[0];
       if (quota.used + quota.incoming > 100) throw new Error("Daily new-publication ceiling exceeded");
     }
-    await tx.query(`update prompix.content c set first_published_at=now(),counts_toward_daily_limit=$2
+    await tx.query(`update prompix.content c set first_published_at=now(),counts_toward_daily_limit=($2 and not(c.id=any($3::text[])))
       from prompix.release_entries e where e.release_id=$1 and e.content_id=c.id and c.first_published_at is null and c.removed_at is null`,
-      [id, !!state.active_release]);
+      [id, !!state.active_release, historicalIDs]);
     // Assign once per immutable release. Rollback keeps its original pagination order.
     await tx.query(`with ranked as (
       select e.position,(row_number() over(order by c.first_published_at desc nulls last,e.position)-1)::integer as latest_position
