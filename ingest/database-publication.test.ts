@@ -140,3 +140,38 @@ test("database rollback requires a full DB release, preserves tombstones and cre
   assert.deepEqual(restored.removedIDs, ["fixture-0"]);
   assert.ok((await f.start()).held);
 });
+
+test("verified local release cache avoids full exports while applying live removals and rejecting corruption", async t => {
+  const { removeContent, preparePublication } = await import("../services/feed/publication.ts");
+  const { storePublicationCache } = await import("./publication-cache.ts");
+  const { writeFile } = await import("node:fs/promises");
+  const root = await mkdtemp(join(tmpdir(), "prompix-db-cache-")), { pg, writer } = await createTestDatabase();
+  t.after(async () => { await pg.close(); await rm(root, { recursive: true, force: true }); });
+  let exports = 0;
+  const tracked = { ...writer, query: async (sql: string, args?: unknown[]) => {
+    if (sql.includes("with page as materialized")) exports++;
+    return writer.query(sql, args);
+  } } as typeof writer;
+  const publisher = databasePublisher(operation => operation(tracked), root), input = catalog(4);
+  const id = await publisher.stage(input); await activatePublication(writer, id, "0");
+  assert.equal(id, preparePublication(input).id);
+  assert.deepEqual((await publisher.read(id)).prompts, input.prompts); assert.equal(exports, 0);
+  await removeContent(writer, [input.prompts[0].id], "Synthetic test removal");
+  const after = await publisher.read(id);
+  assert.deepEqual(after.prompts, input.prompts.slice(1)); assert.ok(after.removedIDs?.includes(input.prompts[0].id)); assert.equal(exports, 0);
+  const tampered = structuredClone(input); tampered.prompts[1].prompt += " tampered";
+  assert.equal(await storePublicationCache(root, id, tampered), false);
+  await writeFile(join(root, "database-release-cache", `${id}.json`), JSON.stringify(tampered));
+  assert.deepEqual((await publisher.read(id)).prompts, input.prompts.slice(1)); assert.ok(exports > 0);
+  await assert.rejects(publisher.read(`feed-${"f".repeat(64)}`), /not_found/);
+});
+
+test("an unavailable optional cache does not turn a committed database stage into failure", async t => {
+  const { writeFile } = await import("node:fs/promises");
+  const root = await mkdtemp(join(tmpdir(), "prompix-db-no-cache-")), { pg, writer } = await createTestDatabase();
+  t.after(async () => { await pg.close(); await rm(root, { recursive: true, force: true }); });
+  await writeFile(join(root, "database-release-cache"), "Not a directory");
+  const publisher = databasePublisher(operation => operation(writer), root), input = catalog(2);
+  const id = await publisher.stage(input);
+  assert.deepEqual((await publisher.read(id)).prompts, input.prompts);
+});

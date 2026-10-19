@@ -252,3 +252,40 @@ test("10,000 items: keyset traversal has no omissions or duplicates", { timeout:
   t.diagnostic(JSON.stringify({ engine: "PGlite PostgreSQL", importedMs: Math.round(importedMs), traversals,
     broadSearchMs: Math.round(plan["Execution Time"]), contentRowsScanned }));
 });
+
+test("publisher export bounds large text batches by bytes and traverses short pages without omissions", async t => {
+  const { pg, writer } = await createTestDatabase(); t.after(() => pg.close());
+  const prompts = Array.from({ length: 29 }, (_, i) => ({ ...prompt(i), prompt: (`Original ${i} `).repeat(4000) }));
+  const input = { schemaVersion: 1 as const, version: "bounded-text", prompts };
+  const id = await stagePublication(writer, input);
+  const batches: { count: number; bytes: number }[] = [];
+  const bounded: Database = { query: async <T extends Record<string, unknown>>(sql: string, values?: unknown[]) => {
+    const result = await writer.query<T>(sql, values);
+    if (sql.includes("with page as materialized")) {
+      const rows = result.rows as unknown as { original: Prompt; translations: unknown }[];
+      const bytes = rows.reduce((n, r) => n + Buffer.byteLength(JSON.stringify(r.original)) + Buffer.byteLength(JSON.stringify(r.translations)), 0);
+      batches.push({ count: rows.length, bytes });
+      assert.ok(bytes <= 262144 || rows.length === 1);
+    }
+    return result;
+  } };
+  assert.deepEqual((await exportRelease(bounded, id)).prompts, prompts);
+  assert.ok(batches.length > 2); assert.ok(batches.some(batch => batch.count > 0 && batch.count < 25));
+});
+
+test("staging a new release transmits bodies only for new immutable revisions", async t => {
+  const { pg, writer } = await createTestDatabase(); t.after(() => pg.close());
+  const before = { schemaVersion: 1 as const, version: "before", prompts: [localized(prompt(0)), prompt(1)] };
+  await stagePublication(writer, before);
+  const sent: number[] = [];
+  const tracked = { ...writer, transaction: <T>(operation: (db: Database) => Promise<T>) => writer.transaction(tx => operation({
+    query: async <R extends Record<string, unknown>>(sql: string, values?: unknown[]) => {
+      if (sql.includes("insert into prompix.revisions")) sent.push(JSON.parse(values![0] as string).length);
+      return tx.query<R>(sql, values);
+    },
+  })) };
+  const next = { ...before, version: "after", prompts: [...before.prompts, localized(prompt(2))] };
+  const release = await stagePublication(tracked, next);
+  assert.deepEqual(sent, [1]);
+  assert.deepEqual((await exportRelease(writer, release)).prompts, next.prompts);
+});

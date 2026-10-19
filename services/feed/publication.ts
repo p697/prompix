@@ -81,21 +81,25 @@ export async function stagePublication(db: TransactionalDatabase, input: Publica
     await tx.query("insert into prompix.content(id) select unnest($1::text[]) on conflict do nothing", [[...release.records.map(row => row.content_id), ...release.removed]]);
     for (let start = 0; start < release.records.length; start += 50) {
       const batch = release.records.slice(start, start + 50);
-      await tx.query(`insert into prompix.revisions(id,content_id,original,card,kind,content_type,creator_id,tags,model,languages,search_text)
+      // Revision IDs hash complete original + translations. Existing immutable rows
+      // need only a new release entry, not another transfer of their large bodies.
+      const existingIDs = new Set((await tx.query<{ id: string }>("select id from prompix.revisions where id=any($1::text[])", [batch.map(row => row.id)])).rows.map(row => row.id));
+      const fresh = batch.filter(row => !existingIDs.has(row.id));
+      if (fresh.length) await tx.query(`insert into prompix.revisions(id,content_id,original,card,kind,content_type,creator_id,tags,model,languages,search_text)
         select id,content_id,original,card,kind,content_type,creator_id,tags,model,languages,search_text
         from jsonb_to_recordset($1::jsonb) as x(id text,content_id text,original jsonb,card jsonb,kind text,
           content_type text,creator_id text,tags text[],model text,languages text[],search_text text)
-        on conflict(id) do nothing`, [JSON.stringify(batch)]);
-      const translations = batch.flatMap(row => row.translations);
+        on conflict(id) do nothing`, [JSON.stringify(fresh)]);
+      const translations = fresh.flatMap(row => row.translations);
       if (translations.length) await tx.query(`insert into prompix.translations(revision_id,locale,content,card)
         select revision_id,locale,content,card from jsonb_to_recordset($1::jsonb)
         as x(revision_id text,locale text,content jsonb,card jsonb) on conflict do nothing`, [JSON.stringify(translations)]);
-      await tx.query(`with prepared as (
+      if (fresh.length) await tx.query(`with prepared as (
         select v.id,fields.* from prompix.revisions v cross join lateral prompix.search_fields(v.original,
           (select jsonb_object_agg(t.locale,t.content) from prompix.translations t where t.revision_id=v.id)) fields
         where v.id=any($1::text[])
       ) update prompix.revisions v set search_titles=p.search_titles,search_creator=p.search_creator,
-        search_metadata=p.search_metadata,search_text=p.search_text from prepared p where p.id=v.id`, [batch.map(row => row.id)]);
+        search_metadata=p.search_metadata,search_text=p.search_text from prepared p where p.id=v.id`, [fresh.map(row => row.id)]);
       await tx.query(`insert into prompix.release_entries(release_id,position,content_id,revision_id)
         select $1,position,content_id,id from jsonb_to_recordset($2::jsonb) as x(position integer,content_id text,id text)`,
         [release.id, JSON.stringify(batch.map(({ position, content_id, id }) => ({ position, content_id, id })))]);
@@ -185,15 +189,22 @@ export async function exportRelease(db: Database, release: string): Promise<Publ
   const prompts: Prompt[] = [];
   let position = -1;
   while (true) {
-    const rows = (await db.query<{ position: number; original: Prompt; translations: NonNullable<Prompt["localization"]>["translations"] }>(`
-      select e.position, v.original, coalesce((select jsonb_object_agg(t.locale,t.content)
-        from prompix.translations t where t.revision_id=v.id),'{}'::jsonb) as translations
-      from prompix.release_entries e join prompix.revisions v on v.id=e.revision_id
-      join prompix.content c on c.id=e.content_id
-      where e.release_id=$1 and e.position>$2 and c.removed_at is null order by e.position limit 25`, [release, position])).rows;
+    const rows = (await db.query<{ position: number; original: Prompt; translations: NonNullable<Prompt["localization"]>["translations"]; has_more: boolean }>(`
+      with page as materialized (
+        select e.position, v.original, coalesce((select jsonb_object_agg(t.locale,t.content)
+          from prompix.translations t where t.revision_id=v.id),'{}'::jsonb) as translations
+        from prompix.release_entries e join prompix.revisions v on v.id=e.revision_id
+        join prompix.content c on c.id=e.content_id
+        where e.release_id=$1 and e.position>$2 and c.removed_at is null order by e.position limit 25
+      ), sized as (
+        select *, sum(octet_length(original::text)+octet_length(translations::text)) over(order by position) as bytes,
+          row_number() over(order by position) as ordinal from page
+      ) select position,original,translations,
+        ((select count(*) from page)=25 or position<(select max(position) from page)) as has_more
+        from sized where bytes<=262144 or ordinal=1 order by position`, [release, position])).rows;
     for (const { original, translations } of rows) prompts.push({ ...original,
       ...(original.localization ? { localization: { ...original.localization, translations } } : {}) });
-    if (rows.length < 25) break;
+    if (!rows.length || !rows.at(-1)!.has_more) break;
     position = rows.at(-1)!.position;
   }
   const removals = await db.query<{ content_id: string }>("select content_id from prompix.removals order by sequence");

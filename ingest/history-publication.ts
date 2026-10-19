@@ -1,3 +1,4 @@
+import { historyPublicationSources } from "./history-publication-sources.ts";
 import { isAbsolute, join } from "node:path";
 import { z } from "zod";
 import type { Prompt } from "../packages/schema/catalog.ts";
@@ -39,6 +40,7 @@ export interface HistoryPublicationReport {
 }
 const dependencies = {
   begin: beginDailyPublication,
+  sources: historyPublicationSources,
   ready: (campaign: string, shared: string, run: string) => exportQueueReady(new StageQueue(queueDatabase()), campaign, shared, run, { publicationFreshOnly: true }),
   limit: (items: Prompt[]) => withPublisherDatabase(db => limitNewPublications(db, items)),
   publish: publishDailyCatalog,
@@ -75,7 +77,8 @@ export async function publishQualifiedHistory(shared: string, campaign: string, 
   const holds = await readQualityHolds(shared);
   const candidates = uniqueHistoryItems(applyQualityHolds(ready, holds).prompts.filter(p => !removedIDs.includes(p.id)), previous.prompts);
   report.uniqueUnpublished = candidates.length;
-  const availability = await adoptFreshXDiscoveries(shared, candidates, await readXAvailability(shared));
+  const sources = await io.sources(campaign, run, candidates);
+  const availability = await adoptFreshXDiscoveries(shared, sources.candidates, await readXAvailability(shared));
   const visible = filterXAvailability(candidates, availability.state);
   report.unavailable = visible.withheldIDs.length;
   // Keep the original source/translation bytes. Availability was checked above and
@@ -85,6 +88,7 @@ export async function publishQualifiedHistory(shared: string, campaign: string, 
   report.quota = quota.report; report.selected = quota.prompts.length;
   const retained = applyQualityHolds(previous.prompts, holds).prompts.filter(p => !removedIDs.includes(p.id));
   if (!quota.prompts.length && retained.length === previous.prompts.length) { report.status = "deferred"; return; }
+  await sources.persist(shared, quota.prompts);
   report.avatarErrors = [];
   const additions = await io.mirror(quota.prompts, shared, report.avatarErrors);
   const prompts = [...retained, ...additions];
