@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { constants } from "node:fs";
-import { open } from "node:fs/promises";
-import { join } from "node:path";
+import { open, realpath } from "node:fs/promises";
+import { isAbsolute, join } from "node:path";
 import { z } from "zod";
 import { promptSchema, type Catalog, type Prompt } from "../packages/schema/catalog.ts";
 import { atomic } from "./publication.ts";
@@ -49,12 +49,40 @@ export async function readQualityReviewFile(path: string, maximumBytes = quality
     return JSON.parse(bytes.subarray(0, length).toString("utf8"));
   } finally { await file.close(); }
 }
-export async function readQualityHolds(root: string): Promise<QualityHolds> {
+async function readLocalQualityHolds(root: string): Promise<QualityHolds> {
   try { return qualityHoldsSchema.parse(await readQualityReviewFile(join(root, "quality-holds.json"))); }
   catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return { schemaVersion: 1, holds: {} };
     throw error;
   }
+}
+
+const holdScopesSchema = z.object({ schemaVersion: z.literal(1), roots: z.array(z.string().refine(isAbsolute)).max(16) }).strict();
+async function readHoldScopes(root: string) {
+  try { return holdScopesSchema.parse(await readQualityReviewFile(join(root, "quality-hold-scopes.json"))); }
+  catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return { schemaVersion: 1 as const, roots: [] as string[] };
+    throw error;
+  }
+}
+/** Publication and recovery keep observing owner holds even while a campaign runs independently.
+ * Registered files are required: losing a mounted campaign must fail closed, not clear its holds.
+ * Scopes are deliberately flat; they cannot recursively include each other. */
+export async function readQualityHolds(root: string): Promise<QualityHolds> {
+  const local = await readLocalQualityHolds(root);
+  for (const scope of (await readHoldScopes(root)).roots) {
+    const linked = qualityHoldsSchema.parse(await readQualityReviewFile(join(scope, "quality-holds.json")));
+    Object.assign(local.holds, linked.holds);
+  }
+  return qualityHoldsSchema.parse(local);
+}
+/** Caller owns the public daily.lock. Persist before staging any campaign content. */
+export async function registerQualityHoldScope(root: string, campaign: string) {
+  const canonical = await realpath(campaign);
+  qualityHoldsSchema.parse(await readQualityReviewFile(join(canonical, "quality-holds.json")));
+  const scopes = await readHoldScopes(root);
+  if (!scopes.roots.includes(canonical)) await atomic(join(root, "quality-hold-scopes.json"),
+    holdScopesSchema.parse({ ...scopes, roots: [...scopes.roots, canonical] }));
 }
 
 /** A changed source does not silently release a hold. Only an explicit reviewed clearance can do so. */
@@ -76,7 +104,7 @@ export async function saveQualityHold(root: string, inspected: Prompt, input: Qu
   if (qualityHoldIdentity(inspected) !== record.sourceIdentitySHA256)
     throw new Error("Quality hold review does not match the inspected original, source and media");
   if (Date.parse(record.reviewedAt) > Date.now()) throw new Error("Quality hold review is dated in the future");
-  const current = await readQualityHolds(root);
+  const current = await readLocalQualityHolds(root);
   const next = qualityHoldsSchema.parse({ ...current, holds: { ...current.holds, [itemID]: record } });
   if (Buffer.byteLength(JSON.stringify(next, null, 2) + "\n") > qualityHoldsByteLimit)
     throw new Error("Quality holds exceed the storage limit");

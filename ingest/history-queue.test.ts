@@ -112,3 +112,16 @@ test("campaign owner holds exclude output while shared publication lock remains 
     await assert.rejects(exportQueueReady(queue, root, shared, run));
   } finally { await rm(root, { recursive: true, force: true }); await rm(shared, { recursive: true, force: true }); }
 });
+
+test("publication-only export defers expired checks but still rejects modified retained output", async () => {
+  const root = await mkdtemp(join(tmpdir(), "prompix-history-expired-"));
+  try {
+    const ready = [{ id: "x-post-1", source: { post: { checkedAt: new Date(Date.now() - 25 * 3600_000).toISOString() } } }];
+    const directory = join(root, "test", "batch-0001");
+    await atomic(join(directory, "ready-0.json"), ready);
+    const queue = { db: { query: async () => ({ rows: [{ payload: { batch: "batch-0001", manifestSHA: "a".repeat(64), policy: ingestLanguagePolicy, start: 0 }, output: { pass: 1, readySHA: queueIdentity(ready) } }] }) } } as unknown as StageQueue;
+    assert.deepEqual(await exportQueueReady(queue, root, root, "test", { publicationFreshOnly: true }), []);
+    await atomic(join(directory, "ready-0.json"), [{ ...ready[0], injected: true }]);
+    await assert.rejects(exportQueueReady(queue, root, root, "test", { publicationFreshOnly: true }), /Ready evidence changed/);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});

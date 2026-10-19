@@ -1,3 +1,5 @@
+**历史合格队列发布入口**：新增独立发布命令与可配置的日常队列消费，复用原文＋中文及审核证据，共用100条/日额度；待CI与生产验收后启用。见[运行说明](backfill-campaign.md#qualified-history-publication)。
+
 **补库故障隔离**：有证据的图片审核超时和文字审核容量拒绝可隔离单批，保留未决任务与请求账本，其他批次继续；累计五个未决批次仍停机检查。不自动重放或放宽审核。见[运行说明](backfill-campaign.md#isolate-evidenced-review-outages)。
 
 **Current backfill scope: 1,000 additional qualified items.** The latest user direction replaces automatic expansion to 10,000. Preserve the frozen starting count, existing queues and quality gates; review the result at the increment milestone. See [campaign operations](backfill-campaign.md#next-stage-1000-additional-qualified-items).

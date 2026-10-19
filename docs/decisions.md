@@ -971,3 +971,12 @@ Seed freshness rechecks use an additive availability overlay. Preserve frozen so
 单批图片审核超时或有完整原始事件的文字审核容量拒绝，不应让无关队列一起停工。失败仍保持 reconcile，后继任务不能领取，候选不算合格且不重新分配；独立隔离证据绑定原始账本与批次哈希。五个累计未决批次触发跨重启保留的熔断。未知错误、存储／租约／额度异常仍停止。此改动不自动重试模型或清除已消费请求，文字容量重试另行验证。
 
 补库owner暂缓记录可先写入campaign独立锁保护的quality-holds，再与共享暂缓取并集排除计数，避免公开日任务持锁期间无法及时剔除已知问题。共享记录仍需在其锁释放后同步，不清除任一范围的暂缓。
+
+
+### 2026-10-19: Consume qualified history independently of collection
+
+Add a publication consumer for fully verified independent-queue outputs, preserving original
+and Chinese without invoking the nine-language pipeline. Daily publication can prioritize this
+queue after source maintenance. Share existing public limits and immutable-release recovery;
+do not reinterpret the +1,000 collection target as permission to bulk-publish. Persist live
+campaign quality-hold scopes so daily recovery cannot bypass a newer private owner finding.
