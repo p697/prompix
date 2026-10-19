@@ -3,6 +3,8 @@ import { join, resolve, isAbsolute } from "node:path";
 import { readdir, appendFile } from "node:fs/promises";
 import { z } from "zod";
 import { atomic, json, lockContent, writeImmutableBytes } from "../ingest/publication.ts";
+import { checkedHistorySeeds, unresolvedHistorySeeds } from "../ingest/history-freshness.ts";
+import { readXAvailability } from "../ingest/x-availability.ts";
 import { StageQueue, workStage } from "../ingest/stage-queue.ts";
 import { queueDatabase } from "../ingest/queue-database.ts";
 import { enqueueHistoryPipeline, exportQueueReady, processHistoryStage } from "../ingest/history-queue.ts";
@@ -45,7 +47,7 @@ try {
   if (originalSeed.length !== config.seedCount) throw new Error("Seed count changed");
   const previous = await json<Record<string, unknown>>(join(root, "progress.json"), {});
   const report: Record<string, unknown> = { ...previous, error: null, resumedAt: new Date().toISOString(), runtime: process.cwd(), pid: process.pid, publishedByCampaign: 0 };
-  let lastSignature = "", ready: Prompt[] = [], seed: Prompt[] = [];
+  let lastSignature = "", ready: Prompt[] = [], seed: Prompt[] = [], unresolvedSeeds: string[] = [];
   const save = async (status: string, extra: Record<string, unknown> = {}) => {
     Object.assign(report, extra, { status, updatedAt: new Date().toISOString() }); await atomic(join(root, "progress.json"), report);
     const metric = { at: report.updatedAt, status, qualifiedTotal: report.qualifiedTotal, newReady: report.newReady, assigned: report.assigned, searches: report.searches, accountedUSD: report.sharedMonthAccountedUSD, incrementalUSD: report.incrementalAccountedUSD, elapsedSeconds: (Date.now() - Date.parse(config.createdAt)) / 1000 };
@@ -74,7 +76,9 @@ try {
     if (signature !== lastSignature) {
       const holds = await readQualityHolds(config.sharedRoot), moderation = await json<{ removedIDs: string[] }>(join(config.sharedRoot, "moderation.json"), { removedIDs: [] });
       const reviews = await readTranslationReviews(join(config.sharedRoot, "translations", "semantic-rejections.json"));
-      seed = applyQualityHolds(originalSeed, holds).prompts.filter(p => !moderation.removedIDs.includes(p.id) && completeHistoryItem(p, Date.now(), requiredIngestLocales) && hasRequiredTranslations(p, reviews));
+      const seedState = await readXAvailability(join(root, "seed-revalidation"));
+      seed = applyQualityHolds(checkedHistorySeeds(originalSeed, seedState), holds).prompts.filter(p => !moderation.removedIDs.includes(p.id) && completeHistoryItem(p, Date.now(), requiredIngestLocales) && hasRequiredTranslations(p, reviews));
+      unresolvedSeeds = unresolvedHistorySeeds(originalSeed, seed, seedState, new Set([...Object.keys(holds.holds), ...moderation.removedIDs]));
       ready = await exportQueueReady(queue, root, config.sharedRoot, config.run);
       ready = uniqueHistoryItems(ready, [...baseline.prompts, ...seed]);
       await atomic(join(root, "qualified-new.json"), [...seed, ...ready]);
@@ -97,7 +101,7 @@ try {
     const accountedUSD = spend ? (spend.opening + spend.entries.reduce((n: number, e: any) => n + e.accounted, 0)) / 1e6 : null;
     await save("running", { target, baselineAtStart: baseline.prompts.length, seedReady: seed.length, newReady: ready.length, qualifiedTotal, assigned: assigned.length, queues: counts, sharedMonthAccountedUSD: accountedUSD,
       incrementalAccountedUSD: accountedUSD === null ? null : accountedUSD - config.priorSharedAccountedUSD, elapsedSecondsThisRun: (Date.now() - started) / 1000 });
-    if (seed.length !== originalSeed.length) throw new Error("Seed quality or freshness changed; revalidate original evidence before counting it");
+    if (unresolvedSeeds.length) throw new Error("Seed quality or freshness changed; revalidate original evidence before counting it");
     if (qualifiedTotal >= target) { await save(continuedTarget !== null ? "milestone-continuation-owner-audit" : target === 2000 ? "milestone-2000-owner-audit" : "milestone-10000-final-audit", { milestoneAt: new Date().toISOString() }); break; }
     const pendingBatches = await queue.db.query<{ count: number }>("select count(distinct payload->>'batch')::int as count from prompix.queue_jobs where run_id=$1 and state in ('queued','leased','retry')", [config.run]);
     if (pendingBatches.rows[0].count >= config.maxInflightBatches) { await sleep(15000); continue; }

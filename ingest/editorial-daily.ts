@@ -2,7 +2,7 @@ import { join } from "node:path";
 import type { Prompt } from "../packages/schema/catalog.ts";
 import type { Candidate } from "./sources.ts";
 import type { Reviews } from "./editorial.ts";
-import { atomic, json } from "./publication.ts";
+import { atomic, json, writeImmutableBytes } from "./publication.ts";
 import { editorialCacheSchema, editorialLedgerSchema, editorialVersion, runEditorialReview } from "./editorial-runner.ts";
 import { codexEditorialProvider } from "./editorial-provider.ts";
 import { reviewRequestLimit } from "./review-budget.ts";
@@ -26,7 +26,8 @@ export async function prepareDailyEditorial(candidates: Candidate[], reviews: Re
       if (clock().toISOString().slice(0, 10) !== day) throw new Error("UTC editorial review day changed before provider call; reserved attempt remains consumed");
       const sequence = requestSequence;
       return codexEditorialProvider(environment.PROMPIX_CODEX ?? "codex",
-        response => atomic(join(directory, "responses", `${day}-${String(sequence).padStart(3, "0")}.json`), response))(items);
+        response => atomic(join(directory, "responses", `${day}-${String(sequence).padStart(3, "0")}.json`), response),
+        async evidence => { await writeImmutableBytes(join(directory, "attempt-evidence", `${day}-${String(sequence).padStart(3, "0")}.json`), Buffer.from(JSON.stringify(evidence) + "\n")); })(items);
     } : undefined,
     persistCache: state => atomic(cachePath, state), persistReviews: state => atomic(join(root, "editorial.json"), state),
     persistLedger: async state => { await atomic(ledgerPath, state); requestSequence = state.requests; },
