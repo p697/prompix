@@ -472,3 +472,18 @@ test("manual native X metadata edits bind the current source revision without by
     await assert.rejects(readFile(join(root, "latest.json")), { code: "ENOENT" });
   } finally { await rm(root, { recursive: true, force: true }); }
 });
+
+
+test("prompt heading scans emoji-only lines without exponential backtracking", async () => {
+  // Run in a child so a pathological regex cannot freeze the entire test runner.
+  const script = String.raw`import { extractMarkedXPrompt } from './ingest/x-intake.ts';
+    for (const emoji of ['🚀', '👇🏽', '👩‍💻']) {
+      const line = (emoji.repeat(100) + ' ').repeat(10);
+      const plain = extractMarkedXPrompt({id:'123',text:line});
+      if (plain.reason !== 'missing-prompt-boundary') throw Error('Unexpected boundary');
+      const body = 'Create an image of a mountain lake in soft morning light.';
+      const marked = extractMarkedXPrompt({id:'123',text:line+'Image Prompt:\n'+body});
+      if (marked.body !== body) throw Error('Lost valid heading or body');
+    }`;
+  await promisify(execFile)(process.execPath, ['--import', 'tsx', '--input-type=module', '-e', script], { timeout: 5000 });
+});

@@ -141,7 +141,9 @@ function inferModality(label: string, context: string, body: string, post: XPost
   return attachedKinds.size === 1 ? { kind: [...attachedKinds][0] } : { reason: "ambiguous-modality" };
 }
 
-const promptMarkerPrefix = /^[\t ]*(?:(?:#{1,6}|>|[-+*•▪◦]|\d{1,2}[.)])[\t ]+|(?:\p{Extended_Pictographic}|\p{Emoji_Presentation})[\uFE0F\u200D\p{Emoji_Modifier}]*[\t ]*)*/u.source;
+// Emoji properties overlap (for example rockets). A union character class and
+// disjoint modifier suffix prevent exponential alternatives on decoration-only lines.
+const promptMarkerPrefix = /^[\t ]*(?:(?:#{1,6}|>|[-+*•▪◦]|\d{1,2}[.)])[\t ]+|(?!\p{Emoji_Modifier})[\p{Extended_Pictographic}\p{Emoji_Presentation}][\uFE0F\u200D\p{Emoji_Modifier}]*[\t ]*)*/u.source;
 const promptMarkerLabel = /(?:(?:(?:image|video)(?:[\t ]+generation)?|full|text|web|website)[\t ]+)?prompt|完整提示词|文本提示词|图片提示词|视频提示词|网页提示词|提示词|(?:(?:画像|動画|テキスト|ウェブサイト|ウェブ|web)[\t ]*)?プロンプト/.source;
 // Recognize a small, explicit model-qualified heading, never arbitrary prose
 // ending in "prompt". Downward arrows are heading decoration, not instructions.
