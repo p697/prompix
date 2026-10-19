@@ -5,6 +5,7 @@ import { z } from "zod";
 import { atomic, json, lockContent, writeImmutableBytes } from "../ingest/publication.ts";
 import { checkedHistorySeeds, unresolvedHistorySeeds } from "../ingest/history-freshness.ts";
 import { readXAvailability } from "../ingest/x-availability.ts";
+import { inspectHistoryIsolation, activeHistoryBatches, isIsolatableReviewError } from "../ingest/history-isolation.ts";
 import { StageQueue, workStage } from "../ingest/stage-queue.ts";
 import { queueDatabase } from "../ingest/queue-database.ts";
 import { enqueueHistoryPipeline, exportQueueReady, processHistoryStage } from "../ingest/history-queue.ts";
@@ -54,23 +55,31 @@ try {
     await appendFile(join(root, "measurements.jsonl"), JSON.stringify(metric) + "\n");
     console.log(JSON.stringify(metric));
   };
-  // A provider failure stops new work across all workers; healthy in-flight calls finish and retain evidence.
+  // Isolate evidenced review failures; integrity, quota, lease and unclassified failures still stop all workers.
   const worker = async () => {
     while (!stopping && claimed < 3000) {
+      let activeJobID: string | undefined;
       try {
         assertSubscriptionSnapshot(await json(join(root, "subscription-quota.json"), null));
-        const did = await workStage(queue, config.run, ["collect", "review", "translate", "semantic"], job => processHistoryStage(queue, root, config.sharedRoot, job, { beforeRequest: async () => assertSubscriptionSnapshot(await json(join(root, "subscription-quota.json"), null)) }));
+        const did = await workStage(queue, config.run, ["collect", "review", "translate", "semantic"], job => { activeJobID = job.id; return processHistoryStage(queue, root, config.sharedRoot, job, { beforeRequest: async () => assertSubscriptionSnapshot(await json(join(root, "subscription-quota.json"), null)) }); });
         if (did) claimed++; else await sleep(5000);
-      } catch (error) { failure = error; stopping = true; }
+      } catch (error) {
+        try {
+          if (!isIsolatableReviewError(error)) throw error;
+          const isolated = await inspectHistoryIsolation(queue, root, config.run);
+          if (!isolated.some(p => p.jobID === activeJobID)) throw error;
+          claimed++;
+        } catch (fatal) { failure = fatal; stopping = true; }
+      }
     }
   };
-  const current = await queue.counts(config.run);
-  if (current.some(row => row.state === "reconcile")) throw new Error("Existing uncertain jobs require evidence reconciliation before campaign resume");
+  await inspectHistoryIsolation(queue, root, config.run);
   workers.push(worker(), worker(), worker());
   const started = Date.now();
   while (!stopping && Date.now() - started < 6 * 3600_000 && claimed < 3000) {
     if (await json(join(root, "pause.json"), null)) { await save("operator-paused"); break; }
     assertSubscriptionSnapshot(await json(join(root, "subscription-quota.json"), null));
+    const isolated = await inspectHistoryIsolation(queue, root, config.run);
     const counts = await queue.counts(config.run);
     const signature = JSON.stringify(counts);
     if (signature !== lastSignature) {
@@ -99,12 +108,12 @@ try {
     const searchLimit = Math.min(20000, config.maximumSearches * Math.ceil(target / 2000));
     const month = new Date().toISOString().slice(0, 7), spend = await json<any>(join(budget.root, month + ".json"), null);
     const accountedUSD = spend ? (spend.opening + spend.entries.reduce((n: number, e: any) => n + e.accounted, 0)) / 1e6 : null;
-    await save("running", { target, baselineAtStart: baseline.prompts.length, seedReady: seed.length, newReady: ready.length, qualifiedTotal, assigned: assigned.length, queues: counts, sharedMonthAccountedUSD: accountedUSD,
+    await save("running", { target, baselineAtStart: baseline.prompts.length, seedReady: seed.length, newReady: ready.length, qualifiedTotal, assigned: assigned.length, queues: counts, isolatedReviews: isolated, sharedMonthAccountedUSD: accountedUSD,
       incrementalAccountedUSD: accountedUSD === null ? null : accountedUSD - config.priorSharedAccountedUSD, elapsedSecondsThisRun: (Date.now() - started) / 1000 });
     if (unresolvedSeeds.length) throw new Error("Seed quality or freshness changed; revalidate original evidence before counting it");
     if (qualifiedTotal >= target) { await save(continuedTarget !== null ? "milestone-continuation-owner-audit" : target === 2000 ? "milestone-2000-owner-audit" : "milestone-10000-final-audit", { milestoneAt: new Date().toISOString() }); break; }
-    const pendingBatches = await queue.db.query<{ count: number }>("select count(distinct payload->>'batch')::int as count from prompix.queue_jobs where run_id=$1 and state in ('queued','leased','retry')", [config.run]);
-    if (pendingBatches.rows[0].count >= config.maxInflightBatches) { await sleep(15000); continue; }
+    const pendingBatches = await activeHistoryBatches(queue, config.run, isolated);
+    if (pendingBatches >= config.maxInflightBatches) { await sleep(15000); continue; }
     if (assigned.length >= sourceLimit) throw new Error("Campaign source bound reached; inspect yield before authorizing more assignments");
     const scans = await Promise.all(config.searchPlans.map(async directory => {
       const plan = searchPlanSchema.parse(await json(join(directory, "plan.json"), null)), state = await readXSearchPlan(directory, plan), found = await selectXSearchLeads(directory, plan);
