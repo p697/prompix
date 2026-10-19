@@ -9,6 +9,7 @@ import { historyBatchSchema, historyCatalogSchema, type HistoryBatch, completeHi
 import { runHistoryBatch } from "./history-batch.ts";
 import { verifyReviewedHistory } from "./history-stage-verification.ts";
 import { requiredIngestLocales, ingestLanguagePolicy, hasRequiredTranslations } from "./ingest-language-policy.ts";
+import { applyQualityHolds, readQualityHolds } from "./quality-holds.ts";
 import { readTranslationReviews } from "./translation-review.ts";
 import { reviewTranslationSemantics } from "./translation-semantic.ts";
 const runName = z.string().regex(/^[a-z0-9][a-z0-9-]{0,79}$/);
@@ -84,15 +85,19 @@ export async function exportQueueReady(queue: StageQueue, root: string, shared: 
   const rows = (await queue.db.query<{ payload: unknown; output: { pass: number; readySHA?: string } }>(
     "select payload,output from prompix.queue_jobs where run_id=$1 and stage='semantic' and state='succeeded' order by id", [run])).rows;
   const items: Prompt[] = [];
+  const holds = await readQualityHolds(shared);
   for (const row of rows) {
     if (!row.output.pass) continue;
     const payload = payloadSchema.parse(row.payload), directory = join(root, run, payload.batch);
     const ready = JSON.parse(await readFile(join(directory, `ready-${payload.start}.json`), "utf8")) as Prompt[];
     if (queueIdentity(ready) !== row.output.readySHA || ready.length !== row.output.pass) throw new Error("Ready evidence changed");
-    await verifyReviewedHistory(directory, shared, ready);
+    // Verify the immutable output before excluding later owner holds. A hold must
+    // remove only its item, without making unrelated approved batches unusable.
+    const eligible = applyQualityHolds(ready, holds).prompts;
+    await verifyReviewedHistory(directory, shared, eligible);
     const rejections = await readTranslationReviews(join(shared, "translations", "semantic-rejections.json"));
-    if (!ready.every(item => completeHistoryItem(item, Date.now(), requiredIngestLocales) && hasRequiredTranslations(item, rejections))) throw new Error("Ready quality expired");
-    items.push(...ready);
+    if (!eligible.every(item => completeHistoryItem(item, Date.now(), requiredIngestLocales) && hasRequiredTranslations(item, rejections))) throw new Error("Ready quality expired");
+    items.push(...eligible);
   }
   if (new Set(items.map(p => p.id)).size !== items.length) throw new Error("Duplicate queue output");
   return uniqueHistoryItems(items, await json<Prompt[]>(join(root, run, "exclusions.json"), []));
