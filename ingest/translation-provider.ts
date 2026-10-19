@@ -18,21 +18,28 @@ export class TranslationProviderError extends Error {
   constructor(message: string, public readonly permanent = false) { super(message); }
 }
 export type TranslationProvider = (locale: TranslationLocale, segments: readonly Segment[]) => Promise<TranslationResponse>;
-export function codexTranslationProvider(executable = "codex", maxOutputTokens = 24000, model = "gpt-6-luna"): TranslationProvider {
+export type TranslationAttemptEvidence = { model: string; startedAt: string; finishedAt: string; exitCode: number | null;
+  error: string | null; diagnostic: string; events: string; eventsTruncated: boolean; output: string | null; outputTruncated: boolean };
+export function codexTranslationProvider(executable = "codex", maxOutputTokens = 24000, model = "gpt-6-luna", recordAttempt?: (evidence: TranslationAttemptEvidence) => Promise<void>): TranslationProvider {
   return async (locale, segments) => {
     const directory = await mkdtemp(join(tmpdir(), "prompix-translation-"));
     const schema = join(directory, "schema.json");
     const output = join(directory, "translation.json");
     await writeFile(schema, JSON.stringify(translationOutputSchema));
+    const startedAt = new Date().toISOString();
+    let diagnostic = "", events = "", eventsTruncated = false, exitCode: number | null = null, failure: string | null = null;
     try {
       let usage: { input_tokens?: number; output_tokens?: number } | undefined;
       await new Promise<void>((resolve, reject) => {
         const child = spawn(executable, ["exec", "--ignore-user-config", "--ignore-rules", "--ephemeral", "--skip-git-repo-check", "--sandbox", "read-only", "--cd", directory,
           "--model", model, "--json", "-c", 'model_reasoning_effort="low"', "-c", "features.shell_tool=false", "-c", 'web_search="disabled"',
           "--output-schema", schema, "--output-last-message", output, "-"], { stdio: ["pipe", "pipe", "pipe"] });
-        let diagnostic = "", eventBuffer = "";
+        let eventBuffer = "";
         child.stdout?.on("data", chunk => {
-          eventBuffer += String(chunk);
+          const text = String(chunk);
+          events += text;
+          if (events.length > 64000) { events = events.slice(-64000); eventsTruncated = true; }
+          eventBuffer += text;
           if (eventBuffer.length > 4_000_000) { child.kill("SIGTERM"); reject(new Error("Codex event exceeded output size limit")); return; }
           let lineEnd: number;
           while ((lineEnd = eventBuffer.indexOf("\n")) !== -1) {
@@ -43,13 +50,25 @@ export function codexTranslationProvider(executable = "codex", maxOutputTokens =
         child.stderr?.on("data", chunk => { diagnostic = (diagnostic + String(chunk)).slice(-8000); });
         const timer = setTimeout(() => { child.kill("SIGTERM"); reject(new Error("Codex translation timed out")); }, 600000);
         child.on("error", error => { clearTimeout(timer); reject(error); });
-        child.on("exit", code => { clearTimeout(timer); code === 0 ? resolve() : reject(new TranslationProviderError(/not supported when using Codex/.test(diagnostic) ? "Requested model is unavailable with this Codex account" : `Codex translation exited ${code}`, /not supported when using Codex|insufficient_quota|authentication|401|403/.test(diagnostic))); });
+        child.on("exit", code => { exitCode = code; clearTimeout(timer); code === 0 ? resolve() : reject(new TranslationProviderError(/not supported when using Codex/.test(diagnostic) ? "Requested model is unavailable with this Codex account" : `Codex translation exited ${code}`, /not supported when using Codex|insufficient_quota|authentication|401|403/.test(diagnostic))); });
         child.stdin.end(translationInstructions + "\n" + JSON.stringify({ locale, segments: compactSegments(segments) }));
       });
       const raw = await readFile(output, "utf8");
       if (Buffer.byteLength(raw) > maxOutputTokens * 12) throw new Error("Codex translation exceeded bounded output byte size");
       return restoreSegmentIDs({ ...JSON.parse(raw), inputTokens: usage?.input_tokens, outputTokens: usage?.output_tokens } as TranslationResponse, segments);
-    } finally { await rm(directory, { recursive: true, force: true }); }
+    } catch (error) {
+      failure = error instanceof Error ? error.message : "Translation provider failed";
+      throw error;
+    } finally {
+      try {
+        if (recordAttempt) {
+          const raw = await readFile(output, "utf8").catch(() => null);
+          const cap = maxOutputTokens * 12;
+          await recordAttempt({ model, startedAt, finishedAt: new Date().toISOString(), exitCode, error: failure,
+            diagnostic, events, eventsTruncated, output: raw === null ? null : raw.slice(0, cap), outputTruncated: raw !== null && raw.length > cap });
+        }
+      } finally { await rm(directory, { recursive: true, force: true }); }
+    }
   };
 }
 export function openAITranslationProvider(apiKey: string, maxOutputTokens = 24000): TranslationProvider {

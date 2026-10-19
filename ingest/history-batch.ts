@@ -132,12 +132,13 @@ export async function runHistoryBatch(directory: string, input: HistoryBatch, pr
     const translationCache = await readTranslationCache(translationPath), translationReviews = await readTranslationReviews(join(sharedRoot, "translations", "semantic-rejections.json"));
     if (options.chineseOnly) seedApprovedChineseMetadata(ready, translationCache);
     const priorTranslation = await json<TranslationRunReport | undefined>(join(translations, "report.json"), undefined);
-    const translate = codexTranslationProvider(env.PROMPIX_CODEX, 24000, "gpt-6-luna");
     let translationSequence = priorTranslation?.attempted ?? 0;
     const translationReport = await runHistoryTranslations({ items: ready, cache: translationCache, reviews: translationReviews,
       provider: async (locale, segments) => {
         await options.checkLease?.();
         const attempt = ++translationSequence;
+        const translate = codexTranslationProvider(env.PROMPIX_CODEX, 24000, "gpt-6-luna", async evidence => {
+          await writeImmutableBytes(join(translations, "attempts", `${attempt}.json`), Buffer.from(JSON.stringify({ locale, ids: segments.map(s => s.id), ...evidence }) + "\n")); });
         const response = await translate(locale, segments);
         await writeImmutableBytes(join(translations, "responses", `${attempt}.json`), Buffer.from(JSON.stringify({ locale, ids: segments.map(s => s.id), response }) + "\n"));
         return response;
@@ -173,7 +174,8 @@ export async function runHistoryTranslations(options: Parameters<typeof runTrans
   let prior = options.prior;
   for (let pass = 0; pass < 3; pass++) {
     const failures = prior?.failures ?? [];
-    const report = await runTranslations({ ...options, prior, provider: (locale, segments) => options.provider(locale, segments.map(segment => {
+    // Unknown provider outcomes need retained-evidence reconciliation, never an automatic replay.
+    const report = await runTranslations({ ...options, prior, maxAttempts: 1, provider: (locale, segments) => options.provider(locale, segments.map(segment => {
       const feedback = failures.filter(f => f.locale === locale && f.ids.includes(segment.id)).map(f => `Previous validation failed: ${f.reason}. Correct this against the complete source; preserve every opaque token exactly once.`);
       return feedback.length ? { ...segment, reviewFeedback: [...new Set([...(segment.reviewFeedback ?? []), ...feedback])] } : segment;
     })) });
