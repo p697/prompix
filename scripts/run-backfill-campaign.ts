@@ -3,16 +3,13 @@ import { join, resolve, isAbsolute } from "node:path";
 import { readdir, appendFile } from "node:fs/promises";
 import { z } from "zod";
 import { atomic, json, lockContent, writeImmutableBytes } from "../ingest/publication.ts";
-import { checkedHistorySeeds, unresolvedHistorySeeds } from "../ingest/history-freshness.ts";
-import { readXAvailability } from "../ingest/x-availability.ts";
+import { campaignInventory } from "../ingest/campaign-inventory.ts";
+import { boundedStageTarget, readCampaignStage } from "../ingest/campaign-stage.ts";
 import { inspectHistoryIsolation, activeHistoryBatches, isIsolatableReviewError } from "../ingest/history-isolation.ts";
 import { StageQueue, workStage } from "../ingest/stage-queue.ts";
 import { queueDatabase } from "../ingest/queue-database.ts";
-import { enqueueHistoryPipeline, exportQueueReady, processHistoryStage, readHistoryQualityHolds } from "../ingest/history-queue.ts";
-import { historyBaseline, historyBatchSchema, historyLeadSchema, chooseHistoryLeads, uniqueHistoryItems, completeHistoryItem } from "../ingest/history-cohort.ts";
-import { applyQualityHolds } from "../ingest/quality-holds.ts";
-import { readTranslationReviews } from "../ingest/translation-review.ts";
-import { hasRequiredTranslations, requiredIngestLocales } from "../ingest/ingest-language-policy.ts";
+import { enqueueHistoryPipeline, processHistoryStage } from "../ingest/history-queue.ts";
+import { historyBaseline, historyBatchSchema, historyLeadSchema, chooseHistoryLeads } from "../ingest/history-cohort.ts";
 import { readXSearchPlan, runXSearchPlan, searchPlanSchema, searchPlanReadiness } from "../ingest/x-search-plan.ts";
 import { selectXSearchLeads } from "../ingest/x-search-admission.ts";
 import { TwitterAPIClient } from "../ingest/twitterapi.ts";
@@ -73,6 +70,9 @@ try {
       }
     }
   };
+  if (await json(join(root, "pause.json"), null)) throw new Error("Campaign is paused; explicit resume required");
+  const activeStage = await readCampaignStage(root);
+  if (activeStage) boundedStageTarget(activeStage, config.run, config.baselineCount, config.createdAt);
   await inspectHistoryIsolation(queue, root, config.run);
   workers.push(worker(), worker(), worker());
   const started = Date.now();
@@ -83,13 +83,7 @@ try {
     const counts = await queue.counts(config.run);
     const signature = JSON.stringify(counts);
     if (signature !== lastSignature) {
-      const holds = await readHistoryQualityHolds(root, config.sharedRoot), moderation = await json<{ removedIDs: string[] }>(join(config.sharedRoot, "moderation.json"), { removedIDs: [] });
-      const reviews = await readTranslationReviews(join(config.sharedRoot, "translations", "semantic-rejections.json"));
-      const seedState = await readXAvailability(join(root, "seed-revalidation"));
-      seed = applyQualityHolds(checkedHistorySeeds(originalSeed, seedState), holds).prompts.filter(p => !moderation.removedIDs.includes(p.id) && completeHistoryItem(p, Date.now(), requiredIngestLocales) && hasRequiredTranslations(p, reviews));
-      unresolvedSeeds = unresolvedHistorySeeds(originalSeed, seed, seedState, new Set([...Object.keys(holds.holds), ...moderation.removedIDs]));
-      ready = await exportQueueReady(queue, root, config.sharedRoot, config.run);
-      ready = uniqueHistoryItems(ready, [...baseline.prompts, ...seed]);
+      ({ seed, ready, unresolvedSeeds } = await campaignInventory(queue, root, config.sharedRoot, config.run, baseline.prompts, originalSeed));
       await atomic(join(root, "qualified-new.json"), [...seed, ...ready]);
       lastSignature = signature;
     }
@@ -103,15 +97,15 @@ try {
     const continuation = await json(join(root, "continuation.json"), null);
     const continuedTarget = continuationTarget(continuation, config.run, config.baselineCount, config.seedCount, config.createdAt);
     if (continuedTarget !== null) await writeImmutableBytes(join(root, "continuation.lock.json"), Buffer.from(JSON.stringify(continuation) + "\n"));
-    const target = continuedTarget ?? campaignTarget(await json(join(root, "expansion-10000.json"), null), config.createdAt);
+    const target = activeStage ? boundedStageTarget(activeStage, config.run, config.baselineCount, config.createdAt) : continuedTarget ?? campaignTarget(await json(join(root, "expansion-10000.json"), null), config.createdAt);
     const sourceLimit = Math.min(30000, config.maximumSources * Math.ceil(target / 2000));
     const searchLimit = Math.min(20000, config.maximumSearches * Math.ceil(target / 2000));
     const month = new Date().toISOString().slice(0, 7), spend = await json<any>(join(budget.root, month + ".json"), null);
     const accountedUSD = spend ? (spend.opening + spend.entries.reduce((n: number, e: any) => n + e.accounted, 0)) / 1e6 : null;
-    await save("running", { target, baselineAtStart: baseline.prompts.length, seedReady: seed.length, newReady: ready.length, qualifiedTotal, assigned: assigned.length, queues: counts, isolatedReviews: isolated, sharedMonthAccountedUSD: accountedUSD,
+    await save("running", { stageID: activeStage?.id ?? null, stageBaselineQualified: activeStage ? activeStage.baselineCount + activeStage.seedReadyAtStart + activeStage.newReadyAtStart : null, target, baselineAtStart: baseline.prompts.length, seedReady: seed.length, newReady: ready.length, qualifiedTotal, assigned: assigned.length, queues: counts, isolatedReviews: isolated, sharedMonthAccountedUSD: accountedUSD,
       incrementalAccountedUSD: accountedUSD === null ? null : accountedUSD - config.priorSharedAccountedUSD, elapsedSecondsThisRun: (Date.now() - started) / 1000 });
     if (unresolvedSeeds.length) throw new Error("Seed quality or freshness changed; revalidate original evidence before counting it");
-    if (qualifiedTotal >= target) { await save(continuedTarget !== null ? "milestone-continuation-owner-audit" : target === 2000 ? "milestone-2000-owner-audit" : "milestone-10000-final-audit", { milestoneAt: new Date().toISOString() }); break; }
+    if (qualifiedTotal >= target) { await save(activeStage || continuedTarget !== null ? "milestone-continuation-owner-audit" : target === 2000 ? "milestone-2000-owner-audit" : "milestone-10000-final-audit", { milestoneAt: new Date().toISOString() }); break; }
     const pendingBatches = await activeHistoryBatches(queue, config.run, isolated);
     if (pendingBatches >= config.maxInflightBatches) { await sleep(15000); continue; }
     if (assigned.length >= sourceLimit) throw new Error("Campaign source bound reached; inspect yield before authorizing more assignments");
