@@ -1015,3 +1015,8 @@ Historical translation now makes one attempt per segment batch when the provider
 ### 2026-10-19 — Confirm retained queue results after transport ambiguity
 
 A completed model result must not be discarded solely because an earlier lease heartbeat timed out. Revalidate the same unexpired lease token before completion. When completion acknowledgement fails, read back both job and attempt and require identical output, attempt number, identity and token before considering the completion confirmed. Otherwise retain reconciliation; never replay the model handler or blindly retry an uncertain transaction. This addresses transport ambiguity without extending leases after expiry or weakening the global worker bound.
+
+
+## 2026-10-19 — Check localized prose completeness separately from semantic fidelity
+
+The per-item semantic audit must also check ordinary untranslated words and malformed mixed-language prose in all localized fields, including unchanged generated metadata. This uses the existing bounded gpt-6.1-sol call and exact source/translation evidence, preserving names, units, code, placeholders and explicitly required lettering/dialogue. Existing artifacts and owner holds remain immutable; this policy affects new review identities and does not retroactively approve held content.
