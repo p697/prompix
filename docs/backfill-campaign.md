@@ -142,3 +142,9 @@ History publication also consumes the verified campaign seeds. `seed-source-file
 ### Historical translation failure evidence
 
 Historical provider exceptions consume one request and stop repair for that batch; they do not trigger the generic translation runner's retry loop. Completed responses with structurally rejected segments may still use the bounded repair passes. Each new Codex translation attempt retains bounded events, stderr, output and exit status in `translations/attempts/<sequence>.json` outside the repository, including failures. A missing output or generic exit code is not proof of a free/unused request. Inspect retained evidence before recovery; never reset request counters or replay unknown results. Previously completed validated segments may be recovered into a new complete-stage artifact while leaving failed attempts intact, and still require normal semantic review before admission.
+
+## Confirm retained results after transient database errors
+
+A transient lease-renewal error no longer discards a completed handler result by itself. Before committing it, the worker must renew the same, still-unexpired lease token. An expired or replaced token still fails closed. If the completion transaction loses its acknowledgement, a read-only check must find both job and attempt succeeded, with the same identity, attempt number, token and exact JSON evidence. Only that confirmed result is accepted; the transaction and provider handler are not replayed.
+
+An uncommitted, mismatched or unreadable outcome still stops for reconciliation. For an existing reconciled job, inspect retained source, translation, model inputs, complete outputs and ready-artifact hashes before any operator recovery, and preserve the original failed attempt. Rollback requires no schema or ledger change: drain the controller and select the preceding durable runtime. Never clear failures to resume it.

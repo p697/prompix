@@ -1011,3 +1011,7 @@ A spot check found a Seoul scene titled Hong Kong and a 15-second storyboard tit
 ### 2026-10-19 — Preserve translation failures without automatic historical replay
 
 Historical translation now makes one attempt per segment batch when the provider throws. An exit code without a retained response is an unknown outcome, not proof that retrying is free or safe. Preserve bounded model events, diagnostics, output and exit status in the external per-attempt directory before temporary-file cleanup. Structurally rejected segments with a completed response retain the existing bounded repair passes. No quality gates, model choices or request counters are reduced/reset. Batch143 exposed the old retry behavior; its original failed call and subsequent successful response remain separate evidence, and recovery can reuse validated cache without another provider request.
+
+### 2026-10-19 — Confirm retained queue results after transport ambiguity
+
+A completed model result must not be discarded solely because an earlier lease heartbeat timed out. Revalidate the same unexpired lease token before completion. When completion acknowledgement fails, read back both job and attempt and require identical output, attempt number, identity and token before considering the completion confirmed. Otherwise retain reconciliation; never replay the model handler or blindly retry an uncertain transaction. This addresses transport ambiguity without extending leases after expiry or weakening the global worker bound.
