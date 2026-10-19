@@ -130,3 +130,11 @@ assets and cannot reproduce the original source digest. After quota selection, o
 original posts are copied idempotently into the ordinary X maintenance intake, with unchanged
 capture times and post text. The shared intake is reread to reject a conflicting newer source.
 This does not copy approval decisions, create new source checks, or fetch anything from X.
+
+## Authorized historical inventory publication
+
+The owner has now authorized bulk publication of eligible historical inventory; the earlier shared 100/day requirement is superseded **only for this explicitly approved inventory**. `PROMPIX_HISTORY_PUBLICATION_AUTHORIZATION` points to a private JSON file with `version: 1`, an authorization `id`, UTC `approvedAt`/`expiresAt` (at most 48 hours apart), and unique `contentIDs` (at most 10,000). Do not commit the file or enable it for unrelated collection runs. Prepare it from verified unpublished inventory after an explicit owner instruction. Both client selection and the serialized DB activation enforce the same frozen set. Invalid or expired files fail closed. A pending activation requires the original, still-valid authorization; inspect commit state before recovery and never replay collection or model work.
+
+Run the independent history publisher with the authorization environment variable for the duration of that operation. Ordinary first publications retain their 100/day cap. Existing published rows and their quota history are never reset; only newly published authorized inventory is recorded outside normal daily discovery usage. Rollback retains the original timestamps and accounting flags.
+
+History publication also consumes the verified campaign seeds. `seed-source-files.json` identifies their retained intake directories; original editorial, full-media, labeling and translation evidence must still validate. Current exact-source checks are overlaid in memory, leaving frozen artifacts unchanged. Missing/changed/expired source evidence defers an item; it never grants approval or triggers a translation replay. Preserve provider responses and shared spend records when refreshing source availability. Final verification must compare new public original and Chinese details with the staged catalog, plus recommendation pagination and the cleared publication intent.

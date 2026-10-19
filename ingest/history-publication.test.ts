@@ -16,7 +16,7 @@ const prompt = (id: string): Prompt => {
 };
 const state = (prompts: Prompt[]) => ({ authoritative: { schemaVersion: 1, version: "test", publishedAt: new Date().toISOString(), prompts }, database: { release: "test", generation: "1" } }) as unknown as PublishedState;
 const sources = async (_campaign: string, _run: string, items: readonly Prompt[]) => ({ candidates: [...items] as any[], persist: async () => {} });
-const quota = (prompts: Prompt[], deferred = 0) => ({ prompts, report: { dailyCeiling: 100, windowAllowance: 25, alreadyPublished: 24, selected: prompts.length, deferred, visualSelected: prompts.length, plainSelected: 0, plainDailyCeiling: 10, plainAlreadyPublished: 0, minimumVisualShare: 0.8 } });
+const quota = (prompts: Prompt[], deferred = 0) => ({ prompts, report: { historicalSelected: 0, dailyCeiling: 100, windowAllowance: 25, alreadyPublished: 24, selected: prompts.length, deferred, visualSelected: prompts.length, plainSelected: 0, plainDailyCeiling: 10, plainAlreadyPublished: 0, minimumVisualShare: 0.8 } });
 async function fixture() {
   const shared = await mkdtemp(join(tmpdir(), "prompix-history-public-")), campaign = await mkdtemp(join(tmpdir(), "prompix-history-private-"));
   await atomic(join(campaign, "quality-holds.json"), { schemaVersion: 1, holds: {} });

@@ -1,3 +1,4 @@
+import { filterXAvailability, type XAvailabilityState } from "./x-availability.ts";
 import { join } from "node:path";
 import type { Prompt } from "../packages/schema/catalog.ts";
 import { historyCatalogSchema } from "./history-cohort.ts";
@@ -13,13 +14,13 @@ import { isDeepStrictEqual } from "node:util";
 import { nativeXSourceIssue } from "./x-source.ts";
 
 /** Recheck exact source/media approvals at the stage boundary; no network or review bypass. */
-export async function verifyReviewedHistory(directory: string, sharedRoot: string, supplied?: readonly Prompt[]): Promise<Prompt[]> {
+export async function verifyReviewedHistory(directory: string, sharedRoot: string, supplied?: readonly Prompt[], availability?: XAvailabilityState): Promise<Prompt[]> {
   const items = supplied ?? historyCatalogSchema.parse(await json(join(directory, "source-catalog.json"), null)).prompts;
   if (!items.length) return [];
   const intake = await readXIntake(directory);
   const reviews = reviewsSchema.parse(await json(join(directory, "editorial.json"), {}));
   const removed = new Set((await json<{ removedIDs: string[] }>(join(sharedRoot, "moderation.json"), { removedIDs: [] })).removedIDs);
-  const eligible = new Map(selectLibrary(applyEditorialReviews(intake.candidates, reviews), removed).map(item => [item.id, item]));
+  const eligible = new Map(selectLibrary(applyEditorialReviews(availability ? intake.candidates.flatMap(p => availability[p.id] ? filterXAvailability([p], availability).prompts : [p]) : intake.candidates, reviews), removed).map(item => [item.id, item]));
   const holds = await readQualityHolds(sharedRoot);
   if (applyQualityHolds([...items], holds).prompts.length !== items.length) throw new Error("Reviewed history has active hold");
   for (const item of items) {
