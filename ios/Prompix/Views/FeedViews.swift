@@ -16,7 +16,7 @@ struct FeedResults: View {
         let waiting = !matches || (store.failure == nil && (store.release == nil || (store.items.isEmpty && store.isLoading)))
         let hasPage = matches && store.release != nil
         let items = (hasPage ? store.items : previews).filter { $0.id != excludingID && !library.isRemoved(id: $0.id) && (query.sort != "recommended" || library.recommendations.allowsRecommended($0)) }
-        let offlineItems = fallback.filter { $0.id != excludingID && !library.isRemoved($0) }
+        let offlineItems = fallback.filter { $0.id != excludingID && !library.isRemoved($0) && (query.sort != "recommended" || library.recommendations.allowsRecommended($0)) }
         let showsFallback = items.isEmpty && matches && !offlineItems.isEmpty &&
             (store.failure != nil || (store.isLoading && fallbackQuery == query))
         LazyVStack(spacing: 12) {

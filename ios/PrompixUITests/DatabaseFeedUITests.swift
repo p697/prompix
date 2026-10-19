@@ -89,6 +89,28 @@ import UIKit
         capture("recommendations-local-interests")
     }
 
+    func testVisibleCardsLearnExposureWithoutCountingThePrefetchedPool() async throws {
+        launch(["--feed-visual-mix-test"])
+        let root = try directory()
+        let scroll = app.scrollViews["discoveryScroll"]
+        XCTAssertTrue(firstFixtureCard.waitForExistence(timeout: 15))
+        scroll.swipeUp(velocity: .slow)
+        var seen: [String] = []
+        for _ in 0..<30 {
+            if let bytes = try? Data(contentsOf: root.appending(path: "recommendation-preferences.json")),
+               let value = try? JSONSerialization.jsonObject(with: bytes) as? [String: Any],
+               let entries = value["entries"] as? [String: [String: Any]] {
+                seen = entries.filter { $0.value["seenAt"] != nil }.map(\.key)
+            }
+            if !seen.isEmpty { break }
+            try await Task.sleep(for: .milliseconds(200))
+        }
+        XCTAssertFalse(seen.isEmpty, "Visible feed cards must produce durable exposure learning")
+        XCTAssertLessThan(seen.count, 30, "Prefetching three cloud pages must not count them all as viewed")
+        XCTAssertTrue(seen.allSatisfy { $0.hasPrefix("database-fixture-") })
+        capture("recommendations-visible-exposure")
+    }
+
     func testSearchTabFocusAndTextSurviveRepeatedSwitches() {
         launch()
         for index in 0..<4 {
@@ -228,6 +250,25 @@ import UIKit
         XCTAssertTrue(firstFixtureCard.waitForExistence(timeout: 12))
         XCTAssertFalse(app.buttons["retryFeed"].exists)
         capture("quantum-03-connected-feed")
+    }
+
+    func testOfflineFallbackHonorsLocalDismissals() throws {
+        launch(["--feed-home-loading-test"])
+        let root = try directory()
+        app.terminate()
+        let preferences: [String: Any] = ["version": 1, "interests": [], "learningEnabled": true, "reduceSuggestive": true,
+            "entries": ["gentle-tarot": ["topics": ["lifestyle"], "kind": "text", "updatedAt": Date().timeIntervalSinceReferenceDate,
+                                        "saved": false, "used": false, "dismissed": true]]]
+        try JSONSerialization.data(withJSONObject: preferences).write(to: root.appending(path: "recommendation-preferences.json"), options: .atomic)
+        launch(["--feed-home-loading-test"])
+        try Data().write(to: root.appending(path: "fail-feed-refresh"))
+        for gate in ["directory", "browse", "feed-refresh"] {
+            try FileManager.default.removeItem(at: root.appending(path: "hold-" + gate))
+        }
+        XCTAssertTrue(app.buttons["retryFeed"].waitForExistence(timeout: 12))
+        XCTAssertTrue(app.staticTexts["离线可用的内容"].exists)
+        XCTAssertFalse(app.buttons["prompt-gentle-tarot"].exists, "Offline recommendations must not resurrect dismissed content")
+        capture("recommendations-offline-dismissal")
     }
 
     func testHomeFailureAndRetryKeepReservedSpace() throws {

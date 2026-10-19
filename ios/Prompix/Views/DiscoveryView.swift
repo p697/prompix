@@ -76,7 +76,12 @@ struct DiscoverView: View {
     @State private var feedLayout = PromptGridLayout(width: 0)
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private let topics = ["好玩一点", "创作灵感", "日常有用"]
-    private var items: [Prompt] { library.prompts.filter { PromptQuery(kind: kind, topic: topic, model: model, skillsOnly: skillsOnly).matches($0) } }
+    private var items: [Prompt] {
+        library.prompts.filter {
+            PromptQuery(kind: kind, topic: topic, model: model, skillsOnly: skillsOnly).matches($0) &&
+                (feedSort != "recommended" || library.recommendations.allowsRecommended($0))
+        }
+    }
     private var feedQuery: FeedQuery { FeedQuery(kind: skillsOnly ? "skill" : kind?.rawValue, tag: topic, model: model, sort: feedSort) }
     private var models: [String] {
         if let feed = library.feed { return feed.browse.value?.models.map(\.name) ?? [] }
