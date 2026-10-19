@@ -80,7 +80,8 @@ export async function runHistoryBatch(directory: string, input: HistoryBatch, pr
     if (ledger && ledger.day !== day) throw new Error("History editorial ledger identity changed");
     let sequence = ledger?.requests ?? 0;
     const editorial = await runEditorialReview({ candidates, previous: [], reviews, cache, ledger, day, maxRequests: historyLimits.editorial,
-      provider: async items => { await options.checkLease?.(); return codexEditorialProvider(env.PROMPIX_CODEX, response => atomic(join(directory, "editorial-responses", `${sequence}.json`), response))(items); },
+      provider: async items => { await options.checkLease?.(); return codexEditorialProvider(env.PROMPIX_CODEX, response => atomic(join(directory, "editorial-responses", `${sequence}.json`), response),
+        async evidence => { await writeImmutableBytes(join(directory, "editorial-attempts", `${sequence}.json`), Buffer.from(JSON.stringify(evidence) + "\n")); })(items); },
       persistReviews: value => atomic(join(directory, "editorial.json"), value), persistCache: value => atomic(cachePath, value),
       persistLedger: async value => { await atomic(ledgerPath, value); sequence = value.requests; } });
     report.editorial = editorial.report;

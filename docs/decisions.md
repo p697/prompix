@@ -959,3 +959,9 @@ A fully received, retained visual response can repeat candidate or attachment id
 ### 2026-10-19: Limit the next backfill stage to1000 additional items
 
 The user's latest request replaces automatic expansion to10000. Freeze the stage starting count and reuse existing queues without resetting exclusions, attempts, budget or approval evidence. Permit bounded same-model retries only for a persisted, explicit pre-output capacity rejection; uncertain outcomes still require reconciliation.
+
+### 2026-10-19: Preserve editorial failure evidence before cleanup
+
+Retain bounded private process events and partial output for each historical/daily editorial call, including nonzero exits. Recovery must distinguish verified pre-output refusals from unknown outcomes using actual evidence. Do not infer the cause from exit code1, erase failed requests, or automatically retry them.
+
+Seed freshness rechecks use an additive availability overlay. Preserve frozen source artifacts and apply only the existing exact-source revision and dependency-scope verification; never rewrite original timestamps or treat a missing source as verified.

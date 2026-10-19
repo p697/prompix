@@ -3,6 +3,8 @@ import { join, resolve, isAbsolute } from "node:path";
 import { readdir, appendFile } from "node:fs/promises";
 import { z } from "zod";
 import { atomic, json, lockContent, writeImmutableBytes } from "../ingest/publication.ts";
+import { checkedHistorySeeds } from "../ingest/history-freshness.ts";
+import { readXAvailability } from "../ingest/x-availability.ts";
 import { StageQueue, workStage } from "../ingest/stage-queue.ts";
 import { queueDatabase } from "../ingest/queue-database.ts";
 import { enqueueHistoryPipeline, exportQueueReady, processHistoryStage } from "../ingest/history-queue.ts";
@@ -74,7 +76,8 @@ try {
     if (signature !== lastSignature) {
       const holds = await readQualityHolds(config.sharedRoot), moderation = await json<{ removedIDs: string[] }>(join(config.sharedRoot, "moderation.json"), { removedIDs: [] });
       const reviews = await readTranslationReviews(join(config.sharedRoot, "translations", "semantic-rejections.json"));
-      seed = applyQualityHolds(originalSeed, holds).prompts.filter(p => !moderation.removedIDs.includes(p.id) && completeHistoryItem(p, Date.now(), requiredIngestLocales) && hasRequiredTranslations(p, reviews));
+      const seedState = await readXAvailability(join(root, "seed-revalidation"));
+      seed = applyQualityHolds(checkedHistorySeeds(originalSeed, seedState), holds).prompts.filter(p => !moderation.removedIDs.includes(p.id) && completeHistoryItem(p, Date.now(), requiredIngestLocales) && hasRequiredTranslations(p, reviews));
       ready = await exportQueueReady(queue, root, config.sharedRoot, config.run);
       ready = uniqueHistoryItems(ready, [...baseline.prompts, ...seed]);
       await atomic(join(root, "qualified-new.json"), [...seed, ...ready]);

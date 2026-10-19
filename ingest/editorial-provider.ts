@@ -22,11 +22,17 @@ export function editorialResponseSchema(items: readonly EditorialInput[]) {
   return z.object({ decisions: z.array(decision).length(items.length) }).strict();
 }
 
-export function codexEditorialProvider(executable = "codex", recordResponse?: (response: { model: string; receivedAt: string; text: string }) => Promise<void>): EditorialProvider {
+export type EditorialAttemptEvidence = { model: string; receivedAt: string; exitCode: number | null;
+  events: string; eventsTruncated: boolean; outputText: string | null; outputBytes: number | null };
+
+export function codexEditorialProvider(executable = "codex", recordResponse?: (response: { model: string; receivedAt: string; text: string }) => Promise<void>,
+  recordAttempt?: (evidence: EditorialAttemptEvidence) => Promise<void>): EditorialProvider {
   return async items => {
     const directory = await mkdtemp(join(tmpdir(), "prompix-editorial-"));
     const schema = join(directory, "schema.json"), output = join(directory, "decisions.json");
     await writeFile(schema, JSON.stringify(z.toJSONSchema(editorialResponseSchema(items))));
+    const eventChunks: Buffer[] = [];
+    let eventBytes = 0, eventsTruncated = false, exitCode: number | null = null;
     try {
       let usage: { input_tokens?: number; output_tokens?: number } | undefined;
       await new Promise<void>((resolve, reject) => {
@@ -43,6 +49,9 @@ export function codexEditorialProvider(executable = "codex", recordResponse?: (r
         const timeout = setTimeout(() => stop("Editorial provider timed out; daily attempt remains consumed"), 180000);
         const cleanup = () => { clearTimeout(timeout); if (escalation) clearTimeout(escalation); };
         child.stdout.on("data", chunk => {
+          const remaining = Math.max(0, 2_000_000 - eventBytes);
+          if (remaining) eventChunks.push(chunk.subarray(0, remaining)); eventBytes += Math.min(chunk.length, remaining);
+          if (chunk.length > remaining) eventsTruncated = true;
           received += chunk.length;
           if (received > 2_000_000) { stop("Editorial provider exceeded bounded output"); return; }
           buffer += String(chunk);
@@ -56,7 +65,7 @@ export function codexEditorialProvider(executable = "codex", recordResponse?: (r
         child.stderr.on("data", () => {});
         child.stdin.on("error", () => {});
         child.on("error", error => { cleanup(); reject(error); });
-        child.on("close", code => { cleanup(); failure ? reject(failure) : code === 0 ? resolve() : reject(new Error(`Editorial provider exited ${code}`)); });
+        child.on("close", code => { exitCode = code; cleanup(); failure ? reject(failure) : code === 0 ? resolve() : reject(new Error(`Editorial provider exited ${code}`)); });
         child.stdin.end(editorialInstructions + "\n" + JSON.stringify({ candidates: items }));
       });
       if ((await stat(output)).size > 32000) throw new Error("Editorial response exceeds bounded output size");
@@ -64,6 +73,16 @@ export function codexEditorialProvider(executable = "codex", recordResponse?: (r
       await recordResponse?.({ model: editorialModel, receivedAt: new Date().toISOString(), text });
       const result = editorialOutputSchema.parse(JSON.parse(text));
       return { decisions: result.decisions, inputTokens: usage?.input_tokens, outputTokens: usage?.output_tokens };
-    } finally { await rm(directory, { recursive: true, force: true }); }
+    } finally {
+      // Preserve bounded private evidence even on nonzero exit or malformed output.
+      // A persistence failure must retain the temporary files and fail closed.
+      if (recordAttempt) {
+        const info = await stat(output).catch((error: NodeJS.ErrnoException) => { if (error.code === "ENOENT") return null; throw error; });
+        await recordAttempt({ model: editorialModel, receivedAt: new Date().toISOString(), exitCode,
+          events: Buffer.concat(eventChunks).toString(), eventsTruncated, outputBytes: info?.size ?? null,
+          outputText: info && info.size <= 32000 ? await readFile(output, "utf8") : null });
+      }
+      await rm(directory, { recursive: true, force: true });
+    }
   };
 }
