@@ -1,6 +1,7 @@
 import { VerifiedCapacityRejection } from "./provider-capacity.ts";
 import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
+import { isDeepStrictEqual } from "node:util";
 import type { TransactionalDatabase } from "../services/feed/database.ts";
 
 export const queueStages = ["collect", "review", "translate", "semantic", "locale"] as const;
@@ -67,6 +68,14 @@ export class StageQueue {
         [job.id, job.lease_token, result.rows[0].state, JSON.stringify(evidence)]);
     });
   }
+  /** A lost COMMIT acknowledgement may hide success. Read both rows; never replay the handler. */
+  async confirmsSuccess(job: QueueJob, evidence: Record<string, unknown>) {
+    const row = (await this.db.query<{ output: unknown; evidence: unknown }>(`select j.output,a.evidence
+      from prompix.queue_jobs j join prompix.queue_attempts a on a.job_id=j.id and a.attempt=j.attempts
+      where j.id=$1 and j.identity=$2 and j.attempts=$3 and j.state='succeeded'
+        and a.token=$4 and a.outcome='succeeded'`, [job.id, job.identity, job.attempts, job.lease_token])).rows[0];
+    return !!row && isDeepStrictEqual(row.output, evidence) && isDeepStrictEqual(row.evidence, evidence);
+  }
   async counts(run: string) {
     return (await this.db.query("select stage,state,count(*)::int as count from prompix.queue_jobs where run_id=$1 group by stage,state order by stage,state", [run])).rows;
   }
@@ -79,8 +88,14 @@ export async function workStage(queue: StageQueue, run: string, stages: QueueSta
   const timer = setInterval(() => { void queue.renew(job).catch(e => { leaseError = e; }); }, 60000);
   try {
     const result = await handler(job);
-    if (leaseError) throw leaseError;
-    await queue.finish(job, "succeeded", result);
+    clearInterval(timer);
+    // A transient renewal error is not proof of lease loss. This fresh CAS must
+    // succeed with the same unexpired token before accepting the retained result.
+    if (leaseError) await queue.renew(job);
+    try { await queue.finish(job, "succeeded", result); }
+    catch (error) {
+      if (!await queue.confirmsSuccess(job, result)) throw error;
+    }
   } catch (error) {
     if (!leaseError && job.stage === "semantic" && error instanceof VerifiedCapacityRejection
       && job.attempts < Math.min(3, job.max_attempts ?? 3)) {

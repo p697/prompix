@@ -78,3 +78,73 @@ test("verified semantic capacity retries preserve attempts, back off and reconci
     await assert.rejects(workStage(queue, "one", ["semantic"], handler), VerifiedCapacityRejection);
   } finally { await pg.close(); }
 });
+
+test("lost completion acknowledgement confirms exact committed result without another handler call", async () => {
+  const { pg, writer } = await createTestDatabase();
+  try {
+    let transactions = 0, calls = 0;
+    const queue = new StageQueue({ query: (sql, params) => writer.query(sql, params), transaction: async op => {
+      const result = await writer.transaction(op); if (++transactions === 2) throw new Error("Query read timeout"); return result;
+    } });
+    await queue.enqueue({ id: "ack", run: "ack", stage: "semantic", payload: {} });
+    assert.equal(await workStage(queue, "ack", ["semantic"], async () => { calls++; return { pass: 4, readySHA: "retained" }; }), true);
+    assert.equal(calls, 1); assert.equal(transactions, 2);
+    assert.equal((await pg.query<{ state: string; attempts: number }>("select state,attempts from prompix.queue_jobs where id='ack'")).rows[0].state, "succeeded");
+    assert.equal((await pg.query<{ n: number }>("select count(*)::int n from prompix.queue_attempts where job_id='ack'")).rows[0].n, 1);
+  } finally { await pg.close(); }
+});
+
+test("uncommitted completion stays reconciled and cannot replay its provider", async () => {
+  const { pg, writer } = await createTestDatabase();
+  try {
+    let transactions = 0, calls = 0;
+    const queue = new StageQueue({ query: (sql, params) => writer.query(sql, params), transaction: async op => {
+      if (++transactions === 2) throw new Error("Query read timeout"); return writer.transaction(op);
+    } });
+    await queue.enqueue({ id: "unknown", run: "unknown", stage: "semantic", payload: {} });
+    await assert.rejects(workStage(queue, "unknown", ["semantic"], async () => { calls++; return { pass: 4 }; }), /Query read timeout/);
+    assert.equal(calls, 1); assert.equal((await pg.query<{ state: string }>("select state from prompix.queue_jobs where id='unknown'")).rows[0].state, "reconcile");
+    assert.equal(await queue.claim("unknown", ["semantic"]), undefined);
+  } finally { await pg.close(); }
+});
+
+test("success readback rejects a different result or attempt token", async () => {
+  const { pg, writer } = await createTestDatabase();
+  try {
+    const queue = new StageQueue(writer); await queue.enqueue({ id: "match", run: "match", stage: "semantic", payload: {} });
+    const job = (await queue.claim("match", ["semantic"]))!; await queue.finish(job, "succeeded", { pass: 4 });
+    assert.equal(await queue.confirmsSuccess(job, { pass: 3 }), false);
+    assert.equal(await queue.confirmsSuccess({ ...job, lease_token: "00000000-0000-0000-0000-000000000000" }, { pass: 4 }), false);
+    assert.equal(await queue.confirmsSuccess(job, { pass: 4 }), true);
+  } finally { await pg.close(); }
+});
+
+test("transient renewal error needs a fresh valid lease before completion", async t => {
+  t.mock.timers.enable({ apis: ["setInterval"] });
+  const { pg, writer } = await createTestDatabase();
+  try {
+    const queue = new StageQueue(writer); await queue.enqueue({ id: "renew", run: "renew", stage: "semantic", payload: {} });
+    const original = queue.renew.bind(queue); let renewals = 0;
+    queue.renew = async job => { if (++renewals === 1) throw new Error("Query read timeout"); return original(job); };
+    assert.equal(await workStage(queue, "renew", ["semantic"], async () => { t.mock.timers.tick(60000); await new Promise<void>(r => setImmediate(r)); return { pass: 4 }; }), true);
+    assert.equal(renewals, 2);
+  } finally { t.mock.timers.reset(); await pg.close(); }
+});
+
+test("a genuinely lost lease cannot be revived after a renewal error", async t => {
+  t.mock.timers.enable({ apis: ["setInterval"] });
+  const { pg, writer } = await createTestDatabase();
+  try {
+    const queue = new StageQueue(writer); await queue.enqueue({ id: "expired", run: "expired", stage: "semantic", payload: {} });
+    const original = queue.renew.bind(queue); let renewals = 0;
+    queue.renew = async job => { if (++renewals === 1) throw new Error("Query read timeout"); return original(job); };
+    await assert.rejects(workStage(queue, "expired", ["semantic"], async () => {
+      t.mock.timers.tick(60000); await new Promise<void>(r => setImmediate(r));
+      await pg.query("update prompix.queue_jobs set lease_until=now()-interval '1 second' where id='expired'");
+      return { pass: 4 };
+    }), /Queue lease lost/);
+    assert.equal(renewals, 2);
+    assert.equal(await queue.claim("expired", ["semantic"]), undefined);
+    assert.equal((await pg.query<{ state: string }>("select state from prompix.queue_jobs where id='expired'")).rows[0].state, "reconcile");
+  } finally { t.mock.timers.reset(); await pg.close(); }
+});
