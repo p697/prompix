@@ -72,9 +72,17 @@ try {
   };
   if (await json(join(root, "pause.json"), null)) throw new Error("Campaign is paused; explicit resume required");
   const activeStage = await readCampaignStage(root);
-  if (activeStage) boundedStageTarget(activeStage, config.run, config.baselineCount, config.createdAt);
+  const continuation = await json(join(root, "continuation.json"), null);
+  const continuedTarget = continuationTarget(continuation, config.run, config.baselineCount, config.seedCount, config.createdAt);
+  if (continuedTarget !== null) await writeImmutableBytes(join(root, "continuation.lock.json"), Buffer.from(JSON.stringify(continuation) + "\n"));
+  const target = activeStage ? boundedStageTarget(activeStage, config.run, config.baselineCount, config.createdAt)
+    : continuedTarget ?? campaignTarget(await json(join(root, "expansion-10000.json"), null), config.createdAt);
   await inspectHistoryIsolation(queue, root, config.run);
-  workers.push(worker(), worker(), worker());
+  // A completed stage must not claim another paid job merely because its process restarted.
+  ({ seed, ready, unresolvedSeeds } = await campaignInventory(queue, root, config.sharedRoot, config.run, baseline.prompts, originalSeed));
+  if (unresolvedSeeds.length) throw new Error("Seed quality or freshness changed; inspect before starting workers");
+  const alreadyComplete = baseline.prompts.length + seed.length + ready.length >= target;
+  if (!alreadyComplete) workers.push(worker(), worker(), worker());
   const started = Date.now();
   while (!stopping && Date.now() - started < 6 * 3600_000 && claimed < 3000) {
     if (await json(join(root, "pause.json"), null)) { await save("operator-paused"); break; }
@@ -94,10 +102,6 @@ try {
     const prior = z.array(z.string()).parse(await json(config.priorAssignments, null));
     if (assigned.some(id => prior.includes(id))) throw new Error("Previously attempted source reassigned");
     const qualifiedTotal = baseline.prompts.length + seed.length + ready.length;
-    const continuation = await json(join(root, "continuation.json"), null);
-    const continuedTarget = continuationTarget(continuation, config.run, config.baselineCount, config.seedCount, config.createdAt);
-    if (continuedTarget !== null) await writeImmutableBytes(join(root, "continuation.lock.json"), Buffer.from(JSON.stringify(continuation) + "\n"));
-    const target = activeStage ? boundedStageTarget(activeStage, config.run, config.baselineCount, config.createdAt) : continuedTarget ?? campaignTarget(await json(join(root, "expansion-10000.json"), null), config.createdAt);
     const sourceLimit = Math.min(30000, config.maximumSources * Math.ceil(target / 2000));
     const searchLimit = Math.min(20000, config.maximumSearches * Math.ceil(target / 2000));
     const month = new Date().toISOString().slice(0, 7), spend = await json<any>(join(budget.root, month + ".json"), null);
