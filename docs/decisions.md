@@ -998,3 +998,8 @@ intake before activation so the published IDs remain eligible for scheduled sour
 ## 2026-10-19: Separate historical inventory publication from daily discovery cadence
 
 The owner explicitly authorized publishing all eligible reviewed historical inventory. The 100/day discovery ceiling must not delay this inventory. A private, expiring authorization freezes the allowed content IDs; selection and transaction activation both honor that same set. Unlisted first publications retain the ordinary cap, and historical activations do not consume normal discovery slots. Existing timestamps, failed attempts, quality holds, source checks and review artifacts remain intact. Seed and independent-queue outputs are revalidated against their original editorial, media and translation evidence; verified third-party availability overlays refresh timestamps only in memory. Missing or changed sources remain withheld. No new collection/model spend is implied by bulk publication.
+
+
+### 2026-10-19: Bound emoji heading parsing without dropping source content
+
+Historical discovery encountered an emoji-only line that froze the Node event loop: overlapping Unicode emoji alternatives created exponential regex backtracking. Match the union of emoji properties once and keep modifier characters disjoint from base characters. Preserve existing explicit heading and original-body rules. Regression tests run long emoji sequences in a subprocess with a five-second timeout, including a valid heading after decoration. Retain interrupted queue outputs for reconciliation; never replay model calls merely because the controller stalled.
