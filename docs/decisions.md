@@ -1003,3 +1003,7 @@ The owner explicitly authorized publishing all eligible reviewed historical inve
 ### 2026-10-19: Bound emoji heading parsing without dropping source content
 
 Historical discovery encountered an emoji-only line that froze the Node event loop: overlapping Unicode emoji alternatives created exponential regex backtracking. Match the union of emoji properties once and keep modifier characters disjoint from base characters. Preserve existing explicit heading and original-body rules. Regression tests run long emoji sequences in a subprocess with a five-second timeout, including a valid heading after decoration. Retain interrupted queue outputs for reconciliation; never replay model calls merely because the controller stalled.
+
+### 2026-10-19: Ground generated metadata in original instructions
+
+A spot check found a Seoul scene titled Hong Kong and a 15-second storyboard titled one minute. Identical Chinese source metadata and translated metadata had escaped same-field translation comparison. Semantic review now explicitly checks factual title, summary and other generated metadata claims against the original prompt. Findings may bind their source evidence to the prompt while retaining the exact translated metadata field and evidence. Unverifiable findings remain withheld. Existing original text, translations and review artifacts are preserved; this strengthens future reviews without declaring old records re-reviewed. Confirmed mistakes stay under owner quality holds pending repair and re-review.
