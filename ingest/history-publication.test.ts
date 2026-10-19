@@ -15,6 +15,7 @@ const prompt = (id: string): Prompt => {
   return p;
 };
 const state = (prompts: Prompt[]) => ({ authoritative: { schemaVersion: 1, version: "test", publishedAt: new Date().toISOString(), prompts }, database: { release: "test", generation: "1" } }) as unknown as PublishedState;
+const sources = async (_campaign: string, _run: string, items: readonly Prompt[]) => ({ candidates: [...items] as any[], persist: async () => {} });
 const quota = (prompts: Prompt[], deferred = 0) => ({ prompts, report: { dailyCeiling: 100, windowAllowance: 25, alreadyPublished: 24, selected: prompts.length, deferred, visualSelected: prompts.length, plainSelected: 0, plainDailyCeiling: 10, plainAlreadyPublished: 0, minimumVisualShare: 0.8 } });
 async function fixture() {
   const shared = await mkdtemp(join(tmpdir(), "prompix-history-public-")), campaign = await mkdtemp(join(tmpdir(), "prompix-history-private-"));
@@ -33,7 +34,7 @@ test("history publication deduplicates live production, honors removals and owne
     await atomic(join(f.campaign, "quality-holds.json"), { schemaVersion: 1, holds: { [held.id]: { sourceIdentitySHA256: qualityHoldIdentity(held), reason: "Synthetic defect", evidenceSHA256: "b".repeat(64), reviewerID: "test", reviewedAt: new Date().toISOString() } } });
     let published: Catalog | undefined;
     await publishQualifiedHistory(f.shared, f.campaign, "test", f.report, {
-      begin: async () => ({ enabled: true, previous: state([prior]) }), ready: async () => ready,
+      sources, begin: async () => ({ enabled: true, previous: state([prior]) }), ready: async () => ready,
       limit: async items => { assert.deepEqual(items, [fresh]); return quota(items); },
       mirror: async items => items,
       publish: async (_, catalog) => { published = catalog; return state(catalog.prompts); },
@@ -52,7 +53,7 @@ test("quota deferral makes no uploads or model work; the next invocation drains 
     const first = prompt("first"), second = prompt("second"), third = prompt("third");
     let current = [first], slots = 0, uploads = 0;
     const io = {
-      begin: async () => ({ enabled: true, previous: state(current) }), ready: async () => [second, third],
+      sources, begin: async () => ({ enabled: true, previous: state(current) }), ready: async () => [second, third],
       limit: async (items: Prompt[]) => quota(items.slice(0, slots), items.length - Math.min(slots, items.length)),
       mirror: async (items: Prompt[]) => { uploads++; return items; },
       publish: async (_: string, catalog: Catalog) => { current = catalog.prompts; return state(current); },
@@ -74,9 +75,9 @@ test("retained publication recovery and holds stop before reading the candidate 
   try {
     const forbidden = async (): Promise<never> => { throw new Error("Must not run new work"); };
     const io = { ready: forbidden, limit: forbidden, mirror: forbidden, publish: forbidden };
-    await publishQualifiedHistory(f.shared, f.campaign, "test", f.report, { ...io, begin: async () => ({ enabled: true, recovered: state([prompt("saved")]) }) });
+    await publishQualifiedHistory(f.shared, f.campaign, "test", f.report, { ...io, sources, begin: async () => ({ enabled: true, recovered: state([prompt("saved")]) }) });
     assert.equal(f.report.status, "recovered");
-    await publishQualifiedHistory(f.shared, f.campaign, "test", f.report, { ...io, begin: async () => ({ enabled: true, held: { reason: "operator" } }) });
+    await publishQualifiedHistory(f.shared, f.campaign, "test", f.report, { ...io, sources, begin: async () => ({ enabled: true, held: { reason: "operator" } }) });
     assert.equal(f.report.status, "held");
   } finally { await f.cleanup(); }
 });
@@ -86,7 +87,7 @@ test("new campaign owner hold during upload blocks publication through the regis
   try {
     const fresh = prompt("fresh");
     await assert.rejects(publishQualifiedHistory(f.shared, f.campaign, "test", f.report, {
-      begin: async () => ({ enabled: true, previous: state([]) }), ready: async () => [fresh], limit: async items => quota(items),
+      sources, begin: async () => ({ enabled: true, previous: state([]) }), ready: async () => [fresh], limit: async items => quota(items),
       mirror: async items => {
         await atomic(join(f.campaign, "quality-holds.json"), { schemaVersion: 1, holds: { [fresh.id]: { sourceIdentitySHA256: qualityHoldIdentity(fresh), reason: "Late defect", evidenceSHA256: "c".repeat(64), reviewerID: "test", reviewedAt: new Date().toISOString() } } });
         return items;

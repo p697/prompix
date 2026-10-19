@@ -989,3 +989,8 @@ text bytes as well as rows, verify local release caches by the full database con
 while reading live removals, and avoid resending existing immutable revision bodies when
 staging another release. This addresses observed publisher transfer stalls without changing
 public API pagination or publication quotas.
+
+
+For historical publication, availability adoption uses the exact raw source candidate rather
+than its mirrored presentation. Persist selected original snapshots into the ordinary maintenance
+intake before activation so the published IDs remain eligible for scheduled source rechecks.

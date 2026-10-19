@@ -122,3 +122,11 @@ missing, corrupt, oversized or unsafe cache falls back to the bounded authoritat
 Cache writes are optional and cannot turn a committed stage into a failed mutation. Existing
 public activation/source freshness/quality gates remain unchanged. Cache files carry third-party
 content and must stay outside Git. They can be deleted without losing authoritative data.
+
+
+Historical publication reconstructs each exact original source candidate from the retained
+batch snapshots before adopting its availability evidence. Mirrored preview URLs are display
+assets and cannot reproduce the original source digest. After quota selection, only selected
+original posts are copied idempotently into the ordinary X maintenance intake, with unchanged
+capture times and post text. The shared intake is reread to reject a conflicting newer source.
+This does not copy approval decisions, create new source checks, or fetch anything from X.
