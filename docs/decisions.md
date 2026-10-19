@@ -980,3 +980,12 @@ and Chinese without invoking the nine-language pipeline. Daily publication can p
 queue after source maintenance. Share existing public limits and immutable-release recovery;
 do not reinterpret the +1,000 collection target as permission to bulk-publish. Persist live
 campaign quality-hold scopes so daily recovery cannot bypass a newer private owner finding.
+
+
+### 2026-10-19: Bound publisher transfer and reuse immutable content
+
+Keep existing statement timeouts and database access controls. Bound export responses by
+text bytes as well as rows, verify local release caches by the full database content identity
+while reading live removals, and avoid resending existing immutable revision bodies when
+staging another release. This addresses observed publisher transfer stalls without changing
+public API pagination or publication quotas.

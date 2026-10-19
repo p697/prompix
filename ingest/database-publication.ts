@@ -1,7 +1,10 @@
+import { homedir } from "node:os";
+import { join, resolve } from "node:path";
+import { readPublicationCache, storePublicationCache } from "./publication-cache.ts";
 import { readFile } from "node:fs/promises";
 import { z } from "zod";
 import type { Catalog } from "../packages/schema/catalog.ts";
-import type { TransactionalDatabase } from "../services/feed/database.ts";
+import { FeedError, type TransactionalDatabase } from "../services/feed/database.ts";
 import { activatePublication, exportRelease, stagePublication } from "../services/feed/publication.ts";
 import { connectDatabase, publisherConfiguration } from "../services/feed/postgres.ts";
 import { retryConnection } from "./transient-retry.ts";
@@ -21,7 +24,7 @@ export interface DatabasePublisher {
 }
 
 /** The adapter also lets recovery tests use real SQL without production credentials. */
-export function databasePublisher(using: <T>(operation: (db: TransactionalDatabase) => Promise<T>) => Promise<T>): DatabasePublisher {
+export function databasePublisher(using: <T>(operation: (db: TransactionalDatabase) => Promise<T>) => Promise<T>, cacheRoot?: string): DatabasePublisher {
   const pointer = () => using(async db => {
     const row = (await db.query("select active_release as release,generation::text from prompix.state where singleton")).rows[0];
     // Bootstrap is a separate verified migration, never an implicit empty fallback.
@@ -29,8 +32,26 @@ export function databasePublisher(using: <T>(operation: (db: TransactionalDataba
   });
   return {
     pointer,
-    read: release => using(db => exportRelease(db, release)),
-    stage: catalog => using(db => stagePublication(db, catalog)),
+    async read(release) {
+      const cached = cacheRoot ? await readPublicationCache(cacheRoot, release) : undefined;
+      if (cached) return using(async db => {
+        // Immutable content may be local; existence and removals always come from the database.
+        const metadata = (await db.query<{ removed_ids: string[] }>("select removed_ids from prompix.releases where id=$1", [release])).rows[0];
+        if (!metadata) throw new FeedError("not_found", 404);
+        const rows = await db.query<{ content_id: string }>(`select content_id from prompix.removals
+          union select id as content_id from prompix.content where removed_at is not null and id=any($1::text[])`, [cached.prompts.map(p => p.id)]);
+        const removed = new Set([...(cached.removedIDs ?? []), ...metadata.removed_ids, ...rows.rows.map(row => row.content_id)]);
+        return { ...cached, prompts: cached.prompts.filter(p => !removed.has(p.id)), removedIDs: [...removed] };
+      });
+      const catalog = await using(db => exportRelease(db, release));
+      if (cacheRoot) await storePublicationCache(cacheRoot, release, catalog);
+      return catalog;
+    },
+    async stage(catalog) {
+      const release = await using(db => stagePublication(db, catalog));
+      if (cacheRoot) await storePublicationCache(cacheRoot, release, catalog);
+      return release;
+    },
     async activate(intent) {
       await assertDatabaseReconciled(intent, await pointer());
       await using(db => activatePublication(db, intent.release, intent.observed.generation));
@@ -50,7 +71,8 @@ export async function withPublisherDatabase<T>(operation: (db: TransactionalData
 }
 
 export function configuredDatabasePublisher(environment: NodeJS.ProcessEnv = process.env): DatabasePublisher {
-  return databasePublisher(operation => withPublisherDatabase(operation, environment));
+  return databasePublisher(operation => withPublisherDatabase(operation, environment),
+    resolve(environment.PROMPIX_CONTENT_DIR ?? join(homedir(), ".local/share/prompix/content")));
 }
 
 export function assertDatabaseActivated(intent: DatabaseIntent, current: DatabasePointer): void {

@@ -100,3 +100,25 @@ count/generation, v1/v2 manifests and new v3 details. Moving a row from staged t
 not another collected item: report campaign-qualified total separately from unpublished count.
 Disable `PROMPIX_HISTORY_CAMPAIGN` to stop draining; do not remove registered hold scopes as
 a rollback shortcut. The prior publisher must receive equivalent shared holds before rollback.
+
+
+## Publisher transfer bounds
+
+Production diagnosis found 898 rows with 20.7 MB of original/translated text. The first
+25-row query executed in about 4 ms server-side, while a live export waited in ClientWrite;
+a full read-only export took about six minutes and another hit the existing 25-second
+statement timeout. Indexes were in use. Do not mask this by raising timeouts or weakening RLS.
+
+Exports retain the 25-row keyset cap and additionally target 256 KiB of text per response,
+always allowing one schema-bounded row. Short byte-limited pages continue until the actual
+end, so large Skill bodies cannot truncate the export. Staging checks immutable revision IDs
+and sends original/translation bodies only for missing revisions; every release entry is still
+written in the same transaction.
+
+The configured publisher may cache a full release under the external content root's
+`database-release-cache/`. Each read recomputes the exact database content hash, verifies the
+release still exists, and fetches current removals and removed flags from the database. A
+missing, corrupt, oversized or unsafe cache falls back to the bounded authoritative export.
+Cache writes are optional and cannot turn a committed stage into a failed mutation. Existing
+public activation/source freshness/quality gates remain unchanged. Cache files carry third-party
+content and must stay outside Git. They can be deleted without losing authoritative data.
