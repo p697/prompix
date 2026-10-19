@@ -67,3 +67,11 @@
 这属于后续日常月度预算归因的独立改进项，不能通过删除旧费用或将补库预算永久开放来解决。
 
 详细恢复/冻结发布规则见[历史补库](backfill-campaign.md)，队列契约见[独立队列](independent-ingest-queues.md)。
+
+### Historical visual evidence handoff
+
+Historical publication copies exact matching visual decisions from batch/seed caches into the shared visual cache under `daily.lock`. This is necessary even when the campaign has no unpublished items: daily retention reapplies presentation from shared evidence. The copy checks the complete media identity and attachment coverage; a newer shared decision wins, and equal-time contradictory evidence stops publication. Campaign directories can then be archived without losing published labels. Copying evidence does not create a relevance approval, invoke a model or consume a new-content allowance. Existing immutable batch evidence and cost ledgers are never rewritten.
+
+A repaired label must be published through the normal versioned publisher and checked against the public API. Missing/changed media remains `unknown`; never restore labels by trusting the old presentation string alone.
+
+For an existing affected edition, `node --import tsx scripts/repair-history-presentation.ts /absolute/campaign-root` takes the shared publisher lock, requires no pending release/hold, reads the authoritative edition and copies exact retained evidence before publishing presentation-only changes. It is idempotent: unchanged labels produce no new edition. Explicit findings stop for a removal publication. Load the usual database/publication environment; this command adds no items and has no model or source-fetch path.

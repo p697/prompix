@@ -1,3 +1,4 @@
+import { adoptHistoryVisualEvidence } from "./history-visual-evidence.ts";
 import { publicationHistoryInventory } from "./history-publication-inventory.ts";
 import { readHistoryAllowance } from "./history-allowance.ts";
 import { historyPublicationSources } from "./history-publication-sources.ts";
@@ -41,6 +42,7 @@ const dependencies = {
   begin: beginDailyPublication,
   sources: historyPublicationSources,
   ready: publicationHistoryInventory,
+  evidence: adoptHistoryVisualEvidence,
   limit: async (items: Prompt[]) => { const historical = await readHistoryAllowance(); return withPublisherDatabase(db => limitNewPublications(db, items, new Date(), historical)); },
   publish: publishDailyCatalog,
   mirror: async (items: Prompt[], shared: string, errors: string[]) => {
@@ -86,6 +88,7 @@ export async function publishQualifiedHistory(shared: string, campaign: string, 
   const previous = preparation.previous.authoritative;
   const ready = await io.ready(campaign, shared, run);
   report.verifiedReady = ready.length;
+  await io.evidence(campaign, shared, run, [...previous.prompts, ...ready]);
   const moderation = moderationSchema.parse(await json(join(shared, "moderation.json"), { removedIDs: [] }));
   const removedIDs = [...new Set([...(previous.removedIDs ?? []), ...moderation.removedIDs])].sort();
   const holds = await readQualityHolds(shared);

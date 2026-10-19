@@ -1025,3 +1025,7 @@ The per-item semantic audit must also check ordinary untranslated words and malf
 ## 2026-10-19 — 收拢补库，保留可重复的按量阶段
 
 用户决定基于已有两千多条线上内容转入推荐/标签验证，暂停本轮扩量与补库heartbeat，日常launchd保持独立。新增stage ID、实际合格基线、指定增量与哈希证据；旧阶段不可覆盖，后续500/1000条请求不修改旧continuation或清空队列/账本。新阶段仅准备授权，须显式恢复运行；公开发布仍独立、使用冻结ID授权且保留所有质量与时效检查。
+
+### 2026-10-19 — Preserve historical visual evidence across daily publication
+
+The daily retention pass only read its shared visual cache; historical batch decisions were isolated, causing known presentation labels to regress to `unknown`. Historical publication now copies exact, fully covered media decisions to shared storage under the publisher lock. Newer evidence takes precedence; conflicting equal-time decisions fail closed. Restore affected metadata only from retained decisions, using normal transactional publication; do not infer approval from old labels or rerun paid review requests.
