@@ -1,7 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createTestDatabase } from "../services/feed/test-database.ts";
-import { StageQueue } from "./stage-queue.ts";
+import { VerifiedCapacityRejection } from "./provider-capacity.ts";
+import { StageQueue, workStage } from "./stage-queue.ts";
 
 test("private durable stages retain dependency, identity, leases, global bound and failed attempts", async () => {
   const { pg, writer, reader } = await createTestDatabase();
@@ -49,5 +50,31 @@ test("retries stop at bound and never discard prior attempt rows", async () => {
     assert.equal(await queue.claim("bound", ["review"]), undefined);
     assert.equal((await pg.query<{ state: string }>("select state from prompix.queue_jobs")).rows[0].state, "rejected");
     assert.equal((await pg.query<{ n: number }>("select count(*)::int as n from prompix.queue_attempts")).rows[0].n, 2);
+  } finally { await pg.close(); }
+});
+
+
+test("verified semantic capacity retries preserve attempts, back off and reconcile at the bound", async () => {
+  const { pg, writer } = await createTestDatabase();
+  try {
+    const queue = new StageQueue(writer);
+    const message = "Selected model is at capacity. Please try a different model.";
+    const raw = [{ type: "thread.started" }, { type: "turn.started" }, { type: "error", message }, { type: "turn.failed", error: { message } }].map(e => JSON.stringify(e)).join("\n");
+    const handler = async () => { throw new VerifiedCapacityRejection(raw); };
+    await queue.enqueue({ id: "capacity", run: "capacity", stage: "semantic", payload: {} });
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      assert.equal(await workStage(queue, "capacity", ["semantic"], handler), true);
+      assert.equal(await queue.claim("capacity", ["semantic"]), undefined);
+      await pg.query("update prompix.queue_jobs set available_at=now() where id='capacity'");
+    }
+    await assert.rejects(workStage(queue, "capacity", ["semantic"], handler), VerifiedCapacityRejection);
+    const outcomes = (await pg.query<{ outcome: string }>("select outcome from prompix.queue_attempts where job_id='capacity' order by attempt")).rows.map(r => r.outcome);
+    assert.deepEqual(outcomes, ["retry", "retry", "reconcile"]);
+    assert.equal(await queue.claim("capacity", ["semantic"]), undefined);
+    await queue.enqueue({ id: "unknown", run: "unknown", stage: "semantic", payload: {} });
+    await assert.rejects(workStage(queue, "unknown", ["semantic"], async () => { throw new Error("timeout"); }), /timeout/);
+    assert.equal(await queue.claim("unknown", ["semantic"]), undefined);
+    await queue.enqueue({ id: "one", run: "one", stage: "semantic", payload: {}, maxAttempts: 1 });
+    await assert.rejects(workStage(queue, "one", ["semantic"], handler), VerifiedCapacityRejection);
   } finally { await pg.close(); }
 });

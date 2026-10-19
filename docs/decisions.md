@@ -955,3 +955,7 @@ A fully received, retained visual response can repeat candidate or attachment id
 ### 2026-10-19：补库抽检暂缓按条目隔离
 
 合格导出必须排除owner新加的quality hold，同时保留原始ready文件及SHA证据，其他条目继续完整校验；不因单条待修正而把整个历史补库视为无效，也不将暂缓内容计入目标。
+
+### 2026-10-19: Limit the next backfill stage to1000 additional items
+
+The user's latest request replaces automatic expansion to10000. Freeze the stage starting count and reuse existing queues without resetting exclusions, attempts, budget or approval evidence. Permit bounded same-model retries only for a persisted, explicit pre-output capacity rejection; uncertain outcomes still require reconciliation.

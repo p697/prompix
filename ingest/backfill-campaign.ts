@@ -21,3 +21,17 @@ export function campaignTarget(raw: unknown, startedAt: string, now = Date.now()
     throw new Error("Expansion requires current, distinct milestone review evidence");
   return 10000;
 }
+
+
+const continuationSchema = z.object({ version: z.literal(1), run: z.string().min(1), authorizedAt: z.iso.datetime(),
+  newReadyAtStart: z.number().int().nonnegative(), additionalQualified: z.literal(1000),
+  observedQualifiedTotal: z.number().int().positive(), evidencePath: z.string().min(1) }).strict();
+/** A later user-approved bounded increment replaces, rather than enables, the old10000 goal. */
+export function continuationTarget(raw: unknown, run: string, baselineCount: number, seedCount: number, startedAt: string, now = Date.now()): number | null {
+  if (raw === null) return null;
+  const grant = continuationSchema.parse(raw), at = Date.parse(grant.authorizedAt);
+  const target = baselineCount + seedCount + grant.newReadyAtStart + grant.additionalQualified;
+  if (grant.run !== run || at < Date.parse(startedAt) || at > now || !Number.isInteger(target) || target > 10000)
+    throw new Error("Invalid bounded campaign continuation");
+  return target;
+}

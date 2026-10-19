@@ -16,7 +16,7 @@ import { TwitterAPIClient } from "../ingest/twitterapi.ts";
 import { configuredXSpendBudget } from "../ingest/x-spend.ts";
 import type { Prompt } from "../packages/schema/catalog.ts";
 
-import { campaignTarget, assertSubscriptionSnapshot } from "../ingest/backfill-campaign.ts";
+import { campaignTarget, continuationTarget, assertSubscriptionSnapshot } from "../ingest/backfill-campaign.ts";
 
 const configSchema = z.object({ version: z.literal(1), run: z.string().regex(/^[a-z0-9-]{1,80}$/),
   targetTotal: z.literal(2000), maxTotal: z.literal(10000), sharedRoot: z.string(), baseline: z.string(), seed: z.string(), exclusions: z.string(),
@@ -44,7 +44,7 @@ try {
   const originalSeed = await json<Prompt[]>(config.seed, []);
   if (originalSeed.length !== config.seedCount) throw new Error("Seed count changed");
   const previous = await json<Record<string, unknown>>(join(root, "progress.json"), {});
-  const report: Record<string, unknown> = { ...previous, resumedAt: new Date().toISOString(), runtime: process.cwd(), pid: process.pid, publishedByCampaign: 0 };
+  const report: Record<string, unknown> = { ...previous, error: null, resumedAt: new Date().toISOString(), runtime: process.cwd(), pid: process.pid, publishedByCampaign: 0 };
   let lastSignature = "", ready: Prompt[] = [], seed: Prompt[] = [];
   const save = async (status: string, extra: Record<string, unknown> = {}) => {
     Object.assign(report, extra, { status, updatedAt: new Date().toISOString() }); await atomic(join(root, "progress.json"), report);
@@ -87,15 +87,18 @@ try {
     const prior = z.array(z.string()).parse(await json(config.priorAssignments, null));
     if (assigned.some(id => prior.includes(id))) throw new Error("Previously attempted source reassigned");
     const qualifiedTotal = baseline.prompts.length + seed.length + ready.length;
-    const target = campaignTarget(await json(join(root, "expansion-10000.json"), null), config.createdAt);
-    const sourceLimit = Math.min(30000, config.maximumSources * (target === 10000 ? 5 : 1));
-    const searchLimit = Math.min(20000, config.maximumSearches * (target === 10000 ? 5 : 1));
+    const continuation = await json(join(root, "continuation.json"), null);
+    const continuedTarget = continuationTarget(continuation, config.run, config.baselineCount, config.seedCount, config.createdAt);
+    if (continuedTarget !== null) await writeImmutableBytes(join(root, "continuation.lock.json"), Buffer.from(JSON.stringify(continuation) + "\n"));
+    const target = continuedTarget ?? campaignTarget(await json(join(root, "expansion-10000.json"), null), config.createdAt);
+    const sourceLimit = Math.min(30000, config.maximumSources * Math.ceil(target / 2000));
+    const searchLimit = Math.min(20000, config.maximumSearches * Math.ceil(target / 2000));
     const month = new Date().toISOString().slice(0, 7), spend = await json<any>(join(budget.root, month + ".json"), null);
     const accountedUSD = spend ? (spend.opening + spend.entries.reduce((n: number, e: any) => n + e.accounted, 0)) / 1e6 : null;
     await save("running", { target, baselineAtStart: baseline.prompts.length, seedReady: seed.length, newReady: ready.length, qualifiedTotal, assigned: assigned.length, queues: counts, sharedMonthAccountedUSD: accountedUSD,
       incrementalAccountedUSD: accountedUSD === null ? null : accountedUSD - config.priorSharedAccountedUSD, elapsedSecondsThisRun: (Date.now() - started) / 1000 });
     if (seed.length !== originalSeed.length) throw new Error("Seed quality or freshness changed; revalidate original evidence before counting it");
-    if (qualifiedTotal >= target) { await save(target === 2000 ? "milestone-2000-owner-audit" : "milestone-10000-final-audit", { milestoneAt: new Date().toISOString() }); break; }
+    if (qualifiedTotal >= target) { await save(continuedTarget !== null ? "milestone-continuation-owner-audit" : target === 2000 ? "milestone-2000-owner-audit" : "milestone-10000-final-audit", { milestoneAt: new Date().toISOString() }); break; }
     const pendingBatches = await queue.db.query<{ count: number }>("select count(distinct payload->>'batch')::int as count from prompix.queue_jobs where run_id=$1 and state in ('queued','leased','retry')", [config.run]);
     if (pendingBatches.rows[0].count >= config.maxInflightBatches) { await sleep(15000); continue; }
     if (assigned.length >= sourceLimit) throw new Error("Campaign source bound reached; inspect yield before authorizing more assignments");
