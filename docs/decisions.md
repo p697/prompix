@@ -965,3 +965,9 @@ The user's latest request replaces automatic expansion to10000. Freeze the stage
 Retain bounded private process events and partial output for each historical/daily editorial call, including nonzero exits. Recovery must distinguish verified pre-output refusals from unknown outcomes using actual evidence. Do not infer the cause from exit code1, erase failed requests, or automatically retry them.
 
 Seed freshness rechecks use an additive availability overlay. Preserve frozen source artifacts and apply only the existing exact-source revision and dependency-scope verification; never rewrite original timestamps or treat a missing source as verified.
+
+### 2026-10-19：历史队列隔离已知审核故障
+
+单批图片审核超时或有完整原始事件的文字审核容量拒绝，不应让无关队列一起停工。失败仍保持 reconcile，后继任务不能领取，候选不算合格且不重新分配；独立隔离证据绑定原始账本与批次哈希。五个累计未决批次触发跨重启保留的熔断。未知错误、存储／租约／额度异常仍停止。此改动不自动重试模型或清除已消费请求，文字容量重试另行验证。
+
+补库owner暂缓记录可先写入campaign独立锁保护的quality-holds，再与共享暂缓取并集排除计数，避免公开日任务持锁期间无法及时剔除已知问题。共享记录仍需在其锁释放后同步，不清除任一范围的暂缓。

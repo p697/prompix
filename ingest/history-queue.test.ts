@@ -4,7 +4,7 @@ import { mkdtemp, rm, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { catalogSchema } from "../packages/schema/catalog.ts";
-import { processHistoryStage, enqueueHistoryPipeline, exportQueueReady } from "./history-queue.ts";
+import { processHistoryStage, enqueueHistoryPipeline, exportQueueReady, readHistoryQualityHolds } from "./history-queue.ts";
 import { StageQueue, queueIdentity, type QueueJob } from "./stage-queue.ts";
 import { atomic } from "./publication.ts";
 import { verifyReviewedHistory } from "./history-stage-verification.ts";
@@ -89,4 +89,26 @@ test("owner holds exclude ready items while immutable evidence and surviving app
     await atomic(join(root, "quality-holds.json"), { invalid: true });
     await assert.rejects(exportQueueReady(queue, root, root, run));
   } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+
+test("campaign owner holds exclude output while shared publication lock remains independent", async () => {
+  const root = await mkdtemp(join(tmpdir(), "campaign-owner-hold-")), shared = await mkdtemp(join(tmpdir(), "public-owner-hold-"));
+  try {
+    const record = { sourceIdentitySHA256: "a".repeat(64), evidenceSHA256: "b".repeat(64), reason: "Metadata contradicts original prompt",
+      reviewerID: "owner", reviewedAt: "2026-10-19T00:00:00Z" };
+    await atomic(join(shared, "quality-holds.json"), { schemaVersion: 1, holds: { global: record } });
+    await atomic(join(shared, "daily.lock", "owner.json"), { pid: process.pid });
+    await atomic(join(root, "quality-holds.json"), { schemaVersion: 1, holds: { local: record } });
+    assert.deepEqual(Object.keys((await readHistoryQualityHolds(root, shared)).holds).sort(), ["global", "local"]);
+    const run = "local-hold", batch = "batch-0001", ready = [{ id: "local", prompt: "Draw two circles." }];
+    const file = join(root, run, batch, "ready-0.json"); await atomic(file, ready);
+    await atomic(join(root, run, "exclusions.json"), []);
+    const queue = new StageQueue({ query: async () => ({ rows: [{ payload: { batch, start: 0, manifestSHA: "c".repeat(64), policy: ingestLanguagePolicy }, output: { pass: 1, readySHA: queueIdentity(ready) } }] }) } as any);
+    const before = await readFile(file), globalBefore = await readFile(join(shared, "quality-holds.json"));
+    assert.deepEqual(await exportQueueReady(queue, root, shared, run), []);
+    assert.deepEqual(await readFile(file), before); assert.deepEqual(await readFile(join(shared, "quality-holds.json")), globalBefore);
+    await atomic(join(root, "quality-holds.json"), { malformed: true });
+    await assert.rejects(exportQueueReady(queue, root, shared, run));
+  } finally { await rm(root, { recursive: true, force: true }); await rm(shared, { recursive: true, force: true }); }
 });
