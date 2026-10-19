@@ -1,10 +1,11 @@
 import test from "node:test";
+import { z } from "zod";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { catalogSchema } from "../packages/schema/catalog.ts";
 import { originalAndChinese, hasRequiredTranslations, seedApprovedChineseMetadata } from "./ingest-language-policy.ts";
 import { emptyTranslationCache, promptSegments, translationFingerprint, translationText } from "./translation.ts";
-import { verifySemanticResult, partitionSemanticResult } from "./translation-semantic.ts";
+import { verifySemanticResult, partitionSemanticResult, semanticResponseSchema } from "./translation-semantic.ts";
 const fixture = catalogSchema.parse(JSON.parse(await readFile(new URL("../ios/Prompix/Resources/catalog.json", import.meta.url), "utf8"))).prompts[0];
 const item = { ...fixture, title: "纸雕山村", summary: "生成精致纸雕村庄，保持柔和光影。", prompt: "Create a quiet mountain village.", example: "使用建议：先选择构图，再生成图片。", previewLabel: "来源图片", cover: undefined };
 const translated = { ...translationText(item), prompt: "生成安静的山间村落。" };
@@ -62,4 +63,19 @@ test("metadata audit binds location and duration claims to original prompt evide
     assert.throws(() => verifySemanticResult({ reviews: [{ id: source.id, verdict: "needs-review", issues: [{ ...issue, sourceQuote: "invented source evidence" }] }] }, [reviewed], "zh-Hans"), /evidence/);
     assert.throws(() => verifySemanticResult({ reviews: [{ id: source.id, verdict: "needs-review", issues: [{ ...issue, translatedQuote: "invented title" }] }] }, [reviewed], "zh-Hans"), /evidence/);
   }
+});
+
+
+test("semantic provider schema requires nullable sourceField while retained reviews stay readable", () => {
+  const schema = z.toJSONSchema(semanticResponseSchema([localized]));
+  const visit = (node: any) => {
+    if (!node || typeof node !== "object") return;
+    if (node.properties) assert.deepEqual(new Set(node.required), new Set(Object.keys(node.properties)));
+    for (const value of Object.values(node)) if (Array.isArray(value)) value.forEach(visit); else if (value && typeof value === "object") visit(value);
+  };
+  visit(schema);
+  const issue = { field: "prompt", sourceField: null, sourceQuote: "quiet mountain village", translatedQuote: "安静的山间村落", reason: "Needs inspection" };
+  const raw = { reviews: [{ id: item.id, verdict: "needs-review", issues: [issue] }] };
+  assert.equal(verifySemanticResult(raw, [localized], "zh-Hans").length, 1);
+  assert.equal(semanticResponseSchema([localized]).safeParse(raw).success, true);
 });
