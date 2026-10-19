@@ -148,3 +148,10 @@ Historical provider exceptions consume one request and stop repair for that batc
 A transient lease-renewal error no longer discards a completed handler result by itself. Before committing it, the worker must renew the same, still-unexpired lease token. An expired or replaced token still fails closed. If the completion transaction loses its acknowledgement, a read-only check must find both job and attempt succeeded, with the same identity, attempt number, token and exact JSON evidence. Only that confirmed result is accepted; the transaction and provider handler are not replayed.
 
 An uncommitted, mismatched or unreadable outcome still stops for reconciliation. For an existing reconciled job, inspect retained source, translation, model inputs, complete outputs and ready-artifact hashes before any operator recovery, and preserve the original failed attempt. Rollback requires no schema or ledger change: drain the controller and select the preceding durable runtime. Never clear failures to resume it.
+
+
+## Target-language completeness
+
+The existing per-item semantic call independently checks localized prose completeness as well as factual fidelity. An untranslated ordinary word or malformed mixed-language word can hold an item without a changed visual instruction. The reviewer must bind exact excerpts to the same source/translation field, including identical generated metadata. Names, model names, units, variables, URLs, intentional lettering/dialogue and established technical loanwords remain valid; there is no blanket Latin-word filter.
+
+Use a fresh retained audit directory for real policy comparisons. Do not replay an unknown request, overwrite original ready artifacts, or clear existing owner holds after changing instructions. Repairs require a new revision and independent review. Drain workers before deploying new instruction identities; rollback does not clear any hold or failed attempt.
