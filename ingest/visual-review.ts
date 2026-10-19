@@ -153,7 +153,7 @@ function eligibilityError(item: Prompt): string | undefined {
 }
 
 /** Also run on cached evidence: a match for a cover alone never approves a whole gallery. */
-function validateAttachments(item: Prompt, attachments: readonly z.infer<typeof attachmentReferenceSchema>[], coverage: VisualCoverage): void {
+export function validateAttachments(item: Prompt, attachments: readonly z.infer<typeof attachmentReferenceSchema>[], coverage: VisualCoverage): void {
   if (!attachments.length || attachments.length > visualLimits.attachments) throw new Error("Invalid visual attachment count");
   if (new Set(attachments.map(attachment => attachment.id)).size !== attachments.length) throw new Error("Duplicate visual attachment identity");
   if (attachments.reduce((sum, attachment) => sum + attachment.byteLength, 0) > visualLimits.totalBytes) throw new Error("Prepared visual attachments exceed the byte budget");
