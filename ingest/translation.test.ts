@@ -997,3 +997,24 @@ test("Korean ultra-realistic and hyphenated hyper-realistic styles cannot become
   }
   assert.doesNotThrow(() => validateSegment('A surreal scene with ultra-realistic textures.', '극사실적인 질감의 초현실적인 장면.', 'ko'));
 });
+
+test("Codex translation retains bounded failure evidence before cleaning temporary files", async () => {
+  const { mkdtemp, writeFile, chmod, rm } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const directory = await mkdtemp(join(tmpdir(), "prompix-translation-failure-")), executable = join(directory, "fake-codex");
+  try {
+    await writeFile(executable, `#!${process.execPath}
+process.stdin.resume(); process.stdin.on('end', () => {
+ process.stderr.write('capacity diagnostic');
+ process.stdout.write('x'.repeat(65000) + '\\n' + JSON.stringify({ type: 'turn.failed', error: { message: 'capacity exhausted' } }) + '\\n', () => process.exit(1));
+});
+`);
+    await chmod(executable, 0o700);
+    const evidence: any[] = [];
+    await assert.rejects(codexTranslationProvider(executable, 24000, "gpt-6-luna", async value => { evidence.push(value); })("zh-Hans", [{ id: "one", text: "Paper village" }]), /exited 1/);
+    assert.equal(evidence.length, 1); assert.equal(evidence[0].exitCode, 1); assert.equal(evidence[0].output, null);
+    assert.equal(evidence[0].error, "Codex translation exited 1"); assert.match(evidence[0].diagnostic, /capacity diagnostic/);
+    assert.equal(evidence[0].eventsTruncated, true); assert.ok(evidence[0].events.length <= 64000); assert.match(evidence[0].events, /turn.failed/);
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});

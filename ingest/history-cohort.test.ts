@@ -164,3 +164,14 @@ test("private full-library baselines exceed the public window without losing sch
   assert.throws(() => historyBaseline({ ...input, prompts: [...prompts, prompts[0]] }), /Duplicate/);
   assert.throws(() => historyBaseline({ ...input, prompts: [{ ...one, title: "" }] }));
 });
+
+test("historical provider failures are not automatically replayed or erased", async () => {
+  const { runHistoryTranslations } = await import("./history-batch.ts");
+  const { emptyTranslationCache } = await import("./translation.ts");
+  const source = { ...item(), title: "Paper village", summary: "Paper village", example: "Paper village", previewLabel: "Paper village", prompt: "Paper village", cover: undefined };
+  let calls = 0;
+  const result = await runHistoryTranslations({ items: [source], cache: emptyTranslationCache(), providerName: "codex", locales: ["zh-Hans"],
+    concurrency: 1, maxAttempts: 3, maxRequests: 20, persist: async () => {}, provider: async () => { calls++; throw new Error("Codex translation exited 1"); } });
+  assert.equal(calls, 1); assert.equal(result.attempted, 1); assert.equal(result.failed, 1);
+  assert.ok(result.pendingSegments > 0); assert.equal(result.failures[0].reason, "Codex translation exited 1");
+});
