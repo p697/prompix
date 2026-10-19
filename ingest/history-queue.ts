@@ -79,13 +79,20 @@ export async function processHistoryStage(queue: StageQueue, root: string, share
   } finally { await unlock(); }
 }
 
+/** Campaign owner holds use its own lock so an ongoing public operation cannot delay exclusion.
+ * Shared holds remain authoritative too; neither file clears the other scope. */
+export async function readHistoryQualityHolds(root: string, shared: string) {
+  const [global, local] = await Promise.all([readQualityHolds(shared), readQualityHolds(root)]);
+  return { schemaVersion: 1 as const, holds: { ...global.holds, ...local.holds } };
+}
+
 /** Export is an acceptance input only. Existing publication limits/holds still apply. */
 export async function exportQueueReady(queue: StageQueue, root: string, shared: string, runInput: string) {
   const run = runName.parse(runInput);
   const rows = (await queue.db.query<{ payload: unknown; output: { pass: number; readySHA?: string } }>(
     "select payload,output from prompix.queue_jobs where run_id=$1 and stage='semantic' and state='succeeded' order by id", [run])).rows;
   const items: Prompt[] = [];
-  const holds = await readQualityHolds(shared);
+  const holds = await readHistoryQualityHolds(root, shared);
   for (const row of rows) {
     if (!row.output.pass) continue;
     const payload = payloadSchema.parse(row.payload), directory = join(root, run, payload.batch);

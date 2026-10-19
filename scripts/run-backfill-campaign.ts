@@ -8,9 +8,9 @@ import { readXAvailability } from "../ingest/x-availability.ts";
 import { inspectHistoryIsolation, activeHistoryBatches, isIsolatableReviewError } from "../ingest/history-isolation.ts";
 import { StageQueue, workStage } from "../ingest/stage-queue.ts";
 import { queueDatabase } from "../ingest/queue-database.ts";
-import { enqueueHistoryPipeline, exportQueueReady, processHistoryStage } from "../ingest/history-queue.ts";
+import { enqueueHistoryPipeline, exportQueueReady, processHistoryStage, readHistoryQualityHolds } from "../ingest/history-queue.ts";
 import { historyBaseline, historyBatchSchema, historyLeadSchema, chooseHistoryLeads, uniqueHistoryItems, completeHistoryItem } from "../ingest/history-cohort.ts";
-import { readQualityHolds, applyQualityHolds } from "../ingest/quality-holds.ts";
+import { applyQualityHolds } from "../ingest/quality-holds.ts";
 import { readTranslationReviews } from "../ingest/translation-review.ts";
 import { hasRequiredTranslations, requiredIngestLocales } from "../ingest/ingest-language-policy.ts";
 import { readXSearchPlan, runXSearchPlan, searchPlanSchema, searchPlanReadiness } from "../ingest/x-search-plan.ts";
@@ -83,7 +83,7 @@ try {
     const counts = await queue.counts(config.run);
     const signature = JSON.stringify(counts);
     if (signature !== lastSignature) {
-      const holds = await readQualityHolds(config.sharedRoot), moderation = await json<{ removedIDs: string[] }>(join(config.sharedRoot, "moderation.json"), { removedIDs: [] });
+      const holds = await readHistoryQualityHolds(root, config.sharedRoot), moderation = await json<{ removedIDs: string[] }>(join(config.sharedRoot, "moderation.json"), { removedIDs: [] });
       const reviews = await readTranslationReviews(join(config.sharedRoot, "translations", "semantic-rejections.json"));
       const seedState = await readXAvailability(join(root, "seed-revalidation"));
       seed = applyQualityHolds(checkedHistorySeeds(originalSeed, seedState), holds).prompts.filter(p => !moderation.removedIDs.includes(p.id) && completeHistoryItem(p, Date.now(), requiredIngestLocales) && hasRequiredTranslations(p, reviews));
