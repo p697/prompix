@@ -1,3 +1,5 @@
+**Current backfill scope: 1,000 additional qualified items.** The latest user direction replaces automatic expansion to 10,000. Preserve the frozen starting count, existing queues and quality gates; review the result at the increment milestone. See [campaign operations](backfill-campaign.md#next-stage-1000-additional-qualified-items).
+
 # Prompix 文档
 
 **补库期间日常复查预算**：新增仅用于已有来源复查的限时补库授权，仍使用共享累计账本；普通增长月限额和每日限额不变，到期回归普通限制。见[补库运行说明](backfill-campaign.md#补库期间保护日常复查)。

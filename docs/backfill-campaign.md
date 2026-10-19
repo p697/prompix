@@ -43,3 +43,9 @@
 ## 抽检暂缓单条内容
 
 Owner抽检发现的问题进入既有quality hold，并从合格导出计数中排除。导出先核对原有ready文件SHA和原通过数量，再剔除暂缓ID；其余条目仍须通过来源、媒体、尺度、翻译与时效验证。暂缓不改写原审核产物、不清除失败账本、不自动重跑或解除；损坏的暂缓记录和篡改的产物继续阻断。
+
+## Next stage: 1000 additional qualified items
+
+On 2026-10-19 the user narrowed the active target to another1000 qualified items. An external continuation.json records the run, authorization timestamp, initial newReady count, fixed increment1000 and baseline evidence. It takes precedence over the old10000 expansion and is frozen in continuation.lock.json across restarts. The stopping target is frozen production baseline + seed + initial newReady +1000; separately report the actual current production union. Ordinary daily growth cannot satisfy the increment. Holds reducing prior qualified output require replacement; held items never count as completed. Budget,90% subscription guard, global concurrency and publication limits remain unchanged. Stop for review at this milestone.
+
+Only a complete retained pre-output model-capacity rejection with no output/result file allows a same-model retry of the existing job. Backoff and the cumulative maximum of3 attempts are retained. Save each attempt and event hash; the final rejection reconciles and stops. Partial output, persistence failures and unknown outcomes never retry automatically. Clear stale display errors on resume, while retaining the original attempts and actual failures.

@@ -1,5 +1,6 @@
+import { VerifiedCapacityRejection, isPreOutputCapacityRejection } from "./provider-capacity.ts";
 import { spawn } from "node:child_process";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile, access } from "node:fs/promises";
 import { join } from "node:path";
 import { z } from "zod";
 import type { Prompt } from "../packages/schema/catalog.ts";
@@ -69,6 +70,8 @@ export async function reviewTranslationSemantics(items: readonly Prompt[], local
   await writeImmutableBytes(join(directory, "instructions.txt"), Buffer.from(semanticInstructions));
   await writeFile(join(directory, "schema.json"), JSON.stringify(z.toJSONSchema(schema)));
   let events = "", diagnostic = "";
+  let failure: unknown;
+  let result: { identity: string; model: string; effort: string; reviews: SemanticVerdict[]; usage: { input_tokens?: number; output_tokens?: number }; unverifiedEvidence: string[] } | undefined;
   try {
     await new Promise<void>((resolve, reject) => {
       const child = spawn(executable, ["exec", "--ignore-user-config", "--ignore-rules", "--ephemeral", "--skip-git-repo-check", "--sandbox", "read-only", "--cd", directory,
@@ -87,9 +90,22 @@ export async function reviewTranslationSemantics(items: readonly Prompt[], local
     const { reviews, unverifiedEvidence } = partitionSemanticResult(JSON.parse(await readFile(join(directory, "output.json"), "utf8")), items, locale);
     let usage: { input_tokens?: number; output_tokens?: number } = {};
     for (const line of events.split("\n")) { try { const event = JSON.parse(line); if (event.type === "turn.completed") usage = event.usage; } catch {} }
-    return { identity, model, effort, reviews, usage, unverifiedEvidence };
-  } finally {
+    result = { identity, model, effort, reviews, usage, unverifiedEvidence };
+  } catch (error) { failure = error; } finally {
     await writeImmutableBytes(join(directory, "events.jsonl"), Buffer.from(events));
     await writeImmutableBytes(join(directory, "diagnostic.json"), Buffer.from(JSON.stringify({ diagnostic })));
   }
+  if (failure) {
+    if (failure instanceof Error && failure.message === "Semantic provider exited 1" && isPreOutputCapacityRejection(events)) {
+      let outputExists = false;
+      for (const file of ["output.json", "result.json"]) {
+        try { await access(join(directory, file)); outputExists = true; }
+        catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
+      }
+      if (!outputExists) throw new VerifiedCapacityRejection(events);
+    }
+    throw failure;
+  }
+  if (!result) throw new Error("Semantic result missing");
+  return result;
 }

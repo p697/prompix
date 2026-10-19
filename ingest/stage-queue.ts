@@ -1,3 +1,4 @@
+import { VerifiedCapacityRejection } from "./provider-capacity.ts";
 import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
 import type { TransactionalDatabase } from "../services/feed/database.ts";
@@ -10,7 +11,7 @@ const inputSchema = z.object({ id: z.string().min(1).max(200), run: z.string().m
   maxAttempts: z.number().int().min(1).max(5).default(3) });
 export type QueueInput = z.input<typeof inputSchema>;
 export type QueueJob = { id: string; run_id: string; stage: QueueStage; identity: string; payload: Record<string, unknown>; dependency: string | null;
-  attempts: number; lease_token: string };
+  attempts: number; max_attempts?: number; lease_token: string };
 
 /** SQL operations finish before any network/model work. Unknown attempts are never automatically replayed. */
 export class StageQueue {
@@ -81,6 +82,12 @@ export async function workStage(queue: StageQueue, run: string, stages: QueueSta
     if (leaseError) throw leaseError;
     await queue.finish(job, "succeeded", result);
   } catch (error) {
+    if (!leaseError && job.stage === "semantic" && error instanceof VerifiedCapacityRejection
+      && job.attempts < Math.min(3, job.max_attempts ?? 3)) {
+      await queue.finish(job, "retry", { reason: "verified-capacity-before-output", eventsSHA256: error.eventsSHA256, sameModel: true });
+      return true;
+    }
+    // Exhausted capacity rejections and unknown outcomes retain evidence and stop for inspection.
     // No blanket retry of external calls after timeout or ambiguous commit.
     await queue.finish(job, "reconcile", { reason: "handler-failed", message: error instanceof Error ? error.message.slice(0, 500) : "unknown" }).catch(() => {});
     throw error;
