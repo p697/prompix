@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
-import {checkedHistorySeeds,unresolvedHistorySeeds} from './history-freshness.ts';
+import {checkedHistorySeeds,unresolvedHistorySeeds,mergeHistoryAvailability,refreshHistoryItems} from './history-freshness.ts';
 import {convertXDiscovery} from './x-intake.ts';
 import {nativeXSourceIssue} from './x-source.ts';
 import type {XAvailabilityState} from './x-availability.ts';
@@ -25,4 +25,20 @@ test('explicit seed holds reduce eligible count but unknown expiry remains a blo
  assert.deepEqual(unresolvedHistorySeeds([item],[],{},new Set([item.id])),[]);
  assert.deepEqual(unresolvedHistorySeeds([item],[],{[item.id]:{status:'withheld',checkedAt:now,checkedBy:'twitterapi'}},new Set()),[]);
  assert.deepEqual(unresolvedHistorySeeds([item],[item],{},new Set()),[]);
+});
+
+
+test('cross-day queue rechecks preserve originals and prefer newer withdrawal over old approval',()=>{
+ const item=fixture(),before=structuredClone(item);
+ const old:XAvailabilityState={[item.id]:{status:'ready',checkedAt:capturedAt,checkedBy:'twitterapi',revision:item.source.revision}};
+ const fresh:XAvailabilityState={[item.id]:{...old[item.id],checkedAt:now}};
+ const merged=mergeHistoryAvailability(fresh,old);
+ const result=refreshHistoryItems([item],merged,Date.parse(now));
+ assert.equal(result[0].source.post!.checkedAt,now);assert.deepEqual(item,before);
+ assert.throws(()=>refreshHistoryItems([item],old,Date.parse(now)),/stale/);
+ assert.throws(()=>refreshHistoryItems([item],{[item.id]:{...fresh[item.id],revision:'b'.repeat(64)}},Date.parse(now)),/match/);
+ const withdrawn:XAvailabilityState={[item.id]:{status:'withheld',checkedAt:'2026-10-19T00:01:00.000Z',checkedBy:'twitterapi'}};
+ assert.deepEqual(refreshHistoryItems([item],mergeHistoryAvailability(withdrawn,fresh),Date.parse(now)),[]);
+ assert.throws(()=>mergeHistoryAvailability(fresh,{[item.id]:{...fresh[item.id],status:'withheld'}}),/Conflicting/);
+ assert.equal(refreshHistoryItems([item],{},Date.parse(now))[0],item,'Missing recheck does not fabricate freshness');
 });

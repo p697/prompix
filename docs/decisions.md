@@ -1042,3 +1042,7 @@ The daily retention pass only read its shared visual cache; historical batch dec
 ### 2026-10-20：离线推荐延续本机偏好
 
 推荐验收复现离线回退重新显示已拒绝内容。完整Prompt与云端卡片共用同一本机可推荐判断，首页离线入口和通用Feed回退均应用该判断；明确explicit永不推荐，画面克制开关与兴趣／行为学习独立。搜索、收藏与明确选择的非推荐排序保持原语义。使用2612条线上快照与330组合成画像验证，不上传用户偏好，不改变权重或扩大采集。
+
+### 2026-10-20 — Bound subscription headroom exceptions to one backfill stage
+
+Keep the default90% account-weekly stop. Explicit user approval may grant one named stage a95% stop through a private expiring grant, rechecked before requests; stale quota, denied ordinary usage, budget and quality gates still stop work. In-flight work drains, and there is no paid-model fallback.

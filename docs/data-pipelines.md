@@ -75,3 +75,16 @@ Historical publication copies exact matching visual decisions from batch/seed ca
 A repaired label must be published through the normal versioned publisher and checked against the public API. Missing/changed media remains `unknown`; never restore labels by trusting the old presentation string alone.
 
 For an existing affected edition, `node --import tsx scripts/repair-history-presentation.ts /absolute/campaign-root` takes the shared publisher lock, requires no pending release/hold, reads the authoritative edition and copies exact retained evidence before publishing presentation-only changes. It is idempotent: unchanged labels produce no new edition. Explicit findings stop for a removal publication. Load the usual database/publication environment; this command adds no items and has no model or source-fetch path.
+
+### Stage-scoped subscription headroom
+
+2026-10-20：用户授权本次 `additional-1000-20261020` 使用至95%，到线停止；不是全局取消订阅保护。
+默认仍为90%。明确获批后，owner在私有campaign目录写入不可变
+`subscription-grants/<stage-id>.json`：`version:1, run, stageID, authorizedAt, expiresAt, stopAtPercent:95`。
+授权最长七天，必须匹配run和当前stage；新stage冻结时使用拟创建的stageID核验，运行时使用冻结stageID。
+失配、到期或格式错误会停止；没有授权则使用90%。该文件不修改真实quota快照，也不改变预算、质量或目标。
+控制器在领取任务、每次模型请求及搜索调用前重新读取授权与快照；周用量达到95%停止新增请求，
+已在途请求完成保存，因此不能承诺全账号用量绝不越过95%。快照仍必须65分钟内且ordinaryUsageAllowed为true。
+全账号其他任务也会消耗额度；授权不能保证完成指定数量，也不允许自动改走付费模型。
+
+跨天恢复会合并shared、seed-revalidation、source-revalidation中最新的确切来源核验，在内存中覆盖checkedAt后重新验证原审核与翻译；保留原始产物及哈希。新的撤回优先，同时间矛盾或未知过期停止。复查不等于新的质量审核；待翻译/语义任务同样接受匹配核验，以免旧队列跨天不可恢复。

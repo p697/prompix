@@ -30,8 +30,10 @@ if (command === "status") {
   const unlock = await lockContent(root);
   try {
     if (!await json(join(root, "pause.json"), null)) throw Error("Pause and drain the campaign before freezing a new stage");
-    assertSubscriptionSnapshot(await json(join(root, "subscription-quota.json"), null));
     const config = await json<any>(join(root, "configuration.json"), null);
+    assertSubscriptionSnapshot(await json(join(root, "subscription-quota.json"), null), Date.now(), {
+      grant: await json(join(root, "subscription-grants", id + ".json"), null), run: config.run, stageID: id,
+    });
     const queue = new StageQueue(queueDatabase());
     if ((await queue.counts(config.run)).some(c => c.state === "leased" && Number(c.count) > 0)) throw Error("Active leases must drain before freezing a stage");
     const baseline = historyBaseline(await json(config.baseline, null));
