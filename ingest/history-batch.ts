@@ -1,3 +1,5 @@
+import { refreshHistoryItems } from "./history-freshness.ts";
+import type { XAvailabilityState } from "./x-availability.ts";
 import { mkdtemp, rm, readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { createHash } from "node:crypto";
@@ -27,7 +29,7 @@ import { verifyReviewedHistory } from "./history-stage-verification.ts";
 import { codexTranslationProvider } from "./translation-provider.ts";
 
 /** Run under the cohort lock. This stages artifacts only, and never activates a public release. */
-export async function runHistoryBatch(directory: string, input: HistoryBatch, previous: Prompt[], sharedRoot: string, seedTranslations?: string, revalidate = false, options: { stage?: "source" | "review" | "translation"; chineseOnly?: boolean; translationConcurrency?: number; checkLease?: () => Promise<void> } = {}) {
+export async function runHistoryBatch(directory: string, input: HistoryBatch, previous: Prompt[], sharedRoot: string, seedTranslations?: string, revalidate = false, options: { availability?: XAvailabilityState; stage?: "source" | "review" | "translation"; chineseOnly?: boolean; translationConcurrency?: number; checkLease?: () => Promise<void> } = {}) {
   const batch = historyBatchSchema.parse(input), day = batch.createdAt.slice(0, 10), env = process.env;
   if (env.PROMPIX_X_DISCOVERY_PROVIDER !== "third-party" || env.PROMPIX_X_OFFICIAL_ENABLED !== "0" || env.X_BEARER_TOKEN ||
       env.PROMPIX_TRANSLATION_MODEL !== "gpt-6-luna" || env.PROMPIX_TRANSLATION_PROVIDER !== "codex" || !env.PROMPIX_CODEX)
@@ -122,7 +124,9 @@ export async function runHistoryBatch(directory: string, input: HistoryBatch, pr
     await atomic(join(directory, "source-catalog.json"), sourceCatalog);
     if (options.stage === "review") return ready;
     } else {
-      ready = await verifyReviewedHistory(directory, sharedRoot);
+      const retained = historyCatalogSchema.parse(await json(join(directory, "source-catalog.json"), null)).prompts;
+      ready = await verifyReviewedHistory(directory, sharedRoot,
+        options.availability ? refreshHistoryItems(retained, options.availability) : retained, options.availability);
     }
     const sourceCatalog = { schemaVersion: 1 as const, version: `history-${batch.id}`, prompts: ready, removedIDs: [] };
     await phase("translation");

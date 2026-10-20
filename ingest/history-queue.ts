@@ -1,3 +1,4 @@
+import { readHistoryAvailability, refreshHistoryItems } from "./history-freshness.ts";
 import { filterXAvailability, type XAvailabilityState } from "./x-availability.ts";
 import { join } from "node:path";
 import { z } from "zod";
@@ -52,6 +53,7 @@ export async function processHistoryStage(queue: StageQueue, root: string, share
         if (!source || predecessor?.output.sourceSHA !== queueIdentity(source)) throw new Error("Reviewed stage artifact changed");
       }
       const items = await runHistoryBatch(directory, batch, prior, shared, undefined, false, {
+        availability: job.stage === "translate" ? await readHistoryAvailability(root, shared) : undefined,
         stage: job.stage === "collect" ? "source" : job.stage === "review" ? "review" : "translation", chineseOnly: true, translationConcurrency: 1, checkLease: async () => { await options.beforeRequest?.(); await queue.renew(job); } });
       const source = await json(join(directory, "source-catalog.json"), null);
       const complete = await json(join(directory, "complete.json"), null);
@@ -64,9 +66,10 @@ export async function processHistoryStage(queue: StageQueue, root: string, share
     // or strip extra fields. Schema validation remains mandatory afterwards.
     if (predecessor?.output.translatedSHA !== queueIdentity(rawComplete)) throw new Error("Translated stage artifact changed");
     const complete = historyCatalogSchema.parse(rawComplete);
-    const items = complete.prompts.slice(payload.start, payload.start + 4);
+    const availability = await readHistoryAvailability(root, shared);
+    const items = refreshHistoryItems(complete.prompts.slice(payload.start, payload.start + 4), availability);
     if (!items.length) return { pass: 0, held: 0, published: 0 };
-    await verifyReviewedHistory(directory, shared, items);
+    await verifyReviewedHistory(directory, shared, items, availability);
     if (!items.every(item => completeHistoryItem(item, Date.now(), requiredIngestLocales))) throw new Error("Required history quality changed");
     const reviewDirectory = join(directory, "semantic", `${payload.start}-${job.attempts}`);
     await options.beforeRequest?.();
@@ -88,7 +91,7 @@ export async function readHistoryQualityHolds(root: string, shared: string) {
 }
 
 /** Export is an acceptance input only. Existing publication limits/holds still apply. */
-export async function exportQueueReady(queue: StageQueue, root: string, shared: string, runInput: string, options: { publicationFreshOnly?: boolean; availability?: XAvailabilityState } = {}) {
+export async function exportQueueReady(queue: StageQueue, root: string, shared: string, runInput: string, options: { publicationFreshOnly?: boolean; availability?: XAvailabilityState; requireFreshChecks?: boolean } = {}) {
   const run = runName.parse(runInput);
   const rows = (await queue.db.query<{ payload: unknown; output: { pass: number; readySHA?: string } }>(
     "select payload,output from prompix.queue_jobs where run_id=$1 and stage='semantic' and state='succeeded' order by id", [run])).rows;
@@ -102,7 +105,7 @@ export async function exportQueueReady(queue: StageQueue, root: string, shared: 
     // Verify the immutable output before excluding later owner holds. A hold must
     // remove only its item, without making unrelated approved batches unusable.
     const accepted = applyQualityHolds(ready, holds).prompts;
-    const eligible = (options.availability ? accepted.flatMap(p => options.availability![p.id] ? filterXAvailability([p], options.availability!).prompts : [p]) : accepted).filter(item => {
+    const eligible = (options.availability && options.requireFreshChecks ? refreshHistoryItems(accepted, options.availability) : options.availability ? accepted.flatMap(p => options.availability![p.id] ? filterXAvailability([p], options.availability!).prompts : [p]) : accepted).filter(item => {
       if (!options.publicationFreshOnly) return true;
       // Defer old source checks; do not rewrite originals or reacquire them here.
       // Hash/count verification above still covers every retained output.

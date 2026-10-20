@@ -27,3 +27,24 @@ test("explicit next1000 counts campaign output rather than daily production and 
   for (const bad of [{ ...grant, run: "another" }, { ...grant, additionalQualified: 10000 }, { ...grant, newReadyAtStart: 10000 }, { ...grant, authorizedAt: "2026-10-18T16:00:00Z" }])
     assert.throws(() => continuationTarget(bad, "history", 888, 309, "2026-10-18T00:00:00Z", now));
 });
+
+
+test("95-percent grant is bounded to one stage, expires, and never bypasses ordinary quota freshness", () => {
+  const sample = { observedAt: "2026-10-18T14:30:00Z", weeklyUsedPercent: 94.9,
+    ordinaryUsageAllowed: true, source: "codex-account-rate-limits" };
+  const grant = { version: 1, run: "history", stageID: "extra-1000", authorizedAt: "2026-10-18T14:00:00Z",
+    expiresAt: "2026-10-20T14:00:00Z", stopAtPercent: 95 };
+  const context = { grant, run: "history", stageID: "extra-1000" };
+  assert.doesNotThrow(() => assertSubscriptionSnapshot(sample, now, context));
+  assert.throws(() => assertSubscriptionSnapshot(sample, now));
+  assert.throws(() => assertSubscriptionSnapshot(sample, now, { ...context, grant: null }));
+  for (const bad of [95, 100]) assert.throws(() => assertSubscriptionSnapshot({ ...sample, weeklyUsedPercent: bad }, now, context));
+  for (const patch of [{ stageID: "other" }, { run: "other" }, { stopAtPercent: 100 },
+    { expiresAt: "2026-10-18T15:00:00Z" }, { expiresAt: "2026-11-18T15:00:00Z" },
+    { authorizedAt: "2026-10-18T16:00:00Z" }])
+    assert.throws(() => assertSubscriptionSnapshot(sample, now, { ...context, grant: { ...grant, ...patch } }));
+  assert.throws(() => assertSubscriptionSnapshot(sample, now, { ...context, stageID: null }));
+  for (const patch of [{ ordinaryUsageAllowed: false }, { observedAt: "2026-10-18T13:00:00Z" },
+    { observedAt: "2026-10-18T16:00:00Z" }, { source: "estimated" }])
+    assert.throws(() => assertSubscriptionSnapshot({ ...sample, ...patch }, now, context));
+});

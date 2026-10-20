@@ -52,13 +52,19 @@ try {
     await appendFile(join(root, "measurements.jsonl"), JSON.stringify(metric) + "\n");
     console.log(JSON.stringify(metric));
   };
+  const activeStage = await readCampaignStage(root);
+  // Read the grant and quota again before every model request and search invocation.
+  const checkQuota = async () => assertSubscriptionSnapshot(await json(join(root, "subscription-quota.json"), null), Date.now(), {
+    grant: activeStage ? await json(join(root, "subscription-grants", activeStage.id + ".json"), null) : null,
+    run: config.run, stageID: activeStage?.id ?? null,
+  });
   // Isolate evidenced review failures; integrity, quota, lease and unclassified failures still stop all workers.
   const worker = async () => {
     while (!stopping && claimed < 3000) {
       let activeJobID: string | undefined;
       try {
-        assertSubscriptionSnapshot(await json(join(root, "subscription-quota.json"), null));
-        const did = await workStage(queue, config.run, ["collect", "review", "translate", "semantic"], job => { activeJobID = job.id; return processHistoryStage(queue, root, config.sharedRoot, job, { beforeRequest: async () => assertSubscriptionSnapshot(await json(join(root, "subscription-quota.json"), null)) }); });
+        await checkQuota();
+        const did = await workStage(queue, config.run, ["collect", "review", "translate", "semantic"], job => { activeJobID = job.id; return processHistoryStage(queue, root, config.sharedRoot, job, { beforeRequest: checkQuota }); });
         if (did) claimed++; else await sleep(5000);
       } catch (error) {
         try {
@@ -71,7 +77,6 @@ try {
     }
   };
   if (await json(join(root, "pause.json"), null)) throw new Error("Campaign is paused; explicit resume required");
-  const activeStage = await readCampaignStage(root);
   const continuation = await json(join(root, "continuation.json"), null);
   const continuedTarget = continuationTarget(continuation, config.run, config.baselineCount, config.seedCount, config.createdAt);
   if (continuedTarget !== null) await writeImmutableBytes(join(root, "continuation.lock.json"), Buffer.from(JSON.stringify(continuation) + "\n"));
@@ -86,7 +91,7 @@ try {
   const started = Date.now();
   while (!stopping && Date.now() - started < 6 * 3600_000 && claimed < 3000) {
     if (await json(join(root, "pause.json"), null)) { await save("operator-paused"); break; }
-    assertSubscriptionSnapshot(await json(join(root, "subscription-quota.json"), null));
+    await checkQuota();
     const isolated = await inspectHistoryIsolation(queue, root, config.run);
     const counts = await queue.counts(config.run);
     const signature = JSON.stringify(counts);
@@ -136,7 +141,7 @@ try {
     }
     const release = await lockContent(next.directory);
     let found;
-    try { const client = new TwitterAPIClient(process.env.TWITTERAPI_IO_KEY ?? "", budget); found = await runXSearchPlan(next.directory, next.plan, { maxRequests: Math.min(10, searchLimit - searches), search: client.search.bind(client) }); }
+    try { const client = new TwitterAPIClient(process.env.TWITTERAPI_IO_KEY ?? "", budget); found = await runXSearchPlan(next.directory, next.plan, { maxRequests: Math.min(10, searchLimit - searches), search: async (...args) => { await checkQuota(); return client.search(...args); } }); }
     finally { await release(); }
     if (["failed", "unresolved", "budget-limit"].includes(found.status)) {
       const readiness = searchPlanReadiness(await readXSearchPlan(next.directory, next.plan));
