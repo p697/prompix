@@ -22,9 +22,9 @@ async function fixture() {
     ...["collect", "review"].map(stage => ({ id: `${run}:${batch}:${stage}`, stage, state: "queued", attempts: 0 }))];
   let success: any;
   const queue = new StageQueue({ query: async (sql: string) => ({ rows: sql.startsWith("select attempts") ? success ? [success] : [] : rows }) } as any);
-  const setSuccess = async () => {
-    const source = { prompts: [{ id: "synthetic" }] }; await atomic(join(root, run, batch, "source-catalog.json"), source);
-    success = { attempts: 1, payload: { manifestSHA: queueIdentity(manifest) }, output: { count: 1, sourceSHA: queueIdentity(source) } };
+  const setSuccess = async (accepted = true) => {
+    const source = { prompts: accepted ? [{ id: "synthetic" }] : [] }; await atomic(join(root, run, batch, "source-catalog.json"), source);
+    success = { attempts: 1, payload: { manifestSHA: queueIdentity(manifest) }, output: { count: accepted ? 1 : 0, sourceSHA: queueIdentity(source) } };
     const attempt = { day: "2026-10-20", requests: 1, model: "gpt-5.6-luna", reservedAt: "2026-10-20T07:00:00Z", candidateIDs: ["x-post-99"], inputCharacters: 100, state: "completed" };
     await atomic(join(root, run, batch, "editorial-ledger.json"), { schemaVersion: 2, day: attempt.day, requests: 1, attempts: [attempt] });
     await atomic(join(root, run, batch, "visual-ledger.json"), { schemaVersion: 2, day: attempt.day, requests: 1, attempts: [{ ...attempt, identities: ["a".repeat(64)], attachments: 1, attachmentBytes: 100 }] });
@@ -37,7 +37,7 @@ test("fresh probe preserves unknowns and requires actual provider success before
     const before = JSON.stringify(f.rows);
     const probe = await reserveReviewProbe(f.queue, f.root, run, batch, [old], now);
     await assert.rejects(recoveredReviewIDs(f.queue, f.root, run, [old], now), /successful fresh probe/);
-    await assert.rejects(completeReviewProbe(f.queue, f.root, probe, now), /no successful/);
+    await assert.rejects(completeReviewProbe(f.queue, f.root, probe, now), /no completed/);
     await f.setSuccess(); await completeReviewProbe(f.queue, f.root, probe, now);
     assert.deepEqual(await recoveredReviewIDs(f.queue, f.root, run, [old], now), new Set([old.jobID]));
     assert.equal(JSON.stringify(f.rows), before, "no old SQL job or attempt mutations");
@@ -83,4 +83,20 @@ test("targeted queue claims never consume unrelated work or replay unknown jobs"
     const rows = (await pg.query<{ id: string; state: string }>("select id,state from prompix.queue_jobs order by id")).rows;
     assert.deepEqual(rows, [{ id: "probe", state: "reconcile" }, { id: "unrelated", state: "queued" }]);
   } finally { await pg.close(); }
+});
+
+
+test("a valid visual rejection proves health without admitting content or repeating a request", async () => {
+  const f = await fixture(); try {
+    const probe = await reserveReviewProbe(f.queue, f.root, run, batch, [old], now);
+    await f.setSuccess(false);
+    const before = await readFile(join(f.root, run, batch, "visual-ledger.json"));
+    await completeReviewProbe(f.queue, f.root, probe, now);
+    assert.deepEqual(await recoveredReviewIDs(f.queue, f.root, run, [old], now), new Set([old.jobID]));
+    assert.deepEqual(JSON.parse(await readFile(join(f.root, run, batch, "source-catalog.json"), "utf8")).prompts, []);
+    assert.deepEqual(await readFile(join(f.root, run, batch, "visual-ledger.json")), before);
+    const p = join(f.root, run, batch, "visual-ledger.json");
+    await atomic(p, { schemaVersion: 2, day: "2026-10-20", requests: 0, attempts: [] });
+    await assert.rejects(recoveredReviewIDs(f.queue, f.root, run, [old], now), /Too small|completed call/);
+  } finally { await f.close(); }
 });

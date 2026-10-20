@@ -67,12 +67,12 @@ async function probeEvidence(queue: StageQueue, root: string, probe: ReviewProbe
   const row = (await queue.db.query<{ attempts: number; output: { count?: number; sourceSHA?: string }; payload: { manifestSHA?: string } }>(
     "select attempts,output,payload from prompix.queue_jobs where id=$1 and run_id=$2 and stage='review' and state='succeeded'",
     [`${probe.run}:${probe.batch}:review`, probe.run])).rows[0];
-  if (!row || row.attempts !== 1 || row.payload.manifestSHA !== probe.manifestSHA || row.output.count !== 1) throw Error("Probe has no successful reviewed source");
+  if (!row || row.attempts !== 1 || row.payload.manifestSHA !== probe.manifestSHA || ![0, 1].includes(row.output.count ?? -1)) throw Error("Probe has no completed review result");
   const source = await json(join(base, "source-catalog.json"), null);
-  if (!source || queueIdentity(source) !== row.output.sourceSHA) throw Error("Probe source changed");
+  if (!source || !Array.isArray((source as any).prompts) || (source as any).prompts.length !== row.output.count || queueIdentity(source) !== row.output.sourceSHA) throw Error("Probe source changed");
   const editorial = editorialLedgerSchema.parse(await json(join(base, "editorial-ledger.json"), null));
   const visual = visualLedgerSchema.parse(await json(join(base, "visual-ledger.json"), null));
-  // Both providers must actually have returned, not merely found a cache hit or rejected an empty batch.
+  // Both providers must actually have returned, not merely found a cache hit or processed an empty batch. A valid visual rejection is healthy too.
   for (const ledger of [editorial, visual]) if (ledger.requests !== 1 || ledger.attempts.length !== 1 || ledger.attempts[0].state !== "completed" || Date.parse(ledger.attempts[0].reservedAt) < Date.parse(probe.createdAt) || Date.parse(ledger.attempts[0].reservedAt) >= Date.parse(probe.expiresAt)) throw Error("Probe requires one completed call to each review provider");
   return { sourceSHA: row.output.sourceSHA, editorialSHA: queueIdentity(editorial), visualSHA: queueIdentity(visual) };
 }

@@ -10,7 +10,8 @@ import { readCampaignStage } from "../ingest/campaign-stage.ts";
 import { assertSubscriptionSnapshot } from "../ingest/backfill-campaign.ts";
 import { configuredXSpendBudget } from "../ingest/x-spend.ts";
 import { verifyReviewedHistory } from "../ingest/history-stage-verification.ts";
-const [root, batch] = process.argv.slice(2);
+const [root, batch, mode] = process.argv.slice(2);
+if (mode && mode !== "--finalize-retained") throw Error("Unknown recovery mode");
 if (!root || !isAbsolute(root) || !/^batch-\d{4}$/.test(batch ?? "")) throw Error("Usage: probe-review-recovery /absolute/campaign batch-NNNN");
 process.umask(0o077);
 const unlock = await lockContent(root);
@@ -32,12 +33,21 @@ try {
   const queue = new StageQueue(queueDatabase());
   const rows = (await queue.db.query("select id,stage,attempts,payload,output from prompix.queue_jobs where run_id=$1 and state='reconcile' order by id", [config.run])).rows;
   const proofs = await Promise.all(rows.map(row => inspectReviewFailure(root, config.run, row)));
-  const probe = await reserveReviewProbe(queue, root, config.run, batch, proofs);
-  console.log(JSON.stringify({ status: "probe-reserved", batch, sequence: probe.sequence }));
-  for (const kind of ["collect", "review"] as const) {
-    await check();
-    if (!await workStage(queue, config.run, [kind], job => processHistoryStage(queue, root, config.sharedRoot, job, { beforeRequest: check }), `${config.run}:${batch}:${kind}`)) throw Error("Probe claim unavailable; reservation remains consumed");
+  if (mode === "--finalize-retained") {
+    const pointer = await json<any>(join(root, "review-recovery/active.json"), null);
+    if (!pointer || pointer.stageID !== stage.id || !Number.isInteger(pointer.sequence) || pointer.sequence < 1 || pointer.sequence > 3) throw Error("No matching probe reservation");
+    const retained = await json<any>(join(root, "review-recovery", stage.id, `attempt-${pointer.sequence}.json`), null);
+    if (!retained || retained.batch !== batch || retained.run !== config.run) throw Error("Probe identity mismatch");
+    await verifyReviewedHistory(join(root, config.run, batch), config.sharedRoot);
+    console.log(JSON.stringify({ status: "probe-finalized-without-replay", receipt: await completeReviewProbe(queue, root, retained) }));
+  } else {
+    const probe = await reserveReviewProbe(queue, root, config.run, batch, proofs);
+    console.log(JSON.stringify({ status: "probe-reserved", batch, sequence: probe.sequence }));
+    for (const kind of ["collect", "review"] as const) {
+      await check();
+      if (!await workStage(queue, config.run, [kind], job => processHistoryStage(queue, root, config.sharedRoot, job, { beforeRequest: check }), `${config.run}:${batch}:${kind}`)) throw Error("Probe claim unavailable; reservation remains consumed");
+    }
+    await verifyReviewedHistory(join(root, config.run, batch), config.sharedRoot);
+    console.log(JSON.stringify({ status: "probe-succeeded", receipt: await completeReviewProbe(queue, root, probe) }));
   }
-  await verifyReviewedHistory(join(root, config.run, batch), config.sharedRoot);
-  console.log(JSON.stringify({ status: "probe-succeeded", receipt: await completeReviewProbe(queue, root, probe) }));
 } finally { await unlock(); }

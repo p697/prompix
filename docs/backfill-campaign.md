@@ -178,7 +178,7 @@ Evidence is diagnostic, never an approval: timeouts, partial/malformed output, u
 1. 停止控制器，持有同一个 campaign root 锁，确认无活动 lease；冻结并逐一校验所有未决审核的 manifest、ledger 与留存证据。文字超时只作为未知结果隔离，不能冒充生成前容量拒绝来终止旧任务。
 2. 最近一次失败及上次探测至少冷却30分钟。使用同一 run 下**未尝试过、未重复分配的单个图片／视频／网页来源**创建一个新 batch，并通过 `enqueueHistoryPipeline` 入队。检查 prior assignments，不挪用旧失败来源。
 3. 在已部署 runtime、原有预算和环境变量下执行 `scripts/probe-review-recovery.ts /absolute/campaign batch-NNNN`。它仅精确领取该 batch 的 collect/review，沿用全局并发上限、第三方记账、实时订阅快照、95%阶段授权（其他阶段默认90%）和预算到期检查。
-4. 必须产生一条经完整审核的来源，并有文字、图片审核各一次真实成功调用，才留存成功凭据。缓存命中、空批次、未完成调用和只有文字通过都不能解除熔断。此时仍未算翻译／语义复核完成，不发布。
+4. 必须有文字、图片审核各一次真实成功调用，才留存成功凭据。有效的媒体“不通过”也证明服务已正常返回，内容仍被拒绝、不发布；不能为了探测通过而放宽质量。缓存命中、空输入、未完成调用和只有文字返回都不能解除熔断。若进程在完整审核后、写成功凭据前退出，可用同一命令附加 `--finalize-retained` 仅核对留存结果，不发请求、不重新领取任务。
 5. 控制器重启逐字节核对冻结失败证据与探测成果后，可处理其他内容。恢复凭据绑定 run/stage，12小时有效；旧未知任务继续隔离，**新增任何一个未决任务即再次停止**。新阶段不能复用凭据。
 
 每阶段最多三次探测；请求前写不可变 reservation，崩溃／失败也占次数，不能重启重放。新的 reservation 立即使上一份成功凭据失效。完整证据位于私有 `review-recovery/<stage>/attempt-N.json`、`success-N.json`；`active.json` 只指向当前 reservation。达到次数上限须工程排查，不清账、改阈值或自动换付费模型。
