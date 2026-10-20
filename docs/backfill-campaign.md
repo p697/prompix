@@ -198,3 +198,11 @@ After a history collection job retains its third-party response, adopt eligible 
 Merge this evidence with shared, seed and source revalidation records at all subsequent boundaries. A newer withdrawal wins; equal-time conflicting records stop. This prevents an old unrelated revision/check from overriding a freshly acquired and reviewed source. Editorial, media, translation and publication checks remain mandatory.
 
 A previously collected batch that failed freshness validation before translation may adopt its retained acquisition using the same function. Inspect and retain the failed SQL attempt, prove no translation request or output exists, and run full source/editorial/media verification against the merged state before a targeted compare-and-set retry. Never re-fetch the source or retry unknown provider results to repair this local state mismatch.
+
+## Database transient recovery
+
+Queue database calls remain serialized per process. Each operation is transactional. On a transient query/network/lock failure, reconnect up to three times (1/3/8 seconds) **only** when ROLLBACK was acknowledged and COMMIT was never sent. Non-transient errors, lost rollback acknowledgements, and uncertain COMMITs stop for reconciliation. Model handlers are outside these retries; no paid model/search request is replayed.
+
+Publisher pointer, immutable release reads and server-enforced read-only snapshots can retry on fresh connections. Stage and activation writes are not automatically replayed. Retained publication-cache content is hash-validated and live removals remain authoritative; operational inventory preparation should reuse that cache instead of exporting all translations on every publication.
+
+On exhaustion, persist the blocked state, drain in-flight workers, check SQL leases/results and provider artifacts before restarting a single controller. A healthy SELECT does not by itself prove an uncertain write succeeded. Quota, budget, source freshness and review recovery checks remain enforced at restart and before requests. The chat heartbeat is optional monitoring, not the controller or the daily collection schedule.

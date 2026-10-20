@@ -14,3 +14,20 @@ test("publisher TLS cannot be weakened through connection URL parameters", () =>
     assert.throws(() => publisherConfiguration({ PROMPIX_DATABASE_URL: value }, ca));
   assert.throws(() => publisherConfiguration({ PROMPIX_DATABASE_URL: url }, ""));
 });
+
+import { confirmedTransaction, hasConfirmedRollback } from "./postgres.ts";
+import type { Database } from "./database.ts";
+
+test("rollback proof excludes lost COMMIT and failed ROLLBACK acknowledgements", async () => {
+  for (const failure of ["query", "commit", "rollback", "begin"]) {
+    const error = new Error("Query read timeout"), statements: string[] = [];
+    const db: Database = { query: async sql => {
+      statements.push(sql);
+      if (sql === failure || (failure === "rollback" && sql === "query")) throw error;
+      return { rows: [] };
+    } };
+    await assert.rejects(confirmedTransaction(db, tx => tx.query("query")), e => e === error);
+    assert.equal(hasConfirmedRollback(error), failure === "query" || failure === "begin");
+    assert.equal(statements.at(-1), "rollback");
+  }
+});

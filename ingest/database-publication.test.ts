@@ -175,3 +175,23 @@ test("an unavailable optional cache does not turn a committed database stage int
   const id = await publisher.stage(input);
   assert.deepEqual((await publisher.read(id)).prompts, input.prompts);
 });
+
+test("publisher retries transient reads but never replays a stage write", async () => {
+  const f = await fixture();
+  try {
+    let reads = 0;
+    const recovering = databasePublisher(async operation => {
+      if (++reads === 1) throw new Error("Query read timeout");
+      return operation(f.writer);
+    });
+    assert.equal((await recovering.pointer()).release, f.initial);
+    assert.equal(reads, 2);
+    reads = 0;
+    assert.equal((await recovering.read(f.initial)).prompts.length, 2);
+    assert.equal(reads, 2);
+    let writes = 0;
+    const uncertain = databasePublisher(async () => { writes++; throw new Error("Query read timeout"); });
+    await assert.rejects(uncertain.stage(catalog(3)), /Query read timeout/);
+    assert.equal(writes, 1);
+  } finally { await f.cleanup(); }
+});

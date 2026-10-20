@@ -1073,3 +1073,7 @@ A fresh probe returned valid editorial and media decisions but was rejected for 
 
 - Persist fresh exact standalone third-party acquisition checks separately in the campaign, retaining the original API capture time and digest. No extra X request or timestamp renewal is needed.
 - All historical consumers merge these checks with existing revalidation records. Newer withdrawals/removals and incomplete thread checks continue to block; full content approval is independent of source freshness.
+
+### 2026-10-20: Retry only proven safe database operations
+
+A transient database timeout stopped both campaign queue claiming and inventory export. Queue operations now retry with new connections only after acknowledged rollback before COMMIT, with three bounded delays. Read-only publication queries may retry; uncertain commits and external model calls must never be replayed by this mechanism. The user requested removal of the chat heartbeat; daily collection and the running bounded campaign remain separate.

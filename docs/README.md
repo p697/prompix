@@ -1,3 +1,5 @@
+**数据库短暂故障恢复**：队列仅重试已确认回滚且尚未提交的事务；发布只读查询可重连重试，未知提交仍停止核对。见[运维边界](backfill-campaign.md#database-transient-recovery)。
+
 **历史来源时效**：完整的新采集记录进入独立时效证据，避免旧复查覆盖新版本；保留原获取时间，零额外 API 请求，见[运维说明](backfill-campaign.md#adopt-retained-acquisition-freshness)。
 
 **审核证据快照**：复用共享文字审核结果时，先保存批次内快照，避免零请求审核跳过写盘、导致翻译阶段缺少证据。后续阶段仍只信任批次记录；见[运维说明](backfill-campaign.md#retain-inherited-editorial-evidence)。
