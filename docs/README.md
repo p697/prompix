@@ -1,3 +1,5 @@
+**历史来源时效**：完整的新采集记录进入独立时效证据，避免旧复查覆盖新版本；保留原获取时间，零额外 API 请求，见[运维说明](backfill-campaign.md#adopt-retained-acquisition-freshness)。
+
 **审核证据快照**：复用共享文字审核结果时，先保存批次内快照，避免零请求审核跳过写盘、导致翻译阶段缺少证据。后续阶段仍只信任批次记录；见[运维说明](backfill-campaign.md#retain-inherited-editorial-evidence)。
 
 **审核故障恢复**：新增单来源、单并发受控探测，成功后可恢复其他批次；历史未决请求与费用不变，新的未决结果再次停机。见[恢复规程](backfill-campaign.md#recover-review-service-with-a-fresh-bounded-probe)。

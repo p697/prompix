@@ -14,6 +14,7 @@ import { requiredIngestLocales, ingestLanguagePolicy, hasRequiredTranslations } 
 import { applyQualityHolds, readQualityHolds } from "./quality-holds.ts";
 import { readTranslationReviews } from "./translation-review.ts";
 import { reviewTranslationSemantics } from "./translation-semantic.ts";
+import { adoptHistoryDiscoveries } from "./history-discovery-evidence.ts";
 const runName = z.string().regex(/^[a-z0-9][a-z0-9-]{0,79}$/);
 const payloadSchema = z.object({ batch: z.string().regex(/^batch-\d{4}$/), manifestSHA: z.string().regex(/^[a-f0-9]{64}$/), policy: z.literal(ingestLanguagePolicy), start: z.number().int().min(0).max(49).optional() }).strict();
 
@@ -51,10 +52,13 @@ export async function processHistoryStage(queue: StageQueue, root: string, share
         const predecessor = (await queue.db.query<{ output: { sourceSHA?: string } }>("select output from prompix.queue_jobs where id=$1 and state='succeeded'", [job.dependency])).rows[0];
         const source = await json(join(directory, "source-catalog.json"), null);
         if (!source || predecessor?.output.sourceSHA !== queueIdentity(source)) throw new Error("Reviewed stage artifact changed");
+        // Also cover already-collected batches when resuming a pre-upgrade queue.
+        await adoptHistoryDiscoveries(directory, root, shared);
       }
       const items = await runHistoryBatch(directory, batch, prior, shared, undefined, false, {
         availability: job.stage === "translate" ? await readHistoryAvailability(root, shared) : undefined,
         stage: job.stage === "collect" ? "source" : job.stage === "review" ? "review" : "translation", chineseOnly: true, translationConcurrency: 1, checkLease: async () => { await options.beforeRequest?.(); await queue.renew(job); } });
+      if (job.stage === "collect") await adoptHistoryDiscoveries(directory, root, shared);
       const source = await json(join(directory, "source-catalog.json"), null);
       const complete = await json(join(directory, "complete.json"), null);
       return { count: items.length, sourceSHA: source ? queueIdentity(source) : null, translatedSHA: complete ? queueIdentity(complete) : null, published: 0 };
