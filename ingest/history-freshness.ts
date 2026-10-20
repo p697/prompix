@@ -33,7 +33,8 @@ export function mergeHistoryAvailability(...states: XAvailabilityState[]): XAvai
 }
 export async function readHistoryAvailability(root: string, shared: string) {
   return mergeHistoryAvailability(...await Promise.all([readXAvailability(shared),
-    readXAvailability(join(root, 'seed-revalidation')), readXAvailability(join(root, 'source-revalidation'))]));
+    readXAvailability(join(root, 'seed-revalidation')), readXAvailability(join(root, 'source-revalidation')),
+    readXAvailability(join(root, 'source-discovery-evidence'))]));
 }
 /** Do not silently count an unexplained stale/mismatched ready record as a removal. */
 export function refreshHistoryItems(items: readonly Prompt[], state: XAvailabilityState, now = Date.now()): Prompt[] {

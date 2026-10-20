@@ -1068,3 +1068,8 @@ A fresh probe returned valid editorial and media decisions but was rejected for 
 - A history batch can reuse an exact shared approval without a new editorial request. Freeze that approval input in its batch before review; do not rely on callbacks that only execute after provider requests.
 - Later stages continue validating local source, editorial and full-media evidence. Do not add a shared-cache fallback to verification or relax source identity checks.
 - Missing legacy snapshots require explicit retained-evidence reconciliation, including proof that translation never began; previous failed attempts and costs remain recorded.
+
+### 2026-10-20 — Let complete historical acquisition evidence supersede older source checks
+
+- Persist fresh exact standalone third-party acquisition checks separately in the campaign, retaining the original API capture time and digest. No extra X request or timestamp renewal is needed.
+- All historical consumers merge these checks with existing revalidation records. Newer withdrawals/removals and incomplete thread checks continue to block; full content approval is independent of source freshness.
