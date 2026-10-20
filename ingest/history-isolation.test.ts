@@ -81,3 +81,51 @@ test("editorial isolation requires complete pre-output capacity evidence, never 
     assert.equal(isolated[0].replayed, false); assert.equal(isolated[0].reason, "editorial-capacity-before-output");
   } finally { await rm(root, { recursive: true, force: true }); }
 });
+
+test("operator closes only proven pre-output capacity failures and preserves all original attempts", async () => {
+  const { rejectVerifiedCapacityBatch } = await import("./history-isolation.ts");
+  const root = await mkdtemp(join(tmpdir(), "disposition-")); const { pg, writer } = await createTestDatabase();
+  try {
+    const queue = new StageQueue(writer);
+    for (let i = 1; i <= 5; i++) {
+      const batch = `batch-${String(i).padStart(4, "0")}`, failed = row(batch, i === 5 ? "Historical editorial attempt requires inspection" : undefined);
+      await fixture(root, batch);
+      await queue.enqueue({ id: failed.id, run, stage: "review", payload: failed.payload });
+      await assert.rejects(workStage(queue, run, ["review"], async () => { throw Error(failed.output.message); }));
+      await queue.enqueue({ id: `child-${i}`, run, stage: "translate", payload: { batch }, dependency: failed.id });
+      await queue.enqueue({ id: `grandchild-${i}`, run, stage: "semantic", payload: { batch }, dependency: `child-${i}` });
+    }
+    const batch = "batch-0005", directory = join(root, run, batch);
+    const { identities, attachments, attachmentBytes, ...editorial } = attempt;
+    await atomic(join(directory, "editorial-ledger.json"), { schemaVersion: 2, day, requests: 1, attempts: [{ ...editorial, error: "Editorial provider exited 1" }] });
+    const message = "Selected model is at capacity. Please try a different model.";
+    const evidence = { model: attempt.model, exitCode: 1, eventsTruncated: false, outputBytes: null, outputText: null,
+      events: [{ type: "thread.started" }, { type: "turn.started" }, { type: "error", message }, { type: "turn.failed", error: { message } }].map(e => JSON.stringify(e)).join("\n") };
+    const path = join(directory, "editorial-attempts", "1.json");
+    await atomic(path, evidence);
+    await assert.rejects(inspectHistoryIsolation(queue, root, run), /circuit open/);
+    await assert.rejects(rejectVerifiedCapacityBatch(queue, root, run, "batch-0001"), /Unknown provider/);
+    await atomic(path, { ...evidence, outputText: "partial" });
+    await assert.rejects(rejectVerifiedCapacityBatch(queue, root, run, batch), /not a verified/);
+    await atomic(path, evidence);
+    await queue.enqueue({ id: "active", run, stage: "collect", payload: {} });
+    const active = (await queue.claim(run, ["collect"]))!;
+    await assert.rejects(rejectVerifiedCapacityBatch(queue, root, run, batch), /Drain active/);
+    await queue.finish(active, "succeeded", {});
+    const attempts = JSON.stringify((await pg.query("select * from prompix.queue_attempts order by job_id,attempt")).rows);
+    const ledger = await readFile(join(directory, "editorial-ledger.json"));
+    const result = await rejectVerifiedCapacityBatch(queue, root, run, batch);
+    assert.equal(result.qualified, 0); assert.equal(result.replayed, false);
+    assert.deepEqual(await readFile(join(directory, "editorial-ledger.json")), ledger);
+    assert.equal(JSON.stringify((await pg.query("select * from prompix.queue_attempts order by job_id,attempt")).rows), attempts);
+    assert.equal((await pg.query<{state: string}>("select state from prompix.queue_jobs where id=$1", [row(batch).id])).rows[0].state, "rejected");
+    assert.equal(await queue.claim(run, ["review", "translate", "semantic"]), undefined);
+    const isolated = await inspectHistoryIsolation(queue, root, run);
+    assert.equal(isolated.length, 4);
+    assert.equal(await activeHistoryBatches(queue, run, isolated), 0, "rejected batch descendants never hold scheduling capacity");
+    await assert.rejects(rejectVerifiedCapacityBatch(queue, root, run, batch), /Only reconciled/);
+    await queue.enqueue({ id: "healthy", run, stage: "collect", payload: { batch: "batch-0006" } });
+    assert.equal(await activeHistoryBatches(queue, run, isolated), 1);
+    assert.ok(await queue.claim(run, ["collect"]));
+  } finally { await pg.close(); await rm(root, { recursive: true, force: true }); }
+});

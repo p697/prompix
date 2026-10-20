@@ -1046,3 +1046,7 @@ The daily retention pass only read its shared visual cache; historical batch dec
 ### 2026-10-20 — Bound subscription headroom exceptions to one backfill stage
 
 Keep the default90% account-weekly stop. Explicit user approval may grant one named stage a95% stop through a private expiring grant, rechecked before requests; stale quota, denied ordinary usage, budget and quality gates still stop work. In-flight work drains, and there is no paid-model fallback.
+
+### 2026-10-20 — Explicit terminal disposition for proven capacity failures
+
+The historical campaign stopped at five reconciled review jobs. One retained editorial request has a complete pre-output capacity refusal; four visual outcomes remain unknown. Add an operator-only, evidence-validated rejection of the entire known-refused batch, preserving every original attempt and charge. Do not retry, approve, clear unknown jobs or raise the five-job breaker. Exclude dependency-blocked descendants of terminally rejected reviews from scheduling pressure.
