@@ -37,6 +37,8 @@ test("concurrent workers share a measurement; failed refresh never renews its ti
     assert.equal((await readFile(join(root, "subscription-quota-history.jsonl"), "utf8")).trim().split("\n").length, 1);
     await refresh(); assert.equal(calls, 2);
     clock += 61_000; fail = false; await refresh(); assert.equal(calls, 3);
+    const wrongAccount = campaignQuotaReader(root, "wrong-account", async () => raw, () => clock);
+    await assert.rejects(wrongAccount(), /Quota account mismatch/);
     assert.equal(JSON.parse(await readFile(join(root, "subscription-quota.json"), "utf8")).observedAt, new Date(clock).toISOString());
   } finally { await rm(root, { recursive: true, force: true }); }
 });

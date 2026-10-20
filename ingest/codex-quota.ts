@@ -65,18 +65,21 @@ export function campaignQuotaReader(root: string, expectedAccountID: string,
     if (pending) return pending;
     if (now() < nextRead) return;
     pending = (async () => {
-      try {
-        const snapshot = quotaObservation(await read(), expectedAccountID, now());
-        await appendFile(join(root, "subscription-quota-history.jsonl"), JSON.stringify(snapshot) + "\n", { mode: 0o600 });
-        await atomic(join(root, "subscription-quota-evidence.json"), snapshot);
-        const { observedAt, ordinaryUsageAllowed, weeklyUsedPercent, source } = snapshot;
-        await atomic(join(root, "subscription-quota.json"), { observedAt, ordinaryUsageAllowed, weeklyUsedPercent, source });
-        nextRead = now() + 20 * 60_000;
-      } catch (error) {
-        // Preserve the last real snapshot. Existing 65-minute admission check still decides.
+      let raw: unknown;
+      try { raw = await read(); }
+      catch {
+        // Transport failure preserves the last measurement; its 65-minute limit still applies.
         nextRead = now() + 60_000;
         await atomic(join(root, "subscription-quota-read-error.json"), { at: new Date(now()).toISOString(), error: "Account quota refresh failed; retained snapshot unchanged" });
+        return;
       }
+      // Wrong accounts, unknown window shapes, and storage failures stop admission immediately.
+      const snapshot = quotaObservation(raw, expectedAccountID, now());
+      await appendFile(join(root, "subscription-quota-history.jsonl"), JSON.stringify(snapshot) + "\n", { mode: 0o600 });
+      await atomic(join(root, "subscription-quota-evidence.json"), snapshot);
+      const { observedAt, ordinaryUsageAllowed, weeklyUsedPercent, source } = snapshot;
+      await atomic(join(root, "subscription-quota.json"), { observedAt, ordinaryUsageAllowed, weeklyUsedPercent, source });
+      nextRead = now() + 20 * 60_000;
     })().finally(() => { pending = undefined; });
     return pending;
   };
