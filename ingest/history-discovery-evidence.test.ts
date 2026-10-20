@@ -27,8 +27,8 @@ test("retained acquisition supersedes older mismatched recheck without renewing 
     await atomic(join(shared, "x-availability", "state.json"), old);
     assert.throws(() => refreshHistoryItems([item], old as any, now), /stale|match/);
     const original = await readFile(input);
-    const result = await adoptHistoryDiscoveries(batch, root, shared, now);
-    assert.equal(result.reused, 1);
+    const concurrent = await Promise.all(Array.from({ length: 3 }, () => adoptHistoryDiscoveries(batch, root, shared, now)));
+    assert.deepEqual(concurrent.map(result => result.reused), [1, 0, 0]);
     const state = await readHistoryAvailability(root, shared);
     assert.equal(state[item.id].checkedAt, at);
     assert.equal(state[item.id].revision, item.source.revision);
