@@ -1,3 +1,5 @@
+**审核故障恢复**：新增单来源、单并发受控探测，成功后可恢复其他批次；历史未决请求与费用不变，新的未决结果再次停机。见[恢复规程](backfill-campaign.md#recover-review-service-with-a-fresh-bounded-probe)。
+
 **图片审核失败证据**：新增有界、私有的请求哈希、事件与部分输出留存；超时仍停止且不自动重放，不追认旧未决结果。见[运维说明](backfill-campaign.md#retain-visual-attempt-diagnostics)。
 
 **已证实的容量拒绝处置**：仅对留存证据完整、生成前明确拒绝的审核任务，支持人工终止整批收录；失败记录和费用不变，未知图片审核结果继续隔离。见[处置规程](backfill-campaign.md#resolve-a-proven-capacity-rejection-without-replay)。

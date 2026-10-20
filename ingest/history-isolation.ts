@@ -7,6 +7,7 @@ import { historyBatchSchema } from "./history-cohort.ts";
 import { editorialLedgerSchema } from "./editorial-runner.ts";
 import { visualLedgerSchema } from "./visual-review.ts";
 import { isPreOutputCapacityRejection } from "./provider-capacity.ts";
+import { recoveredReviewIDs } from "./review-recovery.ts";
 import { StageQueue, queueIdentity } from "./stage-queue.ts";
 
 const messages = ["Historical visual attempt requires inspection", "Historical editorial attempt requires inspection"] as const;
@@ -26,13 +27,18 @@ const absent = async (path: string) => {
 export async function inspectHistoryIsolation(queue: StageQueue, root: string, run: string) {
   if (!/^[a-z0-9-]{1,80}$/.test(run)) throw new Error("Invalid isolation run");
   const rows = (await queue.db.query("select id,stage,attempts,payload,output from prompix.queue_jobs where run_id=$1 and state='reconcile' order by id", [run])).rows;
-  if (rows.length >= 5) throw new Error("Five unresolved batches; campaign isolation circuit open");
+  // With no recovery record retain the original circuit and its fail-closed behavior.
+  if (rows.length >= 5 && !await json(join(root, "review-recovery", "active.json"), null))
+    throw new Error("Five unresolved batches; campaign isolation circuit open");
   const proofs = [];
   for (const raw of rows) proofs.push(await inspectReviewFailure(root, run, raw));
+  const recovered = await recoveredReviewIDs(queue, root, run, proofs);
+  if ((rows.length >= 5 && !recovered) || (recovered && proofs.some(p => !recovered.has(p.jobID))))
+    throw new Error("Five unresolved batches; campaign isolation circuit open");
   return proofs;
 }
 
-async function inspectReviewFailure(root: string, run: string, raw: unknown) {
+export async function inspectReviewFailure(root: string, run: string, raw: unknown) {
   const row = rowSchema.parse(raw), directory = join(root, run, row.payload.batch);
   if (row.id !== `${run}:${row.payload.batch}:review`) throw new Error("Isolation job identity changed");
   const manifest = historyBatchSchema.parse(await json(join(directory, "manifest.json"), null));
@@ -49,16 +55,19 @@ async function inspectReviewFailure(root: string, run: string, raw: unknown) {
   if (visual) {
     if (last.error !== "Visual provider timed out; daily attempt remains consumed") throw new Error("Unclassified visual failure");
   } else {
-    if (last.error !== "Editorial provider exited 1") throw new Error("Unclassified editorial failure");
+    if (!["Editorial provider exited 1", "Editorial provider timed out; daily attempt remains consumed"].includes(last.error ?? ""))
+      throw new Error("Unclassified editorial failure");
     const evidence = await readFile(join(directory, "editorial-attempts", `${ledger.requests}.json`));
     const attempt = JSON.parse(evidence.toString());
-    if (attempt.model !== last.model || attempt.exitCode !== 1 || attempt.eventsTruncated !== false
+    const timeout = last.error === "Editorial provider timed out; daily attempt remains consumed";
+    if (attempt.model !== last.model || (!timeout && attempt.exitCode !== 1) || attempt.eventsTruncated !== false
       || attempt.outputBytes !== null || attempt.outputText !== null || typeof attempt.events !== "string"
-      || !isPreOutputCapacityRejection(attempt.events)) throw new Error("Editorial failure is not a verified pre-output capacity rejection");
+      || (!timeout && !isPreOutputCapacityRejection(attempt.events)))
+      throw new Error("Editorial failure is not a verified no-output timeout or pre-output capacity rejection");
     evidenceSHA = hash(evidence);
   }
   const proof = { version: 1, jobID: row.id, batch: row.payload.batch, attempt: row.attempts, manifestSHA: row.payload.manifestSHA,
-    reason: visual ? "visual-timeout-no-response" : "editorial-capacity-before-output", ledgerSHA: hash(bytes), evidenceSHA,
+    reason: visual ? "visual-timeout-no-response" : last.error === "Editorial provider exited 1" ? "editorial-capacity-before-output" : "editorial-timeout-no-response", ledgerSHA: hash(bytes), evidenceSHA,
     consumedRequests: ledger.requests, candidateIDs: last.candidateIDs, qualified: 0, replayed: false };
   await writeImmutableBytes(join(root, "isolated-reviews", `${row.payload.batch}-${row.attempts}.json`), Buffer.from(JSON.stringify(proof) + "\n"));
   return proof;
