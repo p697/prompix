@@ -1050,3 +1050,7 @@ Keep the default90% account-weekly stop. Explicit user approval may grant one na
 ### 2026-10-20 — Explicit terminal disposition for proven capacity failures
 
 The historical campaign stopped at five reconciled review jobs. One retained editorial request has a complete pre-output capacity refusal; four visual outcomes remain unknown. Add an operator-only, evidence-validated rejection of the entire known-refused batch, preserving every original attempt and charge. Do not retry, approve, clear unknown jobs or raise the five-job breaker. Exclude dependency-blocked descendants of terminally rejected reviews from scheduling pressure.
+
+### 2026-10-20 — Preserve failed visual attempt diagnostics
+
+A new editorial timeout reopened the five-unknown circuit; it has no output and is not a verified capacity rejection. Keep collection stopped, retain all unknown charges, and publish only already qualified inventory. Persist bounded visual events and partial output before temporary-directory cleanup for future diagnosis. This change does not retry calls, alter timeouts or weaken approval/isolation gates.

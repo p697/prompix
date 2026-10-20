@@ -46,7 +46,7 @@ const images = await Promise.all(paths.map(async path => ({ path, sha256: create
 await writeFile(capture, JSON.stringify({ args, stdin, images, pid: process.pid,
   secretPresent: !!process.env.PROMPIX_VISUAL_TEST_SECRET,
   schema: JSON.parse(await readFile(argument('--output-schema'), 'utf8')) }));
-if (behavior === 'timeout') { process.on('SIGTERM', () => {}); setInterval(() => {}, 1000); }
+if (behavior === 'timeout' || behavior === 'timeout-output') { if(behavior === 'timeout-output') await writeFile(argument('--output-last-message'), '{partial'); process.stdout.write(JSON.stringify({type:'thread.started',thread_id:'synthetic-retained-id'}) + '\\n'); process.on('SIGTERM', () => {}); setInterval(() => {}, 1000); }
 else if (behavior === 'stdout-limit') { process.stdout.write('x'.repeat(2000001)); setInterval(() => {}, 1000); }
 else if (behavior === 'stderr-limit') { process.stderr.write('x'.repeat(2000001)); setInterval(() => {}, 1000); }
 else if (behavior === 'tool') { process.stdout.write(JSON.stringify({ type: 'item.started', item: { type: 'command_execution', command: 'synthetic private command' } }) + '\\n'); setInterval(() => {}, 1000); }
@@ -286,4 +286,32 @@ test("duplicate identity responses carry a hash of retained raw evidence for qua
     assert.ok(error instanceof VisualIdentityRejection); assert.equal(error.responseSHA256, sha(raw)); return true;
   });
   assert.ok(raw.length > 0); await assertCleaned(cli.capture);
+});
+
+
+test("private attempt evidence retains timeout output and bounded events without accepting decisions", async t => {
+  const { root, item } = await fixture(t);
+  for (const behavior of ["timeout", "timeout-output", "stdout-limit", "symlink-response", "valid"] as const) {
+    const privateFile = join(root, "private-audit-fixture"); await writeFile(privateFile, "must-not-read");
+    const cli = await fakeCLI(root, behavior, { privateFile }), records: any[] = [];
+    const provider = codexVisualProvider(cli.executable, undefined, { timeoutMs: 1500, killGraceMs: 20 }, async evidence => { records.push(evidence); });
+    if (behavior === "valid") await provider([item]); else await assert.rejects(provider([item]));
+    assert.equal(records.length, 1);
+    const record = records[0]; assert.equal(record.model, visualReviewModel);
+    assert.equal(record.requestSHA256, sha(visualRequestText([item])));
+    assert.ok(Buffer.byteLength(record.events) <= 128_000);
+    assert.ok(record.elapsedMs >= 0); assert.doesNotMatch(JSON.stringify(record), /must-not-read/);
+    if (behavior === "timeout-output") { assert.equal(record.outputState, "retained"); assert.equal(record.outputText, "{partial"); assert.equal(record.outputBytes, 8); }
+    if (behavior === "timeout") { assert.equal(record.outputState, "missing"); assert.equal(record.outputText, null); assert.match(record.events, /synthetic-retained-id/); }
+    if (behavior === "stdout-limit") assert.equal(record.eventsTruncated, true);
+    if (behavior === "symlink-response") { assert.equal(record.outputState, "unreadable"); assert.equal(record.outputText, null); }
+    if (behavior === "valid") { assert.equal(record.exitCode, 0); assert.equal(record.outputState, "retained"); }
+    await assertCleaned(cli.capture);
+  }
+});
+
+test("failure to retain attempt evidence fails closed and still removes temporary media", async t => {
+  const { root, item } = await fixture(t), cli = await fakeCLI(root);
+  await assert.rejects(codexVisualProvider(cli.executable, undefined, {}, async () => { throw Error("Audit storage unavailable"); })([item]), /Audit storage unavailable/);
+  await assertCleaned(cli.capture);
 });

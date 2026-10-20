@@ -2,7 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Prompt } from "../packages/schema/catalog.ts";
-import { atomic, json } from "./publication.ts";
+import { atomic, json, writeImmutableBytes } from "./publication.ts";
 import { applyVisualPresentation, runVisualReview, visualCacheSchema, visualLedgerSchema, visualReviewVersion } from "./visual-review.ts";
 import { codexVisualProvider } from "./visual-provider.ts";
 import { prepareVisualMedia } from "./visual-media.ts";
@@ -34,7 +34,8 @@ export async function prepareDailyVisualReview(prompts: Prompt[], previous: Prom
         if (clock().toISOString().slice(0, 10) !== day) throw new Error("UTC visual review day changed; reserved attempt remains consumed");
         const sequence = requestSequence;
         return codexVisualProvider(environment.PROMPIX_CODEX ?? "codex",
-          response => atomic(join(directory, "responses", `${day}-${String(sequence).padStart(3, "0")}.json`), response))(items);
+          response => atomic(join(directory, "responses", `${day}-${String(sequence).padStart(3, "0")}.json`), response), {},
+          async evidence => { await writeImmutableBytes(join(directory, "attempt-evidence", `${day}-${String(sequence).padStart(3, "0")}.json`), Buffer.from(JSON.stringify(evidence) + "\n")); })(items);
       } : undefined,
       prepareMedia: async prompt => {
         temporary ??= await mkdtemp(join(tmpdir(), "prompix-visual-daily-"));
