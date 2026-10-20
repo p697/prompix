@@ -88,6 +88,8 @@ export async function rejectVerifiedCapacityBatch(queue: StageQueue, root: strin
     priorOutput: raw.output, qualified: 0, replayed: false, attemptsPreserved: true, feesPreserved: true };
   await writeImmutableBytes(join(root, "review-dispositions", `${batch}-${raw.attempts}.json`), Buffer.from(JSON.stringify(disposition) + "\n"));
   await queue.db.transaction(async tx => {
+    // Serialize the drain check with StageQueue.claim across every worker.
+    await tx.query("select max_active from prompix.queue_controls where id='ingest' for update");
     const active = (await tx.query<{ count: number }>("select count(*)::int as count from prompix.queue_jobs where run_id=$1 and state='leased'", [run])).rows[0].count;
     if (active) throw Error("Drain active leases before disposing review failures");
     const result = await tx.query(`update prompix.queue_jobs set state='rejected',output=$4,finished_at=now()
