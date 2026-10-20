@@ -112,7 +112,8 @@ export async function runHistoryBatch(directory: string, input: HistoryBatch, pr
     try {
       visual = await runVisualReview({ prompts: mirrored, previous: [], cache: visualCache, ledger: visualLedger, day, maxRequests: historyLimits.visual, reviewWebsite,
         prepareMedia: item => prepareVisualMedia(item, temporary),
-        provider: async items => { await options.checkLease?.(); return codexVisualProvider(env.PROMPIX_CODEX, response => atomic(join(directory, "visual-responses", `${visualSequence}.json`), response))(items); },
+        provider: async items => { await options.checkLease?.(); return codexVisualProvider(env.PROMPIX_CODEX, response => atomic(join(directory, "visual-responses", `${visualSequence}.json`), response), {},
+          async evidence => { await writeImmutableBytes(join(directory, "visual-attempts", `${visualSequence}.json`), Buffer.from(JSON.stringify(evidence) + "\n")); })(items); },
         persistCache: value => atomic(visualPath, value), persistLedger: async value => { await atomic(visualLedgerPath, value); visualSequence = value.requests; } });
     } finally { await rm(temporary, { recursive: true, force: true }); }
     report.visual = visual.report;

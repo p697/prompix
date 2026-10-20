@@ -113,18 +113,24 @@ function providerEnvironment() {
   return environment;
 }
 
+export type VisualAttemptEvidence = { model: string; receivedAt: string; elapsedMs: number; exitCode: number | null;
+  requestSHA256: string; events: string; eventsTruncated: boolean;
+  outputState: "missing" | "retained" | "unreadable"; outputText: string | null; outputBytes: number | null };
 type ProviderLimits = { timeoutMs?: number; killGraceMs?: number };
 /** Test overrides may shorten hard limits; they cannot enlarge the production budget. */
 export function codexVisualProvider(executable = "codex",
-  recordResponse?: (response: { model: string; receivedAt: string; text: string }) => Promise<void>, limits: ProviderLimits = {}): VisualProvider {
+  recordResponse?: (response: { model: string; receivedAt: string; text: string }) => Promise<void>, limits: ProviderLimits = {}, recordAttempt?: (evidence: VisualAttemptEvidence) => Promise<void>): VisualProvider {
   const timeoutMs = limits.timeoutMs ?? 180_000, killGraceMs = limits.killGraceMs ?? 2000;
   if (!Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 180_000 || !Number.isInteger(killGraceMs) || killGraceMs < 1 || killGraceMs > 2000)
     throw new Error("Invalid visual provider time limit");
   return async items => {
     const values = validateInput(items), responseSchema = visualResponseSchema(values);
     const directory = await mkdtemp(join(tmpdir(), "prompix-visual-"));
+    const output = join(directory, "decisions.json"), startedAt = Date.now();
+    let attempted = false, exitCode: number | null = null, eventBytes = 0, eventsTruncated = false;
+    const eventChunks: Buffer[] = [];
     try {
-      const schema = join(directory, "schema.json"), output = join(directory, "decisions.json"), paths: string[] = [];
+      const schema = join(directory, "schema.json"), paths: string[] = [];
       for (const attachment of values.flatMap(item => item.attachments)) {
         let bytes: Buffer;
         try {
@@ -140,6 +146,7 @@ export function codexVisualProvider(executable = "codex",
       await writeFile(schema, JSON.stringify(z.toJSONSchema(responseSchema)), { mode: 0o600 });
       let inputTokens: number | undefined, outputTokens: number | undefined;
       await new Promise<void>((resolve, reject) => {
+        attempted = true;
         const child = spawn(executable, ["exec", "--ignore-user-config", "--ignore-rules", "--ephemeral", "--skip-git-repo-check",
           "--sandbox", "read-only", "--cd", directory, "--model", visualReviewModel, "--json",
           "-c", 'model_reasoning_effort="low"', "-c", "features.shell_tool=false", "-c", 'web_search="disabled"',
@@ -171,6 +178,9 @@ export function codexVisualProvider(executable = "codex",
           }
         };
         child.stdout.on("data", (chunk: Buffer) => {
+          const remaining = Math.max(0, 128_000 - eventBytes);
+          eventChunks.push(Buffer.from(chunk.subarray(0, remaining))); eventBytes += Math.min(chunk.length, remaining);
+          if (chunk.length > remaining) eventsTruncated = true;
           received += chunk.length;
           if (received > 2_000_000) { stop("Visual provider exceeded bounded output"); return; }
           buffer += chunk.toString();
@@ -186,6 +196,7 @@ export function codexVisualProvider(executable = "codex",
         child.stdin.on("error", () => {});
         child.on("error", () => { cleanup(); reject(new Error("Visual provider could not start")); });
         child.on("close", code => {
+          exitCode = code;
           if (buffer.trim()) eventLine(buffer);
           cleanup();
           if (failure) reject(failure);
@@ -211,6 +222,19 @@ export function codexVisualProvider(executable = "codex",
             : new Error("Visual provider returned duplicate, unordered or inconsistent decisions");
       }
       return { decisions: parsed.data.decisions.map(conservativeVisualDecision), inputTokens, outputTokens };
-    } finally { await rm(directory, { recursive: true, force: true }); }
+    } finally {
+      try {
+        if (attempted && recordAttempt) {
+          let outputState: VisualAttemptEvidence["outputState"] = "missing", outputText: string | null = null, outputBytes: number | null = null;
+          try {
+            const bytes = await boundedFile(output, 32_000);
+            outputState = "retained"; outputText = bytes.toString("utf8"); outputBytes = bytes.length;
+          } catch (error: any) { if (error.code !== "ENOENT") outputState = "unreadable"; }
+          await recordAttempt({ model: visualReviewModel, receivedAt: new Date().toISOString(), elapsedMs: Date.now() - startedAt, exitCode,
+            requestSHA256: createHash("sha256").update(visualRequestText(values)).digest("hex"),
+            events: Buffer.concat(eventChunks).toString("utf8"), eventsTruncated, outputState, outputText, outputBytes });
+        }
+      } finally { await rm(directory, { recursive: true, force: true }); }
+    }
   };
 }

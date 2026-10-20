@@ -1,3 +1,5 @@
+**图片审核失败证据**：新增有界、私有的请求哈希、事件与部分输出留存；超时仍停止且不自动重放，不追认旧未决结果。见[运维说明](backfill-campaign.md#retain-visual-attempt-diagnostics)。
+
 **已证实的容量拒绝处置**：仅对留存证据完整、生成前明确拒绝的审核任务，支持人工终止整批收录；失败记录和费用不变，未知图片审核结果继续隔离。见[处置规程](backfill-campaign.md#resolve-a-proven-capacity-rejection-without-replay)。
 
 **推荐回归（2026-10-20）**：2612条线上完整遍历、330组本机画像对照及默认字号模拟器验证；修复离线回退不遵守本机拒绝／画面偏好，见[实测结果](local-first-recommendations.md#2026-10-20当前线上库的推荐回归)。
