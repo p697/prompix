@@ -184,3 +184,9 @@ Evidence is diagnostic, never an approval: timeouts, partial/malformed output, u
 每阶段最多三次探测；请求前写不可变 reservation，崩溃／失败也占次数，不能重启重放。新的 reservation 立即使上一份成功凭据失效。完整证据位于私有 `review-recovery/<stage>/attempt-N.json`、`success-N.json`；`active.json` 只指向当前 reservation。达到次数上限须工程排查，不清账、改阈值或自动换付费模型。
 
 回滚：停止控制器，切回此前 runtime；旧五批熔断重新生效。保留全部 recovery 文件与来源批次，不能删除来刷新探测次数。本次不调整模型或3分钟审核上限；超时参数须通过后续实际延迟证据单独评估。
+
+## Retain inherited editorial evidence
+
+Before a historical review starts, save the schema-validated shared editorial input to the batch's `editorial.json` if that file is absent. Fully approved input causes `runEditorialReview` to return `no-pending` with zero requests, so its request-success persistence callback alone cannot establish the downstream evidence. Existing batch evidence, including an empty object, remains authoritative. Translation, semantic verification and publication never fall back to mutable shared approvals.
+
+For a legacy batch stopped before translation because this snapshot is missing, do not replay review or regenerate source artifacts. Under the campaign and batch locks, retain the original SQL attempt/output, all artifact hashes and the proposed inherited approval. Verify the approval predates the original review, matches the intake fingerprint and source revision, and reproduces the exact approved text and metadata. Verify the retained complete media review as well. Confirm no translation request, response, cache, completion or downstream successful output exists. Only then save the missing evidence and compare-and-set that specific translation job from `reconcile` to `retry`, retaining its previous attempt and failure evidence. Any mismatch or ambiguous provider activity remains blocked. This local evidence repair does not consume a review-service probe reservation or authorize replay of unknown review requests.

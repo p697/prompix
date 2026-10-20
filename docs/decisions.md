@@ -1062,3 +1062,9 @@ Keep unknown review requests and their charges immutable and unpublishable. A ro
 ### 2026-10-20 — Treat valid rejection as review service health
 
 A fresh probe returned valid editorial and media decisions but was rejected for preview mismatch. A completed negative verdict is service success, not content approval. Finalize its retained evidence without another provider request; the rejected source remains excluded. No cached or missing provider response can satisfy the health check.
+
+### 2026-10-20 — Persist inherited editorial approvals before independent history review
+
+- A history batch can reuse an exact shared approval without a new editorial request. Freeze that approval input in its batch before review; do not rely on callbacks that only execute after provider requests.
+- Later stages continue validating local source, editorial and full-media evidence. Do not add a shared-cache fallback to verification or relax source identity checks.
+- Missing legacy snapshots require explicit retained-evidence reconciliation, including proof that translation never began; previous failed attempts and costs remain recorded.
