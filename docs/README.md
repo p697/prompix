@@ -1,3 +1,5 @@
+**审核证据快照**：复用共享文字审核结果时，先保存批次内快照，避免零请求审核跳过写盘、导致翻译阶段缺少证据。后续阶段仍只信任批次记录；见[运维说明](backfill-campaign.md#retain-inherited-editorial-evidence)。
+
 **审核故障恢复**：新增单来源、单并发受控探测，成功后可恢复其他批次；历史未决请求与费用不变，新的未决结果再次停机。见[恢复规程](backfill-campaign.md#recover-review-service-with-a-fresh-bounded-probe)。
 
 **图片审核失败证据**：新增有界、私有的请求哈希、事件与部分输出留存；超时仍停止且不自动重放，不追认旧未决结果。见[运维说明](backfill-campaign.md#retain-visual-attempt-diagnostics)。

@@ -9,7 +9,7 @@ import { atomic, json, writeImmutableBytes } from "./publication.ts";
 import { historyBatchSchema, historyCatalogSchema, historyLimits, completeHistoryItem, uniqueHistoryItems, type HistoryBatch } from "./history-cohort.ts";
 import { admitXLeadSelection } from "./x-search-admission.ts";
 import { readXIntake } from "./x-intake.ts";
-import { applyEditorialReviews, reviewsSchema } from "./editorial.ts";
+import { applyEditorialReviews } from "./editorial.ts";
 import { editorialCacheSchema, editorialLedgerSchema, editorialVersion, runEditorialReview } from "./editorial-runner.ts";
 import { codexEditorialProvider } from "./editorial-provider.ts";
 import { selectLibrary } from "./library.ts";
@@ -26,6 +26,7 @@ import { readTranslationReviews } from "./translation-review.ts";
 import { runTranslations, type TranslationRunReport } from "./translation-runner.ts";
 import { requiredIngestLocales, originalAndChinese, seedApprovedChineseMetadata } from "./ingest-language-policy.ts";
 import { verifyReviewedHistory } from "./history-stage-verification.ts";
+import { snapshotHistoryEditorial } from "./history-editorial.ts";
 import { codexTranslationProvider } from "./translation-provider.ts";
 
 /** Run under the cohort lock. This stages artifacts only, and never activates a public release. */
@@ -75,7 +76,7 @@ export async function runHistoryBatch(directory: string, input: HistoryBatch, pr
     for (const id of Object.keys(holds.holds)) excluded.add(id);
     const candidates = intake.candidates.filter(p => approvedIDs.has(p.id) && !excluded.has(p.id));
     await phase("editorial");
-    const reviews = reviewsSchema.parse(await json(join(directory, "editorial.json"), await json(join(sharedRoot, "editorial.json"), {})));
+    const reviews = await snapshotHistoryEditorial(directory, sharedRoot);
     const cachePath = join(directory, "editorial-cache.json"), ledgerPath = join(directory, "editorial-ledger.json");
     const cache = editorialCacheSchema.parse(await json(cachePath, { version: editorialVersion, decisions: {} }));
     const ledgerRaw = await json(ledgerPath, undefined), ledger = ledgerRaw === undefined ? undefined : editorialLedgerSchema.parse(ledgerRaw);
