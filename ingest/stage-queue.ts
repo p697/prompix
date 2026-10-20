@@ -1,3 +1,5 @@
+import { hasUncertainCommit } from "../services/feed/postgres.ts";
+import { transientQueryError } from "./transient-retry.ts";
 import { VerifiedCapacityRejection } from "./provider-capacity.ts";
 import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
@@ -28,7 +30,8 @@ export class StageQueue {
   }
   async claim(run: string, stages: readonly QueueStage[], leaseSeconds = 900, onlyJobID?: string): Promise<QueueJob | undefined> {
     if (!run || !stages.length || stages.some(s => !queueStages.includes(s)) || !Number.isInteger(leaseSeconds) || leaseSeconds < 30 || leaseSeconds > 3600) throw new Error("Invalid queue claim");
-    return this.db.transaction(async tx => {
+    const token = randomUUID();
+    try { return await this.db.transaction(async tx => {
       // One short lock provides a global cap across runs/processes, not a per-worker multiplier.
       const control = (await tx.query<{ max_active: number }>("select max_active from prompix.queue_controls where id='ingest' for update")).rows[0];
       await tx.query(`with expired as (
@@ -38,7 +41,6 @@ export class StageQueue {
         from expired e where a.job_id=e.id and a.attempt=e.attempts and a.outcome='reserved'`);
       const active = (await tx.query<{ count: number }>("select count(*)::int as count from prompix.queue_jobs where state='leased'")).rows[0].count;
       if (!control || active >= control.max_active) return;
-      const token = randomUUID();
       const claimed = await tx.query<QueueJob>(`with candidate as (
         select j.id from prompix.queue_jobs j where j.run_id=$1 and j.stage=any($2::text[])
         and ($5::text is null or j.id=$5)
@@ -50,7 +52,25 @@ export class StageQueue {
       const job = claimed.rows[0];
       if (job) await tx.query("insert into prompix.queue_attempts(job_id,attempt,token) values($1,$2,$3)", [job.id, job.attempts, token]);
       return job;
-    });
+    }); } catch (error) {
+      if (!hasUncertainCommit(error) || !transientQueryError(error)) throw error;
+      // No handler has started. The control lock is a barrier behind the original transaction:
+      // once acquired, absence of this exact token proves there was no committed claim.
+      return this.db.transaction(async tx => {
+        await tx.query("select max_active from prompix.queue_controls where id='ingest' for update");
+        const rows = (await tx.query<QueueJob & { state: string; attempt_outcome: string; lease_live: boolean }>(`
+          select j.*,a.outcome as attempt_outcome,(j.lease_until>now()) as lease_live
+          from prompix.queue_attempts a join prompix.queue_jobs j on j.id=a.job_id
+          where a.token=$1`, [token])).rows;
+        if (!rows.length) return undefined;
+        if (rows.length !== 1) throw new Error("Ambiguous queue claim token");
+        const job = rows[0];
+        if (job.run_id !== run || !stages.includes(job.stage) || (onlyJobID && job.id !== onlyJobID) ||
+          job.state !== "leased" || job.lease_token !== token || !job.lease_live || job.attempt_outcome !== "reserved")
+          throw new Error("Recovered queue claim is no longer exclusively owned");
+        return job;
+      });
+    }
   }
   async renew(job: QueueJob, seconds = 900) {
     if (!Number.isInteger(seconds) || seconds < 30 || seconds > 3600) throw new Error("Invalid lease extension");

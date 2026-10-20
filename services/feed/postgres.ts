@@ -38,6 +38,10 @@ export function publisherConfiguration(environment: NodeJS.ProcessEnv, ca: strin
 }
 
 const rolledBackErrors = new WeakSet<Error>();
+const uncertainCommitErrors = new WeakSet<Error>();
+export function hasUncertainCommit(error: unknown): boolean {
+  return error instanceof Error && uncertainCommitErrors.has(error);
+}
 export function hasConfirmedRollback(error: unknown): boolean {
   return error instanceof Error && rolledBackErrors.has(error);
 }
@@ -53,7 +57,10 @@ export async function confirmedTransaction<T>(db: Database, operation: (db: Data
     return result;
   } catch (error) {
     // The same Error may be reused by a caller; proof is specific to this attempt.
-    if (error instanceof Error) rolledBackErrors.delete(error);
+    if (error instanceof Error) {
+      rolledBackErrors.delete(error); uncertainCommitErrors.delete(error);
+      if (commitSent) uncertainCommitErrors.add(error);
+    }
     try {
       await db.query("rollback");
       if (!commitSent && error instanceof Error) rolledBackErrors.add(error);
