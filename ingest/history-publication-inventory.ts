@@ -1,7 +1,8 @@
 import { dirname, join } from "node:path";
 import type { Prompt } from "../packages/schema/catalog.ts";
 import { json } from "./publication.ts";
-import { readXAvailability, filterXAvailability } from "./x-availability.ts";
+import { readHistoryAvailability } from "./history-freshness.ts";
+import { filterXAvailability } from "./x-availability.ts";
 import { exportQueueReady, readHistoryQualityHolds } from "./history-queue.ts";
 import { StageQueue } from "./stage-queue.ts";
 import { queueDatabase } from "./queue-database.ts";
@@ -15,7 +16,7 @@ import { readTranslationReviews } from "./translation-review.ts";
 /** Reread immutable queue evidence and original seed approvals, with live source checks.
  * The source overlay changes only checkedAt in memory; no original file is rewritten. */
 export async function publicationHistoryInventory(campaign: string, shared: string, run: string) {
-  const availability = await readXAvailability(shared);
+  const availability = await readHistoryAvailability(campaign, shared);
   const queued = await exportQueueReady(new StageQueue(queueDatabase()), campaign, shared, run,
     { publicationFreshOnly: true, availability });
   const originals = await json<Prompt[]>(join(campaign, "seed-ready.json"), []);

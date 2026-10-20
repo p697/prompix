@@ -1,3 +1,5 @@
+**队列提交查回**：领取任务的 COMMIT 应答丢失时，按唯一 token 在数据库锁后核对预约，只执行已确认且仍独占的任务；发布与采集采用同一组来源时效证据。见[运行说明](backfill-campaign.md#database-transient-recovery)。
+
 **数据库短暂故障恢复**：队列仅重试已确认回滚且尚未提交的事务；发布只读查询可重连重试，未知提交仍停止核对。见[运维边界](backfill-campaign.md#database-transient-recovery)。
 
 **历史来源时效**：完整的新采集记录进入独立时效证据，避免旧复查覆盖新版本；保留原获取时间，零额外 API 请求，见[运维说明](backfill-campaign.md#adopt-retained-acquisition-freshness)。

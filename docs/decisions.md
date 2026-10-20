@@ -1077,3 +1077,7 @@ A fresh probe returned valid editorial and media decisions but was rejected for 
 ### 2026-10-20: Retry only proven safe database operations
 
 A transient database timeout stopped both campaign queue claiming and inventory export. Queue operations now retry with new connections only after acknowledged rollback before COMMIT, with three bounded delays. Read-only publication queries may retry; uncertain commits and external model calls must never be replayed by this mechanism. The user requested removal of the chat heartbeat; daily collection and the running bounded campaign remain separate.
+
+### 2026-10-20: Reconcile queue claims and unify publication freshness
+
+A second timeout occurred at COMMIT, requiring outcome lookup rather than blind retry. Claim reservations now retain a token outside the transaction and reconcile it behind the control lock before any handler starts. Publication eligibility shares the campaign's merged freshness evidence, fixing a qualified item deferred solely by an older shared source version.

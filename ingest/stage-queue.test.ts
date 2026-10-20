@@ -148,3 +148,66 @@ test("a genuinely lost lease cannot be revived after a renewal error", async t =
     assert.equal((await pg.query<{ state: string }>("select state from prompix.queue_jobs where id='expired'")).rows[0].state, "reconcile");
   } finally { t.mock.timers.reset(); await pg.close(); }
 });
+
+import { confirmedTransaction } from "../services/feed/postgres.ts";
+import type { TransactionalDatabase } from "../services/feed/database.ts";
+async function loseCommitResponse<T>(value: T): Promise<T> {
+  return confirmedTransaction({ query: async sql => {
+    if (sql === "commit") throw new Error("Query read timeout");
+    return { rows: [] };
+  } }, async () => value);
+}
+
+test("lost claim COMMIT response reads the exact reservation and invokes handler once", async () => {
+  const { pg, writer } = await createTestDatabase();
+  try {
+    const ordinary = new StageQueue(writer);
+    await ordinary.enqueue({ id: "committed", run: "claim-proof", stage: "collect", payload: {} });
+    let first = true, calls = 0;
+    const db: TransactionalDatabase = { ...writer, transaction: async op => {
+      const result = await writer.transaction(op);
+      if (first) { first = false; return loseCommitResponse(result); }
+      return result;
+    } };
+    const queue = new StageQueue(db);
+    assert.equal(await workStage(queue, "claim-proof", ["collect"], async () => { calls++; return { accepted: true }; }), true);
+    assert.equal(calls, 1);
+    const jobs = (await writer.query("select state,attempts from prompix.queue_jobs where id='committed'")).rows;
+    assert.deepEqual(jobs, [{ state: "succeeded", attempts: 1 }]);
+  } finally { await pg.close(); }
+});
+
+test("an uncommitted claim returns idle only after the control lock barrier", async () => {
+  const { pg, writer } = await createTestDatabase();
+  try {
+    let first = true;
+    const db: TransactionalDatabase = { ...writer, transaction: async op => {
+      if (first) { first = false; return loseCommitResponse(undefined as any); }
+      return writer.transaction(op);
+    } };
+    const queue = new StageQueue(db);
+    await queue.enqueue({ id: "unclaimed", run: "claim-empty", stage: "collect", payload: {} });
+    assert.equal(await queue.claim("claim-empty", ["collect"]), undefined);
+    assert.equal((await writer.query("select attempts from prompix.queue_jobs where id='unclaimed'")).rows[0].attempts, 0);
+    assert.equal((await queue.claim("claim-empty", ["collect"]))?.id, "unclaimed");
+  } finally { await pg.close(); }
+});
+
+test("a lost claim response never runs an expired reservation", async () => {
+  const { pg, writer } = await createTestDatabase();
+  try {
+    await new StageQueue(writer).enqueue({ id: "expired", run: "claim-expired", stage: "collect", payload: {} });
+    let first = true, calls = 0;
+    const db: TransactionalDatabase = { ...writer, transaction: async op => {
+      const result = await writer.transaction(op);
+      if (first) {
+        first = false;
+        await writer.query("update prompix.queue_jobs set lease_until=now()-interval '1 second' where id='expired'");
+        return loseCommitResponse(result);
+      }
+      return result;
+    } };
+    await assert.rejects(workStage(new StageQueue(db), "claim-expired", ["collect"], async () => { calls++; return {}; }), /no longer exclusively owned/);
+    assert.equal(calls, 0);
+  } finally { await pg.close(); }
+});
