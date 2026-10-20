@@ -26,7 +26,7 @@ export class StageQueue {
     [input.id, input.run, input.stage, identity, JSON.stringify(input.payload), input.dependency ?? null, input.priority, input.maxAttempts]);
     if (result.rows.length !== 1) throw new Error("Immutable queue identity conflict");
   }
-  async claim(run: string, stages: readonly QueueStage[], leaseSeconds = 900): Promise<QueueJob | undefined> {
+  async claim(run: string, stages: readonly QueueStage[], leaseSeconds = 900, onlyJobID?: string): Promise<QueueJob | undefined> {
     if (!run || !stages.length || stages.some(s => !queueStages.includes(s)) || !Number.isInteger(leaseSeconds) || leaseSeconds < 30 || leaseSeconds > 3600) throw new Error("Invalid queue claim");
     return this.db.transaction(async tx => {
       // One short lock provides a global cap across runs/processes, not a per-worker multiplier.
@@ -41,11 +41,12 @@ export class StageQueue {
       const token = randomUUID();
       const claimed = await tx.query<QueueJob>(`with candidate as (
         select j.id from prompix.queue_jobs j where j.run_id=$1 and j.stage=any($2::text[])
+        and ($5::text is null or j.id=$5)
         and j.state in ('queued','retry') and j.available_at<=now() and j.attempts<j.max_attempts
         and (j.dependency is null or exists(select 1 from prompix.queue_jobs d where d.id=j.dependency and d.state='succeeded'))
         order by j.priority desc,j.created_at,j.id for update of j skip locked limit 1
       ) update prompix.queue_jobs j set state='leased',attempts=attempts+1,lease_token=$3,lease_until=now()+$4*interval '1 second'
-        from candidate c where j.id=c.id returning j.*`, [run, stages, token, leaseSeconds]);
+        from candidate c where j.id=c.id returning j.*`, [run, stages, token, leaseSeconds, onlyJobID ?? null]);
       const job = claimed.rows[0];
       if (job) await tx.query("insert into prompix.queue_attempts(job_id,attempt,token) values($1,$2,$3)", [job.id, job.attempts, token]);
       return job;
@@ -81,8 +82,8 @@ export class StageQueue {
   }
 }
 
-export async function workStage(queue: StageQueue, run: string, stages: QueueStage[], handler: (job: QueueJob) => Promise<Record<string, unknown>>) {
-  const job = await queue.claim(run, stages);
+export async function workStage(queue: StageQueue, run: string, stages: QueueStage[], handler: (job: QueueJob) => Promise<Record<string, unknown>>, onlyJobID?: string) {
+  const job = await queue.claim(run, stages, 900, onlyJobID);
   if (!job) return false;
   let leaseError: unknown;
   const timer = setInterval(() => { void queue.renew(job).catch(e => { leaseError = e; }); }, 60000);

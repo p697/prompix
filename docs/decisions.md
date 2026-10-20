@@ -1054,3 +1054,7 @@ The historical campaign stopped at five reconciled review jobs. One retained edi
 ### 2026-10-20 — Preserve failed visual attempt diagnostics
 
 A new editorial timeout reopened the five-unknown circuit; it has no output and is not a verified capacity rejection. Keep collection stopped, retain all unknown charges, and publish only already qualified inventory. Persist bounded visual events and partial output before temporary-directory cleanup for future diagnosis. This change does not retry calls, alter timeouts or weaken approval/isolation gates.
+
+### 2026-10-20 — Separate quarantined review outcomes from service recovery
+
+Keep unknown review requests and their charges immutable and unpublishable. A root-locked, stage-scoped single-source probe may validate both review providers after a 30-minute cooldown, at most three times per stage. Only a verified successful probe permits unrelated queue work; every subsequent unknown outcome opens the circuit again. Recovery expires after12 hours, does not replay old requests, and retains quota, budget, source freshness and publication gates. This replaces indefinite waiting for terminated processes to return results.

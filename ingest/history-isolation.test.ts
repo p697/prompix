@@ -129,3 +129,58 @@ test("operator closes only proven pre-output capacity failures and preserves all
     assert.ok(await queue.claim(run, ["collect"]));
   } finally { await pg.close(); await rm(root, { recursive: true, force: true }); }
 });
+
+test("recovery receipt isolates five unchanged failures, stops on any new failure, and never unlocks their children", async () => {
+  const { reserveReviewProbe, completeReviewProbe } = await import("./review-recovery.ts");
+  const { inspectReviewFailure } = await import("./history-isolation.ts");
+  const { activateCampaignStage } = await import("./campaign-stage.ts");
+  const { createHash } = await import("node:crypto");
+  const root = await mkdtemp(join(tmpdir(), "recover-five-")), { pg, writer } = await createTestDatabase();
+  try {
+    const queue = new StageQueue(writer), evidence = join(root, "evidence.json"); await atomic(evidence, {});
+    await activateCampaignStage(root, { version: 1, id: "one", run, authorizedAt: new Date().toISOString(), baselineCount: 1, seedReadyAtStart: 0, newReadyAtStart: 0, additionalQualified: 1000,
+      evidencePath: evidence, evidenceSHA256: createHash("sha256").update(await readFile(evidence)).digest("hex") });
+    const proofs = [];
+    for (let i = 1; i <= 5; i++) {
+      const batch = `batch-000${i}`; await fixture(root, batch);
+      await queue.enqueue({ id: row(batch).id, run, stage: "review", payload: row(batch).payload });
+      await assert.rejects(workStage(queue, run, ["review"], async () => { throw Error(row(batch).output.message); }));
+      await queue.enqueue({ id: `child-${i}`, run, stage: "translate", payload: {}, dependency: row(batch).id });
+      proofs.push(await inspectReviewFailure(root, run, row(batch)));
+    }
+    await pg.query("update prompix.queue_jobs set finished_at=now()-interval '1 hour' where state='reconcile'");
+    const attempts = JSON.stringify((await pg.query("select * from prompix.queue_attempts order by job_id")).rows);
+    const probeBatch = "batch-0006", probeManifest = { ...manifest(probeBatch), leads: [{ ...manifest(probeBatch).leads[0], id: "99" }] };
+    await atomic(join(root, run, probeBatch, "manifest.json"), probeManifest);
+    for (const kind of ["collect", "review"] as const) await queue.enqueue({ id: `${run}:${probeBatch}:${kind}`, run, stage: kind, payload: { batch: probeBatch, manifestSHA: queueIdentity(probeManifest) } });
+    const probe = await reserveReviewProbe(queue, root, run, probeBatch, proofs);
+    await assert.rejects(inspectHistoryIsolation(queue, root, run), /successful fresh probe/);
+    const source = { prompts: [{ id: "synthetic" }] }; await atomic(join(root, run, probeBatch, "source-catalog.json"), source);
+    await workStage(queue, run, ["review"], async () => ({ count: 1, sourceSHA: queueIdentity(source) }), `${run}:${probeBatch}:review`);
+    const { identities, attachments, attachmentBytes, ...editorial } = attempt;
+    await atomic(join(root, run, probeBatch, "editorial-ledger.json"), { schemaVersion: 2, day, requests: 1, attempts: [{ ...editorial, state: "completed", error: undefined, reservedAt: new Date().toISOString() }] });
+    await atomic(join(root, run, probeBatch, "visual-ledger.json"), { schemaVersion: 2, day, requests: 1, attempts: [{ ...attempt, state: "completed", error: undefined, reservedAt: new Date().toISOString() }] });
+    await completeReviewProbe(queue, root, probe);
+    assert.equal((await inspectHistoryIsolation(queue, root, run)).length, 5);
+    assert.equal(await queue.claim(run, ["translate"]), undefined);
+    assert.equal(JSON.stringify((await pg.query("select * from prompix.queue_attempts where job_id <> $1 order by job_id", [`${run}:${probeBatch}:review`])).rows), attempts);
+    const next = "batch-0007"; await fixture(root, next);
+    await queue.enqueue({ id: row(next).id, run, stage: "review", payload: row(next).payload });
+    await assert.rejects(workStage(queue, run, ["review"], async () => { throw Error(row(next).output.message); }));
+    await assert.rejects(inspectHistoryIsolation(queue, root, run), /circuit open/);
+  } finally { await pg.close(); await rm(root, { recursive: true, force: true }); }
+});
+
+test("editorial timeout remains unknown and cannot use capacity terminal disposition", async () => {
+  const { rejectVerifiedCapacityBatch } = await import("./history-isolation.ts");
+  const root = await mkdtemp(join(tmpdir(), "editorial-timeout-")), batch = "batch-0001";
+  const raw = { ...row(batch, "Historical editorial attempt requires inspection"), state: "reconcile" };
+  const queue = new StageQueue({ query: async () => ({ rows: [raw] }) } as any);
+  try {
+    await fixture(root, batch); const { identities, attachments, attachmentBytes, ...editorial } = attempt;
+    await atomic(join(root, run, batch, "editorial-ledger.json"), { schemaVersion: 2, day, requests: 1, attempts: [{ ...editorial, error: "Editorial provider timed out; daily attempt remains consumed" }] });
+    await atomic(join(root, run, batch, "editorial-attempts/1.json"), { model: attempt.model, exitCode: null, eventsTruncated: false, outputBytes: null, outputText: null, events: '{"type":"turn.started"}' });
+    assert.equal((await inspectHistoryIsolation(queue, root, run))[0].reason, "editorial-timeout-no-response");
+    await assert.rejects(rejectVerifiedCapacityBatch(queue, root, run, batch), /Unknown provider outcomes cannot be closed/);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});

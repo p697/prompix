@@ -170,3 +170,17 @@ This is not an automatic breaker reset: visual timeouts, partial output, unknown
 Visual provider attempts now retain private bounded event streams (128 KB), elapsed time, exit status, an exact request hash and any readable output (32 KB) before deleting temporary media. History stores immutable `visual-attempts/<sequence>.json`; daily ingestion uses `visual-review/attempt-evidence/<UTC-day>-<sequence>.json`. Unsafe or oversized output is recorded as unreadable, not absent. No stderr or environment values enter the evidence. These files remain outside the repository.
 
 Evidence is diagnostic, never an approval: timeouts, partial/malformed output, unsafe files, tool attempts and failure to persist evidence still fail closed. The timeout, model, review criteria, paid-attempt ledger, five-job isolation circuit and no-replay rules are unchanged. Old visual timeouts have no such evidence and cannot be retroactively classified as successful or pre-output capacity refusals. The new editorial timeout in batch0194 retained only thread/turn-start events, so the current five-unknown circuit remains blocked despite this diagnostic improvement.
+
+## Recover review service with a fresh bounded probe
+
+历史未决请求不是服务当前仍故障的证明。原有累计五批熔断保持；新增显式恢复入口，让隔离记录与当前服务健康分开。旧 `reconcile` 任务、费用、原始输出和后续依赖均不改写、不重放。
+
+1. 停止控制器，持有同一个 campaign root 锁，确认无活动 lease；冻结并逐一校验所有未决审核的 manifest、ledger 与留存证据。文字超时只作为未知结果隔离，不能冒充生成前容量拒绝来终止旧任务。
+2. 最近一次失败及上次探测至少冷却30分钟。使用同一 run 下**未尝试过、未重复分配的单个图片／视频／网页来源**创建一个新 batch，并通过 `enqueueHistoryPipeline` 入队。检查 prior assignments，不挪用旧失败来源。
+3. 在已部署 runtime、原有预算和环境变量下执行 `scripts/probe-review-recovery.ts /absolute/campaign batch-NNNN`。它仅精确领取该 batch 的 collect/review，沿用全局并发上限、第三方记账、实时订阅快照、95%阶段授权（其他阶段默认90%）和预算到期检查。
+4. 必须产生一条经完整审核的来源，并有文字、图片审核各一次真实成功调用，才留存成功凭据。缓存命中、空批次、未完成调用和只有文字通过都不能解除熔断。此时仍未算翻译／语义复核完成，不发布。
+5. 控制器重启逐字节核对冻结失败证据与探测成果后，可处理其他内容。恢复凭据绑定 run/stage，12小时有效；旧未知任务继续隔离，**新增任何一个未决任务即再次停止**。新阶段不能复用凭据。
+
+每阶段最多三次探测；请求前写不可变 reservation，崩溃／失败也占次数，不能重启重放。新的 reservation 立即使上一份成功凭据失效。完整证据位于私有 `review-recovery/<stage>/attempt-N.json`、`success-N.json`；`active.json` 只指向当前 reservation。达到次数上限须工程排查，不清账、改阈值或自动换付费模型。
+
+回滚：停止控制器，切回此前 runtime；旧五批熔断重新生效。保留全部 recovery 文件与来源批次，不能删除来刷新探测次数。本次不调整模型或3分钟审核上限；超时参数须通过后续实际延迟证据单独评估。
