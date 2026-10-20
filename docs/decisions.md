@@ -1058,3 +1058,7 @@ A new editorial timeout reopened the five-unknown circuit; it has no output and 
 ### 2026-10-20 — Separate quarantined review outcomes from service recovery
 
 Keep unknown review requests and their charges immutable and unpublishable. A root-locked, stage-scoped single-source probe may validate both review providers after a 30-minute cooldown, at most three times per stage. Only a verified successful probe permits unrelated queue work; every subsequent unknown outcome opens the circuit again. Recovery expires after12 hours, does not replay old requests, and retains quota, budget, source freshness and publication gates. This replaces indefinite waiting for terminated processes to return results.
+
+### 2026-10-20 — Treat valid rejection as review service health
+
+A fresh probe returned valid editorial and media decisions but was rejected for preview mismatch. A completed negative verdict is service success, not content approval. Finalize its retained evidence without another provider request; the rejected source remains excluded. No cached or missing provider response can satisfy the health check.
