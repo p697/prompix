@@ -18,16 +18,8 @@ export async function connectDatabase(config: ClientConfig): Promise<Transaction
     async transaction(operation) {
       if (inTransaction) throw new Error("Concurrent or nested transactions are not supported");
       inTransaction = true;
-      try {
-        await client.query("begin");
-        const result = await operation(adapter);
-        await client.query("commit");
-        return result;
-      } catch (error) {
-        // Preserve the original failure if the connection also failed during rollback.
-        await client.query("rollback").catch(() => {});
-        throw error;
-      } finally { inTransaction = false; }
+      try { return await confirmedTransaction(adapter, operation); }
+      finally { inTransaction = false; }
     },
   };
 }
@@ -43,4 +35,29 @@ export function publisherConfiguration(environment: NodeJS.ProcessEnv, ca: strin
   return { host: url.hostname, port: Number(url.port || 5432), database: "postgres",
     user: decodeURIComponent(url.username), password: decodeURIComponent(url.password),
     ssl: { ca, rejectUnauthorized: true }, application_name: "prompix-publisher" };
+}
+
+const rolledBackErrors = new WeakSet<Error>();
+export function hasConfirmedRollback(error: unknown): boolean {
+  return error instanceof Error && rolledBackErrors.has(error);
+}
+
+/** Only pre-COMMIT failures with an acknowledged rollback can be replayed. */
+export async function confirmedTransaction<T>(db: Database, operation: (db: Database) => Promise<T>): Promise<T> {
+  let commitSent = false;
+  try {
+    await db.query("begin");
+    const result = await operation(db);
+    commitSent = true;
+    await db.query("commit");
+    return result;
+  } catch (error) {
+    // The same Error may be reused by a caller; proof is specific to this attempt.
+    if (error instanceof Error) rolledBackErrors.delete(error);
+    try {
+      await db.query("rollback");
+      if (!commitSent && error instanceof Error) rolledBackErrors.add(error);
+    } catch { /* A lost rollback acknowledgement is not replay permission. */ }
+    throw error;
+  }
 }
