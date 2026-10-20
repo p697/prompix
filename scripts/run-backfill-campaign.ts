@@ -3,6 +3,7 @@ import { join, resolve, isAbsolute } from "node:path";
 import { readdir, appendFile } from "node:fs/promises";
 import { z } from "zod";
 import { atomic, json, lockContent, writeImmutableBytes } from "../ingest/publication.ts";
+import { campaignQuotaReader } from "../ingest/codex-quota.ts";
 import { campaignInventory } from "../ingest/campaign-inventory.ts";
 import { boundedStageTarget, readCampaignStage } from "../ingest/campaign-stage.ts";
 import { inspectHistoryIsolation, activeHistoryBatches, isIsolatableReviewError } from "../ingest/history-isolation.ts";
@@ -54,10 +55,14 @@ try {
   };
   const activeStage = await readCampaignStage(root);
   // Read the grant and quota again before every model request and search invocation.
-  const checkQuota = async () => assertSubscriptionSnapshot(await json(join(root, "subscription-quota.json"), null), Date.now(), {
+  const refreshQuota = process.env.PROMPIX_CODEX_QUOTA_ACCOUNT_ID ? campaignQuotaReader(root, process.env.PROMPIX_CODEX_QUOTA_ACCOUNT_ID) : undefined;
+  const checkQuota = async () => {
+    await refreshQuota?.();
+    assertSubscriptionSnapshot(await json(join(root, "subscription-quota.json"), null), Date.now(), {
     grant: activeStage ? await json(join(root, "subscription-grants", activeStage.id + ".json"), null) : null,
     run: config.run, stageID: activeStage?.id ?? null,
   });
+  };
   // Isolate evidenced review failures; integrity, quota, lease and unclassified failures still stop all workers.
   const worker = async () => {
     while (!stopping && claimed < 3000) {

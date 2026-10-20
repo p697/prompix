@@ -19,7 +19,7 @@
 
 本次worker的预算配置与旧日常runtime分开；不会因补库而默认放大未来每月预算。旧日常预算可能受本月已累计费用影响；在共享金额接近20美元时必须核对日常维护空间与运行状态，不能把临时历史额度当作长期订阅或自动续费。
 
-`subscription-quota.json` 由owner通过账号限额工具记录实际读数。每个外部请求前检查：允许普通订阅使用、读数不超过65分钟、周已用低于90%；达不到条件暂停新工作，不把未知余量当成免费额度。该检查是保守准入，账号其他会话仍可能同时消耗额度。每小时跟进负责刷新真实读数，禁止自行推算或修改时间来维持运行。
+`subscription-quota.json` 由owner通过账号限额工具记录实际读数。每个外部请求前检查：允许普通订阅使用、读数不超过65分钟、周已用低于90%；达不到条件暂停新工作，不把未知余量当成免费额度。该检查是保守准入，账号其他会话仍可能同时消耗额度。可由owner工具刷新读数；配置 `PROMPIX_CODEX_QUOTA_ACCOUNT_ID` 后，持久控制器在请求前通过本机 Codex app-server 的 `account/rateLimits/read` 每20分钟读取一次真实额度，不需要聊天定时任务。读数必须匹配指定账号、有有效的周窗口，普通使用许可保守取自真实窗口及限额状态，不使用充值余额兜底。失败保留原时间戳，最多每分钟再读，原65分钟时效及90%/95%保护不变。测量证据与历史落盘，禁止自行推算或修改时间来维持运行。
 
 `progress.json`、`measurements.jsonl`、每批文字/媒体/翻译账本、语义响应及SQL attempts持久化保存。费用和速度持续记录；订阅用量是全账号读数，不能精确归因到本批任务。
 
@@ -203,6 +203,6 @@ A previously collected batch that failed freshness validation before translation
 
 Queue database calls remain serialized per process. Each operation is transactional. On a transient query/network/lock failure, reconnect up to three times (1/3/8 seconds) **only** when ROLLBACK was acknowledged and COMMIT was never sent. Non-transient errors, lost rollback acknowledgements, and uncertain COMMITs stop for reconciliation. Model handlers are outside these retries; no paid model/search request is replayed.
 
-Publisher pointer, immutable release reads and server-enforced read-only snapshots can retry on fresh connections. Stage and activation writes are not automatically replayed. Retained publication-cache content is hash-validated and live removals remain authoritative; operational inventory preparation should reuse that cache instead of exporting all translations on every publication.
+Publisher pointer, immutable release reads can retry on fresh connections. Stage and activation writes are not automatically replayed. Retained publication-cache content is hash-validated and live removals remain authoritative; operational inventory preparation should reuse that cache instead of exporting all translations on every publication.
 
 On exhaustion, persist the blocked state, drain in-flight workers, check SQL leases/results and provider artifacts before restarting a single controller. A healthy SELECT does not by itself prove an uncertain write succeeded. Quota, budget, source freshness and review recovery checks remain enforced at restart and before requests. The chat heartbeat is optional monitoring, not the controller or the daily collection schedule.
