@@ -210,3 +210,10 @@ On exhaustion, persist the blocked state, drain in-flight workers, check SQL lea
 For a queue **claim** with an uncertain COMMIT acknowledgement, the handler has not started. Reacquire the ingest control-row lock as a completion barrier and read the exact reservation token. Return only a still-live, reserved lease belonging to the same run/stage/target; an absent token means no claim committed. Never rerun a model handler or adopt another worker's token. Expired/ambiguous leases remain blocked. Other uncertain writes retain their existing reconciliation rules.
 
 Historical publication now reads the same merged shared/seed/revalidation/acquisition availability as campaign qualification. A stale shared check cannot silently hide a newly qualified version. Newer withdrawals and equal-time contradictions still take precedence; publication continues full evidence verification and ordinary source adoption before activation.
+
+
+## Mixed-language metadata recovery
+
+Chinese editorial metadata is only an optional translation-cache seed. If the original metadata fails Simplified Chinese validation (for example an English bracket instruction), do not seed it: send it through normal `gpt-6-luna` translation and subsequent semantic review. Keep original source text and all translation validation intact.
+
+Queue inspection reports non-review reconciliation jobs with their actual stage and cause, rather than parsing them as review failures. Such jobs still require retained-evidence inspection; they are not filtered out or automatically retried. A pre-provider seeding failure may be resumed only after reproducing it from the unchanged source and proving there are no translation requests, responses or cache artifacts. Preserve the original SQL attempt and write an immutable recovery record before changing the job to retry. Review timeouts remain isolated under the existing bounded recovery-probe policy.

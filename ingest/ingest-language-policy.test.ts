@@ -79,3 +79,22 @@ test("semantic provider schema requires nullable sourceField while retained revi
   assert.equal(verifySemanticResult(raw, [localized], "zh-Hans").length, 1);
   assert.equal(semanticResponseSchema([localized]).safeParse(raw).success, true);
 });
+
+
+test("mixed Chinese metadata with English bracket guidance is translated, never seeded or fatal", async () => {
+  const { translationBatches, runTranslations } = await import("./translation-runner.ts");
+  const mixed = { ...item, example: "请先填写人物姓名和详细说明，然后生成完整画面：[Enter your name]" };
+  const cache = emptyTranslationCache();
+  seedApprovedChineseMetadata([mixed], cache);
+  const segment = promptSegments(mixed).find(s => s.sourceText === mixed.example)!;
+  assert.equal(cache.segments["zh-Hans"]?.[segment.id], undefined);
+  assert.ok(translationBatches([mixed], cache, ["zh-Hans"]).some(b => b.segments.some(s => s.id === segment.id)));
+  let calls = 0;
+  const report = await runTranslations({ items: [mixed], cache, locales: ["zh-Hans"], providerName: "codex", maxAttempts: 1,
+    provider: async (_locale, segments) => { calls++; return { translations: segments.map(s => ({ id: s.id, text: s.id === segment.id ? "请先填写人物姓名和详细说明，然后生成完整画面：[输入你的姓名]" : "生成安静的山间村落。" })) }; }, persist: async () => {} });
+  assert.equal(calls, 1);
+  assert.equal(report.failed, 0);
+  assert.equal(report.rejected, 0);
+  assert.equal(report.pendingSegments, 0);
+  assert.equal(hasRequiredTranslations(originalAndChinese([mixed], cache)[0]), true);
+});

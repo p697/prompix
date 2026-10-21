@@ -77,7 +77,7 @@ try {
           const isolated = await inspectHistoryIsolation(queue, root, config.run);
           if (!isolated.some(p => p.jobID === activeJobID)) throw error;
           claimed++;
-        } catch (fatal) { failure = fatal; stopping = true; }
+        } catch (fatal) { failure ??= fatal; stopping = true; }
       }
     }
   };
