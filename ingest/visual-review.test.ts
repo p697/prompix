@@ -45,10 +45,10 @@ function harness(items: Prompt[], previous: Prompt[] = []) {
     cache: { version: 1, decisions: {} }, events: [], preparedIDs: [], inputs: [], batches: [],
   };
   const run = (settings: { prompts?: Prompt[]; previous?: Prompt[]; provider?: VisualProvider | null;
-    prepareMedia?: (item: Prompt) => Promise<PreparedVisualMedia>; day?: string; maxRequests?: unknown; classifyPublished?: boolean; ledger?: VisualLedger | VisualAttempt;
+    prepareMedia?: (item: Prompt) => Promise<PreparedVisualMedia>; day?: string; maxRequests?: unknown; maxCandidatesPerRequest?: number; classifyPublished?: boolean; ledger?: VisualLedger | VisualAttempt;
     persistCache?: (cache: VisualCache) => Promise<void>; persistLedger?: (ledger: VisualLedger) => Promise<void> } = {}) => runVisualReview({
     prompts: settings.prompts ?? items, previous: settings.previous ?? previous, cache: state.cache, ledger: settings.ledger ?? state.ledger,
-    day: settings.day ?? day, now, maxRequests: settings.maxRequests, classifyPublished: settings.classifyPublished,
+    day: settings.day ?? day, now, maxRequests: settings.maxRequests, maxCandidatesPerRequest: settings.maxCandidatesPerRequest, classifyPublished: settings.classifyPublished,
     provider: settings.provider === null ? undefined : async input => {
       state.events.push("provider"); state.inputs = input; state.batches.push(input);
       return (settings.provider ?? (async items => approve(items)))(input);
@@ -539,4 +539,36 @@ test("retained identity rejection isolates its batch, consumes allowance and nev
   const resumed = await run({ maxRequests: 3 });
   assert.equal(resumed.report.requests, 0); assert.equal(state.events.filter(e => e === "provider").length, 2);
   assert.equal(resumed.prompts.length, 3);
+});
+
+
+test("single-source review preserves complete galleries and video frames within the original request budget", async () => {
+  const items = [prompt("single-gallery", "image", 4), prompt("single-video", "video"), prompt("single-image")];
+  const {run,state} = harness(items);
+  const first = await run({maxCandidatesPerRequest: 1, maxRequests: 2});
+  assert.equal(first.report.requests, 2);
+  assert.equal(first.prompts.length, 2);
+  assert.equal(state.batches.length, 2);
+  for (const batch of state.batches) {
+    assert.equal(batch.length, 1);
+    const item = items.find(p => p.id === batch[0].id)!;
+    assert.deepEqual(batch[0].attachments, prepare(item).attachments);
+    assert.deepEqual(batch[0].coverage, prepare(item).coverage);
+  }
+  const again = await run({maxCandidatesPerRequest: 1, maxRequests: 2});
+  assert.equal(again.report.requests, 0);
+  assert.equal(state.ledger!.requests, 2);
+  const resumed = await run({maxCandidatesPerRequest: 1, maxRequests: 3});
+  assert.equal(resumed.prompts.length, 3);
+  assert.equal(state.ledger!.requests, 3);
+  assert.equal(new Set(state.batches.flatMap(b=>b.map(i=>i.id))).size, 3);
+});
+
+test("candidate batch override cannot increase production limits or accept invalid values", async () => {
+  for (const limit of [0,4,-1,1.5,NaN,Infinity]) {
+    const {run,state}=harness([prompt("invalid-limit")]);
+    await assert.rejects(run({maxCandidatesPerRequest:limit}), /Invalid visual candidate batch limit/);
+    assert.equal(state.batches.length,0);
+    assert.equal(state.ledger,undefined);
+  }
 });
