@@ -231,3 +231,7 @@ Publication activation validates the entire resulting catalog, including retaine
 ### Bound combined review complexity
 
 The initial one-source mitigation avoided multi-source requests with ten or more attachments, but observed input tokens per item increased. Historical review now packs at most three complete sources only when the combined request has at most six attachments and 14,000 input characters. Larger galleries, videos and long sources run intact alone within the unchanged global limits. Never drop images or sampled frames, shorten source text, increase request allowances or replay unknown outcomes. Daily defaults remain unchanged. Compare subsequent measured latency/token yield before claiming a speedup; cohort comparisons are not controlled experiments.
+
+### Reduce an active stage without resetting progress
+
+Pause and drain the controller, then run `manage-backfill reduce-stage /absolute/campaign existing-stage-id 500`. The amount is the new total increment from the existing frozen baseline, not another 500 items. The command requires the campaign lock, no active SQL leases and a valid quota snapshot. It appends a private immutable ceiling tied to the original stage hash; stage grants, baseline IDs and prior ceilings remain unchanged. Only strict reductions are accepted, and restart uses the smallest valid ceiling. Recheck the publication drain target before explicitly resuming. If already at the reduced target, controller startup admits no new paid jobs. In-flight work is drained, not cancelled.

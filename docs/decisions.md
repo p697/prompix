@@ -1102,3 +1102,7 @@ Source freshness transfer covers the entire resulting catalog. Resolve old publi
 ### 2026-10-21 — Bound historical review complexity instead of always isolating every item
 
 The initial single-source mitigation has measured overhead (62 completed requests averaged16,689 input tokens/item; the preceding21-item mixed cohort averaged10,297). These cohorts differ, so this is a diagnostic signal, not a promised speedup. Pack up to three complete sources only under six combined attachments and14,000 characters. Larger individual galleries/videos retain full coverage in standalone requests, with all existing quality and budget guards.
+
+### 2026-10-21 — Reduce the current historical stage to 500
+
+The owner reduced the current increment from 1,000 to 500, preserving its qualified baseline of 2,602 (target 3,102). Append a stage-bound ceiling rather than rewriting frozen authorization or counting another 500 from today. Quality gates, budget and publication verification remain unchanged.

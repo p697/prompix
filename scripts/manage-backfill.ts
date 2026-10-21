@@ -6,13 +6,13 @@ import { StageQueue } from "../ingest/stage-queue.ts";
 import { queueDatabase } from "../ingest/queue-database.ts";
 import { historyBaseline } from "../ingest/history-cohort.ts";
 import { campaignInventory } from "../ingest/campaign-inventory.ts";
-import { activateCampaignStage, boundedStageTarget, readCampaignStage } from "../ingest/campaign-stage.ts";
+import { activateCampaignStage, boundedStageTarget, readCampaignStage, reduceCampaignStage } from "../ingest/campaign-stage.ts";
 import { assertSubscriptionSnapshot } from "../ingest/backfill-campaign.ts";
 import type { Prompt } from "../packages/schema/catalog.ts";
 process.umask(0o077);
 const [command, path, id, amount] = process.argv.slice(2);
-if (!path || !isAbsolute(path) || !["status", "pause", "authorize-stage"].includes(command))
-  throw Error("Usage: manage-backfill status|pause /absolute/campaign OR authorize-stage /absolute/campaign stage-id additional-count");
+if (!path || !isAbsolute(path) || !["status", "pause", "authorize-stage", "reduce-stage"].includes(command))
+  throw Error("Usage: manage-backfill status|pause /absolute/campaign OR authorize-stage|reduce-stage /absolute/campaign stage-id additional-count");
 const root = resolve(path), now = new Date().toISOString();
 if (command === "status") {
   const progress = await json<Record<string, unknown>>(join(root, "progress.json"), {});
@@ -36,21 +36,26 @@ if (command === "status") {
     });
     const queue = new StageQueue(queueDatabase());
     if ((await queue.counts(config.run)).some(c => c.state === "leased" && Number(c.count) > 0)) throw Error("Active leases must drain before freezing a stage");
-    const baseline = historyBaseline(await json(config.baseline, null));
-    const originalSeed = await json<Prompt[]>(config.seed, []);
-    if (baseline.prompts.length !== config.baselineCount || originalSeed.length !== config.seedCount) throw Error("Frozen campaign baseline changed");
-    const inventory = await campaignInventory(queue, root, config.sharedRoot, config.run, baseline.prompts, originalSeed);
-    if (inventory.unresolvedSeeds.length) throw Error("Seed freshness or quality requires inspection");
-    const evidencePath = join(root, "stage-evidence", id + ".json");
-    const bytes = Buffer.from(JSON.stringify({ at: now, run: config.run, baselineCount: config.baselineCount,
-      seedIDs: inventory.seed.map(p => p.id), readyIDs: inventory.ready.map(p => p.id),
-      countsExcludeLiveHoldsAndRemovals: true }) + "\n");
-    const stage = { version: 1 as const, id, run: config.run, authorizedAt: now, baselineCount: config.baselineCount,
-      seedReadyAtStart: inventory.seed.length, newReadyAtStart: inventory.ready.length, additionalQualified: Number(amount),
-      evidencePath, evidenceSHA256: createHash("sha256").update(bytes).digest("hex") };
-    const target = boundedStageTarget(stage, config.run, config.baselineCount, config.createdAt);
-    await writeImmutableBytes(evidencePath, bytes);
-    await activateCampaignStage(root, stage);
-    console.log(JSON.stringify({ stage, target, paused: true, note: "No collection started. Inspect budget, isolation and quota, then explicitly remove pause.json and launch the durable runtime." }));
+    if (command === "reduce-stage") {
+      const stage = await reduceCampaignStage(root, id, Number(amount));
+      console.log(JSON.stringify({ stage, target: boundedStageTarget(stage, config.run, config.baselineCount, config.createdAt), paused: true }));
+    } else {
+      const baseline = historyBaseline(await json(config.baseline, null));
+      const originalSeed = await json<Prompt[]>(config.seed, []);
+      if (baseline.prompts.length !== config.baselineCount || originalSeed.length !== config.seedCount) throw Error("Frozen campaign baseline changed");
+      const inventory = await campaignInventory(queue, root, config.sharedRoot, config.run, baseline.prompts, originalSeed);
+      if (inventory.unresolvedSeeds.length) throw Error("Seed freshness or quality requires inspection");
+      const evidencePath = join(root, "stage-evidence", id + ".json");
+      const bytes = Buffer.from(JSON.stringify({ at: now, run: config.run, baselineCount: config.baselineCount,
+        seedIDs: inventory.seed.map(p => p.id), readyIDs: inventory.ready.map(p => p.id),
+        countsExcludeLiveHoldsAndRemovals: true }) + "\n");
+      const stage = { version: 1 as const, id, run: config.run, authorizedAt: now, baselineCount: config.baselineCount,
+        seedReadyAtStart: inventory.seed.length, newReadyAtStart: inventory.ready.length, additionalQualified: Number(amount),
+        evidencePath, evidenceSHA256: createHash("sha256").update(bytes).digest("hex") };
+      const target = boundedStageTarget(stage, config.run, config.baselineCount, config.createdAt);
+      await writeImmutableBytes(evidencePath, bytes);
+      await activateCampaignStage(root, stage);
+      console.log(JSON.stringify({ stage, target, paused: true, note: "No collection started. Inspect budget, isolation and quota, then explicitly remove pause.json and launch the durable runtime." }));
+    }
   } finally { await unlock(); }
 }
