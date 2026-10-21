@@ -1,3 +1,4 @@
+import { adoptHistoryPublicationChecks } from "./history-publication-checks.ts";
 import { adoptHistoryVisualEvidence } from "./history-visual-evidence.ts";
 import { publicationHistoryInventory } from "./history-publication-inventory.ts";
 import { readHistoryAllowance } from "./history-allowance.ts";
@@ -13,7 +14,7 @@ import { applyQualityHolds, readQualityHolds, registerQualityHoldScope } from ".
 import { uniqueHistoryItems } from "./history-cohort.ts";
 import { withPublisherDatabase } from "./database-publication.ts";
 import { limitNewPublications } from "./publication-quota.ts";
-import { adoptFreshXDiscoveries, filterXAvailability, readXAvailability } from "./x-availability.ts";
+import { adoptFreshXDiscoveries, filterXAvailability } from "./x-availability.ts";
 import { mirrorCreatorAvatars } from "./creators.ts";
 import { publishAvatar } from "./creator-images.ts";
 
@@ -95,7 +96,8 @@ export async function publishQualifiedHistory(shared: string, campaign: string, 
   const candidates = uniqueHistoryItems(applyQualityHolds(ready, holds).prompts.filter(p => !removedIDs.includes(p.id)), previous.prompts);
   report.uniqueUnpublished = candidates.length;
   const sources = await io.sources(campaign, run, candidates);
-  const availability = await adoptFreshXDiscoveries(shared, sources.candidates, await readXAvailability(shared));
+  const checks = await adoptHistoryPublicationChecks(campaign, shared, sources.candidates);
+  const availability = await adoptFreshXDiscoveries(shared, sources.candidates, checks.state);
   const visible = filterXAvailability(candidates, availability.state);
   report.unavailable = visible.withheldIDs.length;
   // Keep the original source/translation bytes. Availability was checked above and

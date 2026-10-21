@@ -1091,3 +1091,6 @@ Do not abort historical batches when approved Chinese metadata contains untransl
 ### 2026-10-21 — One complete source per historical visual request
 
 Reduce historical visual request fan-in from up to three sources to one, retaining complete per-source attachments and all existing request/worker budgets. Do not reduce frame coverage to improve latency.
+### 2026-10-21 — Share verified source freshness at publication
+
+Campaign inventory and actual publication must consume the same verified source checks. Transfer only current exact-source third-party records for the publication candidates, preserving timestamps, removal decisions and chain coverage.
