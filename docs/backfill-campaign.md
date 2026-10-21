@@ -225,3 +225,5 @@ Historical review sends one complete source per visual model request. A gallery 
 ### Transfer source rechecks to publication
 
 Before selecting historical additions, transfer the newest matching third-party source check from campaign evidence into shared publication state under the shared lock. Verify the raw source digest, revision, age and reply-chain scope; preserve the original check timestamp. Never override permanent removals or newer withdrawals, and never copy unrelated entries. This allows a completed campaign recheck to satisfy stage/activation gates without a duplicate paid lookup.
+
+Publication activation validates the entire resulting catalog, including retained items. Match retained native X sources against exact shared standalone/reply intake and transfer their campaign checks too. Exclude explicit withdrawals/removals from the next catalog, without silently dropping stale or unknown records. A stale retained source requires a bounded, recorded full-dependency recheck before activation.
