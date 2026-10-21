@@ -220,7 +220,7 @@ export function applyVisualPresentation(items: readonly Prompt[], cache: VisualC
 
 export async function runVisualReview(options: {
   prompts: readonly Prompt[]; previous: readonly Prompt[]; cache: VisualCache; ledger?: VisualLedger | VisualAttempt; day: string; now?: string;
-  maxRequests?: unknown; maxCandidatesPerRequest?: number; classifyPublished?: boolean;
+  maxRequests?: unknown; maxCandidatesPerRequest?: number; combinedLimits?: { attachments: number; inputCharacters: number }; classifyPublished?: boolean;
   reviewWebsite?: (prompt: Prompt) => Promise<void>;
   provider?: VisualProvider; prepareMedia: (prompt: Prompt) => Promise<PreparedVisualMedia>;
   persistCache: (cache: VisualCache) => Promise<void>; persistLedger: (ledger: VisualLedger) => Promise<void>;
@@ -233,6 +233,11 @@ export async function runVisualReview(options: {
   const candidateLimit = options.maxCandidatesPerRequest ?? visualLimits.candidates;
   if (!Number.isInteger(candidateLimit) || candidateLimit < 1 || candidateLimit > visualLimits.candidates)
     throw new Error("Invalid visual candidate batch limit");
+  const combined = options.combinedLimits ?? visualLimits;
+  if (![combined.attachments, combined.inputCharacters].every(Number.isInteger)
+    || combined.attachments < 1 || combined.attachments > visualLimits.attachments
+    || combined.inputCharacters < 1 || combined.inputCharacters > visualLimits.inputCharacters)
+    throw new Error("Invalid combined visual complexity limit");
   let cache = visualCacheSchema.parse(options.cache);
   const savedLedger = options.ledger === undefined ? undefined : visualLedgerSchema.parse(options.ledger);
   let ledger = savedLedger?.day === options.day ? savedLedger : undefined;
@@ -325,7 +330,8 @@ export async function runVisualReview(options: {
     const attachments = items.flatMap(item => item.attachments);
     return attachments.length <= visualLimits.attachments
       && attachments.reduce((sum, attachment) => sum + attachment.byteLength, 0) <= visualLimits.totalBytes
-      && visualInputCharacters(items) <= visualLimits.inputCharacters;
+      && visualInputCharacters(items) <= visualLimits.inputCharacters
+      && (items.length === 1 || (attachments.length <= combined.attachments && visualInputCharacters(items) <= combined.inputCharacters));
   };
   let carried: VisualInput | undefined;
   while (report.dailyRequests < maxRequests && (remaining.length || carried)) {

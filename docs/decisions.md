@@ -1098,3 +1098,7 @@ Campaign inventory and actual publication must consume the same verified source 
 ### 2026-10-21 — Validate retained history during publication
 
 Source freshness transfer covers the entire resulting catalog. Resolve old published native sources from exact shared standalone and reply intake; preserve live source withdrawals. New-only tests are insufficient: the publication integration regression includes a stale retained item, a new item and a withdrawn item through the final availability gate.
+
+### 2026-10-21 — Bound historical review complexity instead of always isolating every item
+
+The initial single-source mitigation has measured overhead (62 completed requests averaged16,689 input tokens/item; the preceding21-item mixed cohort averaged10,297). These cohorts differ, so this is a diagnostic signal, not a promised speedup. Pack up to three complete sources only under six combined attachments and14,000 characters. Larger individual galleries/videos retain full coverage in standalone requests, with all existing quality and budget guards.

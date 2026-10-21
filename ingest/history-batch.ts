@@ -111,7 +111,7 @@ export async function runHistoryBatch(directory: string, input: HistoryBatch, pr
     const reviewWebsite = mirrored.some(p => p.kind === "web") ? await websiteReviewer(sharedRoot) : undefined;
     let visual;
     try {
-      visual = await runVisualReview({ prompts: mirrored, previous: [], cache: visualCache, ledger: visualLedger, day, maxRequests: historyLimits.visual, maxCandidatesPerRequest: 1, reviewWebsite,
+      visual = await runVisualReview({ prompts: mirrored, previous: [], cache: visualCache, ledger: visualLedger, day, maxRequests: historyLimits.visual, combinedLimits: { attachments: 6, inputCharacters: 14000 }, reviewWebsite,
         prepareMedia: item => prepareVisualMedia(item, temporary),
         provider: async items => { await options.checkLease?.(); return codexVisualProvider(env.PROMPIX_CODEX, response => atomic(join(directory, "visual-responses", `${visualSequence}.json`), response), {},
           async evidence => { await writeImmutableBytes(join(directory, "visual-attempts", `${visualSequence}.json`), Buffer.from(JSON.stringify(evidence) + "\n")); })(items); },

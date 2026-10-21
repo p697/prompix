@@ -45,10 +45,10 @@ function harness(items: Prompt[], previous: Prompt[] = []) {
     cache: { version: 1, decisions: {} }, events: [], preparedIDs: [], inputs: [], batches: [],
   };
   const run = (settings: { prompts?: Prompt[]; previous?: Prompt[]; provider?: VisualProvider | null;
-    prepareMedia?: (item: Prompt) => Promise<PreparedVisualMedia>; day?: string; maxRequests?: unknown; maxCandidatesPerRequest?: number; classifyPublished?: boolean; ledger?: VisualLedger | VisualAttempt;
+    prepareMedia?: (item: Prompt) => Promise<PreparedVisualMedia>; day?: string; maxRequests?: unknown; maxCandidatesPerRequest?: number; combinedLimits?: { attachments: number; inputCharacters: number }; classifyPublished?: boolean; ledger?: VisualLedger | VisualAttempt;
     persistCache?: (cache: VisualCache) => Promise<void>; persistLedger?: (ledger: VisualLedger) => Promise<void> } = {}) => runVisualReview({
     prompts: settings.prompts ?? items, previous: settings.previous ?? previous, cache: state.cache, ledger: settings.ledger ?? state.ledger,
-    day: settings.day ?? day, now, maxRequests: settings.maxRequests, maxCandidatesPerRequest: settings.maxCandidatesPerRequest, classifyPublished: settings.classifyPublished,
+    day: settings.day ?? day, now, maxRequests: settings.maxRequests, maxCandidatesPerRequest: settings.maxCandidatesPerRequest, combinedLimits: settings.combinedLimits, classifyPublished: settings.classifyPublished,
     provider: settings.provider === null ? undefined : async input => {
       state.events.push("provider"); state.inputs = input; state.batches.push(input);
       return (settings.provider ?? (async items => approve(items)))(input);
@@ -570,5 +570,46 @@ test("candidate batch override cannot increase production limits or accept inval
     await assert.rejects(run({maxCandidatesPerRequest:limit}), /Invalid visual candidate batch limit/);
     assert.equal(state.batches.length,0);
     assert.equal(state.ledger,undefined);
+  }
+});
+
+
+test("complexity-bounded batches reuse lightweight groups while preserving every gallery and video frame", async () => {
+  const items = [prompt("a", "image", 2), prompt("b", "image", 3), prompt("c"), prompt("d", "video"), prompt("e", "image", 8), prompt("f"), prompt("g")];
+  const { run, state } = harness(items);
+  const limits = { attachments: 6, inputCharacters: 14000 };
+  const result = await run({ combinedLimits: limits, maxRequests: 10 });
+  assert.equal(result.prompts.length, items.length);
+  assert.ok(state.batches.some(batch => batch.length > 1));
+  for (const batch of state.batches) {
+    if (batch.length > 1) {
+      assert.ok(batch.flatMap(item => item.attachments).length <= limits.attachments);
+      assert.ok(visualInputCharacters(batch) <= limits.inputCharacters);
+    }
+    for (const input of batch) {
+      const item = items.find(item => item.id === input.id)!;
+      assert.deepEqual(input.attachments, prepare(item).attachments);
+      assert.deepEqual(input.coverage, prepare(item).coverage);
+      if (item.kind === "video" || input.attachments.length > 6) assert.equal(batch.length, 1);
+    }
+  }
+  assert.equal((await run({ combinedLimits: limits, maxRequests: 10 })).report.requests, 0);
+});
+
+test("combined text bound never truncates or rejects a complete valid standalone input", async () => {
+  const items = [prompt("one"), prompt("two"), prompt("three")].map(item => ({ ...item, prompt: item.prompt + "x".repeat(11000) }));
+  const { run, state } = harness(items);
+  const result = await run({ combinedLimits: { attachments: 6, inputCharacters: 14000 }, maxRequests: 3 });
+  assert.equal(result.prompts.length, 3);
+  assert.ok(state.batches.every(batch => batch.length === 1));
+  for (const input of state.batches.flat()) assert.equal(input.prompt, items.find(item => item.id === input.id)!.prompt);
+});
+
+test("combined limits cannot expand global budgets or admit malformed configuration", async () => {
+  for (const limits of [{ attachments: 17, inputCharacters: 14000 }, { attachments: 0, inputCharacters: 14000 }, { attachments: 6, inputCharacters: 32001 }, { attachments: 6, inputCharacters: NaN }]) {
+    const { run, state } = harness([prompt("invalid")]);
+    await assert.rejects(run({ combinedLimits: limits }), /Invalid combined visual complexity limit/);
+    assert.equal(state.batches.length, 0);
+    assert.equal(state.ledger, undefined);
   }
 });
