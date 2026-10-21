@@ -1094,3 +1094,7 @@ Reduce historical visual request fan-in from up to three sources to one, retaini
 ### 2026-10-21 — Share verified source freshness at publication
 
 Campaign inventory and actual publication must consume the same verified source checks. Transfer only current exact-source third-party records for the publication candidates, preserving timestamps, removal decisions and chain coverage.
+
+### 2026-10-21 — Validate retained history during publication
+
+Source freshness transfer covers the entire resulting catalog. Resolve old published native sources from exact shared standalone and reply intake; preserve live source withdrawals. New-only tests are insufficient: the publication integration regression includes a stale retained item, a new item and a withdrawn item through the final availability gate.

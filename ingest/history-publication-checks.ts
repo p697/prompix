@@ -15,11 +15,11 @@ export async function adoptHistoryPublicationChecks(campaign: string, shared: st
   let adopted = 0;
   for (const item of sources) {
     const check = merged[item.id];
-    if (current[item.id]?.removed || !check || check.removed || check.status !== "ready"
+    if (current[item.id]?.removed || !check
       || Date.parse(check.checkedAt) > now
       || !["twitterapi", "rapidapi"].includes(check.checkedBy ?? "")
       || nativeXSourceDigest(item) !== item.source.revision
-      || !filterXAvailability([item], merged, now).prompts.length) continue;
+      || (check.status !== "withheld" && !check.removed && !filterXAvailability([item], merged, now).prompts.length)) continue;
     if (!isDeepStrictEqual(next[item.id], check)) {
       next[item.id] = check;
       adopted++;

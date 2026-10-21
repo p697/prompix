@@ -110,7 +110,7 @@ test("publication configuration rejects a foreign shared root before any externa
 });
 
 
-test("publisher transfers a retained fresh source check through final activation without fetching again", async () => {
+test("publisher transfers retained and new source checks through final activation, excluding withdrawals without fetching again", async () => {
   const f = await fixture();
   try {
     const { convertXDiscovery } = await import("./x-intake.ts");
@@ -122,27 +122,49 @@ test("publisher transfers a retained fresh source check through final activation
       media: [{ media_key: "m", type: "photo", url: "https://pbs.twimg.com/media/test.jpg" }],
       creators: [{ id: "x-456", externalID: "456", platform: "x", username: "fixture", displayName: "Fixture", profileURL: "https://x.com/fixture" }],
     };
+    raw.posts.push(...["124", "125"].map(id => ({ ...raw.posts[0], id, text: raw.posts[0].text + " Variant " + id })));
     await atomic(join(f.campaign, "test/batch-0001/x-discovery/fixture.json"), raw);
+    await atomic(join(f.shared, `x-discovery/${old.slice(0, 10)}.json`), { ...raw, posts: raw.posts.slice(1) });
     const original = convertXDiscovery([{ name: "fixture", data: raw }]).candidates[0];
     const { promptSchema } = await import("../packages/schema/catalog.ts");
     const fresh = promptSchema.parse({ ...original, media: { ...original.media!, imageURL: `https://api.prompix.dev/media/${"a".repeat(64)}.jpg` } });
+    const [retained, withdrawn] = convertXDiscovery([{ name: "fixture", data: raw }]).candidates.slice(1).map((item, index) => promptSchema.parse({ ...item, media: { ...fresh.media, imageURL: `https://api.prompix.dev/media/${(index ? "c" : "b").repeat(64)}.jpg` } }));
     const before = JSON.stringify(fresh);
     await atomic(join(f.campaign, "source-revalidation/x-availability/state.json"), { [fresh.id]: {
       status: "ready", checkedAt, checkedBy: "twitterapi", revision: fresh.source.revision, scopeIDs: ["123"],
-    } });
+    }, [retained.id]: { status: "ready", checkedAt, checkedBy: "twitterapi", revision: retained.source.revision, scopeIDs: ["124"] },
+    [withdrawn.id]: { status: "withheld", checkedAt, checkedBy: "twitterapi" } });
     let published = false;
     await publishQualifiedHistory(f.shared, f.campaign, "test", f.report, {
-      begin: async () => ({ enabled: true, previous: state([]) }), ready: async () => [fresh],
+      begin: async () => ({ enabled: true, previous: state([retained, withdrawn]) }), ready: async () => [fresh],
       evidence: async () => ({ version: 1 as const, decisions: {} }), limit: async items => { assert.equal(items.length, 1); return quota(items); },
       mirror: async items => items,
       publish: async (shared, catalog) => {
         const checks = await readXAvailability(shared);
         assert.equal(checks[fresh.id].checkedAt, checkedAt);
-        assert.equal(filterXAvailability(catalog.prompts, checks).prompts.length, 1);
-        assert.equal(JSON.stringify(catalog.prompts[0]), before);
+        assert.equal(filterXAvailability(catalog.prompts, checks).prompts.length, 2);
+        assert.deepEqual(catalog.prompts.map(item => item.id), [retained.id, fresh.id]);
+        assert.equal(JSON.stringify(catalog.prompts[1]), before);
         published = true; return state(catalog.prompts);
       },
     });
     assert.equal(published, true); assert.equal(f.report.unavailable, 0);
+    // Unknown/stale retention must fail the final gate, never silently disappear.
+    await atomic(join(f.shared, "x-availability/state.json"), {});
+    await atomic(join(f.campaign, "source-revalidation/x-availability/state.json"), {
+      [fresh.id]: { status: "ready", checkedAt, checkedBy: "twitterapi", revision: fresh.source.revision, scopeIDs: ["123"] },
+      [retained.id]: { status: "ready", checkedAt: old, checkedBy: "twitterapi", revision: retained.source.revision, scopeIDs: ["124"] },
+    });
+    await assert.rejects(publishQualifiedHistory(f.shared, f.campaign, "test", f.report, {
+      begin: async () => ({ enabled: true, previous: state([retained]) }), ready: async () => [fresh],
+      evidence: async () => ({ version: 1 as const, decisions: {} }), limit: async items => quota(items), mirror: async items => items,
+      publish: async (shared, catalog) => {
+        assert.ok(catalog.prompts.some(item => item.id === retained.id));
+        const { assertXAvailability } = await import("./x-availability.ts");
+        await assertXAvailability(shared, catalog);
+        throw Error("Must fail freshness");
+      },
+    }), /current source check/);
+
   } finally { await f.cleanup(); }
 });

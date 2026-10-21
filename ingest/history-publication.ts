@@ -1,3 +1,4 @@
+import { readAllXIntake } from "./x-thread-intake.ts";
 import { adoptHistoryPublicationChecks } from "./history-publication-checks.ts";
 import { adoptHistoryVisualEvidence } from "./history-visual-evidence.ts";
 import { publicationHistoryInventory } from "./history-publication-inventory.ts";
@@ -42,6 +43,7 @@ export interface HistoryPublicationReport {
 const dependencies = {
   begin: beginDailyPublication,
   sources: historyPublicationSources,
+  retainedSources: readAllXIntake,
   ready: publicationHistoryInventory,
   evidence: adoptHistoryVisualEvidence,
   limit: async (items: Prompt[]) => { const historical = await readHistoryAllowance(); return withPublisherDatabase(db => limitNewPublications(db, items, new Date(), historical)); },
@@ -96,7 +98,10 @@ export async function publishQualifiedHistory(shared: string, campaign: string, 
   const candidates = uniqueHistoryItems(applyQualityHolds(ready, holds).prompts.filter(p => !removedIDs.includes(p.id)), previous.prompts);
   report.uniqueUnpublished = candidates.length;
   const sources = await io.sources(campaign, run, candidates);
-  const checks = await adoptHistoryPublicationChecks(campaign, shared, sources.candidates);
+  const previousRevisions = new Map(previous.prompts.map(item => [item.id, item.source.revision]));
+  const retainedSources = (await io.retainedSources(shared)).candidates.filter(item =>
+    previousRevisions.has(item.id) && previousRevisions.get(item.id) === item.source.revision);
+  const checks = await adoptHistoryPublicationChecks(campaign, shared, [...retainedSources, ...sources.candidates]);
   const availability = await adoptFreshXDiscoveries(shared, sources.candidates, checks.state);
   const visible = filterXAvailability(candidates, availability.state);
   report.unavailable = visible.withheldIDs.length;
@@ -105,7 +110,8 @@ export async function publishQualifiedHistory(shared: string, campaign: string, 
   const visibleIDs = new Set(visible.prompts.map(p => p.id));
   const quota = await io.limit(candidates.filter(p => visibleIDs.has(p.id)));
   report.quota = quota.report; report.selected = quota.prompts.length;
-  const retained = applyQualityHolds(previous.prompts, holds).prompts.filter(p => !removedIDs.includes(p.id));
+  const retained = applyQualityHolds(previous.prompts, holds).prompts.filter(p => !removedIDs.includes(p.id)
+    && !availability.state[p.id]?.removed && availability.state[p.id]?.status !== "withheld");
   if (!quota.prompts.length && retained.length === previous.prompts.length) { report.status = "deferred"; return; }
   await sources.persist(shared, quota.prompts);
   report.avatarErrors = [];
