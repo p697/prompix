@@ -217,3 +217,8 @@ Historical publication now reads the same merged shared/seed/revalidation/acquis
 Chinese editorial metadata is only an optional translation-cache seed. If the original metadata fails Simplified Chinese validation (for example an English bracket instruction), do not seed it: send it through normal `gpt-6-luna` translation and subsequent semantic review. Keep original source text and all translation validation intact.
 
 Queue inspection reports non-review reconciliation jobs with their actual stage and cause, rather than parsing them as review failures. Such jobs still require retained-evidence inspection; they are not filtered out or automatically retried. A pre-provider seeding failure may be resumed only after reproducing it from the unchanged source and proving there are no translation requests, responses or cache artifacts. Preserve the original SQL attempt and write an immutable recovery record before changing the job to retry. Review timeouts remain isolated under the existing bounded recovery-probe policy.
+
+
+### Bound historical visual requests
+
+Historical review sends one complete source per visual model request. A gallery retains all images; a video retains its required poster and sampled frames. This reduces request complexity after an observed three-source timeout with ten attachments. It does not relax verdicts, raise the 64-request batch allowance, replay unknown attempts, or increase worker concurrency. Default daily batching is unchanged. Completion speed remains subject to observed model latency.

@@ -1086,3 +1086,8 @@ A second timeout occurred at COMMIT, requiring outcome lookup rather than blind 
 ### 2026-10-21 — Chinese metadata reuse is optional
 
 Do not abort historical batches when approved Chinese metadata contains untranslated bracket guidance. Skip only the cache-seeding optimization and require normal translation and semantic review. Report unrelated queue failures by stage; preserve unknown attempts, fees and review circuit limits.
+
+
+### 2026-10-21 — One complete source per historical visual request
+
+Reduce historical visual request fan-in from up to three sources to one, retaining complete per-source attachments and all existing request/worker budgets. Do not reduce frame coverage to improve latency.

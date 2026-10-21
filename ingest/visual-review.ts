@@ -220,7 +220,7 @@ export function applyVisualPresentation(items: readonly Prompt[], cache: VisualC
 
 export async function runVisualReview(options: {
   prompts: readonly Prompt[]; previous: readonly Prompt[]; cache: VisualCache; ledger?: VisualLedger | VisualAttempt; day: string; now?: string;
-  maxRequests?: unknown; classifyPublished?: boolean;
+  maxRequests?: unknown; maxCandidatesPerRequest?: number; classifyPublished?: boolean;
   reviewWebsite?: (prompt: Prompt) => Promise<void>;
   provider?: VisualProvider; prepareMedia: (prompt: Prompt) => Promise<PreparedVisualMedia>;
   persistCache: (cache: VisualCache) => Promise<void>; persistLedger: (ledger: VisualLedger) => Promise<void>;
@@ -230,6 +230,9 @@ export async function runVisualReview(options: {
   const now = options.now ?? new Date().toISOString();
   z.iso.datetime().parse(now);
   const maxRequests = reviewRequestLimit(options.maxRequests);
+  const candidateLimit = options.maxCandidatesPerRequest ?? visualLimits.candidates;
+  if (!Number.isInteger(candidateLimit) || candidateLimit < 1 || candidateLimit > visualLimits.candidates)
+    throw new Error("Invalid visual candidate batch limit");
   let cache = visualCacheSchema.parse(options.cache);
   const savedLedger = options.ledger === undefined ? undefined : visualLedgerSchema.parse(options.ledger);
   let ledger = savedLedger?.day === options.day ? savedLedger : undefined;
@@ -317,7 +320,7 @@ export async function runVisualReview(options: {
   // first use of it; old presentation labels consume only spare review slots.
   const unchanged = (item: Prompt) => previous.has(item.id) && visualReviewIdentity(previous.get(item.id)!) === visualReviewIdentity(item);
   const prioritized = options.classifyPublished ? [...rotated.filter(item => !unchanged(item)), ...rotated.filter(unchanged)] : rotated;
-  const remaining = prioritized.slice(0, (maxRequests - report.dailyRequests) * visualLimits.candidates);
+  const remaining = prioritized.slice(0, (maxRequests - report.dailyRequests) * candidateLimit);
   const fits = (items: VisualInput[]) => {
     const attachments = items.flatMap(item => item.attachments);
     return attachments.length <= visualLimits.attachments
@@ -328,7 +331,7 @@ export async function runVisualReview(options: {
   while (report.dailyRequests < maxRequests && (remaining.length || carried)) {
     const selected: VisualInput[] = carried ? [carried] : [];
     carried = undefined;
-    while (selected.length < visualLimits.candidates && remaining.length) {
+    while (selected.length < candidateLimit && remaining.length) {
       const item = remaining.shift()!;
       try {
         const input = preparedInput(item, await options.prepareMedia(item));
