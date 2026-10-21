@@ -184,3 +184,13 @@ test("editorial timeout remains unknown and cannot use capacity terminal disposi
     await assert.rejects(rejectVerifiedCapacityBatch(queue, root, run, batch), /Unknown provider outcomes cannot be closed/);
   } finally { await rm(root, { recursive: true, force: true }); }
 });
+
+
+test("non-review reconcile reports its actual stage and cause without changing evidence", async () => {
+  const raw = { ...row("batch-0001"), id: `${run}:batch-0001:translate`, stage: "translate",
+    output: { reason: "handler-failed", message: "Translation retained untranslated bracket guidance" } };
+  const before = JSON.stringify(raw);
+  const queue = new StageQueue({ query: async () => ({ rows: [raw] }) } as any);
+  await assert.rejects(inspectHistoryIsolation(queue, "/unused", run), /batch-0001:translate \(translate\): Translation retained untranslated bracket guidance/);
+  assert.equal(JSON.stringify(raw), before);
+});

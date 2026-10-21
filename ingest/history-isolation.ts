@@ -27,6 +27,10 @@ const absent = async (path: string) => {
 export async function inspectHistoryIsolation(queue: StageQueue, root: string, run: string) {
   if (!/^[a-z0-9-]{1,80}$/.test(run)) throw new Error("Invalid isolation run");
   const rows = (await queue.db.query("select id,stage,attempts,payload,output from prompix.queue_jobs where run_id=$1 and state='reconcile' order by id", [run])).rows;
+  // Do not mask an unrelated stage failure with a review-only schema error.
+  // Unknown outcomes still block; they are never silently filtered or replayed.
+  const unrelated = rows.filter((row: any) => !rowSchema.safeParse(row).success);
+  if (unrelated.length) throw new Error(`Unclassified queue failures require inspection: ${unrelated.map((row: any) => `${row.id} (${row.stage}): ${row.output?.message ?? row.output?.reason ?? "unknown"}`).join("; ")}`);
   // With no recovery record retain the original circuit and its fail-closed behavior.
   if (rows.length >= 5 && !await json(join(root, "review-recovery", "active.json"), null))
     throw new Error("Five unresolved batches; campaign isolation circuit open");

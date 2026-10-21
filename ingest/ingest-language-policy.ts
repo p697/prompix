@@ -26,7 +26,10 @@ export function seedApprovedChineseMetadata(items: readonly Prompt[], cache: Tra
     if (!/\p{Script=Han}/u.test(prose) || /[\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u.test(prose)) continue;
     if (/[這為個與圖畫體現譯簡觀創復轉說時種點書開變從讓過進應對來將請產維動線場]/u.test(prose)) continue;
     if ((prose.match(/\p{Script=Han}/gu)?.length ?? 0) < (prose.match(/\p{L}/gu)?.length ?? 0) * 0.65) continue;
-    validateSegment(segment.text, segment.text, "zh-Hans", segment.numericHints);
+    // Reuse is optional: mixed-language metadata must enter normal translation.
+    // Validation failure is not a provider failure and must not abort the batch.
+    try { validateSegment(segment.text, segment.text, "zh-Hans", segment.numericHints); }
+    catch { continue; }
     if (cache.segments["zh-Hans"]?.[segment.id] !== undefined) continue;
     (cache.segments["zh-Hans"] ??= {})[segment.id] = segment.text;
     ((cache.provenance ??= {})["zh-Hans"] ??= {})[segment.id] = { provider: "approved-editorial-original", model: "none", generatedAt: new Date().toISOString() };

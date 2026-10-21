@@ -1081,3 +1081,8 @@ A transient database timeout stopped both campaign queue claiming and inventory 
 ### 2026-10-20: Reconcile queue claims and unify publication freshness
 
 A second timeout occurred at COMMIT, requiring outcome lookup rather than blind retry. Claim reservations now retain a token outside the transaction and reconcile it behind the control lock before any handler starts. Publication eligibility shares the campaign's merged freshness evidence, fixing a qualified item deferred solely by an older shared source version.
+
+
+### 2026-10-21 — Chinese metadata reuse is optional
+
+Do not abort historical batches when approved Chinese metadata contains untranslated bracket guidance. Skip only the cache-seeding optimization and require normal translation and semantic review. Report unrelated queue failures by stage; preserve unknown attempts, fees and review circuit limits.
