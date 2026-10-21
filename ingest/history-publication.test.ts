@@ -108,3 +108,41 @@ test("publication configuration rejects a foreign shared root before any externa
     await assert.rejects(historyPublicationRun(f.shared, "relative"), /absolute/);
   } finally { await f.cleanup(); }
 });
+
+
+test("publisher transfers a retained fresh source check through final activation without fetching again", async () => {
+  const f = await fixture();
+  try {
+    const { convertXDiscovery } = await import("./x-intake.ts");
+    const { filterXAvailability, readXAvailability } = await import("./x-availability.ts");
+    const old = new Date(Date.now() - 48 * 3600_000).toISOString();
+    const checkedAt = new Date(Date.now() - 60_000).toISOString();
+    const raw = { provider: "twitterapi", capturedAt: old,
+      posts: [{ id: "123", author_id: "456", created_at: old, text: "Image prompt: Create a delicate paper village with warm lights and layered roofs.", attachments: { media_keys: ["m"] } }],
+      media: [{ media_key: "m", type: "photo", url: "https://pbs.twimg.com/media/test.jpg" }],
+      creators: [{ id: "x-456", externalID: "456", platform: "x", username: "fixture", displayName: "Fixture", profileURL: "https://x.com/fixture" }],
+    };
+    await atomic(join(f.campaign, "test/batch-0001/x-discovery/fixture.json"), raw);
+    const original = convertXDiscovery([{ name: "fixture", data: raw }]).candidates[0];
+    const { promptSchema } = await import("../packages/schema/catalog.ts");
+    const fresh = promptSchema.parse({ ...original, media: { ...original.media!, imageURL: `https://api.prompix.dev/media/${"a".repeat(64)}.jpg` } });
+    const before = JSON.stringify(fresh);
+    await atomic(join(f.campaign, "source-revalidation/x-availability/state.json"), { [fresh.id]: {
+      status: "ready", checkedAt, checkedBy: "twitterapi", revision: fresh.source.revision, scopeIDs: ["123"],
+    } });
+    let published = false;
+    await publishQualifiedHistory(f.shared, f.campaign, "test", f.report, {
+      begin: async () => ({ enabled: true, previous: state([]) }), ready: async () => [fresh],
+      evidence: async () => ({ version: 1 as const, decisions: {} }), limit: async items => { assert.equal(items.length, 1); return quota(items); },
+      mirror: async items => items,
+      publish: async (shared, catalog) => {
+        const checks = await readXAvailability(shared);
+        assert.equal(checks[fresh.id].checkedAt, checkedAt);
+        assert.equal(filterXAvailability(catalog.prompts, checks).prompts.length, 1);
+        assert.equal(JSON.stringify(catalog.prompts[0]), before);
+        published = true; return state(catalog.prompts);
+      },
+    });
+    assert.equal(published, true); assert.equal(f.report.unavailable, 0);
+  } finally { await f.cleanup(); }
+});

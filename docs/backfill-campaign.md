@@ -222,3 +222,6 @@ Queue inspection reports non-review reconciliation jobs with their actual stage 
 ### Bound historical visual requests
 
 Historical review sends one complete source per visual model request. A gallery retains all images; a video retains its required poster and sampled frames. This reduces request complexity after an observed three-source timeout with ten attachments. It does not relax verdicts, raise the 64-request batch allowance, replay unknown attempts, or increase worker concurrency. Default daily batching is unchanged. Completion speed remains subject to observed model latency.
+### Transfer source rechecks to publication
+
+Before selecting historical additions, transfer the newest matching third-party source check from campaign evidence into shared publication state under the shared lock. Verify the raw source digest, revision, age and reply-chain scope; preserve the original check timestamp. Never override permanent removals or newer withdrawals, and never copy unrelated entries. This allows a completed campaign recheck to satisfy stage/activation gates without a duplicate paid lookup.
