@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { atomic, json } from "./publication.ts";
 import { convertXDiscovery } from "./x-intake.ts";
 import { XBudgetExceeded } from "./x-spend.ts";
-import { unchangedXStandalone } from "./x-recheck.ts";
+import { unchangedXStandalone, recheckXStandalone } from "./x-recheck.ts";
 import { filterXAvailability, prepareXAvailability } from "./x-availability.ts";
 import type { TwitterAPIResult } from "./twitterapi.ts";
 
@@ -154,4 +154,24 @@ test("official fallback retains maintenance purpose while drafts never share its
     lookup: async (_, ids, purpose) => { calls.push({ ids, purpose }); return { ...snapshot, posts: posts.filter(p => ids.includes(p.id)), unavailable: [] }; } });
   assert.deepEqual(calls, [{ ids: ["102"], purpose: "maintenance" }, { ids: ["101"], purpose: "growth" }]);
   assert.equal(result.report.checked, 2); assert.equal(result.report.requests, 2);
+}));
+
+test("explicit inventory allowance preserves the daily ledger across forty requests and restart", () => fixture(async root => {
+  const path = join(root, "x-rechecks", "2026-10-17.json");
+  const prior = Array.from({ length: 40 }, (_, i) => ({ ids: [String(2000 + i)], at: now, state: "completed" }));
+  await atomic(path, prior);
+  let calls = 0;
+  const options = { now, excerpts: {}, sleep, maxRequests: 41, dailyRequestCeiling: 80,
+    lookup: async () => { calls++; return { raw: {}, result: response() }; }, apply: async () => {} };
+  const result = await recheckXStandalone(root, [candidate()], options);
+  assert.equal(result.verified, 1); assert.equal(calls, 1);
+  const retained = await json<any[]>(path, []);
+  assert.deepEqual(retained.slice(0, 40), prior); assert.equal(retained.length, 41);
+  assert.equal((await recheckXStandalone(root, [candidate()], options)).status, "daily-limit");
+  // Ordinary daily runs can read the larger ledger without gaining allowance or resetting it.
+  assert.equal((await recheckXStandalone(root, [candidate()], { ...options, maxRequests: 40, dailyRequestCeiling: undefined })).status, "daily-limit");
+  for (const ceiling of [0, 80.5, 81]) await assert.rejects(recheckXStandalone(root, [candidate()], { ...options, dailyRequestCeiling: ceiling }));
+  await atomic(path, [...retained.slice(0, 40), { ...retained[40], state: "failed" }]);
+  assert.equal((await recheckXStandalone(root, [candidate()], { ...options, maxRequests: 80 })).status, "daily-limit");
+  assert.equal(calls, 1);
 }));

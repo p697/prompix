@@ -231,3 +231,7 @@ Publication activation validates the entire resulting catalog, including retaine
 ### Bound combined review complexity
 
 The initial one-source mitigation avoided multi-source requests with ten or more attachments, but observed input tokens per item increased. Historical review now packs at most three complete sources only when the combined request has at most six attachments and 14,000 input characters. Larger galleries, videos and long sources run intact alone within the unchanged global limits. Never drop images or sampled frames, shorten source text, increase request allowances or replay unknown outcomes. Daily defaults remain unchanged. Compare subsequent measured latency/token yield before claiming a speedup; cohort comparisons are not controlled experiments.
+
+### Large-inventory source revalidation
+
+The recheck ledger accepts at most 80 daily attempts. Ordinary callers retain the existing 40-request maximum. A bounded operator run can explicitly set `dailyRequestCeiling:80` and its requested allowance after checking the shared budget and quota. It uses the same provider/day ledger, pacing, exact source comparison and raw captures; failed or unknown attempts continue to stop replay. This lets a library exceeding 2,000 X sources be revalidated without splitting ledgers or weakening source freshness. Increasing the ceiling does not enable any automatic caller or change monthly dollar limits.
