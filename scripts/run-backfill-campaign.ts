@@ -132,7 +132,7 @@ try {
     const leads = z.array(historyLeadSchema).parse(await json(config.extraLeads, []));
     for (let i = 0; scans.some(s => i < s.leads.length); i++) for (const scan of scans) if (scan.leads[i]) leads.push(scan.leads[i]);
     const used = new Set([...prior, ...assigned]);
-    const chosen = chooseHistoryLeads(leads, used, Math.min(50, sourceLimit - assigned.length));
+    const chosen = chooseHistoryLeads(leads, used, Math.min(12, sourceLimit - assigned.length));
     if (chosen.length) {
       const manifest = historyBatchSchema.parse({ version: 1, id: `batch-${String(names.length + 1).padStart(4, "0")}`, createdAt: new Date().toISOString(), leads: chosen });
       await enqueueHistoryPipeline(queue, root, config.run, manifest, exclusions.prompts);
