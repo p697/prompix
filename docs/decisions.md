@@ -1106,3 +1106,7 @@ The initial single-source mitigation has measured overhead (62 completed request
 ### 2026-10-23 — Start another bounded 1,000 and preserve large-library checks
 
 The owner requested another 1,000 qualified additions from a newly frozen current baseline. Previous stage targets remain historical. Revalidation found the old 40×50 daily request ceiling cannot cover the enlarged X inventory. Support an explicit ceiling up to 80 on the same ledger, retaining default40, shared dollars and unknown-result protection. No source quality or freshness relaxation.
+
+### 2026-10-23 — Keep the retained library maintainable during backfill
+
+Expose the explicit recheck daily ceiling to the scheduled runtime so its old16-request setting does not leave an enlarged library permanently stale. Configure up to80 only after reviewing the active inventory and shared budget. Restore previously published items from hash-verified editions and current source checks, retaining live quality/removal gates; restoration never counts as new backfill. Use a bounded maintenance-only allowance through the current month inside the existing100-dollar aggregate instead of clearing historical test costs.

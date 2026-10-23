@@ -88,3 +88,9 @@ For an existing affected edition, `node --import tsx scripts/repair-history-pres
 全账号其他任务也会消耗额度；授权不能保证完成指定数量，也不允许自动改走付费模型。
 
 跨天恢复会合并shared、seed-revalidation、source-revalidation中最新的确切来源核验，在内存中覆盖checkedAt后重新验证原审核与翻译；保留原始产物及哈希。新的撤回优先，同时间矛盾或未知过期停止。复查不等于新的质量审核；待翻译/语义任务同样接受匹配核验，以免旧队列跨天不可恢复。
+
+### Enlarged retained-library maintenance
+
+`PROMPIX_X_RECHECK_DAILY_CEILING` exposes the bounded recheck ceiling to the existing daily runtime. Default40 and default16 requested attempts remain unchanged; a privately configured value up to80 permits retaining an X library larger than800 sources. The same daily ledger and cumulative dollar budget apply, and configuration cannot silently expand the ceiling by raising only the request count.
+
+On 2026-10-23, expired maintenance authorization and insufficient daily request capacity were found after the published library had fallen to686. The authorized backfill renewed source checks, restored eligible previously published items through the versioned publisher, and froze another1,000 from the current qualified baseline. Restored old IDs are excluded from the new-stage increment. Maintenance uses a separately expiring allowance within the previously approved100-dollar aggregate, sharing the original ledger; the normal20-dollar growth ceiling remains in place. Missing Chinese, changed sources and quality holds remain excluded.
