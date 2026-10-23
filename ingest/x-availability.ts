@@ -87,7 +87,12 @@ export function configuredRecheck(environment: NodeJS.ProcessEnv = process.env):
   const budget = configuredXSpendBudget(environment), key = provider === "rapidapi" ? environment.RAPIDAPI_KEY : environment.TWITTERAPI_IO_KEY;
   if (!budget || !key) throw new Error("Third-party rechecks require a shared dollar budget and key");
   const client = provider === "rapidapi" ? new RapidAPIClient(key, budget) : new TwitterAPIClient(key, budget);
-  return { provider, lookup: client.lookup.bind(client), maxRequests: Number(environment.PROMPIX_X_RECHECK_MAX_REQUESTS ?? 16) };
+  const maxRequests = Number(environment.PROMPIX_X_RECHECK_MAX_REQUESTS ?? 16);
+  const dailyRequestCeiling = Number(environment.PROMPIX_X_RECHECK_DAILY_CEILING ?? 40);
+  if (!Number.isInteger(dailyRequestCeiling) || dailyRequestCeiling < 1 || dailyRequestCeiling > 80
+    || !Number.isInteger(maxRequests) || maxRequests < 0 || maxRequests > dailyRequestCeiling)
+    throw new Error("Invalid configured third-party recheck budget");
+  return { provider, lookup: client.lookup.bind(client), maxRequests, dailyRequestCeiling };
 }
 /** Separate maintenance budget: default two requests, bounded to four / 400 posts per UTC day. No automatic retries. Caller holds daily.lock. */
 export async function prepareXAvailability(root: string, options: { enabled: boolean; bearer?: string; now?: string;

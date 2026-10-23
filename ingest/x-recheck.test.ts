@@ -7,7 +7,7 @@ import { atomic, json } from "./publication.ts";
 import { convertXDiscovery } from "./x-intake.ts";
 import { XBudgetExceeded } from "./x-spend.ts";
 import { unchangedXStandalone, recheckXStandalone } from "./x-recheck.ts";
-import { filterXAvailability, prepareXAvailability } from "./x-availability.ts";
+import { filterXAvailability, prepareXAvailability, configuredRecheck } from "./x-availability.ts";
 import type { TwitterAPIResult } from "./twitterapi.ts";
 
 const capturedAt = "2026-10-16T00:00:00.000Z", now = "2026-10-17T01:00:00.000Z";
@@ -175,3 +175,16 @@ test("explicit inventory allowance preserves the daily ledger across forty reque
   assert.equal((await recheckXStandalone(root, [candidate()], { ...options, maxRequests: 80 })).status, "daily-limit");
   assert.equal(calls, 1);
 }));
+
+test("configured maintenance can opt into a larger ceiling without enlarging ordinary defaults", () => {
+  const env = { PROMPIX_X_RECHECK_PROVIDER: "twitterapi", PROMPIX_X_MONTHLY_USD: "20", TWITTERAPI_IO_KEY: "fixture" };
+  assert.equal(configuredRecheck(env)?.dailyRequestCeiling, 40);
+  assert.equal(configuredRecheck(env)?.maxRequests, 16);
+  const large = { ...env, PROMPIX_X_RECHECK_DAILY_CEILING: "80", PROMPIX_X_RECHECK_MAX_REQUESTS: "80" };
+  assert.equal(configuredRecheck(large)?.dailyRequestCeiling, 80);
+  assert.equal(configuredRecheck(large)?.maxRequests, 80);
+  for (const patch of [{ PROMPIX_X_RECHECK_MAX_REQUESTS: "81" }, { PROMPIX_X_RECHECK_DAILY_CEILING: "81" },
+    { PROMPIX_X_RECHECK_DAILY_CEILING: "0" }, { PROMPIX_X_RECHECK_MAX_REQUESTS: "1.5" }])
+    assert.throws(() => configuredRecheck({ ...large, ...patch }), /budget/);
+  assert.throws(() => configuredRecheck({ ...env, PROMPIX_X_RECHECK_MAX_REQUESTS: "80" }), /budget/);
+});
