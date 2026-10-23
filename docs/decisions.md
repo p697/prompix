@@ -1102,3 +1102,7 @@ Source freshness transfer covers the entire resulting catalog. Resolve old publi
 ### 2026-10-21 — Bound historical review complexity instead of always isolating every item
 
 The initial single-source mitigation has measured overhead (62 completed requests averaged16,689 input tokens/item; the preceding21-item mixed cohort averaged10,297). These cohorts differ, so this is a diagnostic signal, not a promised speedup. Pack up to three complete sources only under six combined attachments and14,000 characters. Larger individual galleries/videos retain full coverage in standalone requests, with all existing quality and budget guards.
+
+### 2026-10-23 — Start another bounded 1,000 and preserve large-library checks
+
+The owner requested another 1,000 qualified additions from a newly frozen current baseline. Previous stage targets remain historical. Revalidation found the old 40×50 daily request ceiling cannot cover the enlarged X inventory. Support an explicit ceiling up to 80 on the same ledger, retaining default40, shared dollars and unknown-result protection. No source quality or freshness relaxation.

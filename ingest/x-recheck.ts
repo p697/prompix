@@ -18,6 +18,8 @@ export type XRecheckOptions = {
     raw: unknown; result: Pick<TwitterAPIResult, "posts" | "creators" | "media"> & { provider: XRecheckProvider };
   }>;
   maxRequests: number;
+  /** Explicit large-inventory runs may request up to80; ordinary callers retain40. */
+  dailyRequestCeiling?: number;
   protectedIDs?: ReadonlySet<string>;
   joint?: boolean;
   sleep?: (ms: number) => Promise<void> };
@@ -70,13 +72,15 @@ export async function recheckXStandalone(root: string, candidates: readonly Cand
   apply: (matched: readonly Candidate[], unresolved: readonly Candidate[],
     result: Pick<TwitterAPIResult, "posts" | "creators" | "media"> & { provider: XRecheckProvider }, ids: readonly string[]) => Promise<void>;
 }) {
-  if (!Number.isInteger(options.maxRequests) || options.maxRequests < 0 || options.maxRequests > 40) throw new Error("Invalid third-party recheck budget");
+  const ceiling = options.dailyRequestCeiling ?? 40;
+  if (!Number.isInteger(ceiling) || ceiling < 1 || ceiling > 80) throw new Error("Invalid third-party daily ceiling");
+  if (!Number.isInteger(options.maxRequests) || options.maxRequests < 0 || options.maxRequests > ceiling) throw new Error("Invalid third-party recheck budget");
   if (!Number.isFinite(Date.parse(options.now))) throw new Error("Invalid third-party recheck time");
   if (candidates.some(item => !item.source.post || (!options.joint && (item.source.context || item.source.post.parentID || item.source.mediaPostID)))) throw new Error("Third-party recheck requires standalone sources");
   const provider = options.provider ?? "twitterapi";
   if (!["twitterapi", "rapidapi"].includes(provider)) throw new Error("Invalid recheck provider");
   const batchSize = provider === "rapidapi" ? 200 : 50;
-  const attemptSchemaForProvider = attemptSchema(batchSize), ledgerSchema = z.array(attemptSchemaForProvider).max(40);
+  const attemptSchemaForProvider = attemptSchema(batchSize), ledgerSchema = z.array(attemptSchemaForProvider).max(80);
   // Keep old TwitterAPI.io files at their original paths; candidate attempts and
   // raw captures are never reinterpreted as another provider during rollback.
   const directory = provider === "rapidapi" ? join(root, "x-rechecks", provider) : join(root, "x-rechecks");
