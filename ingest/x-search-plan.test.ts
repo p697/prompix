@@ -3,9 +3,10 @@ import assert from "node:assert/strict";
 import { mkdtemp, rm, readdir, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { buildXSearchPlan, readXSearchPlan, runXSearchPlan, boundedSearchQuery, type XSearchPlan, searchPlanReadiness } from "./x-search-plan.ts";
+import { buildXSearchPlan, readXSearchPlan, runXSearchPlan, boundedSearchQuery, type XSearchPlan, searchPlanReadiness, releaseUnsentSearchAttempt } from "./x-search-plan.ts";
 import { atomic, json } from "./publication.ts";
-import { TwitterAPIClient } from "./twitterapi.ts";
+import { createHash } from "node:crypto";
+import { TwitterAPIClient, twitterAPIQuery } from "./twitterapi.ts";
 import { XSpendBudget } from "./x-spend.ts";
 
 const at = "2026-10-17T08:00:00.000Z", now = () => new Date(at), sleep = async () => {};
@@ -219,4 +220,34 @@ test("readiness replays a retained valid capture without scheduling another paid
   const recovered = await readXSearchPlan(directory, p);
   assert.equal(recovered.recovered, 1);
   assert.equal(searchPlanReadiness(recovered), "complete");
+}));
+
+test("quota denial happens before a search reservation and cannot poison its cursor", () => fixture(async root => {
+  let calls = 0;
+  await assert.rejects(runXSearchPlan(root, plan(1), { maxRequests: 1, sleep, now,
+    beforeRequest: async () => { throw Error("subscription denied"); },
+    search: async () => { calls++; throw Error("must not run"); } }), /subscription denied/);
+  assert.equal(calls, 0);
+  assert.equal((await readXSearchPlan(root, plan(1))).state.attempts.length, 0);
+}));
+
+test("a proven unsent old search failure is released without rewriting it or refunding spend", () => fixture(async root => {
+  const p = plan(1), deny = async () => { throw Error("old pre-provider quota denial"); };
+  await runXSearchPlan(root, p, { maxRequests: 1, sleep, now, search: deny });
+  const before = await json<any>(join(root, "progress.json"), null);
+  const url = new URL("https://api.twitterapi.io/twitter/tweet/advanced_search");
+  url.searchParams.set("query", twitterAPIQuery(boundedSearchQuery(p.queries[0])));url.searchParams.set("queryType", "Latest");
+  const request = createHash("sha256").update(url.toString()).digest("hex");
+  const quota = { observedAt: at, ordinaryUsageAllowed: false, weeklyUsedPercent: 100, source: "codex-account-rate-limits" };
+  await assert.rejects(releaseUnsentSearchAttempt(root,p,1,url.toString(),{opening:0,entries:[{request,at}]},quota,at), /reservation exists/);
+  await assert.rejects(releaseUnsentSearchAttempt(root,p,1,url.toString(),{opening:0,entries:[]},{...quota,ordinaryUsageAllowed:true,weeklyUsedPercent:0},at), /quota denial/);
+  await releaseUnsentSearchAttempt(root,p,1,url.toString(),{opening:0,entries:[]},quota,at);
+  assert.equal(searchPlanReadiness(await readXSearchPlan(root,p)), "ready");
+  assert.deepEqual(await json(join(root,"progress.json"),null),before);
+  let calls = 0;
+  await runXSearchPlan(root,p,{maxRequests:1,sleep,now,search:async(_q,_c,capture)=>{calls++;const raw=page([tweet()]);await capture?.(raw);return {} as any;}});
+  const after = await json<any>(join(root,"progress.json"),null);
+  assert.equal(calls,1);assert.deepEqual(after.attempts[0],before.attempts[0]);assert.equal(after.attempts[1].state,"completed");
+  await atomic(join(root,"progress.json"),{...after,attempts:[{...after.attempts[0],error:"tampered"},after.attempts[1]]});
+  await assert.rejects(readXSearchPlan(root,p),/disposition/);
 }));

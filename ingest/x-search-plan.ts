@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { z } from "zod";
-import { atomic, json } from "./publication.ts";
+import { atomic, json, writeImmutableBytes } from "./publication.ts";
 import { auditPilotSearch } from "./x-pilot.ts";
 import { parseTwitterAPI, type TwitterAPIClient, type TwitterAPIResult } from "./twitterapi.ts";
 import { xFeeds } from "./x-feed.ts";
@@ -69,6 +69,16 @@ export async function readXSearchPlan(directory: string, input: XSearchPlan) {
     if (pending.has(attempt.query) || cursor.done || cursor.cursor !== attempt.cursor) throw new Error("Invalid X search checkpoint sequence");
     const capture = await json<{ at: string; raw: unknown } | null>(join(directory, attempt.response), null);
     if (!capture) {
+      const ordinal = state.attempts.indexOf(attempt) + 1;
+      const release = await json<any>(join(directory, "admission-releases", `${ordinal}.json`), null);
+      if (release) {
+        const checked = unsentReleaseSchema.parse(release);
+        if (attempt.state !== "failed" || checked.planID !== planID || checked.ordinal !== ordinal
+          || checked.attemptSHA256 !== hash(attempt) || Date.parse(checked.quota.observedAt) < Date.parse(attempt.at)
+          || Date.parse(checked.releasedAt) > Date.now() || Date.parse(checked.releasedAt) < Date.parse(checked.quota.observedAt)
+          || (checked.quota.ordinaryUsageAllowed && checked.quota.weeklyUsedPercent < 90)) throw Error("Invalid unsent search disposition");
+        continue;
+      }
       if (attempt.state === "completed") throw new Error("Completed X search is missing its evidence");
       pending.add(attempt.query); continue;
     }
@@ -149,7 +159,7 @@ export async function deferXSearchQuery(directory: string, input: XSearchPlan, q
 
 /** Caller holds the content lock. Every bounded transport retry keeps the earlier charge and reserves again. */
 export async function runXSearchPlan(directory: string, input: XSearchPlan, options: {
-  search: TwitterAPIClient["search"]; maxRequests: number; sleep?: (ms: number) => Promise<void>; now?: () => Date;
+  search: TwitterAPIClient["search"]; beforeRequest?: () => Promise<void>; maxRequests: number; sleep?: (ms: number) => Promise<void>; now?: () => Date;
 }) {
   if (!Number.isInteger(options.maxRequests) || options.maxRequests < 0 || options.maxRequests > 100)
     throw new Error("Invalid X search invocation limit");
@@ -172,6 +182,9 @@ export async function runXSearchPlan(directory: string, input: XSearchPlan, opti
     const index = Array.from({ length: run.plan.queries.length }, (_, n) => (run.state.nextQuery + n) % run.plan.queries.length)
       .find(i => !run.deferred.has(i) && !run.cursors[i].done && run.cursors[i].pages < run.plan.maxPagesPerQuery);
     if (index === undefined) break;
+    await (options.sleep ?? (ms => new Promise(resolve => setTimeout(resolve, ms))))(6500);
+    // Admission happens before reservation; quota denial cannot poison the search checkpoint.
+    await options.beforeRequest?.();
     const attempt: z.infer<typeof attemptSchema> = { state: "reserved", at: now().toISOString(), query: index,
       cursor: run.cursors[index].cursor, response: `response-${String(run.state.attempts.length + 1).padStart(5, "0")}.json` };
     run.state.attempts.push(attempt);
@@ -179,7 +192,6 @@ export async function runXSearchPlan(directory: string, input: XSearchPlan, opti
     await atomic(join(directory, "progress.json"), run.state);
     calls++;
     try {
-      await (options.sleep ?? (ms => new Promise(resolve => setTimeout(resolve, ms))))(6500);
       // Only the captured, validated raw response is authoritative; not a transport adapter's cached result.
       await options.search(boundedSearchQuery(run.plan.queries[index]), attempt.cursor,
         raw => atomic(join(directory, attempt.response), { at: now().toISOString(), raw }));
@@ -210,4 +222,38 @@ export async function runXSearchPlan(directory: string, input: XSearchPlan, opti
     ...(run.state.attempts.length >= 10000 && run.report.status !== "complete" ? { status: "checkpoint-limit" } : {}) };
   await atomic(join(directory, "report.json"), report);
   return report;
+}
+
+const unsentReleaseSchema = z.object({ version: z.literal(1), planID: z.string().regex(/^[a-f0-9]{64}$/),
+  ordinal: z.number().int().positive().max(10000), attemptSHA256: z.string().regex(/^[a-f0-9]{64}$/),
+  releasedAt: z.iso.datetime(), requestSHA256: z.string().regex(/^[a-f0-9]{64}$/),
+  spendLedgerSHA256: z.string().regex(/^[a-f0-9]{64}$/),
+  quota: z.object({ observedAt: z.iso.datetime(), ordinaryUsageAllowed: z.boolean(), weeklyUsedPercent: z.number().min(0).max(100),
+    source: z.literal("codex-account-rate-limits") }).passthrough() }).strict();
+/** Operator-only repair of an old admission failure. The TwitterAPI adapter reserves the URL before HTTP.
+ * Preserve the original failed attempt; a matching spend reservation or response forbids this repair. */
+export async function releaseUnsentSearchAttempt(directory: string, input: XSearchPlan, ordinal: number,
+  requestedURL: string, spendLedger: { opening: number; entries: { request: string; at: string }[] }, quota: unknown, now = new Date().toISOString()) {
+  const run = await readXSearchPlan(directory, input), attempt = run.state.attempts[ordinal - 1];
+  if (!attempt || attempt.state !== "failed" || !run.pending.has(attempt.query)
+    || attempt !== run.state.attempts.at(-1) || await json(join(directory, attempt.response), null)) throw Error("Only the final uncaptured failed attempt may be released");
+  const url = new URL(requestedURL);
+  const { twitterAPIQuery } = await import("./twitterapi.ts");
+  if (url.origin !== "https://api.twitterapi.io" || url.pathname !== "/twitter/tweet/advanced_search"
+    || url.searchParams.get("query") !== twitterAPIQuery(boundedSearchQuery(run.plan.queries[attempt.query]))
+    || url.searchParams.get("queryType") !== "Latest" || (url.searchParams.get("cursor") ?? undefined) !== attempt.cursor
+    || [...url.searchParams.keys()].some(key => !["query", "queryType", "cursor"].includes(key))) throw Error("Unsent request URL mismatch");
+  const canonical = new URL("https://api.twitterapi.io/twitter/tweet/advanced_search");
+  canonical.searchParams.set("query", twitterAPIQuery(boundedSearchQuery(run.plan.queries[attempt.query])));
+  canonical.searchParams.set("queryType", "Latest");
+  if (attempt.cursor) canonical.searchParams.set("cursor", attempt.cursor);
+  if (url.toString() !== canonical.toString()) throw Error("Unsent request must match the adapter's exact URL");
+  const requestSHA256 = createHash("sha256").update(url.toString()).digest("hex");
+  if (spendLedger.entries.some(entry => entry.request === requestSHA256)) throw Error("HTTP reservation exists; preserve unresolved paid request");
+  const record = unsentReleaseSchema.parse({ version: 1, planID: run.planID, ordinal, attemptSHA256: hash(attempt),
+    releasedAt: now, requestSHA256, spendLedgerSHA256: hash(spendLedger), quota });
+  if (Date.parse(record.quota.observedAt) < Date.parse(attempt.at) || Date.parse(record.quota.observedAt) - Date.parse(attempt.at) > 120000
+    || Date.parse(now) < Date.parse(record.quota.observedAt) || (record.quota.ordinaryUsageAllowed && record.quota.weeklyUsedPercent < 90)) throw Error("Missing contemporaneous quota denial");
+  await writeImmutableBytes(join(directory, "admission-releases", `${ordinal}.json`), Buffer.from(JSON.stringify(record) + "\n"));
+  return record;
 }

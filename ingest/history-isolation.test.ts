@@ -1,11 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, rm, readFile } from "node:fs/promises";
+import { mkdtemp, rm, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { atomic } from "./publication.ts";
 import { StageQueue, queueIdentity, workStage } from "./stage-queue.ts";
-import { inspectHistoryIsolation, activeHistoryBatches } from "./history-isolation.ts";
+import { inspectHistoryIsolation, activeHistoryBatches, rejectQuotaAdmissionBatch } from "./history-isolation.ts";
 import { createTestDatabase } from "../services/feed/test-database.ts";
 const run = "isolation", day = "2026-10-19";
 const manifest = (batch: string) => ({ version: 1, id: batch, createdAt: day + "T00:00:00Z", leads: [
@@ -193,4 +193,26 @@ test("non-review reconcile reports its actual stage and cause without changing e
   const queue = new StageQueue({ query: async () => ({ rows: [raw] }) } as any);
   await assert.rejects(inspectHistoryIsolation(queue, "/unused", run), /batch-0001:translate \(translate\): Translation retained untranslated bracket guidance/);
   assert.equal(JSON.stringify(raw), before);
+});
+
+test("proven pre-provider quota failure rejects its whole batch while retaining original attempts", async () => {
+ const root=await mkdtemp(join(tmpdir(),"admission-disposition-"));const{pg,writer}=await createTestDatabase();
+ try{
+  const queue=new StageQueue(writer),batch="batch-0001",id=row(batch).id;await fixture(root,batch);
+  const failure={...attempt,error:JSON.stringify([{code:"invalid_value",values:[true],path:["ordinaryUsageAllowed"],message:"expected true"}])};
+  await atomic(join(root,run,batch,"visual-ledger.json"),{schemaVersion:2,day,requests:1,attempts:[failure]});
+  await queue.enqueue({id,run,stage:"review",payload:row(batch).payload});
+  const observedAt=new Date(Date.now()-1000).toISOString();
+  await assert.rejects(workStage(queue,run,["review"],async()=>{throw Error(row(batch).output.message);}));
+  const before=await readFile(join(root,run,batch,"visual-ledger.json"));const attempts=JSON.stringify((await pg.query("select * from prompix.queue_attempts")).rows);
+  await assert.rejects(rejectQuotaAdmissionBatch(queue,root,run,batch));
+  await writeFile(join(root,"subscription-quota-history.jsonl"),JSON.stringify({observedAt,ordinaryUsageAllowed:false,weeklyUsedPercent:100,source:"codex-account-rate-limits"})+"\n");
+  await atomic(join(root,run,batch,"visual-attempts/1.json"),{events:"partial or unknown"});
+  await assert.rejects(rejectQuotaAdmissionBatch(queue,root,run,batch),/Retained response/);
+  await rm(join(root,run,batch,"visual-attempts"),{recursive:true});
+  const disposition=await rejectQuotaAdmissionBatch(queue,root,run,batch);assert.equal(disposition.qualified,0);assert.equal(disposition.replayed,false);
+  assert.equal((await pg.query<{state:string}>("select state from prompix.queue_jobs where id=$1",[id])).rows[0].state,"rejected");
+  assert.deepEqual(await readFile(join(root,run,batch,"visual-ledger.json")),before);assert.equal(JSON.stringify((await pg.query("select * from prompix.queue_attempts")).rows),attempts);
+  await assert.rejects(rejectQuotaAdmissionBatch(queue,root,run,batch));
+ }finally{await pg.close();await rm(root,{recursive:true,force:true});}
 });

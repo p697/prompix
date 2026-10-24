@@ -1,3 +1,4 @@
+import { ProviderAdmissionDenied } from "./provider-admission.ts";
 import { hasUncertainCommit } from "../services/feed/postgres.ts";
 import { transientQueryError } from "./transient-retry.ts";
 import { VerifiedCapacityRejection } from "./provider-capacity.ts";
@@ -118,6 +119,12 @@ export async function workStage(queue: StageQueue, run: string, stages: QueueSta
       if (!await queue.confirmsSuccess(job, result)) throw error;
     }
   } catch (error) {
+    if (!leaseError && error instanceof ProviderAdmissionDenied) {
+      await queue.finish(job, job.attempts < (job.max_attempts ?? 3) ? "retry" : "rejected",
+        { reason: "provider-admission-before-request", providerInvoked: false, message: error.message });
+      // Stop the controller; retry only on an explicit later resume, after quota recovery.
+      throw error;
+    }
     if (!leaseError && job.stage === "semantic" && error instanceof VerifiedCapacityRejection
       && job.attempts < Math.min(3, job.max_attempts ?? 3)) {
       await queue.finish(job, "retry", { reason: "verified-capacity-before-output", eventsSHA256: error.eventsSHA256, sameModel: true });

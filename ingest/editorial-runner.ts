@@ -1,3 +1,4 @@
+import { beforeProviderRequest } from "./provider-admission.ts";
 import { hasVisualPreview } from "../packages/schema/visual.ts";
 import { isDiscoveredSkill, discoveredSkillIssue } from "./discovered-skills.ts";
 import { createHash } from "node:crypto";
@@ -142,7 +143,7 @@ export function editorialQueue(items: readonly Candidate[], previous: readonly P
 export async function runEditorialReview(options: { candidates: readonly Candidate[]; previous: readonly Prompt[]; reviews: Reviews;
   cache: EditorialCache; ledger?: EditorialLedger | EditorialAttempt; day: string; provider?: EditorialProvider; now?: string; maxRequests?: number;
   persistCache: (cache: EditorialCache) => Promise<void>; persistReviews: (reviews: Reviews) => Promise<void>;
-  persistLedger: (ledger: EditorialLedger) => Promise<void>;
+  beforeRequest?: () => Promise<void>; persistLedger: (ledger: EditorialLedger) => Promise<void>;
 }) {
   const now = options.now ?? new Date().toISOString();
   const maxRequests = reviewRequestLimit(options.maxRequests);
@@ -205,6 +206,7 @@ export async function runEditorialReview(options: { candidates: readonly Candida
     const selectedIDs = new Set(selected.map(item => item.id));
     queue = queue.filter(item => !selectedIDs.has(item.id));
     const input = selected.map(editorialInput);
+    await beforeProviderRequest(options.beforeRequest);
     const attempt: EditorialAttempt = { day: options.day, requests: 1, model: editorialModel, reservedAt: now,
       candidateIDs: selected.map(item => item.id), inputCharacters: JSON.stringify(input).length, state: "reserved" };
     const reserved = appendReviewAttempt(ledger, attempt);

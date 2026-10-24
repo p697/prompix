@@ -447,3 +447,12 @@ test("plain-text review spending stays bounded across restarts and publication",
     provider: async input => approve(input), persistCache: async () => {}, persistReviews: async () => {}, persistLedger: async () => {} });
   assert.equal(afterPublication.report.requests, 0, "Publishing reviewed text must not refund its daily review budget");
 });
+
+test("editorial admission failure does not reserve or approve a request", async () => {
+  let calls=0;
+  await assert.rejects(runEditorialReview({candidates:[candidate("admission")],previous:[],reviews:{},cache:{version:1,decisions:{}},day,
+    beforeRequest:async()=>{throw Error("quota denied");},provider:async()=>{calls++;throw Error("must not run");},
+    persistCache:async()=>{throw Error("unexpected cache");},persistReviews:async()=>{throw Error("unexpected approval");},
+    persistLedger:async()=>{throw Error("unexpected reservation");}}),/Provider admission denied/);
+  assert.equal(calls,0);
+});
