@@ -44,10 +44,10 @@ function harness(items: Prompt[], previous: Prompt[] = []) {
     batches: Array<readonly VisualInput[]> } = {
     cache: { version: 1, decisions: {} }, events: [], preparedIDs: [], inputs: [], batches: [],
   };
-  const run = (settings: { prompts?: Prompt[]; previous?: Prompt[]; provider?: VisualProvider | null;
+  const run = (settings: { beforeRequest?: () => Promise<void>; prompts?: Prompt[]; previous?: Prompt[]; provider?: VisualProvider | null;
     prepareMedia?: (item: Prompt) => Promise<PreparedVisualMedia>; day?: string; maxRequests?: unknown; maxCandidatesPerRequest?: number; combinedLimits?: { attachments: number; inputCharacters: number }; classifyPublished?: boolean; ledger?: VisualLedger | VisualAttempt;
     persistCache?: (cache: VisualCache) => Promise<void>; persistLedger?: (ledger: VisualLedger) => Promise<void> } = {}) => runVisualReview({
-    prompts: settings.prompts ?? items, previous: settings.previous ?? previous, cache: state.cache, ledger: settings.ledger ?? state.ledger,
+    beforeRequest: settings.beforeRequest, prompts: settings.prompts ?? items, previous: settings.previous ?? previous, cache: state.cache, ledger: settings.ledger ?? state.ledger,
     day: settings.day ?? day, now, maxRequests: settings.maxRequests, maxCandidatesPerRequest: settings.maxCandidatesPerRequest, combinedLimits: settings.combinedLimits, classifyPublished: settings.classifyPublished,
     provider: settings.provider === null ? undefined : async input => {
       state.events.push("provider"); state.inputs = input; state.batches.push(input);
@@ -612,4 +612,10 @@ test("combined limits cannot expand global budgets or admit malformed configurat
     assert.equal(state.batches.length, 0);
     assert.equal(state.ledger, undefined);
   }
+});
+
+test("visual admission failure leaves no provider attempt or approval", async () => {
+  const {state,run}=harness([prompt("admission")]);
+  await assert.rejects(run({beforeRequest:async()=>{throw Error("quota denied");}}),/Provider admission denied/);
+  assert.equal(state.ledger,undefined);assert.deepEqual(state.events,[]);assert.deepEqual(state.cache.decisions,{});
 });

@@ -1112,3 +1112,7 @@ The owner requested another 1,000 qualified additions from a newly frozen curren
 Expose the explicit recheck daily ceiling to the scheduled runtime so its old16-request setting does not leave an enlarged library permanently stale. Configure up to80 only after reviewing the active inventory and shared budget. Restore previously published items from hash-verified editions and current source checks, retaining live quality/removal gates; restoration never counts as new backfill. Use a bounded maintenance-only allowance through the current month inside the existing100-dollar aggregate instead of clearing historical test costs.
 
 The same run showed all three leases held by large review/translation batches while semantic jobs waited on their dependencies. New assignments are bounded to12 sources so completed upstream work can reach the independent final queue sooner. Do not split or re-enqueue frozen existing jobs, increase concurrency or omit any review.
+
+### 2026-10-25 — Resume the existing increment after quota reset
+
+Continue the frozen `additional-1000-20261023` baseline2982/target3982. Do not rebase or request another1,000. The old stop combined a subscription denial with post-reservation guards, which mislabeled unsent search/visual work as provider failure. Move guards before reservation; retain original records and require explicit evidence for operator dispositions. Near the protection line, measure the account every minute. Keep the default90% threshold; the previous stage's95% grant is not reused.

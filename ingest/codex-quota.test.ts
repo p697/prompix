@@ -42,3 +42,10 @@ test("concurrent workers share a measurement; failed refresh never renews its ti
     assert.equal(JSON.parse(await readFile(join(root, "subscription-quota.json"), "utf8")).observedAt, new Date(clock).toISOString());
   } finally { await rm(root, { recursive: true, force: true }); }
 });
+
+test("near-limit quota observations refresh after one minute instead of twenty", async () => {
+  const root=await mkdtemp(join(tmpdir(),"quota-near-limit-"));
+  try {let clock=now,calls=0;const refresh=campaignQuotaReader(root,"fixture-account",async()=>{calls++;return {...raw,rateLimitsByLimitId:{codex:{...bucket,primary:{...bucket.primary,usedPercent:86}}}};},()=>clock);
+    await refresh();clock+=59000;await refresh();assert.equal(calls,1);clock+=1001;await refresh();assert.equal(calls,2);
+  }finally{await rm(root,{recursive:true,force:true});}
+});

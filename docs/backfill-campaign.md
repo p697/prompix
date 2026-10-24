@@ -235,3 +235,9 @@ The initial one-source mitigation avoided multi-source requests with ten or more
 ### Large-inventory source revalidation
 
 The recheck ledger accepts at most 80 daily attempts. Ordinary callers retain the existing 40-request maximum. A bounded operator run can explicitly set `dailyRequestCeiling:80` and its requested allowance after checking the shared budget and quota. It uses the same provider/day ledger, pacing, exact source comparison and raw captures; failed or unknown attempts continue to stop replay. This lets a library exceeding 2,000 X sources be revalidated without splitting ledgers or weakening source freshness. Increasing the ceiling does not enable any automatic caller or change monthly dollar limits.
+
+### Quota admission before reservations
+
+Search, editorial and visual stages check the subscription/lease admission hook before persisting a provider reservation. A denial stops admission without creating a misleading failed external call. Account observations refresh every minute once weekly use reaches80%; lower usage retains the20-minute interval. Other account activity and in-flight calls can still change the account window between observations.
+
+An old uncaptured search failure may be released only by the operator helper with the exact adapter URL, a contemporaneous denying account observation and no matching HTTP reservation in the shared spend ledger. An immutable disposition leaves its original failed checkpoint untouched; captured or potentially paid requests cannot use this repair. A visual batch rejected by the old quota hook may be terminally excluded only when the exact admission validation error is retained, no diagnostic/response exists for that ordinal and a contemporaneous account denial is retained. The entire batch remains unpublishable, earlier provider work and every fee/attempt remain unchanged. Real unknown provider outcomes still require the existing bounded recovery probe.

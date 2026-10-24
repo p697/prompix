@@ -79,7 +79,7 @@ export function campaignQuotaReader(root: string, expectedAccountID: string,
       await atomic(join(root, "subscription-quota-evidence.json"), snapshot);
       const { observedAt, ordinaryUsageAllowed, weeklyUsedPercent, source } = snapshot;
       await atomic(join(root, "subscription-quota.json"), { observedAt, ordinaryUsageAllowed, weeklyUsedPercent, source });
-      nextRead = now() + 20 * 60_000;
+      nextRead = now() + (weeklyUsedPercent >= 80 ? 60_000 : 20 * 60_000);
     })().finally(() => { pending = undefined; });
     return pending;
   };

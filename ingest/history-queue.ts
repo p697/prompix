@@ -1,3 +1,4 @@
+import { beforeProviderRequest } from "./provider-admission.ts";
 import { readHistoryAvailability, refreshHistoryItems } from "./history-freshness.ts";
 import { filterXAvailability, type XAvailabilityState } from "./x-availability.ts";
 import { join } from "node:path";
@@ -57,7 +58,7 @@ export async function processHistoryStage(queue: StageQueue, root: string, share
       }
       const items = await runHistoryBatch(directory, batch, prior, shared, undefined, false, {
         availability: job.stage === "translate" ? await readHistoryAvailability(root, shared) : undefined,
-        stage: job.stage === "collect" ? "source" : job.stage === "review" ? "review" : "translation", chineseOnly: true, translationConcurrency: 1, checkLease: async () => { await options.beforeRequest?.(); await queue.renew(job); } });
+        stage: job.stage === "collect" ? "source" : job.stage === "review" ? "review" : "translation", chineseOnly: true, translationConcurrency: 1, checkLease: async () => { await beforeProviderRequest(options.beforeRequest); await queue.renew(job); } });
       if (job.stage === "collect") await adoptHistoryDiscoveries(directory, root, shared);
       const source = await json(join(directory, "source-catalog.json"), null);
       const complete = await json(join(directory, "complete.json"), null);
@@ -76,7 +77,7 @@ export async function processHistoryStage(queue: StageQueue, root: string, share
     await verifyReviewedHistory(directory, shared, items, availability);
     if (!items.every(item => completeHistoryItem(item, Date.now(), requiredIngestLocales))) throw new Error("Required history quality changed");
     const reviewDirectory = join(directory, "semantic", `${payload.start}-${job.attempts}`);
-    await options.beforeRequest?.();
+    await beforeProviderRequest(options.beforeRequest);
     await queue.renew(job);
     const review = await reviewTranslationSemantics(items, "zh-Hans", reviewDirectory, process.env.PROMPIX_CODEX ?? "codex");
     await atomic(join(reviewDirectory, "result.json"), review);

@@ -113,3 +113,43 @@ export async function rejectVerifiedCapacityBatch(queue: StageQueue, root: strin
   });
   return disposition;
 }
+
+/** Terminally exclude an old batch whose quota check rejected before its provider was invoked.
+ * Previous completed calls, every original artifact and queue_attempt outcome remain unchanged. */
+export async function rejectQuotaAdmissionBatch(queue: StageQueue, root: string, run: string, batch: string) {
+  if (!/^[a-z0-9-]{1,80}$/.test(run) || !/^batch-\d{4}$/.test(batch)) throw Error("Invalid admission disposition identity");
+  const id = `${run}:${batch}:review`;
+  const raw = (await queue.db.query("select id,stage,state,attempts,payload,output,finished_at from prompix.queue_jobs where id=$1 and run_id=$2", [id, run])).rows[0] as any;
+  if (!raw || raw.state !== "reconcile") throw Error("Only a reconciled review can be disposed");
+  const row = rowSchema.parse(raw), directory = join(root, run, batch);
+  if (row.output.message !== messages[0]) throw Error("Only evidenced visual admission failures are supported");
+  const manifest = historyBatchSchema.parse(await json(join(directory, "manifest.json"), null));
+  if (manifest.id !== batch || queueIdentity(manifest) !== row.payload.manifestSHA) throw Error("Admission manifest changed");
+  const bytes = await readFile(join(directory, "visual-ledger.json"));
+  const ledger = visualLedgerSchema.parse(JSON.parse(bytes.toString())), last = ledger.attempts.at(-1);
+  if (!last || last.state !== "failed" || ledger.attempts.slice(0, -1).some(a => a.state !== "completed")) throw Error("Unknown earlier provider outcome");
+  const errors = z.array(z.object({ code: z.literal("invalid_value"), path: z.tuple([z.literal("ordinaryUsageAllowed")]),
+    values: z.tuple([z.literal(true)]) }).passthrough()).length(1).parse(JSON.parse(last.error ?? "null"));
+  if (!errors.length) throw Error("No pre-provider admission denial");
+  await absent(join(directory, "visual-responses", `${ledger.requests}.json`));
+  await absent(join(directory, "visual-attempts", `${ledger.requests}.json`));
+  const history = (await readFile(join(root, "subscription-quota-history.jsonl"), "utf8")).trim().split("\n").map(line => JSON.parse(line));
+  const end = new Date(raw.finished_at).getTime();
+  const quota = history.slice().reverse().find((q: any) => q.source === "codex-account-rate-limits" && q.ordinaryUsageAllowed === false
+    && Date.parse(q.observedAt) >= Date.parse(last.reservedAt) && Date.parse(q.observedAt) <= end
+    && end - Date.parse(q.observedAt) <= 120000);
+  if (!quota) throw Error("No contemporaneous quota denial evidence");
+  const disposition = { version: 1, action: "reject-entire-batch-before-provider-admission", batch, jobID: id,
+    manifestSHA: row.payload.manifestSHA, ledgerSHA: hash(bytes), quota, ordinal: ledger.requests,
+    priorOutput: raw.output, qualified: 0, replayed: false, attemptsPreserved: true, feesPreserved: true };
+  await writeImmutableBytes(join(root, "review-dispositions", `${batch}-${raw.attempts}.json`), Buffer.from(JSON.stringify(disposition) + "\n"));
+  await queue.db.transaction(async tx => {
+    await tx.query("select max_active from prompix.queue_controls where id='ingest' for update");
+    if ((await tx.query("select id from prompix.queue_jobs where run_id=$1 and state='leased'", [run])).rows.length) throw Error("Drain leases before admission disposition");
+    const result = await tx.query(`update prompix.queue_jobs set state='rejected',output=$4,finished_at=now()
+      where id=$1 and run_id=$2 and state='reconcile' and attempts=$3 and output=$5::jsonb and payload=$6::jsonb returning id`,
+      [id, run, raw.attempts, JSON.stringify(disposition), JSON.stringify(raw.output), JSON.stringify(raw.payload)]);
+    if (result.rows.length !== 1) throw Error("Admission disposition changed concurrently");
+  });
+  return disposition;
+}

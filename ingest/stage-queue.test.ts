@@ -1,3 +1,4 @@
+import { beforeProviderRequest } from "./provider-admission.ts";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createTestDatabase } from "../services/feed/test-database.ts";
@@ -210,4 +211,17 @@ test("a lost claim response never runs an expired reservation", async () => {
     await assert.rejects(workStage(new StageQueue(db), "claim-expired", ["collect"], async () => { calls++; return {}; }), /no longer exclusively owned/);
     assert.equal(calls, 0);
   } finally { await pg.close(); }
+});
+
+test("pre-provider admission denial retains a resumable job and never replays a provider", async () => {
+ const{pg,writer}=await createTestDatabase();try{
+  const q=new StageQueue(writer);await q.enqueue({id:"admit",run:"admission",stage:"review",payload:{}});let calls=0;
+  const blocked=()=>workStage(q,"admission",["review"],async()=>{await beforeProviderRequest(async()=>{throw Error("quota");});calls++;return{pass:1};});
+  await assert.rejects(blocked(),/Provider admission denied/);
+  assert.equal((await pg.query<{state:string}>("select state from prompix.queue_jobs where id='admit'")).rows[0].state,"retry");
+  // Explicit later worker run, after a fresh admission check, can finish the untouched dependency.
+  await pg.query("update prompix.queue_jobs set available_at=now() where id='admit'");
+  assert.equal(await workStage(q,"admission",["review"],async()=>{calls++;return{pass:1};}),true);assert.equal(calls,1);
+  assert.deepEqual((await pg.query<{outcome:string}>("select outcome from prompix.queue_attempts order by attempt")).rows.map(r=>r.outcome),["retry","succeeded"]);
+ }finally{await pg.close();}
 });

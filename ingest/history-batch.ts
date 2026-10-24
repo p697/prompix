@@ -83,7 +83,7 @@ export async function runHistoryBatch(directory: string, input: HistoryBatch, pr
     if (ledger && ledger.day !== day) throw new Error("History editorial ledger identity changed");
     let sequence = ledger?.requests ?? 0;
     const editorial = await runEditorialReview({ candidates, previous: [], reviews, cache, ledger, day, maxRequests: historyLimits.editorial,
-      provider: async items => { await options.checkLease?.(); return codexEditorialProvider(env.PROMPIX_CODEX, response => atomic(join(directory, "editorial-responses", `${sequence}.json`), response),
+      beforeRequest: options.checkLease, provider: async items => { return codexEditorialProvider(env.PROMPIX_CODEX, response => atomic(join(directory, "editorial-responses", `${sequence}.json`), response),
         async evidence => { await writeImmutableBytes(join(directory, "editorial-attempts", `${sequence}.json`), Buffer.from(JSON.stringify(evidence) + "\n")); })(items); },
       persistReviews: value => atomic(join(directory, "editorial.json"), value), persistCache: value => atomic(cachePath, value),
       persistLedger: async value => { await atomic(ledgerPath, value); sequence = value.requests; } });
@@ -113,7 +113,7 @@ export async function runHistoryBatch(directory: string, input: HistoryBatch, pr
     try {
       visual = await runVisualReview({ prompts: mirrored, previous: [], cache: visualCache, ledger: visualLedger, day, maxRequests: historyLimits.visual, combinedLimits: { attachments: 6, inputCharacters: 14000 }, reviewWebsite,
         prepareMedia: item => prepareVisualMedia(item, temporary),
-        provider: async items => { await options.checkLease?.(); return codexVisualProvider(env.PROMPIX_CODEX, response => atomic(join(directory, "visual-responses", `${visualSequence}.json`), response), {},
+        beforeRequest: options.checkLease, provider: async items => { return codexVisualProvider(env.PROMPIX_CODEX, response => atomic(join(directory, "visual-responses", `${visualSequence}.json`), response), {},
           async evidence => { await writeImmutableBytes(join(directory, "visual-attempts", `${visualSequence}.json`), Buffer.from(JSON.stringify(evidence) + "\n")); })(items); },
         persistCache: value => atomic(visualPath, value), persistLedger: async value => { await atomic(visualLedgerPath, value); visualSequence = value.requests; } });
     } finally { await rm(temporary, { recursive: true, force: true }); }

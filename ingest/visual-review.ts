@@ -1,3 +1,4 @@
+import { beforeProviderRequest } from "./provider-admission.ts";
 import { createHash } from "node:crypto";
 import { isAbsolute } from "node:path";
 import { z } from "zod";
@@ -223,7 +224,7 @@ export async function runVisualReview(options: {
   maxRequests?: unknown; maxCandidatesPerRequest?: number; combinedLimits?: { attachments: number; inputCharacters: number }; classifyPublished?: boolean;
   reviewWebsite?: (prompt: Prompt) => Promise<void>;
   provider?: VisualProvider; prepareMedia: (prompt: Prompt) => Promise<PreparedVisualMedia>;
-  persistCache: (cache: VisualCache) => Promise<void>; persistLedger: (ledger: VisualLedger) => Promise<void>;
+  persistCache: (cache: VisualCache) => Promise<void>; beforeRequest?: () => Promise<void>; persistLedger: (ledger: VisualLedger) => Promise<void>;
 }): Promise<{ prompts: Prompt[]; withheldIDs: string[]; blockedIDs: string[]; report: VisualReport }> {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(options.day) || new Date(`${options.day}T00:00:00Z`).toISOString().slice(0, 10) !== options.day)
     throw new Error("Invalid UTC visual review day");
@@ -352,6 +353,7 @@ export async function runVisualReview(options: {
     }
     if (!selected.length) break;
     const attachments = selected.flatMap(item => item.attachments);
+    await beforeProviderRequest(options.beforeRequest);
     const attempt: VisualAttempt = { day: options.day, requests: 1, model: visualReviewModel, reservedAt: now,
       candidateIDs: selected.map(item => item.id), identities: selected.map(item => item.identity),
       inputCharacters: visualInputCharacters(selected), attachments: attachments.length,

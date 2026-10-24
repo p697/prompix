@@ -146,7 +146,7 @@ try {
     }
     const release = await lockContent(next.directory);
     let found;
-    try { const client = new TwitterAPIClient(process.env.TWITTERAPI_IO_KEY ?? "", budget); found = await runXSearchPlan(next.directory, next.plan, { maxRequests: Math.min(10, searchLimit - searches), search: async (...args) => { await checkQuota(); return client.search(...args); } }); }
+    try { const client = new TwitterAPIClient(process.env.TWITTERAPI_IO_KEY ?? "", budget); found = await runXSearchPlan(next.directory, next.plan, { maxRequests: Math.min(10, searchLimit - searches), beforeRequest: checkQuota, search: client.search.bind(client) }); }
     finally { await release(); }
     if (["failed", "unresolved", "budget-limit"].includes(found.status)) {
       const readiness = searchPlanReadiness(await readXSearchPlan(next.directory, next.plan));
