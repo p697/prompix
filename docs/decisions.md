@@ -1116,3 +1116,14 @@ The same run showed all three leases held by large review/translation batches wh
 ### 2026-10-25 — Resume the existing increment after quota reset
 
 Continue the frozen `additional-1000-20261023` baseline2982/target3982. Do not rebase or request another1,000. The old stop combined a subscription denial with post-reservation guards, which mislabeled unsent search/visual work as provider failure. Move guards before reservation; retain original records and require explicit evidence for operator dispositions. Near the protection line, measure the account every minute. Keep the default90% threshold; the previous stage's95% grant is not reused.
+
+## 2026-10-30：官网改为服务端渲染并展示最新 Prompt
+
+用户要求以 `prompix.dev` 做正式官网（用户提到的 promptx.dev 不在本账号 Cloudflare 中），视觉对标近年 Apple 产品页，展示最新抓取内容并做好 SEO。替代 0.3 时期只放三条原创示例的静态官网，以及产品文档中「完整 SEO 网页产品后置」的边界：本次只做浏览与阅读，不做账号、收藏同步或生成。
+
+- `prompix-site` 改为 Worker 服务端渲染，经 Service Binding 读取已部署的 `prompix-feed` `/v3` 接口，不另建数据库查询；页面和 feed 响应在边缘短时缓存，透传访客 IP 以保留 feed 的按 IP 限流。为不随官网发布未部署的 feed 代码，本次不改 feed。
+- 列表只展示视觉审核为 `general` 的预览（与 App 默认减少暗示性内容一致），其余条目仅直链可见、`noindex` 且不进 sitemap。图片与视频直接从 `api.prompix.dev/media` 加载，网站不复制第三方媒体。
+- 中英双语：英文在 `/`、中文在 `/zh`，语言注册表统一驱动路由、hreflang、sitemap 与语言菜单，新增语言只需加消息文件并注册。当前约六成新增内容只有中文元数据，英文列表只显示英文标题，没有英文标题的英文详情页 `noindex`。
+- App、商店引用的 `/support`、`/privacy`、`/content`、`/report?id=` 及 `/zh` 版本全部保留，文案原样迁移；隐私页「这个网站」一节按新的加载与搜索行为更新。
+- 视觉沿用 `design-language.md` 色板：中性白底、墨色正文、蓝紫粉光谱只用于标题重点词、数字与局部光晕；系统字体，无第三方脚本或字体；动效仅入场、滚动渐显与图片墙缓慢漂移，尊重减少动态效果。
+
