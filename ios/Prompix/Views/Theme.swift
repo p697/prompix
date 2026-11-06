@@ -73,19 +73,16 @@ extension View {
 
     func paperScreen() -> some View { modifier(PaperScreen()) }
 
-    @ViewBuilder func plainTopEdge() -> some View {
-        if #available(iOS 26, *) { scrollEdgeEffectHidden(true, for: .top) }
-        else { self }
-    }
-
-    /// Root headers sit in the scroll view's top bar, so the system edge effect
-    /// rather than a drawn material separates them from the content beneath.
-    /// The hard style keeps header text legible over artwork.
-    @ViewBuilder func rootHeaderBar<Bar: View>(@ViewBuilder _ bar: () -> Bar) -> some View {
+    /// Root pages use the system large title, which shrinks into the bar as the
+    /// page scrolls, so nothing above the content changes height. The optional
+    /// bar (the kind tabs) stays pinned beneath it under a soft, gradual edge.
+    @ViewBuilder func rootHeader<Trailing: View, Bar: View>(title: String, @ViewBuilder trailing: () -> Trailing, @ViewBuilder bar: () -> Bar) -> some View {
+        let page = navigationTitle(title).navigationBarTitleDisplayMode(.large)
+            .toolbar { ToolbarItem(placement: .topBarTrailing) { trailing() } }
         if #available(iOS 26, *) {
-            safeAreaBar(edge: .top, spacing: 0, content: bar).scrollEdgeEffectStyle(.hard, for: .top)
+            page.safeAreaBar(edge: .top, spacing: 0, content: bar).scrollEdgeEffectStyle(.soft, for: .top)
         } else {
-            safeAreaInset(edge: .top, spacing: 0) { bar().background(Palette.paper.ignoresSafeArea(edges: .top)) }
+            page.safeAreaInset(edge: .top, spacing: 0) { bar().background(Palette.paper) }
         }
     }
 
@@ -122,7 +119,8 @@ struct KindPicker: View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 2) {
                 choice(nil, title: String(localized: "全部"))
-                ForEach(PromptKind.allCases) { choice($0, title: $0.title) }
+                // The work people come for leads: images, then video, text and web.
+                ForEach([PromptKind.image, .video, .text, .web]) { choice($0, title: $0.title) }
                 Button { select(nil, skills: true) } label: {
                     choiceLabel("Skills", selected: skillsOnly)
                 }.buttonStyle(.plain).accessibilityAddTraits(skillsOnly ? .isSelected : [])

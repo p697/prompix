@@ -73,8 +73,6 @@ struct DiscoverView: View {
     @State private var facet: String?
     @State private var modelFamily: String?
     @State private var inputs: String?
-    @State private var chromeCollapsed = false
-    @State private var headerHeight: CGFloat = 112
     @State private var viewportHeight: CGFloat = 0
     @State private var feedLayout = PromptGridLayout(width: 0)
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -104,10 +102,6 @@ struct DiscoverView: View {
                     LazyVStack(alignment: .leading, spacing: 14) {
                         Group {
                             discoveryContext
-                            if skillsOnly {
-                                Text(String(localized: "可在支持 Agent Skills 的工具中使用，包含完整说明与源文件；具体依赖请查看详情。"))
-                                    .font(.subheadline).foregroundStyle(Palette.muted).padding(.horizontal, 20)
-                            }
                             if let feed = library.feed {
                                 FeedResults(store: feed.discovery, query: feedQuery, loadsOnAppear: false, fallback: items, layout: feedLayout, interlude: rails)
                             } else if items.isEmpty {
@@ -135,17 +129,15 @@ struct DiscoverView: View {
                         .transaction { $0.animation = nil }
                 }
                 .accessibilityIdentifier("discoveryScroll")
-                // The bar's height leaves when it collapses; this margin takes its
-                // place so the scroll view's total inset, and the reader, never move.
-                .contentMargins(.top, chromeCollapsed ? headerHeight : 0, for: .scrollContent)
                 .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { viewportHeight = $0 }
                 .onGeometryChange(for: PromptGridLayout.self) { proxy in
                     PromptGridLayout.measured(in: proxy, inset: PromptGridLayout.inset)
                 } action: { if !$0.widths.isEmpty { feedLayout = $0 } }
                 .scrollClipDisabled()
                 .background(Palette.paper).foregroundStyle(Palette.ink)
-                .readingChrome($chromeCollapsed)
-                .rootHeaderBar { discoveryChrome }
+                .rootHeader(title: String(localized: "发现")) { filterMenu } bar: {
+                    KindPicker(selection: $kind, skillsOnly: $skillsOnly, onSelect: selectKind).padding(.bottom, 6)
+                }
                 .pageRefreshable {
                     // SwiftUI can cancel the refresh action when lazy sections
                     // move during overscroll. The user's bounded request owns its
@@ -164,12 +156,10 @@ struct DiscoverView: View {
                     var transaction = Transaction(); transaction.disablesAnimations = true
                     withTransaction(transaction) {
                         library.feed?.discovery.select(query)
-                        chromeCollapsed = false
                         scroll.scrollTo("discovery-top", anchor: .top)
                     }
                 }
             }
-            .toolbar(.hidden, for: .navigationBar)
             .task(id: feedQuery) { await library.feed?.discovery.load(feedQuery) }
             .task(id: "\(library.recommendations.preferenceRevision)-\(recommendationSurfaceVisible)") {
                 let revision = library.recommendations.preferenceRevision
@@ -192,34 +182,11 @@ struct DiscoverView: View {
         kind = next; skillsOnly = skills; topic = nil; model = nil; facet = nil; modelFamily = nil; inputs = nil
         library.feed?.discovery.select(feedQuery)
     }
-    // The bar itself shrinks, so the edge effect retreats to the status bar
-    // instead of veiling cards beneath an empty header.
-    private var discoveryChrome: some View {
-        discoveryHeader.fixedSize(horizontal: false, vertical: true)
-            .animation(reduceMotion ? nil : Motion.chrome) {
-                $0.offset(y: chromeCollapsed ? -headerHeight : 0).opacity(chromeCollapsed ? 0 : 1)
-            }
-            .frame(height: chromeCollapsed ? 0 : nil, alignment: .top)
-            .allowsHitTesting(!chromeCollapsed)
-            .accessibilityHidden(chromeCollapsed)
-    }
-    private var discoveryHeader: some View {
-        VStack(spacing: 4) {
-            RootPageHeader(title: String(localized: "发现"), titleID: "discoveryHeading") { filterMenu }
-            KindPicker(selection: $kind, skillsOnly: $skillsOnly, onSelect: selectKind)
-        }.foregroundStyle(Palette.ink).padding(.bottom, 4)
-            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { headerHeight = $0 }
-            .accessibilityElement(children: .contain).accessibilityIdentifier("discoveryHeader")
-    }
     private var discoveryContext: some View {
         HStack(alignment: .center) {
-            Text(skillsOnly ? String(localized: "Agent Skills") : isFiltered ? String(localized: "筛选结果") : feedSort == "latest" ? String(localized: "最新收录") : String(localized: "为你挑的"))
+            Text(feedSort == "latest" ? String(localized: "最新收录") : String(localized: "为你挑的"))
                 .font(.subheadline.weight(.semibold))
             Spacer()
-            if isFiltered {
-                Button(String(localized: "清除筛选")) { selectKind(nil, false) }
-                    .font(.footnote).foregroundStyle(Palette.muted).frame(minHeight: 44)
-            }
             sortMenu
         }.padding(.leading, 20).padding(.trailing, 16)
     }
@@ -241,6 +208,10 @@ struct DiscoverView: View {
             if let browse = library.feed?.browse.value, let uses = browse.facets?.useCase, !uses.isEmpty {
                 servedFilters(uses: uses, families: browse.modelFamilies ?? [])
             } else { catalogFilters }
+            if refined {
+                Button(String(localized: "清除筛选"), role: .destructive) { selectKind(kind, skillsOnly) }
+                    .accessibilityIdentifier("clearFilters")
+            }
         } label: {
             Image(systemName: "line.3.horizontal.decrease").frame(width: 44, height: 44)
                 .overlay(alignment: .topTrailing) {
@@ -532,187 +503,85 @@ private struct PromptReadingPresentation: View {
 
 struct FavoritesView: View {
     @Environment(Library.self) private var library
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Environment(\.dynamicTypeSize) private var typeSize
-    @State private var kind: PromptKind?
-    @State private var skillsOnly = false
-    @State private var query = ""
-    @State private var images = ImageStore.shared
     @State private var scope = SavedScope.decks
     @State private var settingsPresented = false
     @State private var namingDeck = false
-    @Namespace private var scopeLine
-    @ScaledMetric(relativeTo: .body) private var searchHeight = 48
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 14) {
-                    if !showsDeckGrid { SavedSearchField(text: $query).frame(height: searchHeight).padding(.horizontal, 12) }
-                    Group {
-                        if typeSize.isAccessibilitySize {
-                            VStack(alignment: .leading, spacing: 8) {
-                                savedScopes
-                                scopeActions
-                            }
-                        } else {
-                            HStack(spacing: 16) { savedScopes; scopeActions }
-                        }
-                    }.padding(.horizontal, 20)
+                Group {
                     switch scope {
-                    case .creators: SavedCreators(query: query)
+                    case .creators: SavedCreators(query: "")
                     case .drafts: draftedContent
-                    case .decks: if showsDeckGrid { DeckGrid() } else { savedContent }
+                    case .decks: if library.favorites.isEmpty && library.favoritesReadable && library.decks.decks.isEmpty { SavedEmpty() } else { DeckGrid { namingDeck = true } }
                     }
-                }.padding(.top, 2).padding(.bottom, 24)
+                }.padding(.top, 8).padding(.bottom, 24)
             }
-            .scrollDismissesKeyboard(.interactively)
             .background(Palette.paper).foregroundStyle(Palette.ink)
-            .rootHeaderBar {
-                RootPageHeader(title: String(localized: "收藏")) {
-                    Button { settingsPresented = true } label: { Image(systemName: "gearshape").frame(width: 44, height: 44) }
+            .rootHeader(title: String(localized: "收藏")) {
+                HStack(spacing: 8) {
+                    Button { settingsPresented = true } label: { Image(systemName: "person").frame(width: 44, height: 44) }
                         .accessibilityLabel(String(localized: "设置")).accessibilityIdentifier("savedSettings")
+                    if scope == .decks {
+                        Button { namingDeck = true } label: { Image(systemName: "plus").frame(width: 44, height: 44) }
+                            .disabled(!library.decks.readable).accessibilityLabel(String(localized: "新建卡组")).accessibilityIdentifier("newDeck")
+                    }
                 }
+            } bar: {
+                Picker(String(localized: "收藏"), selection: $scope) {
+                    Text(String(localized: "卡组")).tag(SavedScope.decks)
+                    Text(String(localized: "创作者")).tag(SavedScope.creators)
+                    Text(String(localized: "我的改写")).tag(SavedScope.drafts)
+                }.pickerStyle(.segmented).padding(.horizontal, 20).padding(.bottom, 8)
+                    .accessibilityIdentifier("savedScope")
             }
-            .toolbar(.hidden, for: .navigationBar)
             .sheet(isPresented: $settingsPresented) { SettingsView().promptSheet() }
             .deckNamePrompt(isPresented: $namingDeck) { library.decks.create(named: $0) }
         }
     }
-    /// Without decks of your own, the deck scope opens straight onto every saved work.
-    private var showsDeckGrid: Bool { scope == .decks && !library.decks.decks.isEmpty }
-    @ViewBuilder private var scopeActions: some View {
-        if scope == .decks {
-            if !showsDeckGrid { kindMenu }
-            Spacer(minLength: 0)
-            Button { namingDeck = true } label: { Image(systemName: "plus").frame(width: 44, height: 44) }
-                .disabled(!library.decks.readable).accessibilityLabel(String(localized: "新建卡组")).accessibilityIdentifier("newDeck")
-        } else if scope == .drafts { kindMenu }
-    }
-    private var savedScopes: some View {
-        HStack(spacing: 20) {
-            savedScope(.decks, title: String(localized: "卡组"), count: library.favorites.count, id: "savedPromptsScope")
-            savedScope(.creators, title: String(localized: "创作者"), count: library.savedCreators.count, id: "savedCreatorsScope")
-            savedScope(.drafts, title: String(localized: "我的改写"), count: nil, id: "savedDraftsScope")
-        }
-    }
-    private func savedScope(_ value: SavedScope, title: String, count: Int?, id: String) -> some View {
-        let selected = scope == value
-        return Button { withAnimation(reduceMotion ? nil : .snappy(duration: 0.25)) { scope = value } } label: {
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Text(title).font(.headline)
-                if let count { Text(count.formatted()).font(.caption.monospacedDigit()).fixedSize().foregroundStyle(Palette.muted) }
-            }.foregroundStyle(selected ? Palette.ink : Palette.muted)
-                .frame(minHeight: 48).contentShape(Rectangle())
-                .overlay(alignment: .bottom) {
-                    if selected {
-                        Capsule().fill(Palette.accent).frame(height: 2).matchedGeometryEffect(id: "saved-scope", in: scopeLine)
-                    }
-                }
-        }.buttonStyle(.plain).accessibilityAddTraits(selected ? .isSelected : [])
-            .accessibilityIdentifier(id)
-    }
     @ViewBuilder private var draftedContent: some View {
         let drafted = library.draftedIDs
         let candidates = library.favorites + library.prompts.filter { !library.savedIDs.contains($0.id) }
-        let items = candidates.filter { drafted.contains($0.id) && PromptQuery(text: query, kind: kind, skillsOnly: skillsOnly).matches($0) }
+        let items = candidates.filter { drafted.contains($0.id) }
         if items.isEmpty {
             ContentUnavailableView(String(localized: "还没有改写过的 Prompt"), systemImage: "square.and.pencil",
                                    description: Text(String(localized: "在详情页改写并保存后，会集中出现在这里。")))
         } else { PromptGrid(items: items, origin: .favorite).padding(.horizontal, PromptGridLayout.inset) }
     }
-    private var kindMenu: some View {
-        Menu {
-            Button(String(localized: "全部")) { kind = nil; skillsOnly = false }
-            ForEach(PromptKind.allCases) { value in
-                Button(value.title) { kind = value; skillsOnly = false }
-            }
-            Button("Skills") { kind = nil; skillsOnly = true }
-        } label: {
-            HStack(spacing: 5) {
-                Text(skillsOnly ? "Skills" : kind?.title ?? String(localized: "全部"))
-                Image(systemName: "chevron.down").font(.caption2)
-            }.font(.subheadline).foregroundStyle(Palette.muted).frame(minHeight: 44)
-        }.accessibilityIdentifier("savedKindFilter")
-    }
-    @ViewBuilder private var savedContent: some View {
-        if !images.offlineFailures.isEmpty {
-            Button { Task { if let urls = library.savedImageURLs { await images.keepOffline(urls) } } } label: {
-                Label(String(localized: "部分收藏预览尚未下载，轻点重试"), systemImage: "arrow.down.circle")
-                    .font(.footnote).foregroundStyle(Palette.muted)
-            }.padding(.horizontal, 20)
-        }
-        let items = library.favorites.filter { PromptQuery(text: query, kind: kind, skillsOnly: skillsOnly).matches($0) }
-        if !library.favoritesReadable {
-            ContentUnavailableView {
-                Label(String(localized: "收藏暂时无法读取"), systemImage: "bookmark.slash")
-            } description: { Text(String(localized: "原文件和离线预览已保留，暂时不会覆盖你的收藏。")) }
-            actions: { Button(String(localized: "重新读取收藏")) { library.reloadFavorites() }.buttonStyle(.bordered) }
-        } else if items.isEmpty {
-            if !query.isEmpty { ContentUnavailableView.search(text: query) }
-            else if !library.favorites.isEmpty {
-                ContentUnavailableView(String(localized: "暂无匹配内容"), systemImage: "bookmark", description: Text(String(localized: "试试其他分类，或清除筛选条件。")))
-            } else {
-                VStack(spacing: 18) {
-                    SpectralPages(openness: 0.7, compact: true).frame(width: 112, height: 112)
-                    Text(String(localized: "暂无收藏")).font(.title3.weight(.medium))
-                    Text(String(localized: "在详情页收藏喜欢的内容，也可以长按卡片收藏。"))
-                        .font(.subheadline).foregroundStyle(Palette.muted).multilineTextAlignment(.center).lineSpacing(4)
-                }.padding(.horizontal, 48).padding(.vertical, 50).frame(maxWidth: .infinity)
-            }
-        } else { PromptGrid(items: items, origin: .favorite).padding(.horizontal, PromptGridLayout.inset) }
-    }
 }
 
-/// Identical placement, material, tint and hit area across the two root pages.
-struct RootPageHeader<Trailing: View>: View {
-    let title: String
-    var titleID = ""
-    @ViewBuilder let trailing: Trailing
+/// Nothing saved yet: six empty frames waiting to develop.
+private struct SavedEmpty: View {
     var body: some View {
-        HStack {
-            Text(title).font(.largeTitle.bold()).accessibilityAddTraits(.isHeader).accessibilityIdentifier(titleID)
-            Spacer()
-            trailing.font(.title3).buttonStyle(.plain).readingGlass()
-        }.foregroundStyle(Palette.ink).padding(.leading, 20).padding(.trailing, 16).padding(.vertical, 6)
-    }
-}
-
-/// UISearchBar retains native clear, keyboard and accessibility behavior without
-/// reserving a navigation drawer above this compact collection layout.
-private struct SavedSearchField: UIViewRepresentable {
-    @Binding var text: String
-    func makeUIView(context: Context) -> UISearchBar {
-        let bar = UISearchBar()
-        bar.searchBarStyle = .minimal
-        bar.placeholder = String(localized: "搜索收藏")
-        bar.delegate = context.coordinator
-        bar.autocapitalizationType = .none
-        bar.autocorrectionType = .no
-        bar.searchTextField.font = .preferredFont(forTextStyle: .subheadline)
-        bar.searchTextField.adjustsFontForContentSizeCategory = true
-        return bar
-    }
-    func updateUIView(_ bar: UISearchBar, context: Context) {
-        context.coordinator.parent = self
-        if bar.text != text { bar.text = text }
-        bar.tintColor = UIColor(Palette.accent)
-    }
-    func makeCoordinator() -> Coordinator { Coordinator(self) }
-    final class Coordinator: NSObject, UISearchBarDelegate {
-        var parent: SavedSearchField
-        init(_ parent: SavedSearchField) { self.parent = parent }
-        func searchBar(_ searchBar: UISearchBar, textDidChange searchText: String) { parent.text = searchText }
-        func searchBarSearchButtonClicked(_ searchBar: UISearchBar) { searchBar.resignFirstResponder() }
+        VStack(spacing: 22) {
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 3), spacing: 8) {
+                ForEach(1...6, id: \.self) { index in
+                    RoundedRectangle(cornerRadius: 5).fill(Palette.surface)
+                        .overlay { RoundedRectangle(cornerRadius: 5).strokeBorder(Palette.line, lineWidth: 0.5) }
+                        .overlay(alignment: .bottomLeading) {
+                            Text(String(format: "%02d", index)).font(Typography.meta(size: 9)).tracking(1).foregroundStyle(Palette.muted).padding(6)
+                        }.frame(height: 96)
+                }
+            }.padding(12).background(Palette.soft.opacity(0.5), in: RoundedRectangle(cornerRadius: 16))
+                .frame(maxWidth: 290).accessibilityHidden(true)
+            VStack(spacing: 8) {
+                Text(String(localized: "还没有收藏")).font(.title3.weight(.semibold))
+                Text(String(localized: "长按任何作品，或者点详情页右上角的书签，收藏的作品会一格一格显影在这里。"))
+                    .font(.subheadline).foregroundStyle(Palette.muted).multilineTextAlignment(.center).lineSpacing(4)
+            }
+        }.padding(.horizontal, 56).padding(.top, 40).frame(maxWidth: .infinity)
+            .accessibilityElement(children: .combine).accessibilityIdentifier("savedEmpty")
     }
 }
 
 private enum SavedScope { case decks, creators, drafts }
 
-/// Every saved work first, then the decks you made. Covers are a 2×2 contact sheet.
+/// Every saved work first, then the decks you made, then room for one more.
 private struct DeckGrid: View {
+    let newDeck: () -> Void
     @Environment(Library.self) private var library
     var body: some View {
-        LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 18) {
+        LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 20) {
             NavigationLink { DeckDetail(deckID: nil) } label: {
                 DeckTile(name: String(localized: "全部收藏"), items: library.favorites)
             }.buttonStyle(.cardPress).accessibilityIdentifier("deck-all")
@@ -721,28 +590,41 @@ private struct DeckGrid: View {
                     DeckTile(name: deck.name, items: DeckDetail.items(deck.itemIDs, in: library))
                 }.buttonStyle(.cardPress).accessibilityIdentifier("deck-\(deck.id)")
             }
+            if library.decks.readable {
+                Button(action: newDeck) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Palette.line, lineWidth: 1)
+                            .aspectRatio(DeckTile.coverRatio, contentMode: .fit)
+                            .overlay { Image(systemName: "plus").font(.title3).foregroundStyle(Palette.muted) }
+                        Text(String(localized: "新建卡组")).font(.subheadline).foregroundStyle(Palette.muted)
+                    }.contentShape(Rectangle())
+                }.buttonStyle(.cardPress).accessibilityLabel(String(localized: "新建卡组")).accessibilityIdentifier("newDeckTile")
+            }
         }.padding(.horizontal, PromptGridLayout.inset)
     }
 }
 
 private struct DeckTile: View {
+    static let coverRatio: CGFloat = 1.2
     let name: String
     let items: [Prompt]
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Grid(horizontalSpacing: 2, verticalSpacing: 2) {
-                ForEach(0..<2, id: \.self) { row in
-                    GridRow {
-                        ForEach(0..<2, id: \.self) { column in
-                            let index = row * 2 + column
-                            Group {
-                                if index < items.count { Artwork(item: items[index], compact: true, fillsFrame: true) }
-                                else { Palette.soft }
-                            }.aspectRatio(1, contentMode: .fill).clipped()
+            Color.clear.aspectRatio(Self.coverRatio, contentMode: .fit).overlay {
+                Grid(horizontalSpacing: 2, verticalSpacing: 2) {
+                    ForEach(0..<2, id: \.self) { row in
+                        GridRow {
+                            ForEach(0..<2, id: \.self) { column in
+                                let index = row * 2 + column
+                                Group {
+                                    if index < items.count { Artwork(item: items[index], compact: true, fillsFrame: true) }
+                                    else { Palette.surface }
+                                }.frame(maxWidth: .infinity, maxHeight: .infinity).clipped()
+                            }
                         }
                     }
                 }
-            }.clipShape(RoundedRectangle(cornerRadius: PromptCardGeometry.cornerRadius, style: .continuous))
+            }.clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
             HStack(alignment: .firstTextBaseline) {
                 Text(name).font(.subheadline.weight(.semibold)).lineLimit(1)
                 Spacer(minLength: 4)
@@ -766,16 +648,40 @@ private struct DeckDetail: View {
     }
     private var deck: Deck? { deckID.flatMap { id in library.decks.decks.first { $0.id == id } } }
     private var items: [Prompt] { deck.map { Self.items($0.itemIDs, in: library) } ?? library.favorites }
+    @State private var kind: PromptKind?
+    @State private var images = ImageStore.shared
+    private var kinds: [(PromptKind, Int)] {
+        [PromptKind.image, .video, .text, .web].compactMap { value in
+            let count = items.filter { $0.kind == value }.count
+            return count > 0 ? (value, count) : nil
+        }
+    }
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(String(localized: "\(items.count) 张")).font(Typography.meta(size: 11)).tracking(1.2).foregroundStyle(Palette.muted)
-                    Text(deck?.name ?? String(localized: "全部收藏")).font(.largeTitle.bold()).accessibilityAddTraits(.isHeader)
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(String(localized: "卡组 ▸ \(items.count) 张")).font(Typography.meta(size: 11)).tracking(1.4).foregroundStyle(Palette.muted)
+                    Text(deck?.name ?? String(localized: "全部收藏")).font(.system(size: 30, weight: .bold)).accessibilityAddTraits(.isHeader)
                 }.padding(.horizontal, 20)
+                if kinds.count > 1 {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 2) {
+                            chip(String(localized: "全部"), selected: kind == nil) { kind = nil }
+                            ForEach(kinds, id: \.0) { value, count in
+                                chip("\(value.title) \(count)", selected: kind == value) { kind = value }
+                            }
+                        }.padding(.horizontal, 16)
+                    }
+                }
+                if deckID == nil, !images.offlineFailures.isEmpty {
+                    Button { Task { if let urls = library.savedImageURLs { await images.keepOffline(urls) } } } label: {
+                        Label(String(localized: "部分收藏预览尚未下载，轻点重试"), systemImage: "arrow.down.circle")
+                            .font(.footnote).foregroundStyle(Palette.muted)
+                    }.padding(.horizontal, 20)
+                }
                 // A deck reads as a contact sheet: three equal squares per row.
-                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 2), count: 3), spacing: 2) {
-                    ForEach(items) { item in PromptCard(item: item, origin: .favorite) }
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 4), count: 3), spacing: 4) {
+                    ForEach(items.filter { kind == nil || $0.kind == kind }) { item in PromptCard(item: item, origin: .favorite) }
                 }.environment(\.cardAspectRatio, 1).padding(.horizontal, PromptGridLayout.inset)
             }.padding(.bottom, 24)
         }
@@ -800,6 +706,15 @@ private struct DeckDetail: View {
                 if let deckID, library.decks.delete(deckID) { dismiss() }
             }
         } message: { Text(String(localized: "卡组里的作品仍会留在全部收藏。")) }
+    }
+    private func chip(_ title: String, selected: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title).font(.subheadline.weight(selected ? .semibold : .regular))
+                .foregroundStyle(selected ? Palette.paper : Palette.muted)
+                .padding(.horizontal, 12).frame(height: 32)
+                .background(selected ? Palette.ink : .clear, in: Capsule())
+                .frame(minHeight: 44).contentShape(Rectangle())
+        }.buttonStyle(.plain).accessibilityAddTraits(selected ? .isSelected : [])
     }
 }
 

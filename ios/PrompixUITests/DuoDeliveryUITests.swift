@@ -47,7 +47,7 @@ import XCTest
         XCTAssertTrue(filter.isSelected)
 
         try voiceOver.enable()
-        let heading = app.staticTexts["discoveryHeading"]
+        let heading = app.navigationBars.staticTexts["发现"]
         try require(heading.exists && heading.isHittable, "The discovery heading must remain reachable.")
         var utterance = try voiceOver.currentSpeech().utterance
         record("initial: \(utterance)")
