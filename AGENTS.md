@@ -12,9 +12,16 @@ Prompix is built mostly by AI coding agents. These rules apply to every agent an
 ## Workflow
 
 - Never commit to `main` directly. For each task, create a git worktree outside the main checkout (for example `../worktrees/<branch>`) on a new branch from the latest `origin/main`.
-- Every change goes through a pull request. Once CI passes, or when no CI applies to the change, the author may merge their own PR with a squash merge.
+- Every change goes through a pull request. Merge your own PR with a squash merge as soon as your own verification passes and CI (when it runs) is green. Do not ask the owner for permission to merge; that is the default. If verification or CI fails, fix it before merging. Right after opening the PR, enable auto-merge with squash (`gh pr merge --auto --squash`); `main` requires the `content` and `ios` checks, so it lands only when CI passes.
 - After a PR is merged or abandoned: delete the remote branch, remove the worktree and the local branch, then fast-forward the main checkout to `origin/main`. If the main checkout has uncommitted changes, leave it alone and report it.
 - Write commit messages and PR titles in concise, imperative English.
+
+## Data pipeline control
+
+- Operate the content pipeline only through `npm run pipeline -- <command>`; see [docs/data-pipeline-v2.md](docs/data-pipeline-v2.md). Never edit files under `~/.local/share/prompix/pipeline/` by hand.
+- Every change names its author: `--by codex`, `--by claude-code`, or the person. Add `--reason` when the owner gave one.
+- To answer "is the pipeline running and how is it going", run `status --brief`, then `log` only if something looks wrong. Do not poll more often than every two hours unless the owner asks; failures alert through the monitor.
+- Model choice is routing (`route <stage> <provider>`), not code. Add a vendor as an adapter under `ingest/models/`.
 
 ## Secrets
 
