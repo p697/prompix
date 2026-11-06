@@ -38,7 +38,7 @@ const usage = `用法：npm run pipeline -- <命令> [参数]
 const time = (value?: string) => value ? new Date(value).toLocaleString("zh-CN", { hour12: false, month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }) : "未知";
 const ago = (value: string) => { const minutes = Math.round((Date.now() - Date.parse(value)) / 60000); return minutes < 1 ? "刚刚" : minutes < 60 ? `${minutes} 分钟前` : `${Math.round(minutes / 60)} 小时前`; };
 const desiredLabel = { stopped: "已停止", running: "运行", paused: "暂停" } as const;
-const jobLabels: Record<string, string> = { maintenance: "来源维护复查" };
+const jobLabels: Record<string, string> = { maintenance: "来源维护复查", intake: "每日采集发布" };
 
 function describeEvent(event: PipelineEvent): string {
   const head = `${time(event.at)}  ${event.actor}`;

@@ -7,7 +7,7 @@ import type { Prompt } from "../packages/schema/catalog.ts";
 import { createTestDatabase } from "../services/feed/test-database.ts";
 import { activatePublication, stagePublication } from "../services/feed/publication.ts";
 import { readEvents, readWorkerStatus, updateConfig, type WorkerStatus } from "./pipeline-control.ts";
-import { jobDue, maintenanceIntervalMs, retryAfterFailureMs, tick, type Job } from "./worker.ts";
+import { intakeJob, intakeWindowMs, jobDue, maintenanceIntervalMs, retryAfterFailureMs, tick, type Job } from "./worker.ts";
 import { runMaintenance, takedownLimit } from "./worker-maintenance.ts";
 import { workerPlist } from "./worker-launchd.ts";
 
@@ -24,6 +24,21 @@ test("a job is due when it never ran, its interval passed, a failure waited out 
   assert.equal(jobDue(job, status({ startedAt: at(retryAfterFailureMs / 3), finishedAt: at(retryAfterFailureMs / 3), ok: false }), now), false);
   assert.equal(jobDue(job, status({ startedAt: at(retryAfterFailureMs + 1), finishedAt: at(retryAfterFailureMs), ok: false }), now), true);
   assert.equal(jobDue(job, status({ startedAt: at(hour) }), now), true);
+});
+
+test("the intake runs once per six-hour UTC window and only while the pipeline is running", async () => {
+  const window = { name: "maintenance", interval: intakeWindowMs, aligned: true };
+  // now is 12:00 UTC, the start of the third window.
+  assert.equal(jobDue(window, status({ startedAt: at(1), finishedAt: at(0), ok: true }), now), true, "11:59 belongs to the previous window");
+  assert.equal(jobDue(window, status({ startedAt: at(-1), finishedAt: at(-1), ok: true }), now + 5 * hour), false);
+  const root = join(await mkdtemp(join(tmpdir(), "prompix-worker-")), "pipeline");
+  let runs = 0;
+  const jobs = [{ ...intakeJob({}, async env => { runs++; assert.equal(env.PROMPIX_TRANSLATION_PROVIDER, "pipeline"); return 0; }), name: "intake" }];
+  await tick(root, at(0), jobs, { now: () => now });
+  assert.equal(runs, 0, "a stopped pipeline collects nothing");
+  await updateConfig(root, "codex", undefined, config => ({ ...config, desired: "running" }));
+  await tick(root, at(0), jobs, { now: () => now });
+  assert.equal(runs, 1);
 });
 
 test("each tick writes a heartbeat, runs a due job once and records success or failure", async () => {

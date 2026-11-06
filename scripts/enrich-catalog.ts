@@ -9,14 +9,12 @@ import { catalogSchema, type Prompt } from "../packages/schema/catalog.ts";
 import {
   applyEnrichment, packEnrichmentBatches, withLikenessDefault, reviewEnrichmentBatch, type EnrichmentCandidate, type EnrichmentImage, type EnrichmentOutcome,
 } from "../ingest/enrichment-review.ts";
-import { prepareJPEG } from "../ingest/images.ts";
+import { prepareEnrichmentMedia, type PreparedEnrichmentMedia } from "../ingest/enrichment-media.ts";
 import { trustSystemCertificates } from "../ingest/models/http.ts";
 import { createProvider, isProviderId, modelEnvironment } from "../ingest/models/registry.ts";
 import { ModelProviderError, type Effort } from "../ingest/models/types.ts";
-import { computePalette } from "../ingest/palette.ts";
 import { appendEvent, pipelineRoot } from "../ingest/pipeline-control.ts";
 import { recordExclusion, refusedIDs } from "../ingest/exclusion-log.ts";
-import { prepareVisualMedia, VisualMediaPreparationError } from "../ingest/visual-media.ts";
 import type { Palette } from "../packages/schema/enrichment.ts";
 import { withDailyStatus } from "../ingest/daily-status.ts";
 import { prepareDailyStaging, publishDailyCatalog, readPublicationHold } from "../ingest/daily-publication.ts";
@@ -35,7 +33,7 @@ const [command] = positionals;
 const work = values.work;
 if (!work || !isAbsolute(work)) throw new Error("--work /absolute/external/directory is required");
 
-type Prepared = { images: (EnrichmentImage & { sourceRole: string })[]; video?: { durationSeconds: number; hasAudio: boolean }; palette?: Palette; error?: string };
+type Prepared = PreparedEnrichmentMedia;
 
 async function loadCatalog(): Promise<Prompt[]> {
   if (!values.catalog) throw new Error("--catalog is required");
@@ -83,42 +81,9 @@ function sample(items: Prompt[], count: number): string[] {
   return picked;
 }
 
-/** Verified mirrored media only. Unknown labels get every image and all six frames, the
- * visual review's standard; settled labels get the cover (and two frames for video). */
-async function prepare(item: Prompt): Promise<Prepared> {
-  const directory = join(work!, "media", item.id), record = join(directory, "prepared.json");
-  if (await exists(record)) return json(record);
-  await rm(directory, { recursive: true, force: true });
-  await mkdir(directory, { recursive: true });
-  let prepared: Prepared;
-  if (!item.media?.imageURL) prepared = { images: [] };
-  else try {
-    // Text and web items can carry a preview image; they are prepared like a still image.
-    const media = await prepareVisualMedia(item.kind === "video" ? item : { ...item, kind: "image" }, directory);
-    // New items are also judged for minors, so they always get the full gallery and frames.
-    const full = values["full-media"] || item.presentation === "unknown" || !item.presentation;
-    const posters = media.attachments.filter(attachment => attachment.role !== "video-frame");
-    const frames = media.attachments.filter(attachment => attachment.role === "video-frame");
-    const chosen = [...(full ? posters : posters.slice(0, 1)), ...(full ? frames : frames.filter((_, index) => index === 1 || index === 4))];
-    const images: Prepared["images"] = [];
-    for (const [index, attachment] of chosen.entries()) {
-      const path = join(directory, `model-${index}.jpg`);
-      await prepareJPEG(attachment.path, path, 768);
-      images.push({ path, mediaType: "image/jpeg", role: attachment.role, sourceRole: attachment.id,
-        ...(attachment.timeSeconds !== undefined ? { timeSeconds: attachment.timeSeconds } : {}) });
-    }
-    prepared = {
-      images, palette: await computePalette(posters[0].path),
-      ...(media.coverage.mode === "sampled-frames" ? { video: { durationSeconds: media.coverage.durationSeconds, hasAudio: media.coverage.hasAudio } } : {}),
-    };
-  } catch (error) {
-    prepared = { images: [], error: error instanceof VisualMediaPreparationError ? error.code : (error as Error).message.slice(0, 200) };
-  }
-  // Keep only the downscaled model images; the verified originals and videos are not needed again.
-  for (const name of await readdir(directory)) if (name.startsWith("visual-")) await rm(join(directory, name), { recursive: true, force: true });
-  await writeFile(record, JSON.stringify(prepared, null, 2));
-  return prepared;
-}
+/** The full gallery for unknown labels (or with --full-media); otherwise the cover and two frames. */
+const prepare = (item: Prompt) => prepareEnrichmentMedia(item, join(work!, "media", item.id),
+  !!values["full-media"] || item.presentation === "unknown" || !item.presentation);
 
 /** Per-million-token list prices used to estimate spend; the console holds the real balance. */
 const prices: Record<string, { input: number; output: number; cachedInput: number }> = {
