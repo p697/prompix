@@ -253,6 +253,42 @@ import XCTest
         XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: directory.path).filter { $0.hasPrefix("detail-") }.count, 2)
     }
 
+    func testQuickServedPageNeverShowsTheDiskCacheFirst() async throws {
+        let cache = FeedCache(directory: directory.appending(path: "browse")), server = FeedStoreServer()
+        let query = FeedQuery(locale: "original", q: "warm")
+        await FeedStore(service: server, cache: cache).load(query)
+        await server.setFirst(FeedPage(schemaVersion: 3, release: FeedFixture.release,
+            items: [FeedFixture.card(id: "fresh-0"), FeedFixture.card(id: "fresh-1")], nextCursor: "next"))
+        let reopened = FeedStore(service: server, cache: cache, cacheGrace: .seconds(5))
+        await reopened.load(query)
+        XCTAssertEqual(reopened.items.map(\.id), ["fresh-0", "fresh-1"], "A quick answer replaces nothing on screen")
+        XCTAssertFalse(reopened.isCached)
+    }
+
+    func testLateServedPageContinuesBelowTheCachedCards() async throws {
+        let cache = FeedCache(directory: directory.appending(path: "browse")), server = FeedStoreServer()
+        let query = FeedQuery(locale: "original", q: "warm")
+        await FeedStore(service: server, cache: cache).load(query)
+        await server.setFirst(FeedPage(schemaVersion: 3, release: FeedFixture.release,
+            items: [FeedFixture.card(id: "warm-1"), FeedFixture.card(id: "fresh-0")], nextCursor: "next"))
+        await server.setDelay("warm", seconds: 0.6)
+        let reopened = FeedStore(service: server, cache: cache, cacheGrace: .milliseconds(50))
+        let load = Task { await reopened.load(query) }
+        try await Task.sleep(for: .milliseconds(300))
+        XCTAssertEqual(reopened.items.map(\.id), ["warm-0", "warm-1"]); XCTAssertTrue(reopened.isCached)
+        await load.value
+        XCTAssertEqual(reopened.items.map(\.id), ["warm-0", "warm-1", "fresh-0"], "Seen cards stay; the served page continues below")
+        XCTAssertFalse(reopened.isCached); XCTAssertEqual(reopened.nextCursor, "next")
+        await server.setDelay("warm", seconds: 0)
+        await server.setNext(FeedPage(schemaVersion: 3, release: FeedFixture.release,
+            items: [FeedFixture.card(id: "warm-0"), FeedFixture.card(id: "fresh-1")], nextCursor: nil))
+        await reopened.loadMore()
+        XCTAssertNil(reopened.failure)
+        XCTAssertEqual(reopened.items.map(\.id), ["warm-0", "warm-1", "fresh-0", "fresh-1"])
+        await reopened.load(query, force: true)
+        XCTAssertEqual(reopened.items.map(\.id), ["warm-1", "fresh-0"], "Pull refresh replaces the page")
+    }
+
     func testCorruptOrUnwritableBrowsingCacheCannotReplaceFreshNetworkData() async throws {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let blocked = directory.appending(path: "blocked")
@@ -270,6 +306,8 @@ private actor FeedStoreServer: FeedServing {
     private var delays: [String: TimeInterval] = [:]
     private var failure: FeedError?
     private var next: FeedPage?
+    private var first: FeedPage?
+    func setFirst(_ value: FeedPage) { first = value }
     func setDelay(_ q: String, seconds: TimeInterval) { delays[q] = seconds }
     func setFailure(_ value: FeedError?) { failure = value }
     func setNext(_ value: FeedPage) { next = value }
@@ -280,6 +318,7 @@ private actor FeedStoreServer: FeedServing {
         }
         if let failure { throw failure }
         if cursor != nil, let next { return next }
+        if cursor == nil, let first { return first }
         let start = cursor == nil ? 0 : 2, prefix = query.q.isEmpty ? "test" : query.q
         return FeedPage(schemaVersion: 3, release: FeedFixture.release,
                         items: (start..<(start + 2)).map { FeedFixture.card(id: "\(prefix)-\($0)") }, nextCursor: cursor == nil ? "next" : nil)

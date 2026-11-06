@@ -607,7 +607,7 @@ import UIKit
         XCTAssertEqual(pages.count, 1, "An appended page must not automatically drain the catalog")
     }
 
-    func testSavedLayoutSharesSettingsPositionAndPreservesSearch() throws {
+    func testSavedLayoutSharesSettingsPosition() throws {
         launch()
         let settingsFrame = app.buttons["discoveryFilters"].frame
         firstDetail()
@@ -618,15 +618,11 @@ import UIKit
         XCTAssertTrue(savedSettings.waitForExistence(timeout: 5))
         XCTAssertEqual(savedSettings.frame.minX, settingsFrame.minX, accuracy: 1)
         XCTAssertEqual(savedSettings.frame.minY, settingsFrame.minY, accuracy: 1)
-        let card = app.buttons["prompt-database-fixture-0"]
-        XCTAssertTrue(card.isHittable)
-        capture("motion-03-saved-gallery")
-        let field = app.searchFields.firstMatch
-        field.tap(); field.typeText("no-matching-item\n")
-        XCTAssertFalse(card.exists)
-        app.buttons["savedCreatorsScope"].tap()
-        XCTAssertFalse(card.exists)
-        capture("motion-04-saved-search-empty")
+        XCTAssertTrue(app.buttons["deck-all"].isHittable)
+        capture("motion-03-saved-decks")
+        app.buttons["创作者"].tap()
+        XCTAssertFalse(app.buttons["deck-all"].exists)
+        capture("motion-04-saved-creators")
     }
 
     func testSavedLayoutAtAccessibilityTextKeepsControlsReachable() throws {
@@ -636,12 +632,9 @@ import UIKit
         app.buttons["closePromptDetail"].tap()
         app.selectPrompixTab("收藏")
         XCTAssertTrue(app.buttons["savedSettings"].isHittable)
-        XCTAssertTrue(app.searchFields.firstMatch.isHittable)
-        XCTAssertTrue(app.buttons["savedPromptsScope"].isHittable)
-        XCTAssertTrue(app.buttons["savedCreatorsScope"].isHittable)
-        let filter = app.buttons["savedKindFilter"]
-        XCTAssertTrue(filter.isHittable)
-        XCTAssertFalse(filter.frame.intersects(app.buttons["savedCreatorsScope"].frame))
+        XCTAssertTrue(app.buttons["卡组"].isHittable)
+        XCTAssertTrue(app.buttons["创作者"].isHittable)
+        XCTAssertTrue(app.buttons["deck-all"].isHittable)
         capture("motion-accessibility-saved")
         try app.performAccessibilityAudit(for: [.hitRegion, .sufficientElementDescription])
         app.buttons["savedSettings"].tap()

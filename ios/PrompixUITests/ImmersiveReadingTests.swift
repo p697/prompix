@@ -174,6 +174,7 @@ import UIKit
         app.buttons["deckActions"].tap(); app.buttons["删除卡组"].tap()
         app.buttons["删除卡组"].firstMatch.tap()
         XCTAssertTrue(app.buttons["newDeck"].waitForExistence(timeout: 3))
+        app.buttons["deck-all"].tap()
         app.buttons["prompt-tiny-island"].press(forDuration: 0.8)
         app.buttons["取消收藏"].tap()
     }
@@ -258,14 +259,15 @@ import UIKit
         capture("filters-01-menu")
         app.buttons["filterUse"].tap()
         XCTAssertTrue(app.buttons["人像写真"].waitForExistence(timeout: 5)); app.buttons["人像写真"].tap()
-        XCTAssertTrue(app.staticTexts["筛选结果"].waitForExistence(timeout: 5))
+        XCTAssertEqual(filters.value as? String, "已筛选")
+        XCTAssertFalse(app.staticTexts["筛选结果"].exists, "A filtered feed keeps the board's context row")
         let card = app.scrollViews["discoveryScroll"].buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'prompt-'")).firstMatch
         XCTAssertTrue(card.waitForExistence(timeout: 15))
         filters.tap(); app.buttons["filterInputs"].tap(); app.buttons["可以用我的照片"].tap()
         XCTAssertTrue(card.waitForExistence(timeout: 15))
         capture("filters-02-portraits-with-my-photo")
-        app.buttons["清除筛选"].tap()
-        XCTAssertTrue(app.staticTexts["为你挑的"].waitForExistence(timeout: 5))
+        filters.tap(); app.buttons["clearFilters"].tap()
+        XCTAssertEqual(filters.value as? String, "")
     }
     func testRefinedChromeAndInteractiveReturn() {
         XCTAssertTrue(app.buttons["discoveryFilters"].waitForExistence(timeout: 10))
@@ -329,5 +331,4 @@ import UIKit
         app.buttons["editPromptAction"].tap()
         XCTAssertTrue(app.textViews["promptEditor"].waitForExistence(timeout: 3))
     }
-
 }

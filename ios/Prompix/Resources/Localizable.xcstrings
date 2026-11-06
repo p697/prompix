@@ -1,6 +1,183 @@
 {
   "sourceLanguage": "zh-Hans",
   "strings": {
+    "卡组 ▸ %lld 张": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "卡组 ▸ %lld 张"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "DECK ▸ %lld"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "STAPEL ▸ %lld"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "COLECCIÓN ▸ %lld"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "PLANCHE ▸ %lld"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "デッキ ▸ %lld 枚"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "덱 ▸ %lld장"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "COLEÇÃO ▸ %lld"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "卡組 ▸ %lld 張"
+          }
+        }
+      }
+    },
+    "还没有收藏": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "还没有收藏"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nothing saved yet"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Noch nichts gemerkt"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aún no has guardado nada"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rien d’enregistré pour l’instant"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "まだ保存したものはありません"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "아직 저장한 항목이 없어요"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nada salvo ainda"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "還沒有收藏"
+          }
+        }
+      }
+    },
+    "长按任何作品，或者点详情页右上角的书签，收藏的作品会一格一格显影在这里。": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "长按任何作品，或者点详情页右上角的书签，收藏的作品会一格一格显影在这里。"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Long-press any work, or tap the bookmark at the top of a detail. Saved works develop here, frame by frame."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Halte ein Werk gedrückt oder tippe oben in den Details auf das Lesezeichen. Gemerkte Werke entwickeln sich hier Bild für Bild."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mantén pulsada cualquier obra o toca el marcador arriba en el detalle. Lo que guardes se revelará aquí, fotograma a fotograma."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Appuyez longuement sur une œuvre, ou touchez le signet en haut du détail. Vos œuvres enregistrées se révèlent ici, image par image."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "作品を長押しするか、詳細画面右上のブックマークをタップ。保存した作品がここに一枚ずつ現像されます。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "작품을 길게 누르거나 상세 화면 오른쪽 위의 책갈피를 탭하세요. 저장한 작품이 여기에 한 칸씩 인화됩니다."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Toque e segure qualquer obra ou toque no marcador no topo do detalhe. O que você salvar será revelado aqui, quadro a quadro."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "長按任何作品，或者點詳情頁右上角的書籤，收藏的作品會一格一格顯影在這裡。"
+          }
+        }
+      }
+    },
     "": {
       "shouldTranslate": false
     },

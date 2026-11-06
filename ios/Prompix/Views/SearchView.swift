@@ -60,7 +60,7 @@ struct SearchView: View {
             }
             .accessibilityIdentifier("searchResults")
             .scrollDismissesKeyboard(.interactively)
-            .plainTopEdge().paperScreen()
+            .background(Palette.paper).foregroundStyle(Palette.ink)
             .navigationTitle(String(localized: "搜索"))
             .navigationBarTitleDisplayMode(.large)
             .searchable(text: searchText, isPresented: $searchPresented, prompt: String(localized: "搜索 Prompt、Skills 或创作者"))
