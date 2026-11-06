@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { englishCardSchema, enrichmentConsistencyIssues, enrichmentShape } from "./enrichment.ts";
 const https = z
   .url()
   .refine((value) => new URL(value).protocol === "https:", "HTTPS required");
@@ -34,6 +35,7 @@ export const promptSchema = z.object({
   localization: z.object({
     sourceLanguage: nonempty.max(40), sourceFingerprint: z.string().regex(/^[a-f0-9]{64}$/),
     translations: z.partialRecord(z.enum(localizationLanguages), translatedContent),
+    en: englishCardSchema.optional(),
   }).optional(),
   title: nonempty.max(250),
   summary: nonempty.max(4000),
@@ -75,8 +77,10 @@ export const promptSchema = z.object({
     .refine(media => !media.imageURLs || media.imageURL === media.imageURLs[0], "Gallery must start with its cover")
     .nullable(),
   presentation: z.enum(["general", "suggestive", "unknown", "explicit"]).optional(),
+  ...enrichmentShape,
   publishedAt: z.string().optional(),
 }).superRefine((item, validation) => {
+  for (const message of enrichmentConsistencyIssues(item)) validation.addIssue({ code: "custom", message });
   const { post, context, mediaPostID } = item.source;
   if (context) {
     const chain = [...context, ...(post ? [post] : [])];

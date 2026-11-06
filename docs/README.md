@@ -1,3 +1,5 @@
+**2.0 条目字段**：presentation、inputs、generation、variables、facets、英文卡片、palette、shots、rights 进入 schema（全部可选），配固定 facets 词表；一次模型调用产出除 palette（本地计算）和 sourceMetrics 外的全部字段。见[字段与合并审核](catalog-enrichment-2.0.md)。
+
 **Prompix 2.0 · 暗房 · 白**：界面只用黑、灰、白，作品是唯一的颜色；新配色、黑底三张白卡的 App Icon 与单色品牌标记先行落地，页面结构按设计稿分步还原。见[设计语言](design-language.md)。
 
 **混合语言说明恢复**：中文元数据不能直接复用时进入正常翻译；队列故障按真实阶段报告，未知请求不重放。见[恢复说明](backfill-campaign.md#mixed-language-metadata-recovery)。
