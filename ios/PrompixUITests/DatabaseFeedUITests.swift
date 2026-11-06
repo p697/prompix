@@ -769,6 +769,7 @@ import UIKit
         XCTAssertTrue(card.waitForExistence(timeout: 20)); card.tap()
         XCTAssertTrue(app.buttons["copyPrompt"].waitForExistence(timeout: 20))
         let pane = app.scrollViews["detailReadingPane"]
+        if !app.buttons["creatorByline"].exists { app.expandPromptInformation() }
         for _ in 0..<6 { if app.buttons["creatorByline"].isHittable { break }; pane.swipeUp() }
         XCTAssertTrue(app.buttons["creatorByline"].waitForExistence(timeout: 5)); app.buttons["creatorByline"].tap()
         let profile = app.scrollViews["creatorProfileScroll"]

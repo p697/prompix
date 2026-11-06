@@ -1503,6 +1503,7 @@ import CryptoKit
             capture("native-x-\(kind)-loaded-preview")
             app.buttons["完成"].tap()
             let byline = app.buttons["creatorByline"]
+            if !byline.exists { app.expandPromptInformation() }
             reveal(byline); byline.tap()
             XCTAssertTrue(app.buttons["saveCreator"].waitForExistence(timeout: 5))
             XCTAssertTrue(app.links["creatorExternalProfile"].exists || app.buttons["creatorExternalProfile"].exists)
@@ -1628,6 +1629,7 @@ import CryptoKit
         reveal(item)
         item.tap()
         XCTAssertTrue(app.buttons["copyPrompt"].waitForExistence(timeout: 5))
+        if !app.buttons["creatorByline"].exists { app.expandPromptInformation() }
         reveal(app.buttons["creatorByline"])
         capture("03-work-with-creator-attribution")
         app.buttons["creatorByline"].tap()
@@ -1907,6 +1909,7 @@ import CryptoKit
         reveal(card); card.tap()
         XCTAssertTrue(app.buttons["copyPrompt"].waitForExistence(timeout: 5))
         let byline = app.buttons["creatorByline"]
+        if !byline.exists { app.expandPromptInformation() }
         reveal(byline); byline.tap()
         XCTAssertTrue(app.buttons["saveCreator"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons.matching(identifier: "saveCreator").allElementsBoundByIndex.contains { $0.isHittable })
