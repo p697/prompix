@@ -11,6 +11,7 @@ struct ContentPreview: Identifiable {
     let displaySummary: String
     let excerpt: String
     let creator: Prompt.Creator?
+    let model: String
     let attribution: String
     let media: Prompt.Media?
     let cover: Prompt.Cover?
@@ -23,7 +24,7 @@ struct ContentPreview: Identifiable {
         id = item.id; kind = item.kind; isSkill = item.isSkill; artwork = item.artwork
         displayTitle = item.displayTitle; displaySummary = item.displaySummary
         excerpt = String((item.isSkill ? item.displaySummary : item.displayContent.prompt).prefix(800))
-        creator = item.creator; attribution = item.source.author ?? item.source.name; media = item.media
+        creator = item.creator; model = item.model; attribution = item.source.author ?? item.source.name; media = item.media
         cover = item.cover.map { value in
             Prompt.Cover(text: item.displayContent.cover?.text ?? value.text,
                          eyebrow: item.displayContent.cover?.eyebrow ?? value.eyebrow, tone: value.tone)
@@ -32,6 +33,6 @@ struct ContentPreview: Identifiable {
     init(_ card: FeedCard) {
         id = card.id; kind = card.kind; isSkill = card.contentType == "skill"; artwork = card.artwork
         displayTitle = card.title; displaySummary = card.summary; excerpt = String(card.summary.prefix(800))
-        creator = card.creator; attribution = card.creator?.displayName ?? card.model; media = card.media; cover = card.cover
+        creator = card.creator; model = card.model; attribution = card.creator?.displayName ?? card.model; media = card.media; cover = card.cover
     }
 }

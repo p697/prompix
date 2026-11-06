@@ -34,10 +34,10 @@ struct Artwork: View {
                 }
                 if item.kind == .video && showsVideoBadge {
                     VStack { Spacer(); HStack {
-                        Label(item.media?.videoURL == nil ? "0:06" : String(localized: "播放"), systemImage: "play.fill").font(.system(size: 11, weight: .medium, design: .monospaced))
-                            .foregroundStyle(.white).padding(.horizontal, 9).padding(.vertical, 6).background(.black.opacity(0.28), in: Capsule())
+                        Image(systemName: "play.fill").font(.system(size: 9, weight: .semibold))
+                            .foregroundStyle(.white).padding(.horizontal, 8).padding(.vertical, 6).background(.black.opacity(0.45), in: Capsule())
                         Spacer()
-                    }.padding(12) }
+                    }.padding(8) }
                 }
             }.frame(width: proxy.size.width, height: proxy.size.height).clipped().accessibilityHidden(true)
         }.accessibilityElement(children: .ignore).accessibilityHidden(true)
@@ -82,28 +82,21 @@ struct Artwork: View {
     private func noteArtwork(size: CGSize) -> some View {
         ZStack {
             noteColor
-            VStack(alignment: .leading, spacing: compact ? 6 : 12) {
-                HStack(spacing: 6) {
-                    Image(systemName: item.isSkill ? "square.stack.3d.up" : "text.quote")
-                    if !compact { Text(item.displayKind) }
-                    Spacer(minLength: 0)
-                }.font(.system(size: compact ? 12 : 10, weight: .medium))
-                    .foregroundStyle(Palette.muted)
-                Text(item.displayTitle)
-                    .font(.system(size: min(size.width * (compact ? 0.14 : 0.108), 23), weight: .regular, design: .default))
-                    .lineSpacing(3).lineLimit(4).fixedSize(horizontal: false, vertical: true).layoutPriority(1)
+            VStack(alignment: .leading, spacing: compact ? 6 : 10) {
                 if !compact {
-                    Text(noteExcerpt).font(.system(size: max(11, min(size.width * 0.068, 13))))
-                        .lineSpacing(4).lineLimit(3)
+                    Text(noteLabel).font(Typography.meta(size: 10)).tracking(1.2).lineLimit(1)
                         .foregroundStyle(Palette.muted)
                 }
+                Text(item.displayTitle)
+                    .font(Typography.prompt(size: min(size.width * (compact ? 0.13 : 0.1), 21)))
+                    .lineSpacing(3).lineLimit(compact ? 4 : 6).fixedSize(horizontal: false, vertical: true).layoutPriority(1)
                 Spacer(minLength: 0)
             }.foregroundStyle(Palette.ink).padding(size.width * 0.10)
         }
     }
-    private var noteExcerpt: String {
-        let text = item.excerpt
-        return text.replacingOccurrences(of: "\n", with: " ").trimmingCharacters(in: .whitespacesAndNewlines)
+    /// Film-edge meta: what kind of work, and which model it is written for.
+    private var noteLabel: String {
+        [item.displayKind, Prompt.localizedModel(item.model)].filter { !$0.isEmpty }.joined(separator: " ▸ ").uppercased()
     }
     private var noteColor: Color { item.isSkill ? Palette.soft : Palette.surface }
     private func photo(_ name: String, size: CGSize) -> some View {

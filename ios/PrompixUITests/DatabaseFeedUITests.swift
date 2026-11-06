@@ -11,7 +11,7 @@ import UIKit
     private func launch(_ options: [String] = []) {
         app.launchArguments = ["--feed-fixture", fixtureID, "-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh-Hans"] + options
         app.launchPrompix()
-        XCTAssertTrue(app.buttons["discoverySettings"].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.buttons["discoveryFilters"].waitForExistence(timeout: 15))
     }
     private var firstFixtureCard: XCUIElement {
         app.scrollViews["discoveryScroll"].buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'prompt-database-fixture-'" )).firstMatch
@@ -77,9 +77,7 @@ import UIKit
         XCTAssertGreaterThanOrEqual(Set(seeds()).count, 2, "Pull refresh must create a new candidate session")
         scroll.swipeUp(); capture("recommendations-refreshed-feed")
         scroll.swipeDown()
-        let settings = app.buttons["discoverySettings"]
-        if !settings.isHittable { scroll.swipeDown() }
-        settings.tap()
+        app.openPrompixSettings()
         let preferences = app.buttons["recommendationPreferences"]
         for _ in 0..<4 { if preferences.isHittable { break }; app.swipeUp() }
         XCTAssertTrue(preferences.waitForExistence(timeout: 5)); preferences.tap()
@@ -132,7 +130,7 @@ import UIKit
         try data.write(to: directory().appending(path: "catalog.json"), options: .atomic)
         app.launchArguments = ["--feed-legacy-test", fixtureID, "--cached-only", "-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh-Hans"]
         app.launchPrompix()
-        XCTAssertTrue(app.buttons["discoverySettings"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["discoveryFilters"].waitForExistence(timeout: 10))
         app.selectPrompixTab("搜索")
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 3))
         app.typeText("portrait\n")
@@ -188,11 +186,11 @@ import UIKit
         scroll.swipeUp(); capture("visual-feed-02-first-screen")
         scroll.swipeUp(); capture("visual-feed-03-second-screen")
         app.terminate(); launch(["--feed-visual-mix-test"])
-        app.buttons["discoveryFilters"].tap(); app.buttons["最新收录"].tap()
+        app.buttons["discoverySort"].tap(); app.buttons["最新收录"].tap()
         XCTAssertTrue(app.buttons["prompt-database-fixture-9999"].waitForExistence(timeout: 10))
         XCTAssertTrue(try requests().contains { $0["operation"] as? String == "page" && $0["query"] as? String == "__latest__" })
         capture("visual-feed-04-explicit-latest")
-        app.buttons["discoveryFilters"].tap(); app.buttons["推荐"].tap()
+        app.buttons["discoverySort"].tap(); app.buttons["推荐"].tap()
         XCTAssertTrue(firstVisual.waitForExistence(timeout: 10))
     }
 
@@ -200,7 +198,7 @@ import UIKit
         launch(["--feed-home-loading-test"])
         let root = try directory()
         let creators = app.buttons["allCreators"], collections = app.buttons["allCollections"]
-        let heading = app.buttons["discoveryFilters"]
+        let heading = app.buttons["discoverySort"]
         XCTAssertTrue(collections.waitForExistence(timeout: 5))
         XCTAssertTrue(heading.waitForExistence(timeout: 5))
         let anchors = [creators.frame.minY, collections.frame.minY, heading.frame.minY]
@@ -274,7 +272,7 @@ import UIKit
     func testHomeFailureAndRetryKeepReservedSpace() throws {
         launch(["--feed-home-loading-test"])
         let root = try directory()
-        let collections = app.buttons["allCollections"], heading = app.buttons["discoveryFilters"]
+        let collections = app.buttons["allCollections"], heading = app.buttons["discoverySort"]
         XCTAssertTrue(heading.waitForExistence(timeout: 5))
         let positions = [collections.frame.minY, heading.frame.minY]
         for gate in ["directory", "browse"] {
@@ -449,7 +447,7 @@ import UIKit
         launch()
         XCTAssertTrue(firstFixtureCard.waitForExistence(timeout: 15))
         let allID = firstFixtureCard.identifier
-        let settings = app.buttons["discoverySettings"], top = settings.frame.minY
+        let settings = app.buttons["discoveryFilters"], top = settings.frame.minY
         app.buttons["kind-image"].tap()
         XCTAssertTrue(firstFixtureCard.waitForExistence(timeout: 10))
         let imageID = firstFixtureCard.identifier
@@ -489,7 +487,7 @@ import UIKit
     func testDiscoveryHeaderCollapsesRevealsAndResetsAfterFiltering() throws {
         launch()
         let scroll = app.scrollViews["discoveryScroll"]
-        let settings = app.buttons["discoverySettings"]
+        let settings = app.buttons["discoveryFilters"]
         XCTAssertTrue(firstFixtureCard.waitForExistence(timeout: 15))
         XCTAssertTrue(settings.isHittable)
         let expandedSettingsTop = settings.frame.minY
@@ -521,7 +519,7 @@ import UIKit
 
     func testHomeUsesLatestOrderWithoutLaunchBannerAndPullRefreshes() async throws {
         launch()
-        app.buttons["discoveryFilters"].tap()
+        app.buttons["discoverySort"].tap()
         app.buttons["最新收录"].tap()
         let newest = app.buttons["prompt-database-fixture-9999"]
         XCTAssertTrue(newest.waitForExistence(timeout: 15))
@@ -560,7 +558,7 @@ import UIKit
         app.buttons["kind-all"].tap()
         XCTAssertTrue(added.waitForExistence(timeout: 10))
         app.terminate(); launch(["--feed-fixture-offline"])
-        app.buttons["discoveryFilters"].tap(); app.buttons["最新收录"].tap()
+        app.buttons["discoverySort"].tap(); app.buttons["最新收录"].tap()
         XCTAssertTrue(added.waitForExistence(timeout: 10))
         XCTAssertFalse(app.otherElements["catalogUpdateStatus"].exists)
         capture("refresh-04-offline-cache")
@@ -609,7 +607,7 @@ import UIKit
 
     func testSavedLayoutSharesSettingsPositionAndPreservesSearch() throws {
         launch()
-        let settingsFrame = app.buttons["discoverySettings"].frame
+        let settingsFrame = app.buttons["discoveryFilters"].frame
         firstDetail()
         app.buttons["detailFavorite"].tap()
         app.buttons["closePromptDetail"].tap()
@@ -769,7 +767,7 @@ import UIKit
         guard ProcessInfo.processInfo.environment["PROMPIX_DATABASE_LIVE_UI"] == "1" else { throw XCTSkip("Explicit live acceptance only") }
         app.launchArguments = ["--feed-live-test", fixtureID, "-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh-Hans"]
         app.launchPrompix()
-        XCTAssertTrue(app.buttons["discoverySettings"].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.buttons["discoveryFilters"].waitForExistence(timeout: 15))
         capture("polish-live-01-home")
         search("盐水礼服")
         let card = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'prompt-'")).firstMatch
@@ -801,7 +799,7 @@ import UIKit
         guard ProcessInfo.processInfo.environment["PROMPIX_DATABASE_LIVE_UI"] == "1" else { throw XCTSkip("Explicit live acceptance only") }
         app.launchArguments = ["--feed-live-test", fixtureID, "-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh-Hans"]
         app.launchPrompix()
-        XCTAssertTrue(app.buttons["discoverySettings"].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.buttons["discoveryFilters"].waitForExistence(timeout: 15))
         for (query, id) in [("给想逃离", "tiny-island"), ("把品牌网站变成", "x-post-2109576638136795289")] {
             search(query)
             let card = app.buttons["prompt-\(id)"]
@@ -828,7 +826,7 @@ import UIKit
             app.launchArguments = ["--feed-live-test", fixtureID, "-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh-Hans"]
             if offline { app.launchArguments += ["--simulate-network-failure"] }
             app.launchPrompix()
-            XCTAssertTrue(app.buttons["discoverySettings"].waitForExistence(timeout: 15))
+            XCTAssertTrue(app.buttons["discoveryFilters"].waitForExistence(timeout: 15))
         }
         openLive()
         let (feedData, feedResponse) = try await URLSession.shared.data(from: URL(string: "https://api.prompix.dev/v3/feed?sort=latest&locale=zh-Hans&limit=30")!)
@@ -899,7 +897,7 @@ import UIKit
         func open(_ mode: String) {
             app.launchArguments = [mode, fixtureID, "-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh-Hans"]
             app.launchPrompix()
-            XCTAssertTrue(app.buttons["discoverySettings"].waitForExistence(timeout: 15))
+            XCTAssertTrue(app.buttons["discoveryFilters"].waitForExistence(timeout: 15))
         }
         open("--feed-legacy-test")
         let path = try directory()

@@ -30,14 +30,14 @@ struct FeedResults: View {
                         ContentActivityLabel(size: 40)
                     }.frame(minHeight: 44).padding(.horizontal, 16)
                 }
-                PromptGrid(items: offlineItems).padding(.horizontal, 12)
+                PromptGrid(items: offlineItems).padding(.horizontal, PromptGridLayout.inset)
             }
             if !showsFallback {
                 // Keep measured column geometry mounted through cold loads.
                 ZStack(alignment: .top) {
                     PreviewMasonryGrid(items: items, preview: ContentPreview.init, cell: { FeedPromptCard(card: $0) }, suppliedLayout: layout)
                     if waiting && items.isEmpty { FeedLoadingGrid() }
-                }.padding(.horizontal, 12)
+                }.padding(.horizontal, PromptGridLayout.inset)
             }
             if waiting {
                 if !items.isEmpty && !showsFallback { ContentActivityLabel(size: 48).frame(maxWidth: .infinity) }
@@ -86,20 +86,16 @@ struct PromptCardFace: View {
     @Environment(\.dynamicTypeSize) private var typeSize
     private var titleIsInArtwork: Bool { preview.usesTextArtwork }
     var body: some View {
-        VStack(alignment: .leading, spacing: PromptCardGeometry.titleSpacing) {
+        Group {
             if typeSize.isAccessibilitySize && titleIsInArtwork {
                 VStack(alignment: .leading, spacing: 12) {
                     Text(preview.displayTitle).font(.headline).foregroundStyle(.primary)
                     Text(preview.displaySummary).font(.subheadline).foregroundStyle(Palette.muted)
                 }.fixedSize(horizontal: false, vertical: true).frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(20).background(Palette.soft, in: RoundedRectangle(cornerRadius: 6))
+                    .padding(20).background(Palette.soft, in: RoundedRectangle(cornerRadius: PromptCardGeometry.cornerRadius, style: .continuous))
             } else {
                 Artwork(preview: preview, fillsFrame: true).aspectRatio(PromptCardGeometry.aspectRatio(for: preview), contentMode: .fit)
-                    .clipShape(RoundedRectangle(cornerRadius: titleIsInArtwork ? 6 : 4, style: .continuous))
-            }
-            if !titleIsInArtwork {
-                Text(preview.displayTitle).font(.footnote).foregroundStyle(Palette.ink)
-                    .lineLimit(typeSize.isAccessibilitySize ? nil : 2).multilineTextAlignment(.leading).padding(.horizontal, 2)
+                    .clipShape(RoundedRectangle(cornerRadius: PromptCardGeometry.cornerRadius, style: .continuous))
             }
         }.contentShape(Rectangle())
     }

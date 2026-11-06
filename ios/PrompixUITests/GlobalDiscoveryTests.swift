@@ -20,7 +20,7 @@ import CryptoKit
         app.launchArguments = ["-AppleLanguages", "(\(language))", "-AppleLocale", language]
         if !online { app.launchArguments.insert("--cached-only", at: 0) }
         app.launchPrompix()
-        XCTAssertTrue(app.buttons["discoverySettings"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["discoveryFilters"].waitForExistence(timeout: 10))
     }
 
     private func capture(_ name: String) {
@@ -113,9 +113,9 @@ import CryptoKit
             drag(0.78, 0.32)
             capture("feed-02-scroll-\(index)")
         }
-        XCTAssertFalse(app.buttons["discoverySettings"].isHittable)
+        XCTAssertFalse(app.buttons["discoveryFilters"].isHittable)
         drag(0.42, 0.58)
-        XCTAssertTrue(app.buttons["discoverySettings"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["discoveryFilters"].waitForExistence(timeout: 3))
         capture("feed-03-header-return")
         app.selectPrompixTab("搜索")
         let field = app.searchFields.firstMatch
@@ -367,14 +367,15 @@ import CryptoKit
         // Retry now reaches the real production manifest and language artifacts.
         try FileManager.default.createDirectory(at: recoveryURL(current).deletingLastPathComponent(), withIntermediateDirectories: true)
         try Data("restored".utf8).write(to: recoveryURL(current), options: .atomic)
-        app.buttons["discoverySettings"].tap()
+        app.openPrompixSettings()
         let check = app.buttons["检查内容更新"]
         reveal(check); check.tap()
         XCTAssertTrue(check.waitForExistence(timeout: 90))
         XCTAssertTrue(check.isEnabled)
         XCTAssertFalse(app.staticTexts["内容更新未完成"].exists)
         app.buttons["完成"].tap()
-        XCTAssertTrue(app.buttons["discoverySettings"].isHittable)
+        app.selectPrompixTab("发现")
+        XCTAssertTrue(app.buttons["discoveryFilters"].isHittable)
         capture("network-04-live-retry-completed")
         openOriginalEditor()
         XCTAssertEqual(editor.value as? String, edited)
@@ -446,7 +447,7 @@ import CryptoKit
         if FileManager.default.fileExists(atPath: cache.path) { try FileManager.default.removeItem(at: cache) }
         app.launchArguments = ["--cached-only", "--simulate-network-failure", "--simulate-slow-image-failure", "-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh-Hans"]
         app.launchPrompix()
-        XCTAssertTrue(app.buttons["discoverySettings"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["discoveryFilters"].waitForExistence(timeout: 10))
         openTarget()
         preview().tap()
         let retry = app.buttons["loadFullImage"]
@@ -1796,7 +1797,7 @@ import CryptoKit
             visitedIDs.formUnion(after)
             for _ in 0..<5 { scrollFeed(forward: false) }
         }
-        XCTAssertTrue(app.buttons["discoverySettings"].exists)
+        XCTAssertTrue(app.buttons["discoveryFilters"].exists)
         XCTAssertGreaterThan(visitedIDs.count, initialIDs.count)
         let directory = try acceptanceDirectory()
         XCTAssertEqual(try readSnapshot(CatalogSnapshot.self, from: directory, file: "catalog.json").version, catalog.version)
@@ -1930,8 +1931,8 @@ import CryptoKit
         XCTAssertTrue(app.buttons["saveCreator"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.tabBars.buttons["收藏"].isHittable)
         app.goBackInPrompix()
-        XCTAssertTrue(app.buttons["discoverySettings"].waitForExistence(timeout: 5))
-        app.buttons["discoverySettings"].tap()
+        XCTAssertTrue(app.buttons["discoveryFilters"].waitForExistence(timeout: 5))
+        app.openPrompixSettings()
         XCTAssertTrue(app.buttons["replayOnboarding"].waitForExistence(timeout: 5))
         capture("refinement-live-settings")
         app.buttons["完成"].tap()
@@ -2044,5 +2045,12 @@ extension XCUIApplication {
         let target = tab.exists ? tab : buttons.matching(NSPredicate(format: "label == %@", title)).firstMatch
         XCTAssertTrue(target.waitForExistence(timeout: 5))
         target.tap()
+    }
+    /// Settings live in the Saved tab's header.
+    @MainActor func openPrompixSettings() {
+        selectPrompixTab("收藏")
+        let settings = buttons["savedSettings"]
+        XCTAssertTrue(settings.waitForExistence(timeout: 5))
+        settings.tap()
     }
 }

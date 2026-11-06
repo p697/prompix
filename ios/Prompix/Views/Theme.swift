@@ -56,6 +56,10 @@ enum Typography {
     static func editorial(_ style: Font.TextStyle) -> Font {
         .system(style, design: .default, weight: .regular)
     }
+    /// Prompt text reads like print: New York.
+    static func prompt(size: CGFloat) -> Font { .system(size: size, weight: .regular, design: .serif) }
+    /// Parameters such as kind, model and ratio read like film-edge printing: SF Mono.
+    static func meta(size: CGFloat) -> Font { .system(size: size, weight: .regular, design: .monospaced) }
 }
 
 extension View {
@@ -116,7 +120,7 @@ struct KindPicker: View {
     }
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 18) {
+            HStack(spacing: 2) {
                 choice(nil, title: String(localized: "全部"))
                 ForEach(PromptKind.allCases) { choice($0, title: $0.title) }
                 Button { select(nil, skills: true) } label: {
@@ -144,16 +148,17 @@ struct KindPicker: View {
             .accessibilityAddTraits(selected ? .isSelected : [])
             .accessibilityIdentifier("kind-\(kind?.rawValue ?? "all")")
     }
+    // The selected kind is a solid capsule; the others are plain text.
     private func choiceLabel(_ title: String, selected: Bool) -> some View {
         Text(title).font(.subheadline.weight(selected ? .semibold : .regular))
-            .foregroundStyle(selected ? Palette.accent : Palette.muted)
-            .padding(.horizontal, 2).frame(minWidth: 44, minHeight: 48)
-            .overlay(alignment: .bottom) {
+            .foregroundStyle(selected ? Palette.paper : Palette.muted)
+            .padding(.horizontal, 14).frame(minHeight: 34)
+            .background {
                 if selected {
-                    Capsule().fill(Palette.accent).frame(height: 2)
-                        .matchedGeometryEffect(id: "kind-selection", in: selectionLine)
+                    Capsule().fill(Palette.accent).matchedGeometryEffect(id: "kind-selection", in: selectionLine)
                 }
-            }.contentShape(Rectangle())
+            }
+            .frame(minWidth: 44, minHeight: 48).contentShape(Rectangle())
     }
 }
 

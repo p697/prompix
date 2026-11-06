@@ -14,7 +14,7 @@ import XCTest
         XCTAssertTrue(preview.isSkill)
         XCTAssertFalse(preview.usesTextArtwork)
         XCTAssertEqual(PromptCardGeometry.aspectRatio(for: preview), 1.5)
-        XCTAssertGreaterThan(PromptCardGeometry.height(for: preview, width: 156, titleFont: .preferredFont(forTextStyle: .footnote)), 104)
+        XCTAssertEqual(PromptCardGeometry.height(for: preview, width: 156), 104)
     }
     func testSynchronousDetailReuseRequiresMatchingRevisionAndDownloadedLocale() async throws {
         let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
