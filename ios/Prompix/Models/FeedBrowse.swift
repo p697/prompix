@@ -1,6 +1,26 @@
 import Foundation
 import Observation
 
+/// Facet names from packages/schema/facets.json, the one vocabulary shared with the service.
+enum FacetCatalog {
+    struct Facet: Decodable { let id: String; let zh: String; let en: String }
+    static let names: [String: (zh: String, en: String)] = {
+        guard let url = Bundle.main.url(forResource: "facets", withExtension: "json"),
+              let data = try? Data(contentsOf: url),
+              let groups = try? JSONDecoder().decode([String: [Facet]].self, from: data) else { return [:] }
+        return Dictionary(groups.values.joined().map { ($0.id, ($0.zh, $0.en)) }, uniquingKeysWith: { first, _ in first })
+    }()
+    static func name(_ id: String) -> String? {
+        guard let value = names[id] else { return nil }
+        return Locale.preferredLanguages.first?.hasPrefix("zh") == true ? value.zh : value.en
+    }
+    /// Model families as people name them. "other" is mostly unnamed models, so it is never offered.
+    static let modelFamilies: [String: String] = [
+        "gpt-image": "GPT Image", "nano-banana": "Nano Banana", "midjourney": "Midjourney", "seedance": "Seedance",
+        "veo": "Veo", "kling": "Kling", "flux": "Flux", "claude": "Claude", "gpt": "GPT", "gemini": "Gemini",
+    ]
+}
+
 enum FeedCollections {
     struct Definition: Decodable { let tags: [String]; let kind: String? }
     static let definitions: [String: Definition] = {
