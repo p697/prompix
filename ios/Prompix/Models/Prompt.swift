@@ -32,6 +32,13 @@ struct Prompt: Codable, Identifiable, Hashable {
     var localization: Localization? = nil
     var presentation: String? = nil
     var publishedAt: String? = nil
+    var inputs: Inputs? = nil
+    var generation: Generation? = nil
+    var variables: [Variable]? = nil
+    var facets: Facets? = nil
+    var palette: [Swatch]? = nil
+    var shots: [Shot]? = nil
+    var rights: Rights? = nil
     // Local snapshot metadata; never sent to the content service or included in
     // source fingerprints. It keeps saved and open details on their own revision.
     var feedRevision: String? = nil
@@ -126,6 +133,60 @@ struct Prompt: Codable, Identifiable, Hashable {
         let sourceLanguage: String
         let sourceFingerprint: String
         let translations: [String: TranslatedContent]
+        /// English card text for items without a full English translation.
+        var en: CardText? = nil
+    }
+    struct CardText: Codable, Hashable, Sendable {
+        let title: String
+        let summary: String
+    }
+
+    // Prompix 2.0 fields, defined in packages/schema/enrichment.ts. Every one is
+    // optional; vocabularies stay plain strings so a newer server value never makes
+    // this app reject a card. `enrichmentSanitized()` drops anything malformed.
+    struct Inputs: Codable, Hashable, Sendable {
+        let requirement: String
+        var count: Int? = nil
+        let kinds: [String]
+        var ownLikenessOnly: Bool? = nil
+    }
+    struct Generation: Codable, Hashable, Sendable {
+        let modelFamily: String
+        var modelVersion: String? = nil
+        let mode: String
+        var outputAspect: String? = nil
+        var durationSeconds: Double? = nil
+        var hasAudio: Bool? = nil
+    }
+    struct Bilingual: Codable, Hashable, Sendable {
+        let zh: String
+        let en: String
+    }
+    struct Variable: Codable, Hashable, Sendable {
+        let token: String
+        let name: Bilingual
+        var `default`: String? = nil
+        var hint: Bilingual? = nil
+    }
+    struct Facets: Codable, Hashable, Sendable {
+        let useCase: [String]
+        let style: [String]
+        let subject: [String]
+    }
+    struct Swatch: Codable, Hashable, Sendable {
+        let hex: String
+        let weight: Double
+    }
+    struct Shot: Codable, Hashable, Sendable {
+        let index: Int
+        var startSec: Double? = nil
+        var endSec: Double? = nil
+        let text: String
+    }
+    struct Rights: Codable, Hashable, Sendable {
+        let license: String
+        let basis: String
+        let imageExport: Bool
     }
     struct TranslatedContent: Codable, Hashable {
         let title: String
@@ -317,5 +378,68 @@ enum SupportLinks {
         parts.path = prefix + (page.rawValue.isEmpty ? "" : "/\(page.rawValue)")
         if page == .report, let contentID { parts.queryItems = [URLQueryItem(name: "id", value: contentID)] }
         return parts.url!
+    }
+}
+
+extension Prompt.Inputs {
+    var isValid: Bool {
+        ["none", "optional", "required"].contains(requirement) && kinds.count <= 6 && Set(kinds).count == kinds.count
+            && (requirement == "none") == kinds.isEmpty && (count.map { (1...8).contains($0) } ?? true)
+            && (ownLikenessOnly == nil || kinds.contains("face"))
+    }
+}
+extension Prompt.Generation {
+    var isValid: Bool {
+        FeedValidation.text(modelFamily, max: 40) && FeedValidation.text(mode, max: 20)
+            && (modelVersion.map { FeedValidation.text($0, max: 40) } ?? true)
+            && (outputAspect.map { $0.wholeMatch(of: /[1-9]\d{0,2}:[1-9]\d{0,2}/) != nil } ?? true)
+            && (durationSeconds.map { $0 > 0 && $0 <= 3600 } ?? true)
+    }
+}
+extension Prompt.Facets {
+    var isValid: Bool {
+        [(useCase, 2), (style, 3), (subject, 3)].allSatisfy { values, limit in
+            values.count <= limit && Set(values).count == values.count && values.allSatisfy { FeedValidation.text($0, max: 40) }
+        }
+    }
+}
+enum Enrichment {
+    static func palette(_ value: [Prompt.Swatch]?) -> [Prompt.Swatch]? {
+        guard let value, value.count == 3,
+              value.allSatisfy({ $0.hex.wholeMatch(of: /#[0-9A-F]{6}/) != nil && (0...1).contains($0.weight) }),
+              zip(value, value.dropFirst()).allSatisfy({ $0.weight >= $1.weight }),
+              value.reduce(0, { $0 + $1.weight }) <= 1.0001 else { return nil }
+        return value
+    }
+    static func rights(_ value: Prompt.Rights?) -> Prompt.Rights? {
+        guard let value, FeedValidation.text(value.license, max: 80), ["license", "attribution-only"].contains(value.basis),
+              value.basis == "license" || !value.imageExport else { return nil }
+        return value
+    }
+    static func card(_ value: Prompt.CardText?) -> Prompt.CardText? {
+        guard let value, FeedValidation.text(value.title, max: 250), FeedValidation.text(value.summary, max: 4000) else { return nil }
+        return value
+    }
+}
+
+extension Prompt {
+    /// Keeps only well-formed 2.0 fields. Variables must point at text in the prompt.
+    func enrichmentSanitized() -> Prompt {
+        var item = self
+        if item.inputs?.isValid == false { item.inputs = nil }
+        if item.generation?.isValid == false { item.generation = nil }
+        if item.facets?.isValid == false { item.facets = nil }
+        item.palette = Enrichment.palette(item.palette)
+        item.rights = Enrichment.rights(item.rights)
+        if let variables = item.variables, variables.count > 16 || Set(variables.map(\.token)).count != variables.count
+            || !variables.allSatisfy({ FeedValidation.text($0.token, max: 120) && item.prompt.contains($0.token) }) { item.variables = nil }
+        if let shots = item.shots, shots.count < 2 || shots.count > 64 || shots.enumerated().contains(where: { offset, shot in
+            shot.index != offset + 1 || !FeedValidation.text(shot.text, max: 2000)
+                || (shot.startSec != nil && shot.endSec != nil && shot.endSec! <= shot.startSec!)
+        }) { item.shots = nil }
+        if let localization = item.localization, localization.en != nil, Enrichment.card(localization.en) == nil {
+            item.localization?.en = nil
+        }
+        return item
     }
 }

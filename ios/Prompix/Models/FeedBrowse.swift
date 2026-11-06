@@ -22,11 +22,23 @@ struct FeedBrowse: Codable, Sendable {
         let count: Int
         var id: String { name }
     }
+    /// A vocabulary id with its count, for facets and model families.
+    struct Count: Codable, Identifiable, Hashable, Sendable {
+        let id: String
+        let count: Int
+    }
+    struct FacetCounts: Codable, Hashable, Sendable {
+        let useCase: [Count]
+        let style: [Count]
+        let subject: [Count]
+    }
     let schemaVersion: Int
     let release: String
     let collections: [Topic]
     let models: [Model]
     let modelCount: Int
+    var facets: FacetCounts? = nil
+    var modelFamilies: [Count]? = nil
     func validated(locale: String) throws -> Self {
         guard schemaVersion == 3, FeedValidation.release(release), collections.count <= 50,
               Set(collections.map(\.id)).count == collections.count,
@@ -38,7 +50,15 @@ struct FeedBrowse: Codable, Sendable {
             for card in topic.covers { _ = try card.validated(locale: locale) }
         }
         guard models.allSatisfy({ FeedValidation.text($0.name, max: 200) && (1...100000).contains($0.count) }) else { throw FeedError.invalidResponse }
-        return self
+        // Optional 2.0 counts are dropped when malformed instead of failing browse.
+        func valid(_ counts: [Count]) -> Bool {
+            counts.count <= 100 && Set(counts.map(\.id)).count == counts.count
+                && counts.allSatisfy { FeedValidation.text($0.id, max: 40) && (0...100000).contains($0.count) }
+        }
+        var value = self
+        if let facets, ![facets.useCase, facets.style, facets.subject].allSatisfy(valid) { value.facets = nil }
+        if let modelFamilies, !valid(modelFamilies) { value.modelFamilies = nil }
+        return value
     }
 }
 

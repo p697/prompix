@@ -181,7 +181,7 @@ struct FeedCheckpoint: Codable {
         if let metadata = fresh.localization ?? snapshot.localization {
             let translations = (snapshot.localization?.translations ?? [:]).merging(fresh.localization?.translations ?? [:]) { _, value in value }
                 .filter { available.contains($0.key) }
-            item.localization = Prompt.Localization(sourceLanguage: metadata.sourceLanguage, sourceFingerprint: metadata.sourceFingerprint, translations: translations)
+            item.localization = Prompt.Localization(sourceLanguage: metadata.sourceLanguage, sourceFingerprint: metadata.sourceFingerprint, translations: translations, en: metadata.en)
         }
         return item
     }

@@ -25,6 +25,11 @@ struct FeedCard: Codable, Identifiable, Hashable, Sendable {
     let availableLanguages: [String]
     var topics: [String]? = nil
     var presentation: String? = nil
+    var facets: Prompt.Facets? = nil
+    var generation: Prompt.Generation? = nil
+    var inputs: Prompt.Inputs? = nil
+    var palette: [Prompt.Swatch]? = nil
+    var rights: Prompt.Rights? = nil
 
     func validated(locale: String) throws -> Self {
         guard FeedValidation.id(id), FeedValidation.revision(revision), ["prompt", "skill"].contains(contentType),
@@ -42,7 +47,14 @@ struct FeedCard: Codable, Identifiable, Hashable, Sendable {
             guard cover.text.utf16.count <= 500, cover.eyebrow.utf16.count <= 500,
                   cover.tone.utf16.count <= 100 else { throw FeedError.invalidResponse }
         }
-        return self
+        // Malformed 2.0 fields are dropped rather than hiding the work.
+        var card = self
+        if card.facets?.isValid == false { card.facets = nil }
+        if card.generation?.isValid == false { card.generation = nil }
+        if card.inputs?.isValid == false { card.inputs = nil }
+        card.palette = Enrichment.palette(card.palette)
+        card.rights = Enrichment.rights(card.rights)
+        return card
     }
 }
 
@@ -55,8 +67,7 @@ struct FeedPage: Codable, Sendable {
         guard schemaVersion == 3, FeedValidation.release(release), expected == nil || release == expected,
               items.count <= limit, Set(items.map(\.id)).count == items.count,
               FeedValidation.cursor(nextCursor), nextCursor == nil || !items.isEmpty else { throw FeedError.invalidResponse }
-        for item in items { _ = try item.validated(locale: locale) }
-        return self
+        return FeedPage(schemaVersion: schemaVersion, release: release, items: try items.map { try $0.validated(locale: locale) }, nextCursor: nextCursor)
     }
 }
 
@@ -77,7 +88,7 @@ struct FeedDetail: Codable, Sendable {
         if let localization = item.localization {
             guard localization.sourceFingerprint == LanguagePackCatalog.sourceFingerprint(item) else { throw FeedError.invalidResponse }
         }
-        return self
+        return FeedDetail(schemaVersion: schemaVersion, revision: revision, item: item.enrichmentSanitized(), availableLanguages: availableLanguages)
     }
 }
 
@@ -151,6 +162,11 @@ struct FeedQuery: Codable, Hashable, Sendable {
     var q = ""
     var sort: String?
     var seed: String?
+    // 2.0 filters; the service rejects values outside its vocabularies.
+    var facet: String?
+    var mode: String?
+    var inputs: String?
+    var modelFamily: String?
 
     func validated() throws -> Self {
         var value = self
@@ -160,6 +176,9 @@ struct FeedQuery: Codable, Hashable, Sendable {
               creator == nil || FeedValidation.text(creator!, max: 200),
               tag == nil || FeedValidation.text(tag!, max: 100), model == nil || FeedValidation.text(model!, max: 200) else { throw FeedError.invalidQuery }
         guard !["discovery", "recommended"].contains(sort ?? "") || q.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw FeedError.invalidQuery }
+        guard [facet, mode, modelFamily].allSatisfy({ $0.map { $0.utf8.count <= 40 && $0.utf8.allSatisfy { (97...122).contains($0) || (48...57).contains($0) || $0 == 45 } } ?? true }),
+              inputs == nil || ["none", "optional", "required"].contains(inputs!),
+              mode == nil || ["t2i", "i2i", "t2v", "i2v", "v2v", "text", "web", "skill"].contains(mode!) else { throw FeedError.invalidQuery }
         guard seed == nil || (sort == "recommended" && seed!.count == 32 && seed!.utf8.allSatisfy { (48...57).contains($0) || (97...102).contains($0) }) else { throw FeedError.invalidQuery }
         value.q = String(q.decomposedStringWithCompatibilityMapping.unicodeScalars.filter { !(0x300...0x36f).contains($0.value) })
             .precomposedStringWithCompatibilityMapping.lowercased().split(whereSeparator: \.isWhitespace).joined(separator: " ")
@@ -168,7 +187,8 @@ struct FeedQuery: Codable, Hashable, Sendable {
     }
     var parameters: [URLQueryItem] {
         var values = [URLQueryItem(name: "locale", value: locale)]
-        for (name, value) in [("sort", sort), ("seed", seed), ("kind", kind), ("collection", collection), ("creator", creator), ("tag", tag), ("model", model), ("q", q.isEmpty ? nil : q)] {
+        for (name, value) in [("sort", sort), ("seed", seed), ("kind", kind), ("collection", collection), ("creator", creator), ("tag", tag), ("model", model),
+                              ("facet", facet), ("mode", mode), ("inputs", inputs), ("modelFamily", modelFamily), ("q", q.isEmpty ? nil : q)] {
             if let value { values.append(URLQueryItem(name: name, value: value)) }
         }
         return values
