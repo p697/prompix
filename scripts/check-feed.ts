@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { performance } from "node:perf_hooks";
-import { allowedPresentations, feedPageSchema, feedDetailSchema } from "../packages/schema/feed.ts";
+import { allowedPresentations, feedPageSchema, feedDetailSchema, publicCard } from "../packages/schema/feed.ts";
 import { preparePublication, type PublicationInput } from "../services/feed/publication.ts";
 import { contentTopics } from "../packages/schema/interests.ts";
 import { publicationIdentity } from "../ingest/release-publication.ts";
@@ -37,7 +37,7 @@ for (const [locale, sort, presentation] of passes) {
     assert.equal(page.release, expected.id);
     for (const card of page.items) {
       const row = sort === "curated" ? listed[ids.length] : byID.get(card.id); assert.ok(row, "Unexpected feed row");
-      const expectedCard = row.translations.find(item => item.locale === locale)?.card ?? row.card;
+      const expectedCard = publicCard(row.translations.find(item => item.locale === locale)?.card ?? row.card, locale);
       assert.equal(publicationIdentity(card), publicationIdentity({ ...expectedCard, topics: contentTopics(expectedCard) })); ids.push(card.id);
     }
     assert.notEqual(page.nextCursor, cursor || "never-a-cursor"); cursor = page.nextCursor;

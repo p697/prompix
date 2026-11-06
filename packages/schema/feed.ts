@@ -4,6 +4,11 @@ import collectionDefinitions from "./collections.json" with { type: "json" };
 export { collectionDefinitions };
 export const collectionIDs = Object.keys(collectionDefinitions) as [keyof typeof collectionDefinitions, ...(keyof typeof collectionDefinitions)[]];
 import { creatorSchema, localizationLanguages, promptSchema } from "./catalog.ts";
+import { englishCardSchema, facetGroups, facetIDs, facetsSchema, generationModes, generationSchema, inputsSchema, modelFamilies, paletteSchema, rightsSchema, type FacetGroup } from "./enrichment.ts";
+
+const allFacetIDs = facetGroups.flatMap(group => facetIDs[group]) as [string, ...string[]];
+/** Facet IDs are unique across groups, so a filter names only the ID. */
+export const facetGroupOf = (id: string): FacetGroup => facetGroups.find(group => facetIDs[group].includes(id))!;
 
 export const feedPageLimit = 50;
 export const feedResponseByteLimit = 1_000_000;
@@ -31,6 +36,10 @@ export const feedFiltersSchema = z.object({
   creator: z.string().min(1).max(200).optional(),
   tag: z.string().min(1).max(100).optional(),
   model: z.string().min(1).max(200).optional(),
+  facet: z.enum(allFacetIDs).optional(),
+  mode: z.enum(generationModes).optional(),
+  inputs: inputsSchema.shape.requirement.optional(),
+  modelFamily: z.enum(modelFamilies).optional(),
   q: z.string().trim().max(120).default(""),
 }).strict();
 export type FeedFilters = z.infer<typeof feedFiltersSchema>;
@@ -49,8 +58,16 @@ export const feedCardSchema = z.object({
   cover: promptSchema.shape.cover,
   language: feedLocale,
   availableLanguages: z.array(z.enum(localizationLanguages)).max(9),
+  facets: facetsSchema.optional(), generation: generationSchema.optional(), inputs: inputsSchema.optional(),
+  palette: paletteSchema.optional(), rights: rightsSchema.optional(),
 }).strict();
 export type FeedCard = z.infer<typeof feedCardSchema>;
+/** Stored original cards also carry the English card text, served when English has no full translation. */
+export const storedCardSchema = feedCardSchema.extend({ en: englishCardSchema.optional() }).strict();
+export type StoredCard = z.infer<typeof storedCardSchema>;
+export function publicCard({ en, ...card }: StoredCard, locale: FeedLocale): FeedCard {
+  return locale === "en" && card.language === "original" && en ? { ...card, ...en } : card;
+}
 export const feedPageSchema = z.object({
   schemaVersion: z.literal(3), release: contentID,
   items: z.array(feedCardSchema).max(feedPageLimit),
@@ -63,7 +80,7 @@ export const feedDetailSchema = z.object({
 }).strict();
 
 export function parseFeedQuery(url: URL): { filters: FeedFilters; limit: number; cursor?: string } {
-  const allowed = new Set(["locale", "presentation", "kind", "collection", "creator", "tag", "model", "q", "sort", "seed", "limit", "cursor"]);
+  const allowed = new Set(["locale", "presentation", "kind", "collection", "creator", "tag", "model", "facet", "mode", "inputs", "modelFamily", "q", "sort", "seed", "limit", "cursor"]);
   const values: Record<string, string> = {};
   for (const [key, value] of url.searchParams) {
     if (!allowed.has(key) || Object.hasOwn(values, key)) throw new Error("Invalid query parameters");

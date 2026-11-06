@@ -1,5 +1,5 @@
 import { creatorFiltersSchema, type CreatorFilters } from "./creator-filters.ts";
-import { allowedPresentations, type FeedCard } from "../../packages/schema/feed.ts";
+import { allowedPresentations, publicCard, type FeedCard } from "../../packages/schema/feed.ts";
 import type { Prompt } from "../../packages/schema/catalog.ts";
 import { decodeDiscoveryCursor, encodeDiscoveryCursor, cursorLifetimeSeconds } from "./cursor.ts";
 import { FeedError, type Database } from "./database.ts";
@@ -60,7 +60,7 @@ export async function getCreatorDiscovery(db: Database,
     left join prompix.revisions v on v.id=cover.revision_id
     order by p.key,p.creator_id collate "C"`, [release, filters.kind ?? null, day, patterns, key, after, query.limit + 1, filters.sort, allowedPresentations(filters.presentation)])).rows;
   const page = rows.slice(0, query.limit), last = page.at(-1);
-  return { schemaVersion: 3 as const, release, items: page.map(({ creator, count, preview }) => ({ creator, count, preview })),
+  return { schemaVersion: 3 as const, release, items: page.map(({ creator, count, preview }) => ({ creator, count, preview: preview && publicCard(preview, "original") })),
     nextCursor: rows.length > query.limit && last ? encodeDiscoveryCursor({ v: 2, scope: "creator-discovery", release,
       key: last.key, after: last.creator_id, day, filters, expires }, secret) : null };
 }
