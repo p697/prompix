@@ -520,13 +520,14 @@ struct FavoritesView: View {
             }
             .background(Palette.paper).foregroundStyle(Palette.ink)
             .rootHeader(title: String(localized: "收藏")) {
+                // Settings keeps its corner; the deck button appears beside it without moving it.
                 HStack(spacing: 8) {
-                    Button { settingsPresented = true } label: { PrompixIcon.person.image.frame(width: 44, height: 44) }
-                        .accessibilityLabel(String(localized: "设置")).accessibilityIdentifier("savedSettings")
                     if scope == .decks {
                         Button { namingDeck = true } label: { PrompixIcon.plus.image.frame(width: 44, height: 44) }
                             .disabled(!library.decks.readable).accessibilityLabel(String(localized: "新建卡组")).accessibilityIdentifier("newDeck")
                     }
+                    Button { settingsPresented = true } label: { PrompixIcon.person.image.frame(width: 44, height: 44) }
+                        .accessibilityLabel(String(localized: "设置")).accessibilityIdentifier("savedSettings")
                 }
             } bar: {
                 Picker(String(localized: "收藏"), selection: $scope) {
@@ -548,9 +549,7 @@ struct FavoritesView: View {
         var seen = Set<String>()
         let items = (kept + earlier).filter { seen.insert($0.id).inserted }
         if items.isEmpty {
-            ContentUnavailableView {
-                Label { Text(String(localized: "还没有自己的版本")) } icon: { PrompixIcon.edit.image(size: 40) }
-            } description: { Text(String(localized: "在详情页点铅笔，就能基于任意 Prompt 写自己的版本。")) }
+            QuietEmpty(title: String(localized: "还没有自己的版本"), message: String(localized: "在详情页点铅笔，就能基于任意 Prompt 写自己的版本。"))
         } else { PromptGrid(items: items, origin: .favorite).padding(.horizontal, PromptGridLayout.inset) }
     }
 }
@@ -669,13 +668,9 @@ private struct DeckDetail: View {
                     Text(deck?.name ?? String(localized: "全部收藏")).font(.system(size: 30, weight: .bold)).accessibilityAddTraits(.isHeader)
                 }.padding(.horizontal, 20)
                 if kinds.count > 1 {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 2) {
-                            chip(String(localized: "全部"), selected: kind == nil) { kind = nil }
-                            ForEach(kinds, id: \.0) { value, count in
-                                chip("\(value.title) \(count)", selected: kind == value) { kind = value }
-                            }
-                        }.padding(.horizontal, 16)
+                    ChipRow(values: [nil] + kinds.map { Optional($0.0) }, selection: $kind) { value in
+                        guard let value else { return String(localized: "全部") }
+                        return "\(value.title) \(kinds.first { $0.0 == value }?.1 ?? 0)"
                     }
                 }
                 if deckID == nil, !images.offlineFailures.isEmpty {
@@ -683,6 +678,9 @@ private struct DeckDetail: View {
                         Label(String(localized: "部分收藏预览尚未下载，轻点重试"), systemImage: "arrow.down.circle")
                             .font(.footnote).foregroundStyle(Palette.muted)
                     }.padding(.horizontal, 20)
+                }
+                if items.isEmpty {
+                    QuietEmpty(title: String(localized: "卡组里还没有作品"), message: String(localized: "在详情页点书签，选这个卡组即可加入。"))
                 }
                 // A deck reads as a contact sheet: three equal squares per row.
                 LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 4), count: 3), spacing: 4) {
@@ -711,15 +709,6 @@ private struct DeckDetail: View {
                 if let deckID, library.decks.delete(deckID) { dismiss() }
             }
         } message: { Text(String(localized: "卡组里的作品仍会留在全部收藏。")) }
-    }
-    private func chip(_ title: String, selected: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Text(title).font(.subheadline.weight(selected ? .semibold : .regular))
-                .foregroundStyle(selected ? Palette.paper : Palette.muted)
-                .padding(.horizontal, 12).frame(height: 32)
-                .background(selected ? Palette.ink : .clear, in: Capsule())
-                .frame(minHeight: 44).contentShape(Rectangle())
-        }.buttonStyle(.plain).accessibilityAddTraits(selected ? .isSelected : [])
     }
 }
 

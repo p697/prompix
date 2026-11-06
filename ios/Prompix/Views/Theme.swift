@@ -30,6 +30,65 @@ enum Palette {
     static func onGlassAccent(for scheme: ColorScheme) -> Color { rgb(scheme == .dark ? 0x0B0B0C : 0xF4F3EF) }
 }
 
+/// A row of quiet choices with one filled capsule: kinds on a deck, a creator, results.
+struct ChipRow<Value: Hashable>: View {
+    let values: [Value]
+    @Binding var selection: Value
+    let title: (Value) -> String
+    var identifier: (Value) -> String = { _ in "" }
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 2) {
+                ForEach(values, id: \.self) { value in
+                    let selected = value == selection
+                    Button { selection = value } label: {
+                        Text(title(value)).font(.subheadline.weight(selected ? .semibold : .regular))
+                            .foregroundStyle(selected ? Palette.paper : Palette.muted)
+                            .padding(.horizontal, 12).frame(height: 32)
+                            .background(selected ? Palette.ink : .clear, in: Capsule())
+                            .frame(minHeight: 44).contentShape(Rectangle())
+                    }.buttonStyle(.plain).accessibilityAddTraits(selected ? .isSelected : [])
+                        .accessibilityIdentifier(identifier(value))
+                }
+            }.padding(.horizontal, 16)
+        }
+    }
+}
+
+/// Every section heading in the app: 15 pt semibold, with an optional quiet link.
+struct SectionHeader<Destination: View>: View {
+    let title: String
+    var linkID = ""
+    @ViewBuilder var destination: () -> Destination
+    var body: some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text(title).font(.subheadline.weight(.semibold)).foregroundStyle(Palette.ink).accessibilityAddTraits(.isHeader)
+            Spacer(minLength: 12)
+            if Destination.self != EmptyView.self {
+                NavigationLink(destination: destination) {
+                    Text(String(localized: "查看全部")).font(.footnote).foregroundStyle(Palette.muted).frame(minHeight: 44)
+                }.accessibilityIdentifier(linkID)
+            }
+        }.frame(minHeight: 44)
+    }
+}
+extension SectionHeader where Destination == EmptyView {
+    init(title: String) { self.init(title: title) { EmptyView() } }
+}
+
+/// An empty place says one plain sentence and, at most, one more; no illustration.
+struct QuietEmpty: View {
+    let title: String
+    var message: String? = nil
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title).font(.title3.weight(.semibold)).foregroundStyle(Palette.ink)
+            if let message { Text(message).font(.subheadline).foregroundStyle(Palette.muted).fixedSize(horizontal: false, vertical: true) }
+        }.frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 20).padding(.vertical, 28)
+            .accessibilityElement(children: .combine)
+    }
+}
+
 enum Motion {
     /// Chrome that yields to scrolling: the reading actions and root headers.
     static let chrome = Animation.spring(response: 0.38, dampingFraction: 0.86)

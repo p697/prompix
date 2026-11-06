@@ -199,14 +199,7 @@ private struct PromptMarkdownContent: View, Equatable {
     var body: some View {
         let document = PromptMarkdownDocument(source)
         return LazyVStack(alignment: .leading, spacing: document.usedPlainTextFallback ? 0 : 18) {
-            if let metadata = document.metadata {
-                DisclosureGroup {
-                    codeText(AttributedString(metadata)).padding(.top, 10)
-                } label: {
-                    Text(String(localized: "元数据")).font(.subheadline).foregroundStyle(Palette.muted)
-                        .frame(minHeight: 44)
-                }.accessibilityIdentifier("promptMetadata")
-            }
+            // A Skill's front matter is for tools; copying still carries it.
             ForEach(document.blocks) { block in
                 HStack(alignment: .firstTextBaseline, spacing: 10) {
                     if block.listDepth > 0 {

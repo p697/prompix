@@ -26,10 +26,6 @@ struct PrompixOnboarding: View {
                 .accessibilityIdentifier("onboardingBack")
                 .disabled(page == 0).opacity(page == 0 ? 0 : 1).accessibilityHidden(page == 0)
                 Spacer()
-                Text("Prompix").font(.system(size: 17, weight: .medium)).tracking(-0.4)
-                    .opacity(page == 0 ? 0 : 1).accessibilityHidden(true)
-                Spacer()
-                Color.clear.frame(width: 44, height: 44).accessibilityHidden(true)
             }
             .buttonStyle(.plain).padding(.horizontal, 16)
             GeometryReader { viewport in
@@ -93,12 +89,6 @@ struct PrompixOnboarding: View {
 
     private var controls: some View {
         VStack(spacing: 14) {
-            if page == interestPage {
-                Text(typeSize.isAccessibilitySize ? "\(library.recommendations.interests.count) / 3" : String(format: copy("onboarding.interests.count"), locale: .current, library.recommendations.interests.count))
-                    .font(.caption.monospacedDigit()).foregroundStyle(Palette.muted)
-                    .contentTransition(.numericText()).accessibilityIdentifier("onboardingInterestCount")
-                    .accessibilityLabel(String(format: copy("onboarding.interests.count"), locale: .current, library.recommendations.interests.count))
-            }
             Button {
                 if page == interestPage {
                     // Check the durable write too: a failed save must never bypass setup.
@@ -109,6 +99,11 @@ struct PrompixOnboarding: View {
                 HStack(spacing: 14) {
                     Text(copy(page == interestPage ? "onboarding.complete" : "onboarding.begin"))
                         .fixedSize(horizontal: false, vertical: true)
+                    // The count lives on the button it unlocks, not in a line of its own.
+                    if page == interestPage && !canComplete {
+                        Text(verbatim: "\(library.recommendations.interests.count) / 3").monospacedDigit()
+                            .contentTransition(.numericText()).accessibilityIdentifier("onboardingInterestCount")
+                    }
                     if !typeSize.isAccessibilitySize { PrompixIcon.arrowRight.image(size: 20).accessibilityHidden(true) }
                 }
                 .font(.body.weight(.semibold)).multilineTextAlignment(.center)
@@ -117,6 +112,7 @@ struct PrompixOnboarding: View {
                 .background(page == interestPage && !canComplete ? Palette.muted.opacity(0.35) : Palette.ink, in: Capsule())
             }
             .buttonStyle(JourneyButtonStyle()).disabled(page == interestPage && !canComplete)
+            .accessibilityValue(page == interestPage ? String(format: copy("onboarding.interests.count"), locale: .current, library.recommendations.interests.count) : "")
             .accessibilityIdentifier(page == interestPage ? "onboardingComplete" : "onboardingNext")
             HStack(spacing: 7) {
                 ForEach(0..<pageCount, id: \.self) { index in

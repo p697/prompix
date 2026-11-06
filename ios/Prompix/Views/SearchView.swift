@@ -118,7 +118,7 @@ struct SearchView: View {
     private var recentSearches: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text(String(localized: "最近")).font(.subheadline.weight(.semibold)).foregroundStyle(Palette.muted)
+                Text(String(localized: "最近")).font(.subheadline.weight(.semibold)).foregroundStyle(Palette.ink)
                     .accessibilityAddTraits(.isHeader)
                 Spacer()
                 Button(String(localized: "清除")) {
@@ -225,7 +225,7 @@ private struct SearchUseTiles: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text(String(localized: "按用途")).font(.subheadline.weight(.semibold)).foregroundStyle(Palette.muted)
+                Text(String(localized: "按用途")).font(.subheadline.weight(.semibold)).foregroundStyle(Palette.ink)
                     .accessibilityAddTraits(.isHeader)
                 Spacer()
                 NavigationLink { CollectionsDirectory() } label: {
