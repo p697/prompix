@@ -73,22 +73,78 @@ extension View {
 
     func paperScreen() -> some View { modifier(PaperScreen()) }
 
-    /// Root pages use the system large title, which shrinks into the bar as the
-    /// page scrolls, so nothing above the content changes height. The optional
-    /// bar (the kind tabs) stays pinned beneath it under a soft, gradual edge.
-    @ViewBuilder func rootHeader<Trailing: View, Bar: View>(title: String, @ViewBuilder trailing: () -> Trailing, @ViewBuilder bar: () -> Bar) -> some View {
-        let page = navigationTitle(title).navigationBarTitleDisplayMode(.large)
-            .toolbar { ToolbarItem(placement: .topBarTrailing) { trailing() } }
-        if #available(iOS 26, *) {
-            page.safeAreaBar(edge: .top, spacing: 0, content: bar).scrollEdgeEffectStyle(.soft, for: .top)
-        } else {
-            page.safeAreaInset(edge: .top, spacing: 0) { bar().background(Palette.paper) }
-        }
+    /// Root pages: a large title row and a pinned bar (the kind tabs). Scrolling
+    /// down slides the whole header away; scrolling back up returns it.
+    func rootHeader<Trailing: View, Bar: View>(title: String, titleID: String = "", @ViewBuilder trailing: () -> Trailing, @ViewBuilder bar: () -> Bar) -> some View {
+        modifier(RootHeader(title: title, titleID: titleID, trailing: trailing(), bar: bar()))
     }
 
     @ViewBuilder func minimizesTabBarOnScroll() -> some View {
         if #available(iOS 26, *) { tabBarMinimizeBehavior(.onScrollDown) }
         else { self }
+    }
+}
+
+/// The header keeps its inset while hidden, so the content never moves; only
+/// the header does. Behind it, a paper veil covers the status bar and the tabs
+/// and fades out just below them once work scrolls underneath.
+private struct RootHeader<Trailing: View, Bar: View>: ViewModifier {
+    let title: String
+    let titleID: String
+    let trailing: Trailing
+    let bar: Bar
+    @State private var collapsed = false
+    @State private var covered = false
+    @State private var height: CGFloat = 0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    func body(content: Content) -> some View {
+        content
+            .toolbar(.hidden, for: .navigationBar)
+            .readingChrome($collapsed)
+            .tracksCover($covered)
+            .topBar { header }
+    }
+    private var header: some View {
+        let shift = collapsed ? -height : 0
+        return VStack(spacing: 4) {
+            HStack {
+                Text(title).font(.largeTitle.bold()).accessibilityAddTraits(.isHeader).accessibilityIdentifier(titleID)
+                Spacer()
+                trailing.font(.title3).buttonStyle(.plain).readingGlass()
+            }.padding(.leading, 20).padding(.trailing, 16).padding(.vertical, 6)
+            bar
+        }.foregroundStyle(Palette.ink).padding(.bottom, 4)
+            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height = $0 }
+            .offset(y: shift).opacity(collapsed ? 0 : 1)
+            .allowsHitTesting(!collapsed).accessibilityHidden(collapsed)
+            .background(alignment: .top) {
+                // Paper behind the status bar and the header, then a 32 pt fade.
+                VStack(spacing: 0) {
+                    Palette.paper
+                    LinearGradient(colors: [Palette.paper, Palette.paper.opacity(0)], startPoint: .top, endPoint: .bottom)
+                        .frame(height: 32).opacity(covered ? 1 : 0)
+                }.padding(.bottom, -32).ignoresSafeArea(edges: .top)
+                    .offset(y: shift)
+                    .allowsHitTesting(false).accessibilityHidden(true)
+            }
+            .animation(reduceMotion ? nil : Motion.chrome, value: collapsed)
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: covered)
+    }
+}
+
+private extension View {
+    /// True once any content has scrolled beneath the top inset.
+    @ViewBuilder func tracksCover(_ covered: Binding<Bool>) -> some View {
+        if #available(iOS 18, *) {
+            onScrollGeometryChange(for: Bool.self) { $0.contentOffset.y + $0.contentInsets.top > 2 } action: { _, value in covered.wrappedValue = value }
+        } else { self }
+    }
+    @ViewBuilder func topBar<Bar: View>(@ViewBuilder _ bar: () -> Bar) -> some View {
+        if #available(iOS 26, *) {
+            safeAreaBar(edge: .top, spacing: 0, content: bar).scrollEdgeEffectHidden(true, for: .top)
+        } else {
+            safeAreaInset(edge: .top, spacing: 0, content: bar)
+        }
     }
 }
 
