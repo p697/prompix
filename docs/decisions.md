@@ -1130,6 +1130,10 @@ The iOS 27.1+ detail uses `ArrangementView`, which shows only the reading pane o
 
 The home header sat over a hand-drawn material veil that looked muddy and had a hard edge. Root headers now live in the scroll view's `safeAreaBar` with the system hard top edge effect; the soft style left the category row unreadable over artwork. The home header still collapses on scroll with the reading-bar spring, and the bar's height goes with it so the edge effect retreats to the status bar. Growing the top inset mid-scroll made SwiftUI jump the content by hundreds of points, so a matching top content margin replaces the bar height while collapsed and the total inset never changes. The tab bar minimizes on scroll from iOS 26. Cards scale to 0.97 when pressed; category switches add a selection haptic. Verified on an iPhone 18 Pro simulator with iOS 27.2 in light and dark.
 
+### 2026-11-06 — Open feed details from the list, not the card
+
+A detail opened from a feed card used to be owned by that card, so when a served page replaced the cached one the card left the hierarchy and its full-screen detail closed a moment after opening. Feed lists (`FeedResults` and the related grid) now own the presentation through `feedDetailHost()`, and cards only ask it to open; the zoom transition shares the list's namespace. Cards outside a host keep presenting themselves. A gated live UI test opens a card right after switching kinds and checks the detail is still open four seconds later; it failed before the change.
+
 ### 2026-11-06 — Make the detail action one step after the first use
 
 The 2.0 boards ask for "one-step use": once a tool has been chosen in the use tray, the detail's main action names that tool and copies (or prefills) the Prompt and opens it in one tap. A long press offers "choose another tool". The tray still opens the first time, when the remembered tool is not among this item's choices, when the Prompt has blanks to fill, and as the fallback when the tool cannot be opened. UI tests launch with `-preferredPromptDestination none` so the tray path stays deterministic.

@@ -58,6 +58,7 @@ struct FeedResults: View {
                 }.accessibilityIdentifier("loadMoreFeed")
             }
         }
+        .feedDetailHost()
         .onChange(of: matches && store.failure != nil && items.isEmpty) { _, failed in
             if failed { fallbackQuery = query }
         }
@@ -137,12 +138,17 @@ struct FeedPromptCard: View {
     @State private var copiedFeedback = false
     @Namespace private var transition
     @Environment(\.openURL) private var openURL
+    @Environment(\.feedDetailHost) private var host
     @AppStorage("preferredPromptDestination") private var preferredDestination = ""
     private enum Action { case copy, save, use }
+    private var isPresenting: Bool { host.map { $0.presentedID == card.id } ?? detailPresented }
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Button { library.recommendations.record(.open, card: card); detailPresented = true } label: {
-                PromptCardFace(preview: ContentPreview(card)).promptTransitionSource(id: card.id, in: transition)
+            Button {
+                library.recommendations.record(.open, card: card)
+                if let host { host.open(card) } else { detailPresented = true }
+            } label: {
+                PromptCardFace(preview: ContentPreview(card)).promptTransitionSource(id: card.id, in: host?.namespace ?? transition)
                     .overlay(alignment: .bottomTrailing) {
                         if actionID != nil { ContentActivityLabel(size: 40).padding(8).background(.regularMaterial, in: Capsule()).padding(8) }
                     }
@@ -178,7 +184,7 @@ struct FeedPromptCard: View {
                 }.buttonStyle(.plain).foregroundStyle(Palette.muted).accessibilityLabel(creator.displayName)
             }
         }
-        .recommendationExposure(card, enabled: !detailPresented)
+        .recommendationExposure(card, enabled: !isPresenting)
         .fullScreenCover(isPresented: $detailPresented) {
             FeedReadingPresentation(card: card).preferredColorScheme(colorScheme)
                 .promptTransitionDestination(id: card.id, in: transition)
@@ -230,6 +236,44 @@ struct WorkPeek: View {
             }.padding(.horizontal, 16).padding(.bottom, 16).padding(.top, preview.usesTextArtwork ? 16 : 0)
         }.frame(width: 320).background(Palette.surface).foregroundStyle(Palette.ink)
     }
+}
+
+/// Opens feed details from a list that outlives its cards. A served page that
+/// replaces the tapped card (a cached first page, a refresh) never closes the
+/// detail it just opened.
+struct FeedDetailHost: Sendable {
+    let namespace: Namespace.ID
+    let presentedID: String?
+    let open: @MainActor @Sendable (FeedCard) -> Void
+}
+
+private struct FeedDetailHostKey: EnvironmentKey {
+    static let defaultValue: FeedDetailHost? = nil
+}
+
+extension EnvironmentValues {
+    var feedDetailHost: FeedDetailHost? {
+        get { self[FeedDetailHostKey.self] }
+        set { self[FeedDetailHostKey.self] = newValue }
+    }
+}
+
+private struct FeedDetailHosting: ViewModifier {
+    @State private var presented: FeedCard?
+    @Namespace private var transition
+    @Environment(\.colorScheme) private var colorScheme
+    func body(content: Content) -> some View {
+        content
+            .environment(\.feedDetailHost, FeedDetailHost(namespace: transition, presentedID: presented?.id) { presented = $0 })
+            .fullScreenCover(item: $presented) { card in
+                FeedReadingPresentation(card: card).preferredColorScheme(colorScheme)
+                    .promptTransitionDestination(id: card.id, in: transition)
+            }
+    }
+}
+
+extension View {
+    func feedDetailHost() -> some View { modifier(FeedDetailHosting()) }
 }
 
 struct FeedReadingPresentation: View {
@@ -387,7 +431,7 @@ struct FeedRelatedResults: View {
                 }
                 if !cards.isEmpty {
                     PreviewMasonryGrid(items: cards, preview: ContentPreview.init) { FeedPromptCard(card: $0) }
-                        .accessibilityIdentifier("relatedFeed")
+                        .feedDetailHost().accessibilityIdentifier("relatedFeed")
                 }
                 if waiting && cards.isEmpty {
                     FeedLoadingGrid()

@@ -229,6 +229,22 @@ import UIKit
             app.buttons["closePromptDetail"].tap()
         }
     }
+    /// Live: a detail opened while a served page replaces the cached one stays open.
+    func testDetailSurvivesThePageThatReplacesItsCard() throws {
+        guard ProcessInfo.processInfo.environment["PROMPIX_LIVE_UI"] == "1" else { throw XCTSkip("Explicit live service check only") }
+        app.terminate()
+        app.launchArguments = ["-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN"]
+        app.launchPrompix()
+        for kind in ["kind-image", "kind-video", "kind-all"] {
+            XCTAssertTrue(app.buttons[kind].waitForExistence(timeout: 15)); app.buttons[kind].tap()
+            let card = app.scrollViews["discoveryScroll"].buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'prompt-'")).firstMatch
+            XCTAssertTrue(card.waitForExistence(timeout: 15)); card.tap()
+            XCTAssertTrue(app.buttons["usePrompt"].waitForExistence(timeout: 15))
+            sleep(4)
+            XCTAssertTrue(app.buttons["usePrompt"].exists, "The detail must stay open after \(kind) settles")
+            app.buttons["closePromptDetail"].tap()
+        }
+    }
     func testRefinedChromeAndInteractiveReturn() {
         XCTAssertTrue(app.buttons["discoveryFilters"].waitForExistence(timeout: 10))
         XCTAssertFalse(app.buttons["searchButton"].exists)
