@@ -1,28 +1,30 @@
-# Prompix：光谱、轻翻页与原生玻璃
+# Prompix：暗房 · 白
 
-2026-10-17，0.12.1（44）。这是后续 UI 开发必须遵循的当前设计语言，替代早期绿色主题和 0.9.1 的石墨绿操作色。页面结构仍是轻盈发现、内容优先；本轮不改变现有 icon、App Icon 资产、导航和内容服务架构。
+2026-11-06，Prompix 2.0 设计语言第一步。用户在五个版本和暗房红／白／蓝重做之后选定「暗房 · 白」，取代 0.12 起的蓝紫光谱和更早的绿色主题。完整设计稿与逐页功能说明在 2.0 设计画布（「暗房 · 白：详细设计」与「页面与功能说明」两组）；页面结构按稿子分步还原，本文件记录已经落进代码的部分。
 
-## 参考如何转成产品
+## 原则
 
-FIELD 官方 [Quantum Brand Ecosystem](https://field.io/work/ibm-quantum)、[Quantum Brand Visuals](https://field.io/work/ibm-quantum-brand-visuals) 和 [Quantum Safe](https://field.io/work/ibm-quantum-safe) 的可借鉴之处是：连续的蓝／紫／粉色与克制的动态节奏。2026-10-17 用户否定圆圈粒子，明确选择「轻翻页」；参考不是复制其图形。网站部分视频在本机浏览器显示无法播放，静态案例观察不能冒充完整影片复刻。
-
-Prompix 使用三个小页片依次轻抬的 SwiftUI Canvas 动效，不搬运参考站的图片、视频、品牌标志或量子功能概念。Apple 的 [Motion](https://developer.apple.com/design/human-interface-guidelines/motion) 和 [Progress indicators](https://developer.apple.com/design/human-interface-guidelines/progress-indicators) 约束反馈的时机和可访问性；Liquid Glass 的交互、高亮、菜单和导航继续由系统实现。
+作品是屏幕上唯一的颜色。界面只有黑、灰、白：主按钮、选中态、可以填的空都用白色（浅色模式里反过来用黑色）。照片、视频和 Prompt 正文保持原色，不给文字、图标或控件套渐变。Liquid Glass 只用在导航栏、Tab 栏、底部操作栏和浮层，交互、高亮和菜单由系统实现。
 
 ## 配色契约
 
-统一从 `Views/Theme.swift` 的 `Palette` 取色，不在业务页面重新定义主题色。
+统一从 `Views/Theme.swift` 的 `Palette` 取色，不在业务页面重新定义主题色。深色是「暗房」，浅色是「相纸」，默认跟随系统。
 
-| 角色 | 浅色 | 深色 | 用途 |
+| 角色 | 浅色（相纸） | 深色（暗房） | 用途 |
 |---|---|---|---|
-| paper | `#F9F9FC` | `#17161F` | 页面底色，保持中性 |
-| surface | `#FFFFFF` | `#24222F` | 必要的局部表面 |
-| soft | `#EEEDF7` | `#302C40` | 骨架与低强调区域 |
-| ink | `#272433` | `#F1EFFA` | 正文、标题 |
-| muted | `#6C687C` | `#B8B2CA` | 辅助文字 |
-| accent | `#4B3FD3` | `#C4BCFF` | 主操作、选中态、链接 |
-| spectrum | 蓝 `#4856EF`、鸢尾 `#8A78E5`、紫粉 `#CD8CE4`、冰蓝 `#B3D0FB`、浅粉 `#EEC4E7` | 同一色谱 | 页片、光、局部品牌表现 |
+| paper | `#F4F3EF` | `#0B0B0C` | 页面底色 |
+| surface | `#FBFAF7` | `#18181A` | 灯箱面板、文本卡 |
+| soft | `#E8E7E2` | `#1E1E20` | 骨架、Skill 卡与低强调区域 |
+| ink | `#141415` | `#F5F5F2` | 正文、标题 |
+| muted | `#6B6B67` | `#9A9A97` | 辅助文字、开关打开时的轨道 |
+| accent | 同 ink | 同 ink | 主操作、选中态、链接 |
+| line | `#DAD9D3` | `#2A2A2C` | 分隔线 |
 
-照片和 Prompt 正文保持原色。光谱不是一整页的彩色背景，不给每个文字、图标或控件套渐变。浅色色谱不用于小字；文字色与底色需要按实际配对检查对比度。既有 icon 和 App Icon 本轮保留，不能随意换一套符号或重画标记。
+主按钮是 accent 底、paper 字：深色里白底黑字，浅色里黑底白字。Liquid Glass 的 tint 用 `Palette.glassAccent(for:)` 按页面外观直接取值，避免交互式 zoom 期间材质快照带来临时的 UIKit trait。系统开关在白色 tint 下会看不见滑块，所以开关用 muted 作 tint；`.borderedProminent` 按钮显式使用 paper 字色。
+
+## 品牌
+
+App Icon 是黑底三张白色卡片：左卡 28%、右卡 50%、中间前卡不透明并带一圈淡光，深色和默认外观使用同一张，tinted 外观使用灰度版本。`SpectralPages` 的紧凑标记沿用这组卡片的透明度和前后关系；首次引导的七张卡片用同一套透明度，以 ink 绘制，浅色模式里随之变成黑色卡片。轻翻页 `PageActivity` 的三个页片用 ink，透明度随抬升变化。
 
 ## 动态语法
 
@@ -71,7 +73,7 @@ Prompix 使用三个小页片依次轻抬的 SwiftUI Canvas 动效，不搬运�
 
 ## 0.14.0：四屏视觉引导
 
-七片玻璃从叠合到展开，沿用 App Icon 的冰蓝顶端、蓝紫主体与粉紫叠色，七片连续过渡；只作用于引导，既有 App Icon 和紧凑标记不变。第二屏采用随包提供的 Prompix Studio 原创橘子、湖泊和纸艺图，做轻微错层、错位拼贴，去掉装饰性收藏按钮和无吸引力的文字卡。第三屏直接表现图片 Prompt → ChatGPT，真实操作复制完整 Prompt 并打开官方入口，明确仍需粘贴，不展示虚假的自动发送或生成结果。
+七张卡片从叠合到展开，透明度与前后关系沿用 App Icon 的三张白卡（2.0 起为单色，见上文「品牌」）。第二屏采用随包提供的 Prompix Studio 原创橘子、湖泊和纸艺图，做轻微错层、错位拼贴，去掉装饰性收藏按钮和无吸引力的文字卡。第三屏直接表现图片 Prompt → ChatGPT，真实操作复制完整 Prompt 并打开官方入口，明确仍需粘贴，不展示虚假的自动发送或生成结果。
 
 标题与说明分别淡入、轻移；主按钮有按压反馈、页面有平滑切换。装饰最多 30fps，仅在当前页、前台、非低电量且未开启减少动态效果时运行。减少动态效果直接呈现完整构图，不等待入场；所有操作立即可用。大字号纵向滚动，主操作固定在底部，兴趣网格自动改单列。
 

@@ -234,23 +234,21 @@ private struct JourneyGlass: View {
             let width = space.size.width
             let height = space.size.height
             ZStack {
-                Ellipse().fill(Palette.spectrumIris.opacity(0.1)).blur(radius: 36)
+                Ellipse().fill(Palette.ink.opacity(0.06)).blur(radius: 36)
                     .frame(width: width * 0.72, height: height * 0.4).offset(y: height * 0.12)
                 ForEach(0..<7) { index in
                     let fraction = Double(index) / 6
-                    RoundedRectangle(cornerRadius: width * 0.045, style: .continuous)
-                        .fill(Palette.onboardingGlass(at: fraction))
-                        .overlay {
-                            RoundedRectangle(cornerRadius: width * 0.045).strokeBorder(
-                                LinearGradient(colors: [.white.opacity(0.95), .white.opacity(0.12), .white.opacity(0.65)], startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 0.7)
-                        }
-                        .shadow(color: Palette.spectrumBlue.opacity(0.08), radius: 9, x: 0, y: 6)
+                    let page = RoundedRectangle(cornerRadius: width * 0.045, style: .continuous)
+                    page.fill(Palette.ink.opacity(SpectralPages.tone(fraction)))
+                        .overlay { page.strokeBorder(Palette.paper.opacity(0.35), lineWidth: 0.7) }
+                        .shadow(color: .black.opacity(0.08), radius: 9, x: 0, y: 6)
                         .frame(width: width * 0.40, height: min(width * 0.67, height * 0.73))
                         .rotationEffect(.degrees(entered ? (fraction - 0.5) * 58 : -12), anchor: .bottom)
                         .rotation3DEffect(.degrees(entered ? sin(elapsed * 0.55) * 3 : 35), axis: (x: 0, y: 1, z: 0))
                         .offset(x: entered ? (fraction - 0.5) * width * 0.06 : 0,
                                 y: (entered ? 0 : height * 0.12) + sin(elapsed * 0.65 + fraction * 1.2) * 5)
                         .scaleEffect(entered ? 1 : 0.72, anchor: .bottom)
+                        .zIndex(SpectralPages.depth(fraction))
                 }
             }
             .scaleEffect(0.9)

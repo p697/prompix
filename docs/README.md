@@ -1,3 +1,5 @@
+**Prompix 2.0 · 暗房 · 白**：界面只用黑、灰、白，作品是唯一的颜色；新配色、黑底三张白卡的 App Icon 与单色品牌标记先行落地，页面结构按设计稿分步还原。见[设计语言](design-language.md)。
+
 **混合语言说明恢复**：中文元数据不能直接复用时进入正常翻译；队列故障按真实阶段报告，未知请求不重放。见[恢复说明](backfill-campaign.md#mixed-language-metadata-recovery)。
 
 **队列提交查回**：领取任务的 COMMIT 应答丢失时，按唯一 token 在数据库锁后核对预约，只执行已确认且仍独占的任务；发布与采集采用同一组来源时效证据。见[运行说明](backfill-campaign.md#database-transient-recovery)。

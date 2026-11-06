@@ -118,7 +118,7 @@ struct DiscoverView: View {
                                     } actions: {
                                         Button(library.isRefreshing ? String(localized: "正在更新…") : String(localized: "检查内容更新")) {
                                             Task { await library.refresh(force: true) }
-                                        }.buttonStyle(.borderedProminent).disabled(library.isRefreshing).accessibilityIdentifier("loadVideoExamples")
+                                        }.buttonStyle(.borderedProminent).foregroundStyle(Palette.paper).disabled(library.isRefreshing).accessibilityIdentifier("loadVideoExamples")
                                         Button(String(localized: "查看其他内容")) { kind = nil; skillsOnly = false; topic = nil; model = nil }
                                             .buttonStyle(.bordered).accessibilityIdentifier("browseOtherIdeas")
                                     }

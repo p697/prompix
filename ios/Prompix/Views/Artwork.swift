@@ -105,15 +105,7 @@ struct Artwork: View {
         let text = item.excerpt
         return text.replacingOccurrences(of: "\n", with: " ").trimmingCharacters(in: .whitespacesAndNewlines)
     }
-    private var noteColor: Color {
-        if item.isSkill { return Palette.soft }
-        switch item.cover?.tone ?? item.artwork {
-        case "sage", "tarot": return Palette.noteMint
-        case "clay", "letter": return Palette.noteRose
-        case "sky", "learn": return Palette.noteLavender
-        default: return Palette.soft
-        }
-    }
+    private var noteColor: Color { item.isSkill ? Palette.soft : Palette.surface }
     private func photo(_ name: String, size: CGSize) -> some View {
         Image(name).resizable().scaledToFill().frame(width: size.width, height: size.height).clipped()
     }
