@@ -1206,3 +1206,7 @@ The owner removed every manual review branch: the pipeline decides each item, an
 ### 2026-11-06 — Recheck X posts by age
 
 Rechecking every published X post daily cost about $0.4–0.6/day on twitterapi.io, which would exhaust the prepaid balance within weeks. The owner chose tiered rechecks: a post younger than 7 days when checked stays verified for 24 hours; an older one stays verified for 7 days. Maintenance rechecks each item 12 hours before its verification lapses, and the publish gate uses the same lifetime. Authors delete most posts soon after posting, so the cost drops to a few cents a day; the trade-off is that a deleted older post can stay live for up to 7 days.
+
+### 2026-11-07 — Show one label for face inputs
+
+The detail page used to say "your own photo" when `inputs.ownLikenessOnly` was true and "portrait photo" otherwise. The owner judged the distinction worth little to people: it guards nothing, and when the review cannot tell, the default is a guess. The app now always shows "portrait photo" for a face input. The feed keeps `ownLikenessOnly` as data; safety decisions about real people stay in the combined review.
