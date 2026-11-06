@@ -104,13 +104,12 @@ import XCTest
     func testNewFiltersAreSentAndValidated() async throws {
         let (client, server) = connection()
         server.set("/v3/feed", bytes: try FeedFixture.page())
-        _ = try await client.page(query: FeedQuery(locale: "original", facet: "portraits", mode: "i2i", inputs: "required", modelFamily: "gpt-image"))
+        _ = try await client.page(query: FeedQuery(locale: "original", facet: "portraits", mode: "i2i", modelFamily: "gpt-image"))
         let parameters = try XCTUnwrap(URLComponents(url: server.urls[0], resolvingAgainstBaseURL: false)?.queryItems)
-        for (name, value) in [("facet", "portraits"), ("mode", "i2i"), ("inputs", "required"), ("modelFamily", "gpt-image")] {
+        for (name, value) in [("facet", "portraits"), ("mode", "i2i"), ("modelFamily", "gpt-image")] {
             XCTAssertEqual(parameters.first { $0.name == name }?.value, value)
         }
         XCTAssertThrowsError(try FeedQuery(mode: "photo").validated())
-        XCTAssertThrowsError(try FeedQuery(inputs: "maybe").validated())
         XCTAssertThrowsError(try FeedQuery(facet: "Portraits & more").validated())
     }
     private func connection() -> (FeedClient, FeedTestServer) {

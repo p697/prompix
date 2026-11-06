@@ -165,7 +165,6 @@ struct FeedQuery: Codable, Hashable, Sendable {
     // 2.0 filters; the service rejects values outside its vocabularies.
     var facet: String?
     var mode: String?
-    var inputs: String?
     var modelFamily: String?
 
     func validated() throws -> Self {
@@ -177,7 +176,6 @@ struct FeedQuery: Codable, Hashable, Sendable {
               tag == nil || FeedValidation.text(tag!, max: 100), model == nil || FeedValidation.text(model!, max: 200) else { throw FeedError.invalidQuery }
         guard !["discovery", "recommended"].contains(sort ?? "") || q.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw FeedError.invalidQuery }
         guard [facet, mode, modelFamily].allSatisfy({ $0.map { $0.utf8.count <= 40 && $0.utf8.allSatisfy { (97...122).contains($0) || (48...57).contains($0) || $0 == 45 } } ?? true }),
-              inputs == nil || ["none", "optional", "required"].contains(inputs!),
               mode == nil || ["t2i", "i2i", "t2v", "i2v", "v2v", "text", "web", "skill"].contains(mode!) else { throw FeedError.invalidQuery }
         guard seed == nil || (sort == "recommended" && seed!.count == 32 && seed!.utf8.allSatisfy { (48...57).contains($0) || (97...102).contains($0) }) else { throw FeedError.invalidQuery }
         value.q = String(q.decomposedStringWithCompatibilityMapping.unicodeScalars.filter { !(0x300...0x36f).contains($0.value) })
@@ -188,7 +186,7 @@ struct FeedQuery: Codable, Hashable, Sendable {
     var parameters: [URLQueryItem] {
         var values = [URLQueryItem(name: "locale", value: locale)]
         for (name, value) in [("sort", sort), ("seed", seed), ("kind", kind), ("collection", collection), ("creator", creator), ("tag", tag), ("model", model),
-                              ("facet", facet), ("mode", mode), ("inputs", inputs), ("modelFamily", modelFamily), ("q", q.isEmpty ? nil : q)] {
+                              ("facet", facet), ("mode", mode), ("modelFamily", modelFamily), ("q", q.isEmpty ? nil : q)] {
             if let value { values.append(URLQueryItem(name: name, value: value)) }
         }
         return values

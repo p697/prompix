@@ -48,15 +48,20 @@ struct SearchView: View {
     var body: some View {
         NavigationStack {
             searchableContent(ScrollView {
-                LazyVStack(alignment: .leading, spacing: 20) {
-                    KindPicker(selection: $kind, skillsOnly: $skillsOnly)
+                LazyVStack(alignment: .leading, spacing: 20, pinnedViews: [.sectionHeaders]) {
                     if isBrowsing {
                         if !recent.isEmpty { recentSearches }
                         SearchUseTiles()
                     } else {
-                        searchResults
+                        // Kinds narrow a search, so they appear once there is one and stay pinned while results scroll.
+                        Section {
+                            searchResults
+                        } header: {
+                            KindPicker(selection: $kind, skillsOnly: $skillsOnly).padding(.bottom, 4)
+                                .background(Palette.paper)
+                        }
                     }
-                }.padding(.bottom, 28)
+                }.padding(.top, 8).padding(.bottom, 28)
             }
             .accessibilityIdentifier("searchResults")
             .scrollDismissesKeyboard(.interactively)
@@ -136,9 +141,12 @@ struct SearchView: View {
 
     @ViewBuilder private var searchResults: some View {
         if let feed = library.feed {
-            if kind == nil && !skillsOnly && !normalizedQuery.isEmpty { FeedCreatorSearch(repository: feed, query: normalizedQuery) }
-            FeedResults(store: feed.search, query: FeedQuery(kind: skillsOnly ? "skill" : kind?.rawValue, q: query), debounce: true, fallback: results)
-                .environment(\.cardShowsTitle, true)
+            // One stack, so an empty creator section adds no gap above the works.
+            VStack(alignment: .leading, spacing: 0) {
+                if kind == nil && !skillsOnly && !normalizedQuery.isEmpty { FeedCreatorSearch(repository: feed, query: normalizedQuery) }
+                FeedResults(store: feed.search, query: FeedQuery(kind: skillsOnly ? "skill" : kind?.rawValue, q: query), debounce: true, fallback: results)
+                    .environment(\.cardShowsTitle, true)
+            }
         } else { legacyResults }
     }
     @ViewBuilder private var legacyResults: some View {
@@ -192,8 +200,11 @@ struct SearchView: View {
 
     private func rememberQuery() {
         guard !normalizedQuery.isEmpty else { return }
+        // A term that extends or shortens another replaces it: typing island, then islands, keeps one.
+        let key = normalizedQuery.folding(options: [.caseInsensitive, .diacriticInsensitive, .widthInsensitive], locale: nil)
         recent = Array(([normalizedQuery] + recent.filter {
-            $0.compare(normalizedQuery, options: [.caseInsensitive, .diacriticInsensitive, .widthInsensitive]) != .orderedSame
+            let other = $0.folding(options: [.caseInsensitive, .diacriticInsensitive, .widthInsensitive], locale: nil)
+            return !other.hasPrefix(key) && !key.hasPrefix(other)
         }).prefix(6))
         UserDefaults.standard.set(recent, forKey: "recentSearches")
     }

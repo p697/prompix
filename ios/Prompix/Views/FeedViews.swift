@@ -131,7 +131,7 @@ struct PromptCardFace: View {
                     .clipShape(RoundedRectangle(cornerRadius: fixedRatio == nil ? PromptCardGeometry.cornerRadius : 4, style: .continuous))
             }
             if titled && !titleIsInArtwork && !typeSize.isAccessibilitySize {
-                Text(preview.displayTitle).font(.footnote).foregroundStyle(Palette.ink).lineLimit(1).padding(.horizontal, 2)
+                Text(preview.displayTitle).font(.subheadline).foregroundStyle(Palette.ink).lineLimit(1).padding(.horizontal, 2)
             }
         }.contentShape(Rectangle())
     }
