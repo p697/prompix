@@ -65,6 +65,54 @@ import XCTest
         let audiences = server.urls.map { URLComponents(url: $0, resolvingAgainstBaseURL: false)?.queryItems?.filter { $0.name == "presentation" }.map(\.value) ?? [] }
         XCTAssertEqual(audiences, [[], ["suggestive"], ["suggestive"], []])
     }
+    func testEnrichedCardDecodesAndDropsOnlyMalformedFields() throws {
+        var card = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(FeedFixture.card())) as? [String: Any])
+        card["facets"] = ["useCase": ["portraits"], "style": ["cinematic", "minimal"], "subject": []]
+        card["generation"] = ["modelFamily": "gpt-image", "mode": "t2i", "outputAspect": "3:4"]
+        card["inputs"] = ["requirement": "required", "count": 1, "kinds": ["face"], "ownLikenessOnly": true]
+        card["palette"] = [["hex": "#C2410C", "weight": 0.5], ["hex": "#F5F5F4", "weight": 0.3], ["hex": "#1C1917", "weight": 0.2]]
+        card["rights"] = ["license": "CC0-1.0", "basis": "license", "imageExport": true]
+        let decoded = try JSONDecoder().decode(FeedCard.self, from: JSONSerialization.data(withJSONObject: card)).validated(locale: "original")
+        XCTAssertEqual(decoded.facets?.style, ["cinematic", "minimal"])
+        XCTAssertEqual(decoded.generation?.outputAspect, "3:4")
+        XCTAssertEqual(decoded.inputs?.ownLikenessOnly, true)
+        XCTAssertEqual(decoded.palette?.first?.hex, "#C2410C")
+        XCTAssertEqual(decoded.rights?.imageExport, true)
+
+        card["palette"] = [["hex": "#c2410c", "weight": 0.5]]
+        card["inputs"] = ["requirement": "none", "kinds": ["face"]]
+        card["rights"] = ["license": "LicenseRef-source-author-rights", "basis": "attribution-only", "imageExport": true]
+        card["generation"] = ["modelFamily": "a-future-family", "mode": "t2i", "outputAspect": "wide"]
+        let sanitized = try JSONDecoder().decode(FeedCard.self, from: JSONSerialization.data(withJSONObject: card)).validated(locale: "original")
+        XCTAssertNil(sanitized.palette); XCTAssertNil(sanitized.inputs); XCTAssertNil(sanitized.rights); XCTAssertNil(sanitized.generation)
+        XCTAssertEqual(sanitized.facets?.useCase, ["portraits"], "Well-formed fields survive beside malformed ones")
+        XCTAssertEqual(sanitized.title, "Synthetic title", "A malformed 2.0 field never hides the work")
+    }
+    func testDetailKeepsVariablesThatPointAtThePromptAndEnglishCardText() throws {
+        var item = FeedFixture.prompt()
+        item.variables = [.init(token: "First-party", name: .init(zh: "内容", en: "Content"))]
+        item.shots = [.init(index: 1, startSec: 0, endSec: 2, text: "Open"), .init(index: 2, startSec: 2, endSec: 4, text: "Close")]
+        let kept = try JSONDecoder().decode(FeedDetail.self, from: FeedFixture.detail(item)).validated(id: item.id, revision: nil, locale: "original")
+        XCTAssertEqual(kept.item.variables?.first?.token, "First-party")
+        XCTAssertEqual(kept.item.shots?.count, 2)
+        item.variables = [.init(token: "[missing]", name: .init(zh: "缺失", en: "Missing"))]
+        item.shots = [.init(index: 2, text: "Out of order"), .init(index: 1, text: "First")]
+        let dropped = try JSONDecoder().decode(FeedDetail.self, from: FeedFixture.detail(item)).validated(id: item.id, revision: nil, locale: "original")
+        XCTAssertNil(dropped.item.variables); XCTAssertNil(dropped.item.shots)
+        XCTAssertEqual(dropped.item.prompt, item.prompt)
+    }
+    func testNewFiltersAreSentAndValidated() async throws {
+        let (client, server) = connection()
+        server.set("/v3/feed", bytes: try FeedFixture.page())
+        _ = try await client.page(query: FeedQuery(locale: "original", facet: "portraits", mode: "i2i", inputs: "required", modelFamily: "gpt-image"))
+        let parameters = try XCTUnwrap(URLComponents(url: server.urls[0], resolvingAgainstBaseURL: false)?.queryItems)
+        for (name, value) in [("facet", "portraits"), ("mode", "i2i"), ("inputs", "required"), ("modelFamily", "gpt-image")] {
+            XCTAssertEqual(parameters.first { $0.name == name }?.value, value)
+        }
+        XCTAssertThrowsError(try FeedQuery(mode: "photo").validated())
+        XCTAssertThrowsError(try FeedQuery(inputs: "maybe").validated())
+        XCTAssertThrowsError(try FeedQuery(facet: "Portraits & more").validated())
+    }
     private func connection() -> (FeedClient, FeedTestServer) {
         let server = FeedTestServer(), token = UUID().uuidString
         FeedTestServers.shared.insert(server, token: token)

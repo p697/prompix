@@ -635,7 +635,7 @@ enum CatalogSyncState: Equatable, Sendable {
             if let available = availability?[item.id] { translations = translations.filter { available.contains($0.key) } }
             if let metadata = item.localization ?? snapshot.localization {
                 updated.localization = Prompt.Localization(sourceLanguage: metadata.sourceLanguage,
-                    sourceFingerprint: item.localization?.sourceFingerprint ?? metadata.sourceFingerprint, translations: translations)
+                    sourceFingerprint: item.localization?.sourceFingerprint ?? metadata.sourceFingerprint, translations: translations, en: metadata.en)
             }
             return updated
         }
