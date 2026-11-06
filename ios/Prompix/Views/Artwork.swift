@@ -84,7 +84,7 @@ struct Artwork: View {
             noteColor
             VStack(alignment: .leading, spacing: compact ? 6 : 10) {
                 if !compact {
-                    Text(noteLabel).font(Typography.meta(size: 10)).tracking(1.2).lineLimit(1)
+                    Text(item.metaLine).font(Typography.meta(size: 10)).tracking(1.2).lineLimit(1)
                         .foregroundStyle(Palette.muted)
                 }
                 Text(item.displayTitle)
@@ -93,10 +93,6 @@ struct Artwork: View {
                 Spacer(minLength: 0)
             }.foregroundStyle(Palette.ink).padding(size.width * 0.10)
         }
-    }
-    /// Film-edge meta: what kind of work, and which model it is written for.
-    private var noteLabel: String {
-        [item.displayKind, Prompt.localizedModel(item.model)].filter { !$0.isEmpty }.joined(separator: " ▸ ").uppercased()
     }
     private var noteColor: Color { item.isSkill ? Palette.soft : Palette.surface }
     private func photo(_ name: String, size: CGSize) -> some View {
