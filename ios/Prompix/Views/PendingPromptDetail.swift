@@ -83,10 +83,12 @@ struct PromptDetailHeading: View {
     var body: some View {
         let meta = preview.detailMeta
         VStack(alignment: .leading, spacing: 10) {
-            (Text(meta.lead).foregroundStyle(Palette.ink).fontWeight(.semibold) + Text(meta.rest).foregroundStyle(Palette.muted))
-                .font(Typography.meta(size: 11)).tracking(1.4)
-                .accessibilityIdentifier("detailMeta")
-            Text(title).font(Typography.editorial(.title)).lineSpacing(3)
+            if !meta.lead.isEmpty || !meta.rest.isEmpty {
+                (Text(meta.lead).foregroundStyle(Palette.ink).fontWeight(.semibold) + Text(meta.rest).foregroundStyle(Palette.muted))
+                    .font(Typography.meta(size: 11)).tracking(1.4)
+                    .accessibilityIdentifier("detailMeta")
+            }
+            Text(title).font(.system(size: 24, weight: .semibold)).lineSpacing(4)
                 .fixedSize(horizontal: false, vertical: true).accessibilityAddTraits(.isHeader)
                 .accessibilityIdentifier("detailTitle")
         }
@@ -161,11 +163,13 @@ extension ContentPreview {
         [displayKind, Prompt.namesModel(model) ? Prompt.localizedModel(model) : "", generation?.outputAspect ?? media?.aspectRatio.flatMap(Self.ratioLabel) ?? "", durationLabel ?? ""]
             .filter { !$0.isEmpty }.joined(separator: " ▸ ").uppercased()
     }
-    /// The detail's line: the model (or, without one, the kind), then the frame and length.
+    /// The detail's line: model ▸ frame ▸ length. Words have no frame, and an
+    /// unknown model is left out rather than replaced by the kind.
     var detailMeta: (lead: String, rest: String) {
-        let lead = Prompt.namesModel(model) ? Prompt.localizedModel(model) : displayKind
-        let rest = [generation?.outputAspect ?? media?.aspectRatio.flatMap(Self.ratioLabel) ?? "", durationLabel ?? ""].filter { !$0.isEmpty }
-        return (lead.uppercased(), rest.map { " ▸ " + $0 }.joined())
+        let lead = Prompt.namesModel(model) ? Prompt.localizedModel(model).uppercased() : ""
+        let frame = kind == .text || kind == .web || isSkill ? "" : generation?.outputAspect ?? media?.aspectRatio.flatMap(Self.ratioLabel) ?? ""
+        let rest = [frame, durationLabel ?? ""].filter { !$0.isEmpty }
+        return (lead, rest.enumerated().map { ($0.offset == 0 && lead.isEmpty ? "" : " ▸ ") + $0.element }.joined())
     }
     /// The nearest common frame ratio, or nothing for an unusual shape.
     static func ratioLabel(_ ratio: Double) -> String? {

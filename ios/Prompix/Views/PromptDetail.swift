@@ -26,6 +26,8 @@ struct PromptDetail: View {
     @State private var languageTask: Task<Void, Never>?
     @State private var actionsCollapsed = false
     @State private var mediaPaneVisible = false
+    /// Once the title scrolls away it returns, small, between the bar buttons over a paper veil.
+    @State private var titleShown = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var typeSize
     @Environment(\.colorScheme) private var colorScheme
@@ -82,6 +84,20 @@ struct PromptDetail: View {
                     .disabled(library.isRemoved(item))
             }
         }
+        .overlay(alignment: .top) {
+            LinearGradient(stops: [.init(color: Palette.paper, location: 0), .init(color: Palette.paper.opacity(0.92), location: 0.6), .init(color: Palette.paper.opacity(0), location: 1)],
+                           startPoint: .top, endPoint: .bottom)
+                .frame(height: 118).ignoresSafeArea(edges: .top)
+                .opacity(titleShown ? 1 : 0).animation(.easeOut(duration: 0.2), value: titleShown)
+                .allowsHitTesting(false).accessibilityHidden(true)
+        }
+        .toolbar {
+            ToolbarItem(placement: .principal) {
+                Text(content.title).font(.subheadline.weight(.semibold)).lineLimit(1).frame(maxWidth: 200)
+                    .opacity(titleShown ? 1 : 0).animation(.easeOut(duration: 0.2), value: titleShown)
+                    .accessibilityHidden(!titleShown)
+            }
+        }
         .promptActionBar { readingActions }
         .onChange(of: content) { _, _ in copied = false }
         .onChange(of: selectedVersion) { _, _ in copied = false }
@@ -128,6 +144,7 @@ struct PromptDetail: View {
                         readingContent
                     }.padding(.bottom, 28).frame(maxWidth: 700).frame(maxWidth: .infinity)
                 }.ignoresSafeArea(edges: mediaPaneVisible ? [] : .top)
+                    .tracksTitle($titleShown, after: mediaPaneVisible ? 60 : 340)
                     .preservingReadingPosition(readingPosition).readingChrome($actionsCollapsed).readingBottomEdge().accessibilityIdentifier("detailReadingPane")
             } secondary: {
                 ScrollView {
@@ -142,6 +159,7 @@ struct PromptDetail: View {
                     readingContent
                 }.padding(.bottom, 28).frame(maxWidth: 700).frame(maxWidth: .infinity)
             }.ignoresSafeArea(edges: hasMediaPreview ? .top : [])
+                .tracksTitle($titleShown, after: hasMediaPreview ? 340 : 60)
                 .preservingReadingPosition(readingPosition).readingChrome($actionsCollapsed).readingBottomEdge().accessibilityIdentifier("detailReadingPane")
         }
     }
@@ -181,30 +199,37 @@ struct PromptDetail: View {
             VStack(alignment: .leading, spacing: 10) {
                 languagePicker
                 if !versions.isEmpty { versionPicker }
-                FoldedPrompt(text: shownText).accessibilityIdentifier("promptBody")
+                // A multi-shot video reads as its shots; the same words are not shown twice.
+                if let shots = item.shots, selectedVersion == nil { PromptShots(shots: shots).accessibilityIdentifier("promptBody") }
+                else { FoldedPrompt(text: shownText).accessibilityIdentifier("promptBody") }
             }
-            if let shots = item.shots { PromptShots(shots: shots) }
             DisclosureGroup {
-                VStack(alignment: .leading, spacing: 20) {
-                    if let creator = item.creator { CreatorByline(creator: creator) }
-                    if let need = PromptNeeds.reference(for: item) {
-                        LabeledContent(String(localized: "参考图"), value: need).font(.subheadline).accessibilityIdentifier("promptNeeds")
+                VStack(alignment: .leading, spacing: 0) {
+                    if let creator = item.creator { CreatorByline(creator: creator).padding(.bottom, 6) }
+                    infoRow(String(localized: "语言"), displaysOriginalContent ? String(localized: "原文") : String(localized: "AI 译文"))
+                    if let link = item.source.url ?? item.source.repository {
+                        Link(destination: link) {
+                            infoRow(String(localized: "原帖"), (item.source.post != nil ? "X" : item.source.name) + " ↗")
+                        }.accessibilityIdentifier("originalSource")
                     }
-                    LabeledContent(String(localized: "语言"), value: displaysOriginalContent ? String(localized: "原文") : String(localized: "AI 译文")).font(.subheadline)
-                    if !content.summary.isEmpty { Text(content.summary).font(.footnote).foregroundStyle(Palette.muted).lineSpacing(4) }
-                    if item.kind != .text { Text(content.previewLabel).font(.footnote).foregroundStyle(Palette.muted) }
-                    Text(content.example).font(.body).lineSpacing(5).textSelection(.enabled)
-                    if let skill = item.skill { SkillInformation(skill: skill) }
+                    infoRow(String(localized: "许可"), licenseText)
+                        .accessibilityLabel(String(localized: "内容许可：\(spokenLicense)"))
+                    if let date = item.source.post?.date {
+                        infoRow(String(localized: "发布"), date.formatted(.dateTime.year().month().day()), mono: true)
+                    }
+                    if let skill = item.skill { SkillInformation(skill: skill).padding(.top, 16) }
                     if WebsiteExamples.files[item.id] != nil {
                         Button { webPresented = true } label: {
-                            Label(String(localized: "打开原创网页示例"), systemImage: "safari").frame(minHeight: 44)
+                            Text(String(localized: "打开原创网页示例")).font(.subheadline).frame(minHeight: 44)
                         }.accessibilityIdentifier("webExample")
                     }
                     if let demo = item.media?.demoURL {
-                        Link(String(localized: "打开网页示例"), destination: demo).frame(minHeight: 44)
+                        Link(String(localized: "打开网页示例"), destination: demo).font(.subheadline).frame(minHeight: 44)
                     }
-                    sourceInformation
-                }.padding(.top, 16)
+                    Link(destination: SupportLinks.url(.report, contentID: item.id)) {
+                        Text(String(localized: "报告问题或申请下架")).font(.footnote).foregroundStyle(Palette.muted).frame(minHeight: 44)
+                    }.accessibilityIdentifier("reportContent")
+                }.padding(.top, 8)
             } label: {
                 moreInformationLabel.accessibilityIdentifier("promptInformation")
             }
@@ -216,6 +241,15 @@ struct PromptDetail: View {
                 PromptGrid(items: related)
             }
         }.padding(.horizontal, 22).padding(.top, 12)
+    }
+    /// Licence codes from the pipeline, in words a reader understands.
+    private var licenseText: String {
+        switch item.source.license {
+        case "X-API-Terms": String(localized: "通过 X API 收录")
+        case "Source-author-rights": String(localized: "版权归原作者")
+        case "CC0-1.0": "CC0"
+        default: item.source.license
+        }
     }
     /// Only licenses a reader recognises at a glance; the full terms stay inside.
     private var shortLicense: String? {
@@ -233,41 +267,14 @@ struct PromptDetail: View {
         }.font(.footnote).foregroundStyle(Palette.muted).frame(minHeight: 44)
             .accessibilityElement(children: .combine)
     }
-    private var sourceInformation: some View {
-            VStack(alignment: .leading, spacing: 8) {
-                ViewThatFits(in: .horizontal) {
-                    HStack { sourceAuthor; Spacer(); sourceKind }
-                    VStack(alignment: .leading, spacing: 6) { sourceAuthor; sourceKind }
-                }
-                Text(item.source.license == "X-API-Terms" ? String(localized: "通过 X API 收录") : item.source.license).font(.footnote).foregroundStyle(Palette.muted)
-                    .accessibilityLabel(String(localized: "内容许可：\(spokenLicense)"))
-                if let post = item.source.post {
-                    if let date = post.date {
-                        Text(date, format: .dateTime.year().month().day().hour().minute())
-                            .font(.caption).foregroundStyle(Palette.muted)
-                    }
-                    DisclosureGroup(String(localized: "查看 X 原帖")) {
-                        Text(post.text).font(.subheadline).lineSpacing(5).textSelection(.enabled)
-                            .frame(maxWidth: .infinity, alignment: .leading).padding(.vertical, 10)
-                    }.font(.subheadline).accessibilityIdentifier("originalXPost")
-                }
-                if let context = item.source.context {
-                    ForEach(context, id: \.id) { source in
-                        DisclosureGroup(source.id == item.source.mediaPostID ? String(localized: "作品原帖") : String(localized: "上下文原帖")) {
-                            VStack(alignment: .leading, spacing: 10) {
-                                if let date = source.date { Text(date, format: .dateTime.year().month().day().hour().minute()).foregroundStyle(Palette.muted) }
-                                Text(source.text).textSelection(.enabled).lineSpacing(5)
-                                if let url = URL(string: "https://x.com/i/web/status/\(source.id)") {
-                                    Link(String(localized: "在 X 查看"), destination: url).frame(minHeight: 44)
-                                }
-                            }.font(.subheadline).frame(maxWidth: .infinity, alignment: .leading).padding(.vertical, 10)
-                        }.font(.subheadline).accessibilityIdentifier("sourceContext-\(source.id)")
-                    }
-                }
-                if let repository = item.source.repository { Link(destination: repository) { Text(String(localized: "收录于 \(item.source.name)")).font(.footnote).frame(minHeight: 44).contentShape(Rectangle()) } }
-                if let source = item.source.url { Link(destination: source) { Text(String(localized: "查看原始来源 ↗")).font(.footnote).frame(minHeight: 44).contentShape(Rectangle()) } }
-                Link(destination: SupportLinks.url(.report, contentID: item.id)) { Text(String(localized: "反馈这条内容")).font(.footnote).frame(minHeight: 44).contentShape(Rectangle()) }.accessibilityIdentifier("reportContent")
-            }
+    private func infoRow(_ label: String, _ value: String, mono: Bool = false) -> some View {
+        HStack(spacing: 12) {
+            Text(label).foregroundStyle(Palette.muted)
+            Spacer(minLength: 8)
+            Text(value).font(mono ? Typography.meta(size: 12) : .subheadline).foregroundStyle(Palette.ink).lineLimit(1)
+        }.font(.subheadline).frame(minHeight: 44)
+            .overlay(alignment: .bottom) { Rectangle().fill(Palette.line).frame(height: 0.5) }
+            .accessibilityElement(children: .combine)
     }
     private var readingActions: some View {
         ReadingActionBar(isSkill: item.isSkill, collapsed: actionsCollapsed, copied: copied,
@@ -300,13 +307,6 @@ struct PromptDetail: View {
                 .frame(minHeight: 44).contentShape(Rectangle())
         }.buttonStyle(.plain).accessibilityAddTraits(selected ? .isSelected : [])
             .accessibilityIdentifier(id.map { "version-\($0)" } ?? "version-original")
-    }
-    private var sourceAuthor: some View {
-        Text(item.source.author ?? item.source.name).font(.footnote.weight(.medium))
-    }
-    private var sourceKind: some View {
-        Text(item.source.name == "Prompix Studio" ? String(localized: "原创内容") : String(localized: "社区收录"))
-            .font(.footnote).foregroundStyle(Palette.muted)
     }
     private var languagePicker: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -847,26 +847,6 @@ struct ZoomImage: UIViewRepresentable {
     }
 }
 
-/// The reference the work asks you to upload, if any.
-enum PromptNeeds {
-    static func reference(for item: Prompt) -> String? {
-        guard let inputs = item.inputs, inputs.requirement != "none" else { return nil }
-        let names = inputs.kinds.map { kind in
-            switch kind {
-            case "face": String(localized: "人像照片")
-            case "product": String(localized: "产品照")
-            case "style": String(localized: "风格参考图")
-            case "scene": String(localized: "场景照片")
-            case "video": String(localized: "参考视频")
-            case "audio": String(localized: "参考音频")
-            default: kind
-            }
-        }.joined(separator: " · ")
-        let count = inputs.count.map { $0 > 1 ? " ×\($0)" : "" } ?? ""
-        return inputs.requirement == "required" ? String(localized: "需要\(names)\(count)") : String(localized: "可选\(names)\(count)")
-    }
-}
-
 /// The prompt itself, folded to about seven lines until the reader asks for all of it.
 private struct FoldedPrompt: View {
     let text: String
@@ -901,7 +881,6 @@ private struct PromptShots: View {
     let shots: [Prompt.Shot]
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(String(localized: "分镜")).font(.subheadline.weight(.semibold)).foregroundStyle(Palette.muted).accessibilityAddTraits(.isHeader)
             ForEach(shots, id: \.index) { shot in
                 VStack(alignment: .leading, spacing: 4) {
                     Text(label(shot)).font(Typography.meta(size: 11)).tracking(1).foregroundStyle(Palette.muted)
@@ -914,5 +893,13 @@ private struct PromptShots: View {
         let number = String(format: "%02d", shot.index)
         guard let start = shot.startSec, let end = shot.endSec else { return number }
         return "\(number) ▸ \(start.formatted(.number.precision(.fractionLength(0...1))))–\(end.formatted(.number.precision(.fractionLength(0...1))))s"
+    }
+}
+
+private extension View {
+    @ViewBuilder func tracksTitle(_ shown: Binding<Bool>, after offset: CGFloat) -> some View {
+        if #available(iOS 18, *) {
+            onScrollGeometryChange(for: Bool.self) { $0.contentOffset.y + $0.contentInsets.top > offset } action: { _, value in shown.wrappedValue = value }
+        } else { self }
     }
 }

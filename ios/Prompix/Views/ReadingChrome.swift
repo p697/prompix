@@ -115,6 +115,12 @@ struct ReadingActionBar: View {
         }
         .padding(.horizontal, 20).padding(.vertical, 8)
         .frame(maxWidth: 600).frame(maxWidth: .infinity)
+        // The reading fades into paper beneath the buttons rather than running behind them.
+        .background {
+            LinearGradient(stops: [.init(color: Palette.paper.opacity(0), location: 0), .init(color: Palette.paper.opacity(0.92), location: 0.55), .init(color: Palette.paper, location: 1)],
+                           startPoint: .top, endPoint: .bottom)
+                .padding(.top, -40).ignoresSafeArea(edges: .bottom).allowsHitTesting(false)
+        }
         .animation(reduceMotion ? nil : Motion.chrome, value: collapsed)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier(collapsed ? "readingActionsCompact" : "readingActionsExpanded")
