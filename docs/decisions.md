@@ -1218,3 +1218,7 @@ Rechecking every published X post daily cost about $0.4–0.6/day on twitterapi.
 ### 2026-11-07 — Show one label for face inputs
 
 The detail page used to say "your own photo" when `inputs.ownLikenessOnly` was true and "portrait photo" otherwise. The owner judged the distinction worth little to people: it guards nothing, and when the review cannot tell, the default is a guess. The app now always shows "portrait photo" for a face input. The feed keeps `ownLikenessOnly` as data; safety decisions about real people stay in the combined review.
+
+### 2026-11-07 — Fall back between vendors per stage
+
+A 20-item comparison of zh-Hans translation, each checked by Sonnet 5.5, left 19 publishable from gpt-6.1-terra (Codex subscription), 16 from gpt-6-luna and from Sonnet 5.5, and 14 from Haiku 5.5. Haiku as the checker passed 2 of the 3 translations Sonnet held. The owner chose gpt-6.1-terra for translation and Sonnet 5.5 for the check. Each side backs up the other: when the GPT route cannot serve, translation falls back to Haiku; when the Claude API cannot serve, the check falls back to a GPT model. A stage route may therefore name one fallback route. It is used only when the primary reports `unavailable` (not signed in, no such model, no credit) or `rate_limited` (rate limit or used-up quota), and every switch is logged. A refusal or an invalid answer is a verdict on the content and never goes to the fallback.

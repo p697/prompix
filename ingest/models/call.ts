@@ -10,8 +10,9 @@ export type ModelCallSummary = { stage: string; provider: ProviderId; model: str
 export async function completeValidated<T>(provider: ModelProvider, stage: string, request: ModelRequest, schema: z.ZodType<T>,
   record?: (summary: ModelCallSummary) => Promise<void>): Promise<{ value: T; result: ModelResult }> {
   const started = Date.now();
-  const summary = (ok: boolean, usage?: ModelUsage, error?: ModelErrorCode): ModelCallSummary =>
-    ({ stage, provider: provider.id, model: provider.model, ok, durationMs: Date.now() - started, usage, error, images: request.images?.length ?? 0 });
+  // A routed provider may answer from its fallback; the result names who actually answered.
+  const summary = (ok: boolean, usage?: ModelUsage, error?: ModelErrorCode, served?: ModelResult): ModelCallSummary =>
+    ({ stage, provider: served?.provider ?? provider.id, model: served?.model ?? provider.model, ok, durationMs: Date.now() - started, usage, error, images: request.images?.length ?? 0 });
   let result: ModelResult;
   try {
     if (request.images?.length && !provider.capabilities.images) throw new ModelProviderError(`${provider.id} does not accept images`, "unsupported", false);
@@ -23,9 +24,9 @@ export async function completeValidated<T>(provider: ModelProvider, stage: strin
   }
   const parsed = schema.safeParse(result.output);
   if (!parsed.success) {
-    await record?.(summary(false, result.usage, "invalid_output"));
+    await record?.(summary(false, result.usage, "invalid_output", result));
     throw new ModelProviderError(`${provider.id} output did not match the ${stage} schema`, "invalid_output", false);
   }
-  await record?.(summary(true, result.usage));
+  await record?.(summary(true, result.usage, undefined, result));
   return { value: parsed.data, result };
 }

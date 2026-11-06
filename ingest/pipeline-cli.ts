@@ -6,7 +6,7 @@ import { completeValidated } from "./models/call.ts";
 import { trustSystemCertificates } from "./models/http.ts";
 import { createProvider, isProviderId, modelEnvironment, providerAvailability, providerDefinitions } from "./models/registry.ts";
 import { ModelProviderError, providerIds, type ModelImage } from "./models/types.ts";
-import { appendEvent, pipelineRoot, pipelineStages, readEvents, snapshot, stageLabels, updateConfig, type PipelineEvent, type PipelineSnapshot } from "./pipeline-control.ts";
+import { appendEvent, pipelineRoot, pipelineStages, readEvents, snapshot, stageLabels, updateConfig, type PipelineEvent, type PipelineSnapshot, type StageRoute } from "./pipeline-control.ts";
 import { repo } from "./publication.ts";
 import { installWorker, restartWorker, uninstallWorker, workerPlistPath } from "./worker-launchd.ts";
 import { pipelineEnvironment, runMaintenance } from "./worker-maintenance.ts";
@@ -22,6 +22,7 @@ const usage = `用法：npm run pipeline -- <命令> [参数]
   start | pause | resume | stop          设置期望状态，后台进程按它执行
   target <每天条数>                       每天目标，0–1000
   route <环节> <提供方> [--model m] [--effort low|medium|high]
+        [--fallback <提供方>|none] [--fallback-model m] [--fallback-effort e]   主路由不可用或限流时改用备用；不写则保留原备用
   note <文字>                            留一条备注给其他 agent
   set legacyContentDir <路径>             旧定时任务的内容目录
 
@@ -35,6 +36,9 @@ const usage = `用法：npm run pipeline -- <命令> [参数]
 环节：${pipelineStages.join(", ")}
 提供方：${providerIds.join(", ")}`;
 
+const describeTarget = (route: Omit<StageRoute, "fallback">) =>
+  `${route.provider} · ${route.model ?? providerDefinitions[route.provider].defaultModel ?? "未指定模型"}${route.effort ? ` · ${route.effort}` : ""}`;
+const describeRoute = (route: StageRoute) => describeTarget(route) + (route.fallback ? `（备用 ${describeTarget(route.fallback)}）` : "");
 const time = (value?: string) => value ? new Date(value).toLocaleString("zh-CN", { hour12: false, month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }) : "未知";
 const ago = (value: string) => { const minutes = Math.round((Date.now() - Date.parse(value)) / 60000); return minutes < 1 ? "刚刚" : minutes < 60 ? `${minutes} 分钟前` : `${Math.round(minutes / 60)} 小时前`; };
 const desiredLabel = { stopped: "已停止", running: "运行", paused: "暂停" } as const;
@@ -75,7 +79,7 @@ function describeStatus(view: PipelineSnapshot, brief: boolean): string {
   if (brief) return [workerLine, desired, worker?.lastError ? `最近错误：${time(worker.lastError.at)} ${worker.lastError.message}` : undefined].filter(Boolean).join("\n");
   const routes = pipelineStages.map(stage => {
     const route = config.routing[stage];
-    return `  ${stageLabels[stage]}：${route.provider} · ${route.model ?? providerDefinitions[route.provider].defaultModel ?? "未指定模型"}${route.effort ? ` · ${route.effort}` : ""}`;
+    return `  ${stageLabels[stage]}：${describeRoute(route)}`;
   });
   const jobs = Object.entries(worker?.jobs ?? {}).map(([name, job]) => `  ${jobLabels[name] ?? name}：${time(job.startedAt)} ${
     !job.finishedAt ? "进行中" : job.ok ? `完成，${job.summary ?? ""}` : `失败，${job.summary ?? ""}`}`);
@@ -120,7 +124,7 @@ async function testProvider(id: string, model: string | undefined, imagePath: st
 export async function main(argv = process.argv.slice(2)) {
   const { values, positionals } = parseArgs({ args: argv, allowPositionals: true, options: {
     json: { type: "boolean" }, brief: { type: "boolean" }, by: { type: "string" }, reason: { type: "string" },
-    model: { type: "string" }, effort: { type: "string" }, image: { type: "string" }, tail: { type: "string" }, help: { type: "boolean", short: "h" } } });
+    model: { type: "string" }, effort: { type: "string" }, fallback: { type: "string" }, "fallback-model": { type: "string" }, "fallback-effort": { type: "string" }, image: { type: "string" }, tail: { type: "string" }, help: { type: "boolean", short: "h" } } });
   const [command, ...rest] = positionals;
   const root = pipelineRoot();
   switch (command) {
@@ -160,10 +164,16 @@ export async function main(argv = process.argv.slice(2)) {
       const [stage, provider] = rest;
       if (!pipelineStages.includes(stage as never)) throw new Error(`未知环节 ${stage}，可选：${pipelineStages.join(", ")}`);
       if (!provider || !isProviderId(provider)) throw new Error(`未知提供方 ${provider}，可选：${providerIds.join(", ")}`);
-      const { after } = await updateConfig(root, actorOf(values), values.reason, config => ({ ...config,
-        routing: { ...config.routing, [stage]: { provider, ...(values.model ? { model: values.model } : {}), ...(values.effort ? { effort: values.effort } : {}) } } }));
+      if (values.fallback && values.fallback !== "none" && !isProviderId(values.fallback)) throw new Error(`未知备用提供方 ${values.fallback}，可选：${providerIds.join(", ")} 或 none`);
+      const { after } = await updateConfig(root, actorOf(values), values.reason, config => {
+        const kept = config.routing[stage as keyof typeof config.routing].fallback;
+        const fallback = values.fallback === "none" ? undefined : values.fallback ? { provider: values.fallback,
+          ...(values["fallback-model"] ? { model: values["fallback-model"] } : {}), ...(values["fallback-effort"] ? { effort: values["fallback-effort"] } : {}) } : kept;
+        return { ...config, routing: { ...config.routing, [stage]: { provider, ...(values.model ? { model: values.model } : {}),
+          ...(values.effort ? { effort: values.effort } : {}), ...(fallback ? { fallback } : {}) } } };
+      });
       const route = after.routing[stage as keyof typeof after.routing];
-      console.log(`${stageLabels[stage as keyof typeof stageLabels]} 改用 ${route.provider} · ${route.model ?? providerDefinitions[route.provider].defaultModel ?? "未指定模型"}`);
+      console.log(`${stageLabels[stage as keyof typeof stageLabels]} 改用 ${describeRoute(route)}`);
       return;
     }
     case "set": {
