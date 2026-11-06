@@ -22,6 +22,7 @@ struct PromptDetail: View {
     @State private var languageRequestID: UUID?
     @State private var languageTask: Task<Void, Never>?
     @State private var actionsCollapsed = false
+    @State private var mediaPaneVisible = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var typeSize
     @Environment(\.colorScheme) private var colorScheme
@@ -116,12 +117,15 @@ struct PromptDetail: View {
         if #available(iOS 27.1, *), hasMediaPreview {
             ArrangementView {
                 ScrollView {
-                    readingContent.padding(.bottom, 28).frame(maxWidth: 700).frame(maxWidth: .infinity)
+                    VStack(alignment: .leading, spacing: 25) {
+                        if !mediaPaneVisible { largePreview }
+                        readingContent
+                    }.padding(.bottom, 28).frame(maxWidth: 700).frame(maxWidth: .infinity)
                 }.preservingReadingPosition(readingPosition).readingChrome($actionsCollapsed).readingBottomEdge().accessibilityIdentifier("detailReadingPane")
             } secondary: {
                 ScrollView {
                     largePreview.padding(.bottom, 24).frame(maxWidth: 600).frame(maxWidth: .infinity)
-                }.preservingReadingPosition(readingPosition, media: true).accessibilityIdentifier("detailMediaPane")
+                }.preservingReadingPosition(readingPosition, media: true).reportsPaneVisibility($mediaPaneVisible).accessibilityIdentifier("detailMediaPane")
             }.arrangementViewStyle(.split.axes(.horizontal))
         } else {
             ScrollView {
@@ -162,7 +166,7 @@ struct PromptDetail: View {
     private var readingContent: some View {
         VStack(alignment: .leading, spacing: 24) {
             PromptDetailHeading(title: content.title, summary: content.summary, creator: item.creator)
-            if #available(iOS 27.1, *), hasMediaPreview { compactPreview }
+            if #available(iOS 27.1, *), hasMediaPreview, mediaPaneVisible { compactPreview }
             languagePicker
             PromptMarkdown(content.prompt)
                 .accessibilityIdentifier("promptBody")
