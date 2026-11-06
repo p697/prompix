@@ -15,7 +15,7 @@ struct PendingPromptDetail: View {
             if #available(iOS 27.1, *), preview.hasDetailMedia {
                 ArrangementView {
                     ScrollView { reading.padding(.bottom, 28).frame(maxWidth: 700).frame(maxWidth: .infinity) }
-                        .preservingReadingPosition(position).readingChrome($actionsCollapsed).accessibilityIdentifier("detailReadingPane")
+                        .preservingReadingPosition(position).readingChrome($actionsCollapsed).readingBottomEdge().accessibilityIdentifier("detailReadingPane")
                 } secondary: {
                     ScrollView { media.padding(.bottom, 24).frame(maxWidth: 600).frame(maxWidth: .infinity) }
                         .preservingReadingPosition(position, media: true).accessibilityIdentifier("detailMediaPane")
@@ -26,7 +26,7 @@ struct PendingPromptDetail: View {
                         media
                         reading
                     }.padding(.bottom, 28).frame(maxWidth: 700).frame(maxWidth: .infinity)
-                }.preservingReadingPosition(position).readingChrome($actionsCollapsed).accessibilityIdentifier("detailReadingPane")
+                }.preservingReadingPosition(position).readingChrome($actionsCollapsed).readingBottomEdge().accessibilityIdentifier("detailReadingPane")
             }
         }.foregroundStyle(Palette.ink)
             .onChange(of: actionsCollapsed) { _, value in position.actionsCollapsed = value }

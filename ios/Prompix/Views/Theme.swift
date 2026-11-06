@@ -186,4 +186,10 @@ extension View {
             safeAreaInset(edge: .bottom, spacing: 0, content: content)
         }
     }
+
+    // Reading text softens beneath floating actions instead of colliding with them.
+    @ViewBuilder func readingBottomEdge() -> some View {
+        if #available(iOS 26, *) { scrollEdgeEffectStyle(.soft, for: .bottom) }
+        else { self }
+    }
 }

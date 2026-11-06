@@ -1116,3 +1116,7 @@ The same run showed all three leases held by large review/translation batches wh
 ### 2026-10-25 — Resume the existing increment after quota reset
 
 Continue the frozen `additional-1000-20261023` baseline2982/target3982. Do not rebase or request another1,000. The old stop combined a subscription denial with post-reservation guards, which mislabeled unsent search/visual work as provider failure. Move guards before reservation; retain original records and require explicit evidence for operator dispositions. Near the protection line, measure the account every minute. Keep the default90% threshold; the previous stage's95% grant is not reused.
+
+### 2026-11-06 — Soften reading text beneath the detail actions
+
+The owner keeps the detail action bar, including its collapse into three circular buttons while scrolling. Only the collision is fixed: reading scroll views opt into the system soft bottom scroll-edge effect so text fades beneath the bar. No layout, color or motion changes. Verified on the iOS 27.1 simulator and installed on the owner's iPhone Air (iOS 27.0.1).
