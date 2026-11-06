@@ -667,13 +667,9 @@ private struct DeckDetail: View {
                     Text(deck?.name ?? String(localized: "全部收藏")).font(.system(size: 30, weight: .bold)).accessibilityAddTraits(.isHeader)
                 }.padding(.horizontal, 20)
                 if kinds.count > 1 {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 2) {
-                            chip(String(localized: "全部"), selected: kind == nil) { kind = nil }
-                            ForEach(kinds, id: \.0) { value, count in
-                                chip("\(value.title) \(count)", selected: kind == value) { kind = value }
-                            }
-                        }.padding(.horizontal, 16)
+                    ChipRow(values: [nil] + kinds.map { Optional($0.0) }, selection: $kind) { value in
+                        guard let value else { return String(localized: "全部") }
+                        return "\(value.title) \(kinds.first { $0.0 == value }?.1 ?? 0)"
                     }
                 }
                 if deckID == nil, !images.offlineFailures.isEmpty {
@@ -712,15 +708,6 @@ private struct DeckDetail: View {
                 if let deckID, library.decks.delete(deckID) { dismiss() }
             }
         } message: { Text(String(localized: "卡组里的作品仍会留在全部收藏。")) }
-    }
-    private func chip(_ title: String, selected: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Text(title).font(.subheadline.weight(selected ? .semibold : .regular))
-                .foregroundStyle(selected ? Palette.paper : Palette.muted)
-                .padding(.horizontal, 12).frame(height: 32)
-                .background(selected ? Palette.ink : .clear, in: Capsule())
-                .frame(minHeight: 44).contentShape(Rectangle())
-        }.buttonStyle(.plain).accessibilityAddTraits(selected ? .isSelected : [])
     }
 }
 

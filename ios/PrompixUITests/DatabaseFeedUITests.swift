@@ -346,7 +346,7 @@ import UIKit
         author.tap()
         let profile = app.scrollViews["creatorProfileScroll"]
         XCTAssertTrue(profile.waitForExistence(timeout: 5))
-        XCTAssertTrue(app.buttons["creatorContentFilter"].exists)
+        XCTAssertTrue(app.buttons["creatorFilter-all"].exists)
         XCTAssertTrue(try requests().contains { $0["operation"] as? String == "creatorWorks" && $0["query"] as? String == "fixture-author-49:video" })
         capture("creator-profile-filter-retained")
         app.navigationBars.buttons.element(boundBy: 0).tap()
@@ -381,9 +381,9 @@ import UIKit
         let loaded = profile.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'prompt-database-fixture-'" )).firstMatch
         XCTAssertTrue(loaded.waitForExistence(timeout: 10))
         let loadedID = loaded.identifier
-        for _ in 0..<3 { if app.buttons["creatorContentFilter"].isHittable { break }; app.swipeDown() }
+        for _ in 0..<3 { if app.buttons["creatorFilter-all"].isHittable { break }; app.swipeDown() }
         try Data().write(to: root.appending(path: "hold-creator"))
-        app.buttons["creatorContentFilter"].tap(); app.buttons["图片"].tap()
+        app.buttons["creatorFilter-image"].tap()
         XCTAssertTrue(app.otherElements["feedLoading"].waitForExistence(timeout: 3))
         XCTAssertFalse(profile.buttons["prompt-database-fixture-0"].exists, "The previous text item cannot remain under the image filter")
         XCTAssertFalse(app.progressIndicators.firstMatch.exists)
@@ -391,12 +391,12 @@ import UIKit
         try FileManager.default.removeItem(at: root.appending(path: "hold-creator"))
         XCTAssertTrue(profile.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'prompt-database-fixture-'" )).firstMatch.waitForExistence(timeout: 10))
         XCTAssertFalse(app.otherElements["feedLoading"].exists)
-        app.buttons["creatorContentFilter"].tap(); app.buttons["Skill"].tap()
+        app.buttons["creatorFilter-all"].tap(); app.buttons["Skill"].tap()
         XCTAssertTrue(app.staticTexts["暂无匹配内容"].waitForExistence(timeout: 8))
         XCTAssertFalse(app.otherElements["feedLoading"].exists, "A confirmed empty result must stop loading")
         capture("polish-04-confirmed-empty-filter")
         try Data().write(to: root.appending(path: "hold-creator"))
-        app.buttons["creatorContentFilter"].tap(); app.buttons["全部"].tap()
+        app.buttons["creatorFilter-all"].tap(); app.buttons["全部"].tap()
         XCTAssertTrue(profile.buttons[loadedID].waitForExistence(timeout: 3), "The cached first page must appear while the next network request is held")
         XCTAssertFalse(app.otherElements["feedLoading"].exists)
         capture("polish-08-cache-before-refresh")

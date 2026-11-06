@@ -439,8 +439,10 @@ struct CreatorDetail: View {
                             .accessibilityLabel(library.isCreatorSaved(creator) ? String(localized: "取消收藏创作者") : String(localized: "收藏创作者"))
                             .accessibilityIdentifier("saveCreator").sensoryFeedback(.selection, trigger: savedFeedback)
                         Link(destination: creator.profileURL) {
-                            Label { Text(String(localized: "查看 \(creator.platformName) 主页")) } icon: { PrompixIcon.arrowUpRight.image(size: 18) }
-                                .font(.subheadline.weight(.semibold)).lineLimit(1).minimumScaleFactor(0.8)
+                            HStack(spacing: 6) {
+                                Text(String(localized: "在 \(creator.platformName) 上查看"))
+                                PrompixIcon.arrowUpRight.image(size: 16)
+                            }.font(.subheadline.weight(.semibold)).lineLimit(1).minimumScaleFactor(0.8)
                                 .frame(maxWidth: .infinity, minHeight: 24).padding(.vertical, 13)
                                 .background(Palette.soft, in: Capsule())
                         }.buttonStyle(.plain).foregroundStyle(Palette.ink)
@@ -448,16 +450,15 @@ struct CreatorDetail: View {
                     }
                 }.padding(.horizontal, 20).padding(.vertical, 12)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                VStack(alignment: .leading, spacing: 14) {
-                    ViewThatFits(in: .horizontal) {
-                        HStack { contentHeading; Spacer(); filterPicker }
-                        VStack(alignment: .leading, spacing: 8) { contentHeading; filterPicker }
-                    }.padding(.horizontal, 20)
+                VStack(alignment: .leading, spacing: 10) {
+                    if availableFilters.count > 2 {
+                        ChipRow(values: availableFilters, selection: $filter, title: \.title) { "creatorFilter-\($0.rawValue)" }
+                            .accessibilityIdentifier("creatorContentFilter")
+                    }
                     if let feed = library.feed {
                         OwnedFeedResults(repository: feed, query: FeedQuery(kind: filter == .all ? nil : filter.rawValue, creator: creator.id, sort: "recommended"), fallback: items, initialPreviews: [initialPreview].compactMap { $0 })
                     } else if items.isEmpty {
-                        ContentUnavailableView(String(localized: "暂无匹配内容"), systemImage: "square.grid.2x2",
-                            description: Text(String(localized: "试试其他分类，或清除筛选条件。")))
+                        QuietEmpty(title: String(localized: "这里还没有作品"))
                     } else {
                         PromptGrid(items: items).padding(.horizontal, 16)
                     }
@@ -466,7 +467,7 @@ struct CreatorDetail: View {
         }
         .background(Palette.paper)
         .accessibilityIdentifier("creatorProfileScroll")
-        .navigationTitle(creator.displayName).navigationBarTitleDisplayMode(.inline)
+        .navigationTitle("").navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 ShareLink(item: creator.profileURL) {
@@ -492,21 +493,6 @@ struct CreatorDetail: View {
         }
     }
 
-    private var contentHeading: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(filter == .all ? String(localized: "全部内容") : filter.title)
-                .font(Typography.editorial(.title3)).accessibilityAddTraits(.isHeader)
-            if filter != .all && library.feed == nil {
-                Text(String(localized: "\(items.count) 条内容")).font(.footnote).foregroundStyle(Palette.muted)
-            }
-        }
-    }
-
-    private var filterPicker: some View {
-        Picker(String(localized: "内容类型"), selection: $filter) {
-            ForEach(availableFilters) { value in Text(value.title).tag(value) }
-        }.pickerStyle(.menu).accessibilityIdentifier("creatorContentFilter")
-    }
 }
 
 struct SavedCreators: View {
@@ -548,7 +534,7 @@ private enum CreatorIdentity {
     }
 }
 
-private enum CreatorContentFilter: String, CaseIterable, Identifiable {
+private enum CreatorContentFilter: String, CaseIterable, Identifiable, Hashable {
     case all, text, image, video, web, skill
     var id: String { rawValue }
     var title: String {

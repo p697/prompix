@@ -30,6 +30,31 @@ enum Palette {
     static func onGlassAccent(for scheme: ColorScheme) -> Color { rgb(scheme == .dark ? 0x0B0B0C : 0xF4F3EF) }
 }
 
+/// A row of quiet choices with one filled capsule: kinds on a deck, a creator, results.
+struct ChipRow<Value: Hashable>: View {
+    let values: [Value]
+    @Binding var selection: Value
+    let title: (Value) -> String
+    var identifier: (Value) -> String = { _ in "" }
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 2) {
+                ForEach(values, id: \.self) { value in
+                    let selected = value == selection
+                    Button { selection = value } label: {
+                        Text(title(value)).font(.subheadline.weight(selected ? .semibold : .regular))
+                            .foregroundStyle(selected ? Palette.paper : Palette.muted)
+                            .padding(.horizontal, 12).frame(height: 32)
+                            .background(selected ? Palette.ink : .clear, in: Capsule())
+                            .frame(minHeight: 44).contentShape(Rectangle())
+                    }.buttonStyle(.plain).accessibilityAddTraits(selected ? .isSelected : [])
+                        .accessibilityIdentifier(identifier(value))
+                }
+            }.padding(.horizontal, 16)
+        }
+    }
+}
+
 /// An empty place says one plain sentence and, at most, one more; no illustration.
 struct QuietEmpty: View {
     let title: String

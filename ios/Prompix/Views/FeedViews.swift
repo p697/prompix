@@ -231,7 +231,11 @@ struct WorkPeek: View {
                 Artwork(preview: preview, fillsFrame: true).aspectRatio(PromptCardGeometry.aspectRatio(for: preview), contentMode: .fit)
             }
             VStack(alignment: .leading, spacing: 6) {
-                Text(preview.metaLine).font(Typography.meta(size: 10)).tracking(1.2).foregroundStyle(Palette.muted)
+                let meta = preview.detailMeta
+                if !meta.lead.isEmpty || !meta.rest.isEmpty {
+                    (Text(meta.lead).foregroundStyle(Palette.ink).fontWeight(.semibold) + Text(meta.rest).foregroundStyle(Palette.muted))
+                        .font(Typography.meta(size: 10)).tracking(1.2)
+                }
                 Text(title).font(.headline).lineLimit(2)
                 Text(text.replacingOccurrences(of: "\n", with: " ")).font(Typography.prompt(size: 14)).foregroundStyle(Palette.muted).lineLimit(3)
             }.padding(.horizontal, 16).padding(.bottom, 16).padding(.top, preview.usesTextArtwork ? 16 : 0)
