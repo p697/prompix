@@ -74,7 +74,6 @@ struct DiscoverView: View {
     @State private var model: String?
     @State private var facet: String?
     @State private var modelFamily: String?
-    @State private var inputs: String?
     @State private var viewportHeight: CGFloat = 0
     @State private var feedLayout = PromptGridLayout(width: 0)
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -86,14 +85,14 @@ struct DiscoverView: View {
         }
     }
     private var feedQuery: FeedQuery {
-        FeedQuery(kind: skillsOnly ? "skill" : kind?.rawValue, tag: topic, model: model, sort: feedSort, facet: facet, inputs: inputs, modelFamily: modelFamily)
+        FeedQuery(kind: skillsOnly ? "skill" : kind?.rawValue, tag: topic, model: model, sort: feedSort, facet: facet, modelFamily: modelFamily)
     }
     private var models: [String] {
         if let feed = library.feed { return feed.browse.value?.models.map(\.name) ?? [] }
         return Array(Set(library.prompts.filter { PromptQuery(kind: kind, skillsOnly: skillsOnly).matches($0) }.map(\.model))).sorted()
     }
     private var isFiltered: Bool { kind != nil || skillsOnly || refined }
-    private var refined: Bool { topic != nil || model != nil || facet != nil || modelFamily != nil || inputs != nil }
+    private var refined: Bool { topic != nil || model != nil || facet != nil || modelFamily != nil }
     private var needsFirstVideoUpdate: Bool {
         kind == .video && library.version.hasPrefix("studio-") && !library.prompts.contains { $0.kind == .video }
     }
@@ -181,7 +180,7 @@ struct DiscoverView: View {
         })
     }
     private func selectKind(_ next: PromptKind?, _ skills: Bool) {
-        kind = next; skillsOnly = skills; topic = nil; model = nil; facet = nil; modelFamily = nil; inputs = nil
+        kind = next; skillsOnly = skills; topic = nil; model = nil; facet = nil; modelFamily = nil
         library.feed?.discovery.select(feedQuery)
     }
     private var discoveryContext: some View {
@@ -222,7 +221,7 @@ struct DiscoverView: View {
         }.accessibilityLabel(String(localized: "筛选")).accessibilityValue(refined ? String(localized: "已筛选") : "")
             .accessibilityIdentifier("discoveryFilters")
     }
-    /// 2.0 filters from the service's own counts: use, model family and reference needs.
+    /// 2.0 filters from the service's own counts: use and model family.
     @ViewBuilder private func servedFilters(uses: [FeedBrowse.Count], families: [FeedBrowse.Count]) -> some View {
         Menu(facet.flatMap(FacetCatalog.name) ?? String(localized: "全部用途")) {
             choice(String(localized: "全部用途"), selected: facet == nil) { facet = nil }
@@ -236,12 +235,6 @@ struct DiscoverView: View {
                 choice(FacetCatalog.modelFamilies[family.id]!, selected: modelFamily == family.id) { modelFamily = family.id }
             }
         }.accessibilityIdentifier("filterModelFamily")
-        Menu(String(localized: "参考图")) {
-            choice(String(localized: "不限"), selected: inputs == nil) { inputs = nil }
-            choice(String(localized: "不需要上传"), selected: inputs == "none") { inputs = "none" }
-            choice(String(localized: "可以用我的照片"), selected: inputs == "optional") { inputs = "optional" }
-            choice(String(localized: "需要上传"), selected: inputs == "required") { inputs = "required" }
-        }.accessibilityIdentifier("filterInputs")
     }
     private func choice(_ title: String, selected: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) { if selected { Label(title, systemImage: "checkmark") } else { Text(title) } }
@@ -409,8 +402,8 @@ enum PromptCardGeometry {
     static let cornerRadius: CGFloat = 12
     static func aspectRatio(for item: Prompt) -> CGFloat { aspectRatio(for: ContentPreview(item)) }
     static func aspectRatio(for item: ContentPreview) -> CGFloat {
-        // Text cards are a short quote, a little wider than tall.
-        if item.usesTextArtwork { return 1.2 }
+        // Text cards hold up to four lines of their words, so their shape follows the text.
+        if item.usesTextArtwork { return textCardRatio(item.displayTitle, skill: item.isSkill) }
         // Retain common portrait and widescreen shapes. Only extreme ratios crop.
         if let ratio = item.media?.aspectRatio { return max(0.65, min(1.8, ratio)) }
         return switch item.kind { case .text: 0.95; case .image: item.artwork == "lake" ? 1.02 : 0.76; case .video: 0.94; case .web: WebsiteExamples.files[item.id] != nil ? 0.62 : 0.87 }
@@ -418,8 +411,14 @@ enum PromptCardGeometry {
     /// Cards carry only the work, so a card is exactly its preview; search results
     /// add one line of title beneath visual works.
     static let titleSpacing: CGFloat = 6
+    /// Estimated at a nominal 180 pt column: 14 pt insets, 16 pt text on 22 pt lines.
+    static func textCardRatio(_ text: String, skill: Bool) -> CGFloat {
+        let units = text.unicodeScalars.reduce(0.0) { sum, scalar in sum + (scalar.value > 0x2E80 ? 1 : 0.55) }
+        let lines = min(4, max(2, (units / 9.5).rounded(.up)))
+        return 180 / (28 + lines * 22 + (skill ? 18 : 0))
+    }
     static func height(for item: ContentPreview, width: CGFloat, titled: Bool = false) -> CGFloat {
-        width / aspectRatio(for: item) + (titled && !item.usesTextArtwork ? titleSpacing + ceil(UIFont.preferredFont(forTextStyle: .footnote).lineHeight) : 0)
+        width / aspectRatio(for: item) + (titled && !item.usesTextArtwork ? titleSpacing + ceil(UIFont.preferredFont(forTextStyle: .subheadline).lineHeight) : 0)
     }
 }
 

@@ -82,7 +82,7 @@ struct FeedCreatorSearch: View {
                         .font(.footnote).frame(minHeight: 44)
                 }
             }
-        }.padding(.horizontal, 20).accessibilityIdentifier("searchCreators")
+        }.padding(.horizontal, 20).padding(.bottom, items.isEmpty ? 0 : 16).accessibilityIdentifier("searchCreators")
             .task(id: query) {
                 do { try await Task.sleep(for: .milliseconds(300)) } catch { return }
                 await store.load(query)

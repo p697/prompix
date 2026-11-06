@@ -58,6 +58,19 @@ enum Typography {
     }
     /// Prompt text reads like print: New York.
     static func prompt(size: CGFloat) -> Font { .system(size: size, weight: .regular, design: .serif) }
+    /// New York only for Latin prompts. Chinese, Japanese and Korean text stays in
+    /// the system face throughout, so Latin words inside it never switch to serif.
+    static func prompt(size: CGFloat, for text: String) -> Font {
+        usesSerif(text) ? prompt(size: size) : .system(size: size)
+    }
+    static func usesSerif(_ text: String) -> Bool {
+        var letters = 0, cjk = 0
+        for scalar in text.unicodeScalars.prefix(600) where scalar.properties.isAlphabetic {
+            letters += 1
+            if (0x3040...0x30FF).contains(scalar.value) || (0x3400...0x9FFF).contains(scalar.value) || (0xAC00...0xD7AF).contains(scalar.value) { cjk += 1 }
+        }
+        return cjk * 5 < letters
+    }
     /// Parameters such as kind, model and ratio read like film-edge printing: SF Mono.
     static func meta(size: CGFloat) -> Font { .system(size: size, weight: .regular, design: .monospaced) }
 }

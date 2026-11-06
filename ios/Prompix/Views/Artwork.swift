@@ -79,22 +79,21 @@ struct Artwork: View {
             }.foregroundStyle(palette.1).padding(size.width * 0.12)
         }
     }
+    /// Text and Skill cards are the words themselves on a quiet sheet, sized to them.
     private func noteArtwork(size: CGSize) -> some View {
-        ZStack {
-            noteColor
-            VStack(alignment: .leading, spacing: compact ? 6 : 10) {
-                if !compact {
-                    Text(item.metaLine).font(Typography.meta(size: 10)).tracking(1.2).lineLimit(1)
-                        .foregroundStyle(Palette.muted)
+        let words = item.displayTitle
+        return ZStack(alignment: .topLeading) {
+            Palette.surface
+            VStack(alignment: .leading, spacing: 6) {
+                if item.isSkill && !compact {
+                    Text(verbatim: "SKILL").font(Typography.meta(size: 10)).tracking(1.2).foregroundStyle(Palette.muted)
                 }
-                Text(item.displayTitle)
-                    .font(Typography.prompt(size: min(size.width * (compact ? 0.13 : 0.1), 21)))
-                    .lineSpacing(3).lineLimit(4).fixedSize(horizontal: false, vertical: true).layoutPriority(1)
-                Spacer(minLength: 0)
-            }.foregroundStyle(Palette.ink).padding(size.width * 0.10)
-        }
+                Text(words)
+                    .font(compact ? Typography.prompt(size: min(size.width * 0.13, 16), for: words) : Typography.prompt(size: 16, for: words))
+                    .lineSpacing(compact ? 2 : 6).lineLimit(4)
+            }.foregroundStyle(Palette.ink).padding(compact ? 8 : 14)
+        }.overlay { RoundedRectangle(cornerRadius: PromptCardGeometry.cornerRadius, style: .continuous).strokeBorder(Palette.line, lineWidth: 0.5) }
     }
-    private var noteColor: Color { item.isSkill ? Palette.soft : Palette.surface }
     private func photo(_ name: String, size: CGSize) -> some View {
         Image(name).resizable().scaledToFill().frame(width: size.width, height: size.height).clipped()
     }

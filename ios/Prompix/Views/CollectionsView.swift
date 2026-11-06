@@ -75,12 +75,12 @@ struct CollectionsDirectory: View {
                                     Text(collection.subtitle).font(.subheadline).foregroundStyle(Palette.muted)
                                         .fixedSize(horizontal: false, vertical: true)
                                 }
-                                Text(String(localized: "\(count) 个 Prompt")).font(.caption).foregroundStyle(Palette.muted)
+                                Text(String(localized: "\(count) 条")).font(Typography.meta(size: 11)).foregroundStyle(Palette.muted)
                             }.padding(.horizontal, 2)
                         }.foregroundStyle(Palette.ink).multilineTextAlignment(.leading)
                             .contentShape(Rectangle())
                     }.buttonStyle(.cardPress)
-                        .accessibilityLabel("\(collection.title) \(collection.subtitle) \(String(localized: "\(count) 个 Prompt"))")
+                        .accessibilityLabel("\(collection.title) \(collection.subtitle) \(String(localized: "\(count) 条"))")
                         .accessibilityIdentifier("collection-\(collection.id)")
                 }
             }.padding(.horizontal, 16).padding(.top, 12).padding(.bottom, 28)
@@ -223,17 +223,18 @@ struct CollectionDetail: View {
     @Environment(Library.self) private var library
     var body: some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: 20) {
-                Text(collection.title).font(Typography.editorial(.largeTitle)).foregroundStyle(Palette.ink).fixedSize(horizontal: false, vertical: true)
+            LazyVStack(alignment: .leading, spacing: 16) {
                 Text(collection.subtitle).font(.subheadline).foregroundStyle(Palette.muted).fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 20)
                 let items = collection.items(in: library)
+                // The grids carry the feed's own 16 pt inset, the same as every other page.
                 if let feed = library.feed {
                     OwnedFeedResults(repository: feed, query: FeedQuery(collection: collection.id, sort: "recommended"), fallback: items)
                 } else if items.isEmpty {
-                    ContentUnavailableView(String(localized: "暂无匹配内容"), systemImage: "sparkle", description: Text(String(localized: "试试其他分类，或清除筛选条件。")))
-                } else { PromptGrid(items: items) }
-            }.padding(20)
-        }.background(Palette.paper).navigationTitle(String(localized: "专题")).navigationBarTitleDisplayMode(.inline)
+                    ContentUnavailableView(String(localized: "暂无匹配内容"), systemImage: "sparkle")
+                } else { PromptGrid(items: items).padding(.horizontal, PromptGridLayout.inset) }
+            }.padding(.top, 4).padding(.bottom, 24)
+        }.background(Palette.paper).navigationTitle(collection.title).navigationBarTitleDisplayMode(.large)
     }
 }
 struct SettingsView: View {
