@@ -395,7 +395,8 @@ enum PromptCardGeometry {
     static let cornerRadius: CGFloat = 12
     static func aspectRatio(for item: Prompt) -> CGFloat { aspectRatio(for: ContentPreview(item)) }
     static func aspectRatio(for item: ContentPreview) -> CGFloat {
-        if item.usesTextArtwork { return 0.95 }
+        // Text cards are a short quote, a little wider than tall.
+        if item.usesTextArtwork { return 1.2 }
         // Retain common portrait and widescreen shapes. Only extreme ratios crop.
         if let ratio = item.media?.aspectRatio { return max(0.65, min(1.8, ratio)) }
         return switch item.kind { case .text: 0.95; case .image: item.artwork == "lake" ? 1.02 : 0.76; case .video: 0.94; case .web: WebsiteExamples.files[item.id] != nil ? 0.62 : 0.87 }

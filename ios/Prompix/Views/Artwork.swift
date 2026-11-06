@@ -89,7 +89,7 @@ struct Artwork: View {
                 }
                 Text(item.displayTitle)
                     .font(Typography.prompt(size: min(size.width * (compact ? 0.13 : 0.1), 21)))
-                    .lineSpacing(3).lineLimit(compact ? 4 : 6).fixedSize(horizontal: false, vertical: true).layoutPriority(1)
+                    .lineSpacing(3).lineLimit(4).fixedSize(horizontal: false, vertical: true).layoutPriority(1)
                 Spacer(minLength: 0)
             }.foregroundStyle(Palette.ink).padding(size.width * 0.10)
         }
