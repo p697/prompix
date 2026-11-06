@@ -11,6 +11,7 @@ struct PromptDetail: View {
     @State private var editorContext: EditorContext?
     @State private var useContext: UseContext?
     @State private var imagePresented = false
+    @State private var imagePage = 0
     @State private var deckPickerPresented = false
     @Namespace private var imageTransition
     @State private var playerPresented = false
@@ -103,7 +104,7 @@ struct PromptDetail: View {
         .sheet(item: $editorContext) { context in PromptEditor(item: context.item, language: context.language) }
         .sheet(isPresented: $deckPickerPresented) { DeckPicker(item: item) }
         .fullScreenCover(isPresented: $imagePresented) {
-            ImageViewer(name: item.media?.image ?? item.artwork, urls: item.media?.galleryURLs ?? [])
+            ImageViewer(name: item.media?.image ?? item.artwork, urls: item.media?.galleryURLs ?? [], selection: imagePage)
                 .promptTransitionDestination(id: "image-\(item.id)", in: imageTransition)
         }
         .sheet(isPresented: $webPresented) {
@@ -117,36 +118,39 @@ struct PromptDetail: View {
     private var previewTitle: String {
         WebsiteExamples.files[item.id] != nil ? String(localized: "打开网页作品") : item.kind == .video ? String(localized: "播放视频") : String(localized: "放大图片")
     }
-    private func openPreview() {
+    private func openPreview(page: Int = 0) {
         if WebsiteExamples.files[item.id] != nil { webPresented = true }
         else if item.kind == .video { playerPresented = true }
-        else { imagePresented = true }
+        else { imagePage = page; imagePresented = true }
     }
     @ViewBuilder private var detailLayout: some View {
         if #available(iOS 27.1, *), hasMediaPreview {
             ArrangementView {
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 25) {
+                    VStack(alignment: .leading, spacing: 0) {
                         if !mediaPaneVisible { largePreview }
                         readingContent
                     }.padding(.bottom, 28).frame(maxWidth: 700).frame(maxWidth: .infinity)
-                }.preservingReadingPosition(readingPosition).readingChrome($actionsCollapsed).readingBottomEdge().accessibilityIdentifier("detailReadingPane")
+                }.ignoresSafeArea(edges: mediaPaneVisible ? [] : .top)
+                    .preservingReadingPosition(readingPosition).readingChrome($actionsCollapsed).readingBottomEdge().accessibilityIdentifier("detailReadingPane")
             } secondary: {
                 ScrollView {
                     largePreview.padding(.bottom, 24).frame(maxWidth: 600).frame(maxWidth: .infinity)
-                }.preservingReadingPosition(readingPosition, media: true).reportsPaneVisibility($mediaPaneVisible).accessibilityIdentifier("detailMediaPane")
+                }.ignoresSafeArea(edges: .top)
+                    .preservingReadingPosition(readingPosition, media: true).reportsPaneVisibility($mediaPaneVisible).accessibilityIdentifier("detailMediaPane")
             }.arrangementViewStyle(.split.axes(.horizontal))
         } else {
             ScrollView {
-                VStack(alignment: .leading, spacing: 25) {
+                VStack(alignment: .leading, spacing: 0) {
                     largePreview
                     readingContent
                 }.padding(.bottom, 28).frame(maxWidth: 700).frame(maxWidth: .infinity)
-            }.preservingReadingPosition(readingPosition).readingChrome($actionsCollapsed).readingBottomEdge().accessibilityIdentifier("detailReadingPane")
+            }.ignoresSafeArea(edges: hasMediaPreview ? .top : [])
+                .preservingReadingPosition(readingPosition).readingChrome($actionsCollapsed).readingBottomEdge().accessibilityIdentifier("detailReadingPane")
         }
     }
     private var compactPreview: some View {
-        Button(action: openPreview) {
+        Button { openPreview() } label: {
             HStack(spacing: 14) {
                 Artwork(item: item).frame(width: 76, height: 86).clipped()
                     .clipShape(RoundedRectangle(cornerRadius: 10)).accessibilityHidden(true)
@@ -159,17 +163,19 @@ struct PromptDetail: View {
     }
     @ViewBuilder private var largePreview: some View {
         if hasMediaPreview {
-            Button(action: openPreview) {
-                hero.overlay(alignment: .bottomTrailing) {
+            DetailHero(preview: ContentPreview(item), title: previewTitle) { page in openPreview(page: page) }
+                .accessibilityIdentifier("previewButton")
+                .promptTransitionSource(id: "image-\(item.id)", in: imageTransition)
+                .overlay(alignment: .bottomTrailing) {
                     if WebsiteExamples.files[item.id] != nil {
                         Label(String(localized: "打开作品"), systemImage: "safari").font(.subheadline.weight(.medium))
                             .padding(.horizontal, 16).padding(.vertical, 12).background(.regularMaterial, in: Capsule()).padding(16)
-                    } else {
-                        Image(systemName: item.kind == .video ? "play.fill" : (item.media?.galleryURLs.count ?? 0) > 1 ? "square.stack" : "arrow.up.left.and.arrow.down.right")
-                            .font(.body).padding(14).background(.regularMaterial, in: Circle()).padding(16)
+                            .allowsHitTesting(false).accessibilityHidden(true)
+                    } else if item.kind == .video {
+                        Image(systemName: "play.fill").font(.body).padding(14).background(.regularMaterial, in: Circle()).padding(16)
+                            .allowsHitTesting(false).accessibilityHidden(true)
                     }
                 }
-            }.buttonStyle(.plain).accessibilityLabel(previewTitle).accessibilityIdentifier("previewButton")
         }
     }
     private var readingContent: some View {
@@ -368,13 +374,6 @@ struct PromptDetail: View {
             else { failedLanguage = code }
         }
     }
-    private var hero: some View {
-        PromptDetailArtwork(preview: ContentPreview(item))
-            .promptTransitionSource(id: "image-\(item.id)", in: imageTransition)
-            .artworkGlow(item.palette)
-            .padding(.horizontal, 12).padding(.top, 8)
-    }
-
 }
 
 private struct StablePromptEditor: View {
@@ -688,11 +687,15 @@ struct MovieView: View {
 struct ImageViewer: View {
     let name: String
     let urls: [URL]
-    @State private var selection = 0
+    @State private var selection: Int
     @State private var zoomedPages: Set<Int> = []
     @State private var dragOffset: CGFloat = 0
     @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    init(name: String, urls: [URL], selection: Int = 0) {
+        self.name = name; self.urls = urls
+        _selection = State(initialValue: min(max(0, selection), max(0, urls.count - 1)))
+    }
     private var count: Int { max(1, urls.count) }
     private var isZoomed: Bool { zoomedPages.contains(selection) }
     private var usesNativeTransition: Bool {

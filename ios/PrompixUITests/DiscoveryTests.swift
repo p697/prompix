@@ -377,6 +377,9 @@ import UIKit
         let preview = app.buttons["previewButton"]
         XCTAssertTrue(preview.waitForExistence(timeout: 5))
         let origin = preview.frame
+        let window = app.windows.firstMatch.frame
+        XCTAssertEqual(origin.minY, window.minY, accuracy: 1, "The work runs under the status bar.")
+        XCTAssertEqual(origin.width, window.width, accuracy: 1, "The work fills the width.")
         preview.tap()
         let close = app.buttons["closeImageViewer"]
         let image = app.descendants(matching: .any)["loadedImage-0"]
@@ -957,8 +960,19 @@ import UIKit
         search.tap(); search.typeText("发明")
         let card = app.buttons.containing(NSPredicate(format: "identifier BEGINSWITH %@", "prompt-youmind-nano-")).firstMatch
         XCTAssertTrue(card.waitForExistence(timeout: 35), "The requested community gallery must be loaded"); card.tap()
-        app.buttons["previewButton"].tap()
-        XCTAssertTrue(app.staticTexts["1 / 4"].waitForExistence(timeout: 10))
+        // The gallery pages in place; the viewer opens on the image being shown.
+        let hero = app.buttons["previewButton"]
+        XCTAssertTrue(hero.waitForExistence(timeout: 10))
+        XCTAssertEqual(hero.value as? String, "1 / 4")
+        capture("gallery-detail-1")
+        hero.swipeLeft()
+        let paged = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", "2 / 4"), object: hero)
+        XCTAssertEqual(XCTWaiter.wait(for: [paged], timeout: 5), .completed)
+        capture("gallery-detail-2")
+        hero.tap()
+        XCTAssertTrue(app.staticTexts["2 / 4"].waitForExistence(timeout: 10))
+        app.buttons["previousImage"].tap()
+        XCTAssertTrue(app.staticTexts["1 / 4"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.buttons["previousImage"].isEnabled)
         for index in 1...4 {
             XCTAssertTrue(app.staticTexts["\(index) / 4"].waitForExistence(timeout: 5))

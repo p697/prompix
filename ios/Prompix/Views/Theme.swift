@@ -30,27 +30,6 @@ enum Palette {
     static func onGlassAccent(for scheme: ColorScheme) -> Color { rgb(scheme == .dark ? 0x0B0B0C : 0xF4F3EF) }
 }
 
-extension Palette {
-    /// The work's own most vivid main color, the one color the interface allows itself.
-    /// Near-grey swatches (often a dark backdrop) give no glow.
-    static func dominant(_ palette: [Prompt.Swatch]?) -> Color? {
-        let swatches = (palette ?? []).compactMap { swatch -> (r: Double, g: Double, b: Double, chroma: Double)? in
-            guard swatch.weight >= 0.15, let value = UInt(swatch.hex.dropFirst(), radix: 16) else { return nil }
-            let r = Double((value >> 16) & 255) / 255, g = Double((value >> 8) & 255) / 255, b = Double(value & 255) / 255
-            return (r, g, b, max(r, g, b) - min(r, g, b))
-        }
-        guard let vivid = swatches.max(by: { $0.chroma < $1.chroma }), vivid.chroma >= 0.12 else { return nil }
-        return Color(red: vivid.r, green: vivid.g, blue: vivid.b)
-    }
-}
-
-extension View {
-    /// A faint halo of the work's dominant color; nothing when the palette is unknown.
-    @ViewBuilder func artworkGlow(_ palette: [Prompt.Swatch]?) -> some View {
-        if let color = Palette.dominant(palette) { shadow(color: color.opacity(0.5), radius: 40) } else { self }
-    }
-}
-
 enum Motion {
     /// Chrome that yields to scrolling: the reading actions and root headers.
     static let chrome = Animation.spring(response: 0.38, dampingFraction: 0.86)
