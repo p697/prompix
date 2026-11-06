@@ -179,18 +179,22 @@ struct PromptDetail: View {
         }
     }
     private var readingContent: some View {
-        VStack(alignment: .leading, spacing: 24) {
-            PromptDetailHeading(meta: ContentPreview(item).metaLine, title: content.title, summary: content.summary, creator: item.creator)
+        VStack(alignment: .leading, spacing: 22) {
+            PromptDetailHeading(preview: ContentPreview(item), title: content.title)
             if #available(iOS 27.1, *), hasMediaPreview, mediaPaneVisible { compactPreview }
-            languagePicker
-            PromptNeeds(item: item)
-            PromptMarkdown(content.prompt)
-                .accessibilityIdentifier("promptBody")
+            VStack(alignment: .leading, spacing: 10) {
+                languagePicker
+                FoldedPrompt(text: content.prompt).accessibilityIdentifier("promptBody")
+            }
             if let shots = item.shots { PromptShots(shots: shots) }
             DisclosureGroup {
                 VStack(alignment: .leading, spacing: 20) {
-                    Label("\(item.displayKind) · \(item.displayModel)", systemImage: item.displaySymbol)
-                        .font(.footnote).foregroundStyle(Palette.muted)
+                    if let creator = item.creator { CreatorByline(creator: creator) }
+                    if let need = PromptNeeds.reference(for: item) {
+                        LabeledContent(String(localized: "参考图"), value: need).font(.subheadline).accessibilityIdentifier("promptNeeds")
+                    }
+                    LabeledContent(String(localized: "语言"), value: displaysOriginalContent ? String(localized: "原文") : String(localized: "AI 译文")).font(.subheadline)
+                    if !content.summary.isEmpty { Text(content.summary).font(.footnote).foregroundStyle(Palette.muted).lineSpacing(4) }
                     if item.kind != .text { Text(content.previewLabel).font(.footnote).foregroundStyle(Palette.muted) }
                     Text(content.example).font(.body).lineSpacing(5).textSelection(.enabled)
                     if let skill = item.skill { SkillInformation(skill: skill) }
@@ -205,8 +209,7 @@ struct PromptDetail: View {
                     sourceInformation
                 }.padding(.top, 16)
             } label: {
-                Text(String(localized: "说明与来源")).font(.subheadline.weight(.medium)).frame(minHeight: 44)
-                    .accessibilityIdentifier("promptInformation")
+                moreInformationLabel.accessibilityIdentifier("promptInformation")
             }
             if let feed = library.feed {
                 FeedRelatedResults(item: item, repository: feed)
@@ -216,6 +219,22 @@ struct PromptDetail: View {
                 PromptGrid(items: related)
             }
         }.padding(.horizontal, 22).padding(.top, 12)
+    }
+    /// Only licenses a reader recognises at a glance; the full terms stay inside.
+    private var shortLicense: String? {
+        if item.source.license == "X-API-Terms" { return "X" }
+        return item.source.license.hasPrefix("CC") ? item.source.license.replacingOccurrences(of: "-1.0", with: "") : nil
+    }
+    /// Who and under what terms, in one quiet line; everything else waits inside.
+    private var moreInformationLabel: some View {
+        HStack(spacing: 8) {
+            if let creator = item.creator { CreatorAvatar(creator: creator, size: 20) }
+            Text([item.creator?.displayName ?? item.source.author ?? item.source.name, shortLicense].compactMap { $0 }.joined(separator: " · "))
+                .lineLimit(1)
+            Spacer(minLength: 8)
+            Text(String(localized: "更多信息"))
+        }.font(.footnote).foregroundStyle(Palette.muted).frame(minHeight: 44)
+            .accessibilityElement(children: .combine)
     }
     private var sourceInformation: some View {
             VStack(alignment: .leading, spacing: 8) {
@@ -295,9 +314,11 @@ struct PromptDetail: View {
     }
     private var languagePicker: some View {
         VStack(alignment: .leading, spacing: 10) {
-            ViewThatFits(in: .horizontal) {
-                HStack(alignment: .center, spacing: 12) { languageSummary; Spacer(minLength: 4); languageMenu }
-                VStack(alignment: .leading, spacing: 10) { languageSummary; languageMenu }
+            HStack {
+                Text(verbatim: "PROMPT").font(Typography.meta(size: 11)).tracking(1.4).foregroundStyle(Palette.muted)
+                    .accessibilityAddTraits(.isHeader)
+                Spacer(minLength: 4)
+                languageMenu
             }
             if library.isRemoved(item) {
                 Text(String(localized: "这条内容已被移除，无法再保存。你仍可复制当前文字。"))
@@ -322,10 +343,6 @@ struct PromptDetail: View {
             }
         }
     }
-    private var languageSummary: some View {
-        Text(displaysOriginalContent ? String(localized: "当前显示原文") : String(localized: "AI 译文"))
-            .font(.caption).foregroundStyle(Palette.muted)
-    }
     @ViewBuilder private var languageMenu: some View {
             if !library.isRemoved(item), !library.advertisedLanguages(for: item).isEmpty {
                 Menu {
@@ -342,9 +359,13 @@ struct PromptDetail: View {
                             .accessibilityHint(item.availableLanguages.contains(code) ? "" : String(localized: "下载后切换到此语言"))
                     }
                 } label: {
-                    Label(effectiveLanguage.map(ContentLanguage.name) ?? String(localized: "原文"), systemImage: "globe")
-                        .font(.subheadline).frame(minHeight: 44)
-                }.accessibilityIdentifier("contentLanguage")
+                    HStack(spacing: 4) {
+                        Text(effectiveLanguage.map(ContentLanguage.name) ?? String(localized: "原文"))
+                        Image(systemName: "chevron.down").font(.system(size: 9, weight: .semibold))
+                    }.font(Typography.meta(size: 11)).tracking(1.2).foregroundStyle(Palette.muted)
+                        .frame(minWidth: 44, minHeight: 44).contentShape(Rectangle())
+                }.accessibilityLabel(String(localized: "语言")).accessibilityValue(effectiveLanguage.map(ContentLanguage.name) ?? String(localized: "原文"))
+                    .accessibilityIdentifier("contentLanguage")
             }
     }
     private func openEditor() {
@@ -916,10 +937,9 @@ struct ZoomImage: UIViewRepresentable {
     }
 }
 
-/// What the work asks of you: a reference to upload, the model and the frame.
-private struct PromptNeeds: View {
-    let item: Prompt
-    private var input: String? {
+/// The reference the work asks you to upload, if any.
+enum PromptNeeds {
+    static func reference(for item: Prompt) -> String? {
         guard let inputs = item.inputs, inputs.requirement != "none" else { return nil }
         let names = inputs.kinds.map { kind in
             switch kind {
@@ -935,21 +955,34 @@ private struct PromptNeeds: View {
         let count = inputs.count.map { $0 > 1 ? " ×\($0)" : "" } ?? ""
         return inputs.requirement == "required" ? String(localized: "需要\(names)\(count)") : String(localized: "可选\(names)\(count)")
     }
+}
+
+/// The prompt itself, folded to about seven lines until the reader asks for all of it.
+private struct FoldedPrompt: View {
+    let text: String
+    @State private var expanded = false
+    @State private var fullHeight: CGFloat = 0
+    @ScaledMetric(relativeTo: .body) private var foldHeight = 188.0
     var body: some View {
-        let model = item.generation != nil && Prompt.namesModel(item.model) ? item.displayModel : nil
-        let values = [input, model, item.generation?.outputAspect].compactMap { $0 }
-        if !values.isEmpty {
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: 6) { chips(values) }
-                VStack(alignment: .leading, spacing: 6) { chips(values) }
-            }.accessibilityElement(children: .combine).accessibilityIdentifier("promptNeeds")
-        }
-    }
-    private func chips(_ values: [String]) -> some View {
-        ForEach(values, id: \.self) { value in
-            Text(value).font(.footnote).lineLimit(1).padding(.horizontal, 12).padding(.vertical, 8)
-                .background(Palette.surface, in: Capsule()).overlay { Capsule().strokeBorder(Palette.line, lineWidth: 0.5) }
-        }
+        let folds = !expanded && fullHeight > foldHeight + 40
+        VStack(alignment: .leading, spacing: 2) {
+            PromptMarkdown(text)
+                .fixedSize(horizontal: false, vertical: true)
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { fullHeight = $0 }
+                .frame(maxHeight: folds ? foldHeight : nil, alignment: .top)
+                .clipped()
+                .overlay(alignment: .bottom) {
+                    if folds {
+                        LinearGradient(colors: [Palette.paper.opacity(0), Palette.paper], startPoint: .top, endPoint: .bottom)
+                            .frame(height: 52).allowsHitTesting(false).accessibilityHidden(true)
+                    }
+                }
+            if folds {
+                Button(String(localized: "展开全文")) { expanded = true }
+                    .font(.subheadline.weight(.medium)).foregroundStyle(Palette.ink).frame(minHeight: 44)
+                    .accessibilityIdentifier("expandPrompt")
+            }
+        }.onChange(of: text) { _, _ in expanded = false }
     }
 }
 

@@ -57,7 +57,7 @@ struct PendingPromptDetail: View {
     }
     private var reading: some View {
         VStack(alignment: .leading, spacing: 24) {
-            PromptDetailHeading(meta: ContentPreview(card).metaLine, title: card.title, summary: card.summary, creator: card.creator)
+            PromptDetailHeading(preview: ContentPreview(card), title: card.title)
             if #available(iOS 27.1, *), preview.hasDetailMedia, mediaPaneVisible {
                 HStack(spacing: 14) {
                     Artwork(preview: preview).frame(width: 76, height: 86).clipped()
@@ -76,26 +76,26 @@ struct PendingPromptDetail: View {
     }
 }
 
+/// The model leads, because it decides what the prompt will make; then the title.
 struct PromptDetailHeading: View {
-    let meta: String
+    let preview: ContentPreview
     let title: String
-    let summary: String
-    let creator: Prompt.Creator?
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text(meta).font(Typography.meta(size: 11)).tracking(1.4).foregroundStyle(Palette.muted)
+        let meta = preview.detailMeta
+        VStack(alignment: .leading, spacing: 10) {
+            (Text(meta.lead).foregroundStyle(Palette.ink).fontWeight(.semibold) + Text(meta.rest).foregroundStyle(Palette.muted))
+                .font(Typography.meta(size: 11)).tracking(1.4)
                 .accessibilityIdentifier("detailMeta")
             Text(title).font(Typography.editorial(.title)).lineSpacing(3)
                 .fixedSize(horizontal: false, vertical: true).accessibilityAddTraits(.isHeader)
                 .accessibilityIdentifier("detailTitle")
-            if !summary.isEmpty { Text(summary).font(.body).lineSpacing(4).foregroundStyle(Palette.muted) }
-            if let creator { CreatorByline(creator: creator) }
         }
     }
 }
 
-/// The work edge to edge, fading into the page. Tall work is cropped to 3:4 so the
-/// title stays on the first screen; the full frame opens on tap. Several images
+/// The work edge to edge, fading into the page. Tall work is cropped to about
+/// 10:9, two fifths of the screen, so the title and the prompt share the first
+/// screen with it; the full frame opens on tap. Several images
 /// page sideways in place, with a counter.
 struct DetailHero: View {
     let preview: ContentPreview
@@ -104,7 +104,7 @@ struct DetailHero: View {
     @State private var page = 0
     private var urls: [URL] { preview.media?.galleryURLs ?? [] }
     private var ratio: Double {
-        max(0.75, min(1.8, preview.media?.aspectRatio ?? (preview.kind == .image ? 0.95 : 1.15)))
+        max(1.1, min(1.8, preview.media?.aspectRatio ?? 1.15))
     }
     var body: some View {
         Color.clear.aspectRatio(ratio, contentMode: .fit)
@@ -160,6 +160,12 @@ extension ContentPreview {
     var metaLine: String {
         [displayKind, Prompt.namesModel(model) ? Prompt.localizedModel(model) : "", generation?.outputAspect ?? media?.aspectRatio.flatMap(Self.ratioLabel) ?? "", durationLabel ?? ""]
             .filter { !$0.isEmpty }.joined(separator: " ▸ ").uppercased()
+    }
+    /// The detail's line: the model (or, without one, the kind), then the frame and length.
+    var detailMeta: (lead: String, rest: String) {
+        let lead = Prompt.namesModel(model) ? Prompt.localizedModel(model) : displayKind
+        let rest = [generation?.outputAspect ?? media?.aspectRatio.flatMap(Self.ratioLabel) ?? "", durationLabel ?? ""].filter { !$0.isEmpty }
+        return (lead.uppercased(), rest.map { " ▸ " + $0 }.joined())
     }
     /// The nearest common frame ratio, or nothing for an unusual shape.
     static func ratioLabel(_ ratio: Double) -> String? {
