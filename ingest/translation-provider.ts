@@ -20,6 +20,10 @@ function restoreSegmentIDs(result: TranslationResponse, segments: readonly Segme
 export class TranslationProviderError extends Error {
   constructor(message: string, public readonly permanent = false) { super(message); }
 }
+/** The model declined: final for these segments; their items go to people, never to another model. */
+export class TranslationRefused extends TranslationProviderError {
+  constructor(message: string) { super(message, true); }
+}
 export type TranslationProvider = (locale: TranslationLocale, segments: readonly Segment[]) => Promise<TranslationResponse>;
 export type TranslationAttemptEvidence = { model: string; startedAt: string; finishedAt: string; exitCode: number | null;
   error: string | null; diagnostic: string; events: string; eventsTruncated: boolean; output: string | null; outputTruncated: boolean };
@@ -101,6 +105,7 @@ export function modelTranslationProvider(provider: ModelProvider, maxOutputToken
         effort: "low", maxOutputTokens }, translationResponseSchema, record);
       return restoreSegmentIDs({ ...value, inputTokens: result.usage.inputTokens, outputTokens: result.usage.outputTokens }, segments);
     } catch (error) {
+      if (error instanceof ModelProviderError && error.code === "refused") throw new TranslationRefused(error.message);
       if (error instanceof ModelProviderError && !error.retryable) throw new TranslationProviderError(error.message, true);
       throw error;
     }

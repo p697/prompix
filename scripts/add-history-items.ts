@@ -26,11 +26,11 @@ import { atomic, contentRoot, json, lockContent, moderationSchema } from "../ing
 import { applyQualityHolds, readQualityHolds } from "../ingest/quality-holds.ts";
 import { configuredRecheck, filterXAvailability, readXAvailability } from "../ingest/x-availability.ts";
 import { readTranslationCache } from "../ingest/translation-cache.ts";
-import { modelTranslationProvider } from "../ingest/translation-provider.ts";
+import { modelTranslationProvider, TranslationRefused } from "../ingest/translation-provider.ts";
 import { createProvider, isProviderId, modelEnvironment } from "../ingest/models/registry.ts";
 import { appendEvent, pipelineRoot } from "../ingest/pipeline-control.ts";
 import { runTranslations } from "../ingest/translation-runner.ts";
-import { attachTranslations, emptyTranslationCache } from "../ingest/translation.ts";
+import { attachTranslations, emptyTranslationCache, promptSegments } from "../ingest/translation.ts";
 import { reviewTranslationSemanticsWith } from "../ingest/translation-semantic.ts";
 import { completeHistoryItem } from "../ingest/history-cohort.ts";
 import { hasRequiredTranslations, requiredIngestLocales } from "../ingest/ingest-language-policy.ts";
@@ -92,9 +92,11 @@ switch (command) {
     const held = await heldBySemanticReview(), published = await live();
     const liveIDs = new Set(published.map(item => item.id)), removedIDs = new Set(moderationSchema.parse(await json(join(contentRoot, "moderation.json"), { removedIDs: [] })).removedIDs);
     const items: Prompt[] = [], findings = new Map<string, Finding[]>();
+    // Items whose translation the model declined wait for a person; they are never sent again.
+    const refusedPath = join(work, "refused-items.json"), refused = new Set(await json<string[]>(refusedPath, []));
     const catalogs = new Map<string, Prompt[]>();
     for (const [id, verdict] of held) {
-      if (verdict.verdict === "pass" || liveIDs.has(id) || removedIDs.has(id)) continue;
+      if (verdict.verdict === "pass" || liveIDs.has(id) || removedIDs.has(id) || refused.has(id)) continue;
       if (!catalogs.has(verdict.directory)) catalogs.set(verdict.directory, (await json<{ prompts: Prompt[] }>(join(verdict.directory, "complete.json"), { prompts: [] })).prompts);
       const item = catalogs.get(verdict.directory)!.find(value => value.id === id);
       if (!item?.localization) continue;
@@ -109,6 +111,8 @@ switch (command) {
     // Attach each finding to the segment it quotes, or to all segments of a short item when no quote matches.
     const routed = await routedProvider();
     const base = modelTranslationProvider(routed, 24000, record("history-intake:translate"));
+    const segmentItems = new Map<string, string[]>();
+    for (const item of items) for (const segment of promptSegments(item)) segmentItems.set(segment.id, [...(segmentItems.get(segment.id) ?? []), item.id]);
     const provider: typeof base = (locale, segments) => base(locale, segments.map(segment => {
       const source = segment.sourceText ?? segment.text, notes: string[] = [];
       for (const item of items) for (const finding of findings.get(item.id) ?? []) {
@@ -117,14 +121,20 @@ switch (command) {
           notes.push(`An independent reviewer rejected the previous translation of this text: ${finding.reason}${finding.translatedQuote ? ` (rejected wording: ${finding.translatedQuote})` : ""}. Correct it; keep everything else faithful and preserve every opaque token exactly once.`);
       }
       return notes.length ? { ...segment, reviewFeedback: [...new Set([...(segment.reviewFeedback ?? []), ...notes])] } : segment;
-    }));
+    })).catch(async error => {
+      if (!(error instanceof TranslationRefused)) throw error;
+      // Record the items and let this batch count as unanswered, so the other batches continue.
+      for (const segment of segments) for (const id of segmentItems.get(segment.id) ?? []) refused.add(id);
+      await atomic(refusedPath, [...refused].sort());
+      return { translations: [] };
+    });
     const report = await runTranslations({ items, cache, provider, providerName: routed.id, model: routed.model, locales: ["zh-Hans"],
       concurrency: Number(values.concurrency ?? 3), maxRequests: 1000, maxUSD: 5, maxCharacters: 12000, maxOutputTokens: 24000,
       persist: async state => { await atomic(cachePath, state); } });
-    const localized = attachTranslations(items, cache).filter(item => item.localization?.translations["zh-Hans"]);
+    const localized = attachTranslations(items, cache).filter(item => !refused.has(item.id) && item.localization?.translations["zh-Hans"]);
     await atomic(join(work, "retranslated.json"), { schemaVersion: 1, version: "history-retranslated", prompts: localized });
     await atomic(join(work, "retranslate-origins.json"), Object.fromEntries(items.map(item => [item.id, held.get(item.id)!.directory])));
-    console.log(JSON.stringify({ held: items.length, translated: localized.length, attempted: report.attempted, rejected: report.rejected, failed: report.failed, pendingSegments: report.pendingSegments, failures: report.failures?.slice(0, 4) }));
+    console.log(JSON.stringify({ held: items.length, refused: refused.size, translated: localized.length, attempted: report.attempted, rejected: report.rejected, failed: report.failed, pendingSegments: report.pendingSegments, failures: report.failures?.slice(0, 4) }));
     break;
   }
   case "semantic": {
