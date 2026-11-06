@@ -1202,3 +1202,7 @@ The owner removed the manual review step: every item is decided by the pipeline.
 ### 2026-11-06 — Exclude automatically instead of waiting for people
 
 The owner removed every manual review branch: the pipeline decides each item, and anything it cannot decide is not published. The combined review judges minors as none, safe, unsafe or uncertain; unsafe (sexualized, revealing, or a child used as an interchangeable model) and uncertain items are never published, and a possible minor next to suggestive styling counts as uncertain. Ordinary children's content such as illustration or education follows the normal rules. Real people follow the existing rules (own-likeness hints and scale labels). Refusals, validator rejections, held translations, unavailable sources and invalid reviews are excluded with one auditable line each (item, stage, reason, model); a refusal is final for that content, the rest may be judged again after a later collection or recheck.
+
+### 2026-11-06 — Recheck X posts by age
+
+Rechecking every published X post daily cost about $0.4–0.6/day on twitterapi.io, which would exhaust the prepaid balance within weeks. The owner chose tiered rechecks: a post younger than 7 days when checked stays verified for 24 hours; an older one stays verified for 7 days. Maintenance rechecks each item 12 hours before its verification lapses, and the publish gate uses the same lifetime. Authors delete most posts soon after posting, so the cost drops to a few cents a day; the trade-off is that a deleted older post can stay live for up to 7 days.
