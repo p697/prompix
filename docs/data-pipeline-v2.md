@@ -83,7 +83,7 @@ npm run pipeline -- pause --by claude-code --reason "额度快用完"
 npm run pipeline -- note "Lucy 说周末前别动安全复核" --by claude-code
 ```
 
-环节：`prefilter`（预筛）、`review`（合并审核）、`safety`（安全复核）、`translate`（翻译）、`translationCheck`（翻译检查）。默认全部走 Codex 订阅：预筛和审核用 gpt-5.6-luna，安全复核和翻译检查用 gpt-6.1-sol，翻译用 gpt-6-luna。
+环节：`prefilter`（预筛）、`review`（合并审核）、`safety`（安全复核）、`translate`（翻译）、`translationCheck`（翻译检查）。默认全部走 Codex 订阅：预筛和审核用 gpt-5.6-luna，安全复核和翻译检查用 gpt-6-astra，翻译用 gpt-5.6-terra。用 ChatGPT 账号登录的 Codex 只能用它列出的模型（2026-11-06 为 gpt-6-astra、gpt-5.6-sol、gpt-5.6-terra、gpt-5.6-luna），gpt-6.1-sol 和 gpt-6-luna 会被拒绝；换模型前先 `test-provider codex-cli --model <名字>`。
 
 ## 指挥官怎么工作
 
