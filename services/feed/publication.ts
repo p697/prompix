@@ -2,7 +2,7 @@ import { historyAllowanceIDs, type HistoryAllowance } from "./history-allowance.
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { catalogSchema, localizationLanguages, type Prompt } from "../../packages/schema/catalog.ts";
-import { contentID, feedCardSchema, detailResponseByteLimit, type FeedCard, type FeedLocale } from "../../packages/schema/feed.ts";
+import { contentID, storedCardSchema, detailResponseByteLimit, type StoredCard, type FeedLocale } from "../../packages/schema/feed.ts";
 import { canonicalArtifact, validateArtifact } from "../../ingest/language-packs.ts";
 import { translationFingerprint } from "../../ingest/translation.ts";
 import { FeedError, type Database, type TransactionalDatabase } from "./database.ts";
@@ -21,9 +21,9 @@ export function preservePublicationInput(input: PublicationInput): PublicationIn
 }
 const hash = (value: unknown) => createHash("sha256").update(JSON.stringify(canonicalArtifact(value))).digest("hex");
 
-function cardFor(item: Prompt, revision: string, locale: FeedLocale, languages: string[]): FeedCard {
+function cardFor(item: Prompt, revision: string, locale: FeedLocale, languages: string[]): StoredCard {
   const translated = locale === "original" ? undefined : item.localization?.translations[locale];
-  const card = feedCardSchema.parse({
+  const card = storedCardSchema.parse({
     id: item.id, revision, kind: item.kind, contentType: item.contentType ?? "prompt",
     title: translated?.title ?? item.title, summary: translated?.summary ?? item.summary,
     tags: item.tags, model: item.model, artwork: item.artwork,
@@ -31,6 +31,8 @@ function cardFor(item: Prompt, revision: string, locale: FeedLocale, languages: 
     creator: item.creator, media: item.media, presentation: item.presentation,
     cover: item.cover ? { ...item.cover, ...(translated?.cover ?? {}) } : undefined,
     language: translated ? locale : "original", availableLanguages: languages,
+    facets: item.facets, generation: item.generation, inputs: item.inputs, palette: item.palette, rights: item.rights,
+    ...(locale === "original" && item.localization?.en ? { en: item.localization.en } : {}),
   });
   // Fifty cards plus cursor and envelope must always fit the public byte budget.
   if (Buffer.byteLength(JSON.stringify(card)) > 18000) throw new Error(`Feed card exceeds byte limit: ${item.id}`);

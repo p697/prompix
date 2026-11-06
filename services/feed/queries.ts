@@ -1,5 +1,5 @@
 import { contentTopics } from "../../packages/schema/interests.ts";
-import { allowedPresentations, collectionDefinitions, contentID, feedLocale, revisionID, type FeedCard, type FeedFilters, type FeedLocale, type FeedPage } from "../../packages/schema/feed.ts";
+import { allowedPresentations, collectionDefinitions, contentID, facetGroupOf, feedLocale, publicCard, revisionID, type FeedCard, type FeedFilters, type FeedLocale, type FeedPage } from "../../packages/schema/feed.ts";
 import type { Prompt } from "../../packages/schema/catalog.ts";
 import { cursorLifetimeSeconds, decodeCursor, encodeCursor, decodeCreatorCursor, encodeCreatorCursor, encodeVisualFeedCursor, decodeVisualFeedCursor, encodeRecommendedCursor, decodeRecommendedCursor } from "./cursor.ts";
 import { FeedError, type Database } from "./database.ts";
@@ -18,7 +18,7 @@ export async function getState(db: Database) {
 
 export async function getFeed(db: Database, query: { filters: FeedFilters; limit: number; cursor?: string }, secret: string, now = Date.now()): Promise<FeedPage> {
   const page = await getRawFeed(db, query, secret, now);
-  return { ...page, items: page.items.map(card => ({ ...card, topics: contentTopics(card) })) };
+  return { ...page, items: page.items.map(card => ({ ...publicCard(card, query.filters.locale), topics: contentTopics(card) })) };
 }
 async function getRawFeed(db: Database, query: { filters: FeedFilters; limit: number; cursor?: string }, secret: string, now: number): Promise<FeedPage> {
   const { filters, limit } = query;
@@ -79,6 +79,11 @@ function feedConditions(filters: FeedFilters, parameter: (value: unknown) => str
   }
   if (filters.creator) where.push(`v.creator_id=${parameter(filters.creator)}`);
   if (filters.model) where.push(`v.model=${parameter(filters.model)}`);
+  // 2.0 fields live in the card; items not yet enriched simply do not match.
+  if (filters.facet) where.push(`v.card->'facets'->'${facetGroupOf(filters.facet)}' @> to_jsonb(${parameter(filters.facet)}::text)`);
+  if (filters.mode) where.push(`v.card#>>'{generation,mode}'=${parameter(filters.mode)}`);
+  if (filters.modelFamily) where.push(`v.card#>>'{generation,modelFamily}'=${parameter(filters.modelFamily)}`);
+  if (filters.inputs) where.push(`v.card#>>'{inputs,requirement}'=${parameter(filters.inputs)}`);
   if (filters.tag) {
     const tagged = `v.tags @> array[${parameter(filters.tag)}]::text[]`;
     where.push(filters.tag === "创作灵感" ? `(v.kind<>'text' or ${tagged})` : tagged);
@@ -232,14 +237,16 @@ export async function getBrowse(db: Database, locale: FeedLocale, presentation?:
   const release = (await getState(db)).release;
   const definitions = Object.entries(collectionDefinitions).map(([id, value]) => ({ id, ...value }));
   const result = (await db.query<{ collections: { id: string; count: number; covers: FeedCard[] }[];
-    models: { name: string; count: number }[]; modelCount: number }>(`
+    models: { name: string; count: number }[]; modelCount: number;
+    facets: Record<string, { id: string; count: number }[]>; modelFamilies: { id: string; count: number }[] }>(`
     with visible_entries as materialized (
       select e.latest_position as position,e.revision_id from prompix.release_entries e
       join prompix.releases r on r.id=e.release_id
       join prompix.content c on c.id=e.content_id
       where e.release_id=$1 and r.published_at is not null and c.removed_at is null
     ), metadata as materialized (
-      select e.position,e.revision_id,v.kind,v.content_type,v.tags,v.model
+      select e.position,e.revision_id,v.kind,v.content_type,v.tags,v.model,
+        v.card->'facets' as facets,v.card#>>'{generation,modelFamily}' as family
       from visible_entries e join prompix.revisions v on v.id=e.revision_id
       where ${presentationCondition("v.card", "$4")}
     ), definitions as (
@@ -254,6 +261,10 @@ export async function getBrowse(db: Database, locale: FeedLocale, presentation?:
       select id,revision_id,ordinal,count from matches where ordinal<=2
     ), model_counts as materialized (
       select model as name,count(*)::integer as count from metadata group by model
+    ), facet_counts as materialized (
+      select g.key as facet_group,f.value as id,count(*)::integer as count from metadata m
+      cross join lateral jsonb_each(coalesce(m.facets,'{}'::jsonb)) g
+      cross join lateral jsonb_array_elements_text(g.value) f group by g.key,f.value
     ) select
       coalesce((select jsonb_agg(summary order by summary->>'id') from (
         select jsonb_build_object('id',d.id,'count',coalesce(max(p.count),0),
@@ -265,7 +276,13 @@ export async function getBrowse(db: Database, locale: FeedLocale, presentation?:
       coalesce((select jsonb_agg(row_to_json(top_models)) from (
         select name,count from model_counts order by count desc,name limit 50
       ) top_models),'[]'::jsonb) as models,
-      (select count(*)::integer from model_counts) as "modelCount"`, [release, JSON.stringify(definitions), locale, allowedPresentations(presentation)])).rows[0];
+      (select count(*)::integer from model_counts) as "modelCount",
+      coalesce((select jsonb_object_agg(facet_group,items) from (
+        select facet_group,jsonb_agg(jsonb_build_object('id',id,'count',count) order by count desc,id) as items
+        from facet_counts group by facet_group) grouped),'{}'::jsonb) as facets,
+      coalesce((select jsonb_agg(jsonb_build_object('id',family,'count',count) order by count desc,family) from (
+        select family,count(*)::integer as count from metadata where family is not null group by family) families),'[]'::jsonb) as "modelFamilies"`, [release, JSON.stringify(definitions), locale, allowedPresentations(presentation)])).rows[0];
   if (!result) throw new FeedError("unavailable", 503);
-  return { schemaVersion: 3 as const, release, ...result };
+  return { schemaVersion: 3 as const, release, ...result,
+    collections: result.collections.map(collection => ({ ...collection, covers: collection.covers.map(card => publicCard(card, locale)) })) };
 }
