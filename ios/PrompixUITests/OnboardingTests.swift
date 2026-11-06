@@ -6,6 +6,10 @@ extension XCUIApplication {
         if !launchArguments.contains("-hasCompletedOnboarding") {
             launchArguments += ["-hasCompletedOnboarding", "YES"]
         }
+        // Without a remembered tool the main action always opens the use tray.
+        if !launchArguments.contains("-preferredPromptDestination") {
+            launchArguments += ["-preferredPromptDestination", "none"]
+        }
         launch()
     }
 }

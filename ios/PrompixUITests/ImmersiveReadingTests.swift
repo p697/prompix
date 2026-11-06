@@ -111,7 +111,7 @@ import UIKit
         app.buttons["prompt-gentle-tarot"].tap()
         app.expandPromptInformation()
         let report = app.descendants(matching: .any)["reportContent"]
-        for _ in 0..<5 { if report.isHittable { break }; drag(from: 0.72, to: 0.38) }
+        for _ in 0..<8 { if report.isHittable { break }; drag(from: 0.72, to: 0.38) }
         XCTAssertTrue(report.isHittable)
         capture("immersive-13-source-disclosure")
     }
@@ -126,6 +126,23 @@ import UIKit
         app.buttons["usePrompt"].tap()
         XCTAssertTrue(app.buttons["handoffOpen"].waitForExistence(timeout: 3))
         capture("immersive-11-use-sheet")
+    }
+    func testRememberedToolMakesUseOneStep() {
+        app.terminate()
+        app.launchArguments += ["-preferredPromptDestination", "chatgpt"]
+        app.launchPrompix()
+        app.selectPrompixTab("搜索")
+        let field = app.searchFields["搜索 Prompt、Skills 或创作者"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5)); field.tap(); field.typeText("塔罗\n")
+        app.buttons["prompt-gentle-tarot"].tap()
+        let use = app.buttons["usePrompt"]
+        XCTAssertTrue(use.waitForExistence(timeout: 3))
+        XCTAssertEqual(use.label, "复制并打开 ChatGPT")
+        use.press(forDuration: 0.8)
+        XCTAssertTrue(app.buttons["选择其他工具"].waitForExistence(timeout: 3))
+        capture("immersive-12-one-step-menu")
+        app.buttons["选择其他工具"].tap()
+        XCTAssertTrue(app.buttons["handoffOpen"].waitForExistence(timeout: 3))
     }
     func testRefinedChromeAndInteractiveReturn() {
         XCTAssertTrue(app.buttons["discoveryFilters"].waitForExistence(timeout: 10))
