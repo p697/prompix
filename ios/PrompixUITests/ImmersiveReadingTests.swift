@@ -111,7 +111,7 @@ import UIKit
         app.buttons["prompt-gentle-tarot"].tap()
         app.expandPromptInformation()
         let report = app.descendants(matching: .any)["reportContent"]
-        for _ in 0..<5 { if report.isHittable { break }; drag(from: 0.72, to: 0.38) }
+        for _ in 0..<8 { if report.isHittable { break }; drag(from: 0.72, to: 0.38) }
         XCTAssertTrue(report.isHittable)
         capture("immersive-13-source-disclosure")
     }
@@ -126,6 +126,56 @@ import UIKit
         app.buttons["usePrompt"].tap()
         XCTAssertTrue(app.buttons["handoffOpen"].waitForExistence(timeout: 3))
         capture("immersive-11-use-sheet")
+    }
+    func testRememberedToolMakesUseOneStep() {
+        app.terminate()
+        app.launchArguments += ["-preferredPromptDestination", "chatgpt"]
+        app.launchPrompix()
+        app.selectPrompixTab("搜索")
+        let field = app.searchFields["搜索 Prompt、Skills 或创作者"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5)); field.tap(); field.typeText("塔罗\n")
+        app.buttons["prompt-gentle-tarot"].tap()
+        let use = app.buttons["usePrompt"]
+        XCTAssertTrue(use.waitForExistence(timeout: 3))
+        XCTAssertEqual(use.label, "复制并打开 ChatGPT")
+        use.press(forDuration: 0.8)
+        XCTAssertTrue(app.buttons["选择其他工具"].waitForExistence(timeout: 3))
+        capture("immersive-12-one-step-menu")
+        app.buttons["选择其他工具"].tap()
+        XCTAssertTrue(app.buttons["handoffOpen"].waitForExistence(timeout: 3))
+    }
+    func testDecksCollectSavedWorks() {
+        app.selectPrompixTab("收藏")
+        XCTAssertTrue(app.buttons["newDeck"].waitForExistence(timeout: 5))
+        app.buttons["newDeck"].tap()
+        let name = app.alerts.textFields.firstMatch
+        XCTAssertTrue(name.waitForExistence(timeout: 3)); name.typeText("Weekend")
+        app.alerts.buttons["创建"].tap()
+        XCTAssertTrue(app.buttons["deck-all"].waitForExistence(timeout: 3))
+        capture("decks-01-grid")
+        app.selectPrompixTab("搜索")
+        let field = app.searchFields["搜索 Prompt、Skills 或创作者"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5)); field.tap(); field.typeText("小岛\n")
+        app.buttons["prompt-tiny-island"].tap()
+        app.buttons["detailFavorite"].tap()
+        let deck = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'pickDeck-'")).firstMatch
+        XCTAssertTrue(deck.waitForExistence(timeout: 3)); deck.tap()
+        XCTAssertTrue(deck.isSelected)
+        capture("decks-02-picker")
+        app.buttons["pickerDone"].tap()
+        app.buttons["closePromptDetail"].tap()
+        app.selectPrompixTab("收藏")
+        let tile = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'deck-' AND identifier != 'deck-all'")).firstMatch
+        XCTAssertTrue(tile.waitForExistence(timeout: 3))
+        XCTAssertEqual(tile.value as? String, "1 张")
+        tile.tap()
+        XCTAssertTrue(app.buttons["prompt-tiny-island"].waitForExistence(timeout: 3))
+        capture("decks-03-deck")
+        app.buttons["deckActions"].tap(); app.buttons["删除卡组"].tap()
+        app.buttons["删除卡组"].firstMatch.tap()
+        XCTAssertTrue(app.buttons["newDeck"].waitForExistence(timeout: 3))
+        app.buttons["prompt-tiny-island"].press(forDuration: 0.8)
+        app.buttons["取消收藏"].tap()
     }
     func testRefinedChromeAndInteractiveReturn() {
         XCTAssertTrue(app.buttons["discoveryFilters"].waitForExistence(timeout: 10))

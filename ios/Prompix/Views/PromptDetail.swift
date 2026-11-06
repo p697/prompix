@@ -11,6 +11,7 @@ struct PromptDetail: View {
     @State private var editorContext: EditorContext?
     @State private var useContext: UseContext?
     @State private var imagePresented = false
+    @State private var deckPickerPresented = false
     @Namespace private var imageTransition
     @State private var playerPresented = false
     @State private var copied = false
@@ -26,6 +27,9 @@ struct PromptDetail: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var typeSize
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.openURL) private var openURL
+    // Written by the use tray each time a tool is chosen; absent until the first use.
+    @AppStorage("preferredPromptDestination") private var preferredDestination = ""
     private struct UseContext: Identifiable {
         let id = UUID()
         let item: Prompt
@@ -68,7 +72,11 @@ struct PromptDetail: View {
                     .accessibilityIdentifier("sharePrompt")
             }
             ToolbarItem(placement: .topBarTrailing) {
-                Button { library.toggle(item) } label: {
+                // With decks of your own, saving asks where; otherwise it stays one tap.
+                Button {
+                    if library.decks.decks.isEmpty { library.toggle(item) }
+                    else if library.isSaved(item) || library.toggle(item) { deckPickerPresented = true }
+                } label: {
                     Label(library.isSaved(item) ? String(localized: "取消收藏") : String(localized: "收藏 Prompt"), systemImage: library.isSaved(item) ? "bookmark.fill" : "bookmark")
                         .frame(minWidth: 44, minHeight: 44)
                 }
@@ -93,6 +101,7 @@ struct PromptDetail: View {
             })
         }
         .sheet(item: $editorContext) { context in PromptEditor(item: context.item, language: context.language) }
+        .sheet(isPresented: $deckPickerPresented) { DeckPicker(item: item) }
         .fullScreenCover(isPresented: $imagePresented) {
             ImageViewer(name: item.media?.image ?? item.artwork, urls: item.media?.galleryURLs ?? [])
                 .promptTransitionDestination(id: "image-\(item.id)", in: imageTransition)
@@ -165,7 +174,7 @@ struct PromptDetail: View {
     }
     private var readingContent: some View {
         VStack(alignment: .leading, spacing: 24) {
-            PromptDetailHeading(title: content.title, summary: content.summary, creator: item.creator)
+            PromptDetailHeading(meta: ContentPreview(item).metaLine, title: content.title, summary: content.summary, creator: item.creator)
             if #available(iOS 27.1, *), hasMediaPreview, mediaPaneVisible { compactPreview }
             languagePicker
             PromptMarkdown(content.prompt)
@@ -237,9 +246,32 @@ struct PromptDetail: View {
             }
     }
     private var readingActions: some View {
-        ReadingActionBar(isSkill: item.isSkill, collapsed: actionsCollapsed, copied: copied,
-                         edit: openEditor, copy: { UIPasteboard.general.string = content.prompt; library.recommendations.record(.use, prompt: item); copied = true },
-                         use: openUseSheet)
+        let quick = quickDestination
+        return ReadingActionBar(isSkill: item.isSkill, collapsed: actionsCollapsed, copied: copied,
+                                useTitle: quick.map(Self.useTitle),
+                                edit: openEditor, copy: { UIPasteboard.general.string = content.prompt; library.recommendations.record(.use, prompt: item); copied = true },
+                                use: { if let quick { useQuickly(quick) } else { openUseSheet() } },
+                                chooseTool: quick.map { _ in { openUseSheet() } })
+    }
+    private static func useTitle(_ destination: PromptDestination) -> String {
+        let format = String(localized: destination.supportsPrefill ? "action.prefill" : "action.copyOpen", table: "UsePrompt")
+        return String(format: format, locale: .current, destination.name)
+    }
+    /// After the first use, the main action goes straight to the last tool when it suits this item.
+    private var quickDestination: PromptDestination? {
+        guard !preferredDestination.isEmpty, !item.isSkill else { return nil }
+        return PromptDestination.choices(for: item).first { $0.id == preferredDestination }
+    }
+    /// One step: copy (or prefill) and open. Blanks still go through the tray, and
+    /// a tool that will not open falls back to it with the text already copied.
+    private func useQuickly(_ destination: PromptDestination) {
+        let text = library.draft(for: item, language: effectiveLanguage)
+        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, PromptTemplate(text).fields.isEmpty else { openUseSheet(); return }
+        let transfer = destination.transfer(text)
+        UIPasteboard.general.string = transfer.text
+        library.recommendations.record(.use, prompt: item)
+        copied = true
+        openURL(transfer.url) { accepted in if !accepted { openUseSheet() } }
     }
     private func openUseSheet() {
         let prepared = library.draft(for: item, language: effectiveLanguage)

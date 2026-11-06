@@ -57,7 +57,7 @@ struct PendingPromptDetail: View {
     }
     private var reading: some View {
         VStack(alignment: .leading, spacing: 24) {
-            PromptDetailHeading(title: card.title, summary: card.summary, creator: card.creator)
+            PromptDetailHeading(meta: ContentPreview(card).metaLine, title: card.title, summary: card.summary, creator: card.creator)
             if #available(iOS 27.1, *), preview.hasDetailMedia, mediaPaneVisible {
                 HStack(spacing: 14) {
                     Artwork(preview: preview).frame(width: 76, height: 86).clipped()
@@ -77,11 +77,14 @@ struct PendingPromptDetail: View {
 }
 
 struct PromptDetailHeading: View {
+    let meta: String
     let title: String
     let summary: String
     let creator: Prompt.Creator?
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
+            Text(meta).font(Typography.meta(size: 11)).tracking(1.4).foregroundStyle(Palette.muted)
+                .accessibilityIdentifier("detailMeta")
             Text(title).font(Typography.editorial(.title)).lineSpacing(3)
                 .fixedSize(horizontal: false, vertical: true).accessibilityAddTraits(.isHeader)
                 .accessibilityIdentifier("detailTitle")
@@ -101,6 +104,19 @@ struct PromptDetailArtwork: View {
 }
 
 extension ContentPreview {
+    /// Film-edge meta: kind, model and, for visual work, its frame ratio.
+    var metaLine: String {
+        [displayKind, Prompt.localizedModel(model), media?.aspectRatio.flatMap(Self.ratioLabel) ?? ""]
+            .filter { !$0.isEmpty }.joined(separator: " ▸ ").uppercased()
+    }
+    /// The nearest common frame ratio, or nothing for an unusual shape.
+    static func ratioLabel(_ ratio: Double) -> String? {
+        let common: [(String, Double)] = [("1:1", 1), ("4:5", 0.8), ("3:4", 0.75), ("2:3", 2.0 / 3), ("9:16", 9.0 / 16),
+                                          ("5:4", 1.25), ("4:3", 4.0 / 3), ("3:2", 1.5), ("16:9", 16.0 / 9), ("21:9", 21.0 / 9)]
+        guard ratio > 0, let nearest = common.min(by: { abs($0.1 - ratio) < abs($1.1 - ratio) }),
+              abs(nearest.1 - ratio) / nearest.1 < 0.03 else { return nil }
+        return nearest.0
+    }
     var hasDetailMedia: Bool {
         WebsiteExamples.files[id] != nil || kind == .video || media?.image != nil || media?.imageURL != nil
     }

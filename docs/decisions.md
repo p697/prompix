@@ -1091,6 +1091,7 @@ Do not abort historical batches when approved Chinese metadata contains untransl
 ### 2026-10-21 — One complete source per historical visual request
 
 Reduce historical visual request fan-in from up to three sources to one, retaining complete per-source attachments and all existing request/worker budgets. Do not reduce frame coverage to improve latency.
+
 ### 2026-10-21 — Share verified source freshness at publication
 
 Campaign inventory and actual publication must consume the same verified source checks. Transfer only current exact-source third-party records for the publication candidates, preserving timestamps, removal decisions and chain coverage.
@@ -1128,6 +1129,14 @@ The iOS 27.1+ detail uses `ArrangementView`, which shows only the reading pane o
 ### 2026-11-06 — Let root headers yield through the system top bar
 
 The home header sat over a hand-drawn material veil that looked muddy and had a hard edge. Root headers now live in the scroll view's `safeAreaBar` with the system hard top edge effect; the soft style left the category row unreadable over artwork. The home header still collapses on scroll with the reading-bar spring, and the bar's height goes with it so the edge effect retreats to the status bar. Growing the top inset mid-scroll made SwiftUI jump the content by hundreds of points, so a matching top content margin replaces the bar height while collapsed and the total inset never changes. The tab bar minimizes on scroll from iOS 26. Cards scale to 0.97 when pressed; category switches add a selection haptic. Verified on an iPhone 18 Pro simulator with iOS 27.2 in light and dark.
+
+### 2026-11-06 — Make the detail action one step after the first use
+
+The 2.0 boards ask for "one-step use": once a tool has been chosen in the use tray, the detail's main action names that tool and copies (or prefills) the Prompt and opens it in one tap. A long press offers "choose another tool". The tray still opens the first time, when the remembered tool is not among this item's choices, when the Prompt has blanks to fill, and as the fallback when the tool cannot be opened. UI tests launch with `-preferredPromptDestination none` so the tray path stays deterministic.
+
+### 2026-11-06 — Keep decks local, separate and optional
+
+Saved works gain decks, stored in their own `decks.json` beside `favorites.json`; an unreadable deck file is kept and never overwritten, and it never blocks saving a work. "全部收藏" is every favorite, not a stored deck, and unsaving removes a work from all decks. Until the owner makes a deck, the deck scope opens straight onto every saved work and the detail bookmark stays one tap; with decks, the bookmark opens a "收藏到" sheet. This departs slightly from the board, which always shows the sheet, to avoid an empty extra step. iCloud sync is left for later. A new "我的改写" scope lists works with saved drafts.
 
 ### 2026-11-06 — Treat model calls as pluggable providers behind one control plane
 

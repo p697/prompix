@@ -2042,7 +2042,8 @@ extension XCUIApplication {
     @MainActor func expandPromptInformation() {
         let information = buttons["promptInformation"]
         for _ in 0..<40 {
-            if information.isHittable { break }
+            // Stop above the floating reading actions, which sit over the scroll content.
+            if information.isHittable && information.frame.maxY < frame.height * 0.8 { break }
             coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.72))
                 .press(forDuration: 0.01, thenDragTo: coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.32)))
         }
