@@ -58,8 +58,10 @@ import UIKit
         drag(from: 0.42, to: 0.60)
         XCTAssertTrue(app.buttons["discoveryFilters"].waitForExistence(timeout: 3))
         capture("immersive-03-header-return")
-        app.swipeDown(); app.swipeDown()
+        app.revealDiscoveryRails()
         let all = app.buttons["allCollections"]
+        for _ in 0..<3 { if all.isHittable { break }; app.scrollViews["discoveryScroll"].swipeUp(velocity: .slow) }
+        capture("immersive-03b-rails-in-feed")
         XCTAssertTrue(all.waitForExistence(timeout: 3)); all.tap()
         XCTAssertTrue(app.buttons["collection-play"].waitForExistence(timeout: 3))
         capture("immersive-04-collections")

@@ -9,6 +9,8 @@ struct FeedResults: View {
     var previews: [FeedCard] = []
     var excludingID: String?
     var layout: PromptGridLayout? = nil
+    /// Full-width modules placed a little way into the feed rather than above it.
+    var interlude: AnyView? = nil
     @State private var fallbackQuery: FeedQuery?
     @Environment(Library.self) private var library
     var body: some View {
@@ -35,9 +37,12 @@ struct FeedResults: View {
             if !showsFallback {
                 // Keep measured column geometry mounted through cold loads.
                 ZStack(alignment: .top) {
-                    PreviewMasonryGrid(items: items, preview: ContentPreview.init, cell: { FeedPromptCard(card: $0) }, suppliedLayout: layout)
-                    if waiting && items.isEmpty { FeedLoadingGrid() }
-                }.padding(.horizontal, PromptGridLayout.inset)
+                    FeedInterleave(items: items, interlude: interlude) { part in
+                        PreviewMasonryGrid(items: part, preview: ContentPreview.init, cell: { FeedPromptCard(card: $0) }, suppliedLayout: layout)
+                            .padding(.horizontal, PromptGridLayout.inset)
+                    }
+                    if waiting && items.isEmpty { FeedLoadingGrid().padding(.horizontal, PromptGridLayout.inset) }
+                }
             }
             if waiting {
                 if !items.isEmpty && !showsFallback { ContentActivityLabel(size: 48).frame(maxWidth: .infinity) }
@@ -78,6 +83,24 @@ struct FeedResults: View {
                 else { await store.load(query, force: true) }
             }
         }.padding(.horizontal, 16)
+    }
+}
+
+/// Splits a feed around one full-width interlude. The leading part is fixed at
+/// a screen or two of works, so later pages never move the interlude.
+struct FeedInterleave<Item: Identifiable, Grid: View>: View {
+    static var leadingCount: Int { 12 }
+    let items: [Item]
+    let interlude: AnyView?
+    @ViewBuilder let grid: ([Item]) -> Grid
+    var body: some View {
+        if let interlude, items.count > Self.leadingCount {
+            VStack(alignment: .leading, spacing: 20) {
+                grid(Array(items.prefix(Self.leadingCount)))
+                interlude
+                grid(Array(items.dropFirst(Self.leadingCount)))
+            }
+        } else { grid(items) }
     }
 }
 

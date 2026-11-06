@@ -1164,3 +1164,7 @@ A 50-item pilot compared the Codex subscription, Claude Sonnet 5.5, Claude Opus 
 ### 2026-11-06 — Let discovery cards carry only the work
 
 Following the 2.0 discover board, feed cards drop their titles and badges: a card is exactly its preview, with 12 pt continuous corners and 6 pt gutters inside a 16 pt inset. Titles remain the accessibility label. Text and Skill cards show a serif title beneath a monospaced "kind ▸ model" line, and video cards show only a play mark until a real duration field exists. The discover header becomes a large "发现" title with one glass filter button (use and model); sort stays in the "为你挑的 · 推荐 ▾" row, and settings live only in the Saved header, so each action has a single entry. Moving the creator and use rails into the feed follows separately.
+
+### 2026-11-06 — Place the creator and use rails inside the discover feed
+
+The first screen of discovery is now all work. The creator rail and the use rail sit together after the first twelve feed items (`FeedInterleave`), so later pages never move them; they are hidden while filtering, as before, and appear only once the feed has more than twelve items. Creator discovery therefore loads when its rail first scrolls into view rather than at launch. UI tests reach the rails through `revealDiscoveryRails()`.

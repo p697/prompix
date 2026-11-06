@@ -197,15 +197,15 @@ import UIKit
     func testHomeSkeletonsKeepSectionAnchorsThroughIndependentResponses() throws {
         launch(["--feed-home-loading-test"])
         let root = try directory()
+        // The rails mount inside the feed; their skeletons must keep the same
+        // spacing while the directory and browse responses arrive independently.
         let creators = app.buttons["allCreators"], collections = app.buttons["allCollections"]
-        let heading = app.buttons["discoverySort"]
+        XCTAssertTrue(firstFixtureCard.waitForExistence(timeout: 10))
+        app.revealDiscoveryRails()
         XCTAssertTrue(collections.waitForExistence(timeout: 5))
-        XCTAssertTrue(heading.waitForExistence(timeout: 5))
-        let anchors = [creators.frame.minY, collections.frame.minY, heading.frame.minY]
+        let spacing = collections.frame.minY - creators.frame.minY
         func checkAnchors() {
-            for (index, value) in [creators.frame.minY, collections.frame.minY, heading.frame.minY].enumerated() {
-                XCTAssertEqual(value, anchors[index], accuracy: 1, "Section \(index) moved during loading")
-            }
+            XCTAssertEqual(collections.frame.minY - creators.frame.minY, spacing, accuracy: 1, "A rail moved during loading")
         }
         capture("home-loading-01-all-skeletons")
         try FileManager.default.removeItem(at: root.appending(path: "hold-directory"))
@@ -216,6 +216,7 @@ import UIKit
         XCTAssertTrue(firstFixtureCard.waitForExistence(timeout: 15))
         checkAnchors(); capture("home-loading-03-loaded")
         app.terminate(); launch(["--feed-fixture-offline"])
+        app.revealDiscoveryRails()
         XCTAssertTrue(app.buttons["creator-fixture-author-0"].waitForExistence(timeout: 8))
         checkAnchors(); capture("home-loading-04-cached-offline")
     }
@@ -272,30 +273,29 @@ import UIKit
     func testHomeFailureAndRetryKeepReservedSpace() throws {
         launch(["--feed-home-loading-test"])
         let root = try directory()
-        let collections = app.buttons["allCollections"], heading = app.buttons["discoverySort"]
-        XCTAssertTrue(heading.waitForExistence(timeout: 5))
-        let positions = [collections.frame.minY, heading.frame.minY]
+        let creators = app.buttons["allCreators"], collections = app.buttons["allCollections"]
+        XCTAssertTrue(firstFixtureCard.waitForExistence(timeout: 10))
+        app.revealDiscoveryRails()
+        let spacing = collections.frame.minY - creators.frame.minY
         for gate in ["directory", "browse"] {
             try Data().write(to: root.appending(path: "fail-" + gate))
             try FileManager.default.removeItem(at: root.appending(path: "hold-" + gate))
         }
         try FileManager.default.removeItem(at: root.appending(path: "hold-feed-refresh"))
         XCTAssertTrue(app.buttons["loadCreators"].waitForExistence(timeout: 10))
-        XCTAssertTrue(firstFixtureCard.waitForExistence(timeout: 10))
-        XCTAssertEqual(collections.frame.minY, positions[0], accuracy: 1)
-        XCTAssertEqual(heading.frame.minY, positions[1], accuracy: 1)
+        XCTAssertEqual(collections.frame.minY - creators.frame.minY, spacing, accuracy: 1)
         capture("home-loading-failed")
         try FileManager.default.removeItem(at: root.appending(path: "fail-directory"))
         app.buttons["loadCreators"].tap()
         XCTAssertTrue(app.buttons["creator-fixture-author-0"].waitForExistence(timeout: 10))
-        XCTAssertEqual(collections.frame.minY, positions[0], accuracy: 1)
-        XCTAssertEqual(heading.frame.minY, positions[1], accuracy: 1)
+        XCTAssertEqual(collections.frame.minY - creators.frame.minY, spacing, accuracy: 1)
         capture("home-loading-recovered")
     }
 
     func testCreatorDirectoryControlsRemainReachableAtLargestText() throws {
         guard ProcessInfo.processInfo.environment["PROMPIX_CREATOR_ACCESSIBILITY"] == "1" else { throw XCTSkip("Explicit largest-text acceptance only") }
         launch()
+        app.revealDiscoveryRails()
         app.buttons["allCreators"].tap()
         let filter = app.buttons["creatorDirectoryFilter"], sort = app.buttons["creatorDirectorySort"]
         XCTAssertTrue(filter.waitForExistence(timeout: 10)); XCTAssertTrue(filter.isHittable); XCTAssertTrue(sort.isHittable)
@@ -331,6 +331,7 @@ import UIKit
 
     func testCreatorDirectoryFiltersSortsSearchesAndOpensMatchingWorks() throws {
         launch(["--feed-detail-preview-test"])
+        app.revealDiscoveryRails()
         app.buttons["allCreators"].tap()
         XCTAssertTrue(app.buttons["creatorDirectoryFilter"].waitForExistence(timeout: 10))
         app.buttons["creatorDirectoryFilter"].tap(); app.buttons["视频"].tap()
@@ -404,6 +405,7 @@ import UIKit
 
     func testCreatorDirectoryUsesLocalPlaceholdersAndClearsPreviousQuery() throws {
         launch()
+        app.revealDiscoveryRails()
         app.buttons["allCreators"].tap()
         XCTAssertTrue(app.buttons["creator-fixture-author-0"].waitForExistence(timeout: 10))
         let root = try directory()
@@ -972,6 +974,7 @@ import UIKit
 
     func testCreatorDirectoryAndCollectionUseTheirOwnPaginatedQueries() throws {
         launch()
+        app.revealDiscoveryRails()
         let creators = app.buttons["allCreators"]
         XCTAssertTrue(creators.waitForExistence(timeout: 15)); creators.tap()
         XCTAssertTrue(app.buttons["creator-fixture-author-0"].waitForExistence(timeout: 10))
