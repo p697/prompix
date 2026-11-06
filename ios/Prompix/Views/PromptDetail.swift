@@ -28,6 +28,7 @@ struct PromptDetail: View {
     @State private var mediaPaneVisible = false
     /// Once the title scrolls away it returns, small, between the bar buttons over a paper veil.
     @State private var titleShown = false
+    @State private var informationExpanded = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var typeSize
     @Environment(\.colorScheme) private var colorScheme
@@ -193,7 +194,7 @@ struct PromptDetail: View {
         }
     }
     private var readingContent: some View {
-        VStack(alignment: .leading, spacing: 22) {
+        VStack(alignment: .leading, spacing: 16) {
             PromptDetailHeading(preview: ContentPreview(item), title: content.title)
             if #available(iOS 27.1, *), hasMediaPreview, mediaPaneVisible { compactPreview }
             VStack(alignment: .leading, spacing: 10) {
@@ -203,7 +204,7 @@ struct PromptDetail: View {
                 if let shots = item.shots, selectedVersion == nil { PromptShots(shots: shots).accessibilityIdentifier("promptBody") }
                 else { FoldedPrompt(text: shownText).accessibilityIdentifier("promptBody") }
             }
-            DisclosureGroup {
+            DisclosureGroup(isExpanded: $informationExpanded) {
                 VStack(alignment: .leading, spacing: 0) {
                     if let creator = item.creator { CreatorByline(creator: creator).padding(.bottom, 6) }
                     infoRow(String(localized: "语言"), displaysOriginalContent ? String(localized: "原文") : String(localized: "AI 译文"))
@@ -259,11 +260,13 @@ struct PromptDetail: View {
     /// Who and under what terms, in one quiet line; everything else waits inside.
     private var moreInformationLabel: some View {
         HStack(spacing: 8) {
-            if let creator = item.creator { CreatorAvatar(creator: creator, size: 20) }
-            Text([item.creator?.displayName ?? item.source.author ?? item.source.name, shortLicense].compactMap { $0 }.joined(separator: " · "))
-                .lineLimit(1)
+            if !informationExpanded {
+                if let creator = item.creator { CreatorAvatar(creator: creator, size: 20) }
+                Text([item.creator?.displayName ?? item.source.author ?? item.source.name, shortLicense].compactMap { $0 }.joined(separator: " · "))
+                    .lineLimit(1)
+            }
             Spacer(minLength: 8)
-            Text(String(localized: "更多信息"))
+            Text(informationExpanded ? String(localized: "收起") : String(localized: "更多信息"))
         }.font(.footnote).foregroundStyle(Palette.muted).frame(minHeight: 44)
             .accessibilityElement(children: .combine)
     }
@@ -279,7 +282,7 @@ struct PromptDetail: View {
     private var readingActions: some View {
         ReadingActionBar(isSkill: item.isSkill, collapsed: actionsCollapsed, copied: copied,
                          copyTitle: item.isSkill && SkillInstall.command(for: item) != nil ? String(localized: "复制安装命令") : nil,
-                         edit: openEditor, copy: copyShown)
+                         canEdit: !item.isSkill, edit: openEditor, copy: copyShown)
     }
     private func copyShown() {
         UIPasteboard.general.string = item.isSkill && selectedVersion == nil ? SkillInstall.command(for: item) ?? shownText : shownText
@@ -640,15 +643,9 @@ struct ImageViewer: View {
                 .offset(y: reduceMotion ? 0 : dragOffset)
                 .scaleEffect(reduceMotion ? 1 : 1 - min(dragOffset / 1800, 0.12))
                 .opacity(reduceMotion ? 1 - min(dragOffset / 600, 0.3) : 1)
+            // Swipe between images, pull down to close; the system dots say where you are.
             VStack {
                 HStack {
-                    if count > 1 {
-                        Text("\(selection + 1) / \(count)")
-                            .font(.subheadline.monospacedDigit()).foregroundStyle(.white)
-                            .padding(.horizontal, 16).padding(.vertical, 10)
-                            .background(.black.opacity(0.45), in: Capsule())
-                            .accessibilityIdentifier("imagePageCounter")
-                    }
                     Spacer()
                     Button { dismiss() } label: {
                         PrompixIcon.close.image(size: 20)
@@ -658,20 +655,6 @@ struct ImageViewer: View {
                         .accessibilityIdentifier("closeImageViewer")
                 }
                 Spacer()
-                if count > 1 {
-                    HStack(spacing: 28) {
-                        Button { selection -= 1 } label: {
-                            PrompixIcon.back.image.frame(width: 44, height: 44)
-                        }.disabled(selection == 0)
-                            .accessibilityLabel(String(localized: "上一张")).accessibilityIdentifier("previousImage")
-                        Button { selection += 1 } label: {
-                            PrompixIcon.chevronRight.image.frame(width: 44, height: 44)
-                        }.disabled(selection == count - 1)
-                            .accessibilityLabel(String(localized: "下一张")).accessibilityIdentifier("nextImage")
-                    }.font(.body.weight(.medium)).buttonStyle(.plain)
-                        .foregroundStyle(.white).padding(.horizontal, 8)
-                        .background(.ultraThinMaterial, in: Capsule())
-                }
             }.padding(.horizontal, 18).padding(.vertical, 12)
                 .opacity(1 - min(dragOffset / 150, 0.8))
         }
@@ -693,7 +676,9 @@ struct ImageViewer: View {
                     else { zoomedPages.remove(index) }
                 }.tag(index)
             }
-        }.tabViewStyle(.page(indexDisplayMode: .never))
+        }.tabViewStyle(.page(indexDisplayMode: count > 1 ? .always : .never))
+            .accessibilityValue(count > 1 ? "\(selection + 1) / \(count)" : "")
+            .accessibilityIdentifier("imagePages")
     }
     // iOS 18 supplies the interactive return to the source image. Older systems
     // and Reduce Motion retain the same downward exit gesture without that zoom.
@@ -869,7 +854,7 @@ private struct FoldedPrompt: View {
                 }
             if folds {
                 Button(String(localized: "展开全文")) { expanded = true }
-                    .font(.subheadline.weight(.medium)).foregroundStyle(Palette.ink).frame(minHeight: 44)
+                    .font(.subheadline.weight(.medium)).foregroundStyle(Palette.ink).frame(minHeight: 36)
                     .accessibilityIdentifier("expandPrompt")
             }
         }.onChange(of: text) { _, _ in expanded = false }

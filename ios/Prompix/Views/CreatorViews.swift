@@ -152,7 +152,8 @@ struct CreatorRail: View {
         library.feed == nil ? LocalCreatorRailRequest(catalog: library.prompts, query: CreatorQuery()) : nil
     }
     private var entries: [CreatorEntry] {
-        if let feed = library.feed { return Array(feed.creatorDiscovery.items.prefix(12)).map { CreatorEntry(creator: $0.creator, count: $0.count, preview: feed.creatorPreview($0)) } }
+        // A rail of people with a body of work: one-off accounts stay findable by search.
+        if let feed = library.feed { return Array(feed.creatorDiscovery.items.filter { $0.count >= 3 }.prefix(12)).map { CreatorEntry(creator: $0.creator, count: $0.count, preview: feed.creatorPreview($0)) } }
         return completedLocalRequest == localRequest ? localEntries : []
     }
 
@@ -530,7 +531,7 @@ private enum CreatorIdentity {
 }
 
 private enum CreatorContentFilter: String, CaseIterable, Identifiable, Hashable {
-    case all, text, image, video, web, skill
+    case all, image, video, text, web, skill
     var id: String { rawValue }
     var title: String {
         switch self {
@@ -539,7 +540,7 @@ private enum CreatorContentFilter: String, CaseIterable, Identifiable, Hashable 
         case .image: PromptKind.image.title
         case .video: PromptKind.video.title
         case .web: PromptKind.web.title
-        case .skill: "Skill"
+        case .skill: "Skills"
         }
     }
     func includes(_ item: Prompt) -> Bool {

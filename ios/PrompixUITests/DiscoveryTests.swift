@@ -734,7 +734,7 @@ import UIKit
         app.buttons["Done"].tap()
         app.goBackInPrompix()
         app.buttons["Settings"].tap()
-        XCTAssertTrue(app.navigationBars["About and settings"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 5))
         capture("19-english-settings")
     }
     func testLiveImageGallery() throws {
@@ -757,26 +757,18 @@ import UIKit
         XCTAssertEqual(XCTWaiter.wait(for: [paged], timeout: 5), .completed)
         capture("gallery-detail-2")
         hero.tap()
-        XCTAssertTrue(app.staticTexts["2 / 4"].waitForExistence(timeout: 10))
-        app.buttons["previousImage"].tap()
-        XCTAssertTrue(app.staticTexts["1 / 4"].waitForExistence(timeout: 5))
-        XCTAssertFalse(app.buttons["previousImage"].isEnabled)
-        for index in 1...4 {
-            XCTAssertTrue(app.staticTexts["\(index) / 4"].waitForExistence(timeout: 5))
-            XCTAssertTrue(app.descendants(matching: .any)["loadedImage-\(index - 1)"].waitForExistence(timeout: 20))
-            capture("gallery-\(index)")
-            if index < 4 { app.buttons["nextImage"].tap() }
-        }
-        XCTAssertFalse(app.buttons["nextImage"].isEnabled)
-        app.buttons["previousImage"].tap()
-        XCTAssertTrue(app.staticTexts["3 / 4"].waitForExistence(timeout: 5))
+        // The viewer opens on the image being shown and pages by swiping.
+        XCTAssertTrue(app.descendants(matching: .any)["loadedImage-1"].waitForExistence(timeout: 20))
+        capture("gallery-2")
+        app.descendants(matching: .any)["loadedImage-1"].swipeLeft()
+        XCTAssertTrue(app.descendants(matching: .any)["loadedImage-2"].waitForExistence(timeout: 20))
         app.descendants(matching: .any)["loadedImage-2"].swipeRight()
-        XCTAssertTrue(app.staticTexts["2 / 4"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.descendants(matching: .any)["loadedImage-1"].waitForExistence(timeout: 5))
         app.descendants(matching: .any)["loadedImage-1"].doubleTap()
         capture("gallery-zoom")
         app.descendants(matching: .any)["loadedImage-1"].doubleTap()
-        app.buttons["完成"].tap()
-        XCTAssertTrue(app.buttons["copyPrompt"].exists)
+        app.buttons["closeImageViewer"].tap()
+        XCTAssertTrue(app.buttons["copyPrompt"].waitForExistence(timeout: 5))
     }
 
     func testLiveCommunityEditionAndRemotePreviews() throws {
