@@ -44,6 +44,7 @@ struct RootView: View {
                 }
             }
             .autocorrectionDisabled().textInputAutocapitalization(.never)
+            .minimizesTabBarOnScroll()
         } else {
             TabView(selection: selection) {
                 DiscoverView().tag(MainTab.discover)
@@ -93,85 +94,79 @@ struct DiscoverView: View {
     }
     var body: some View {
         NavigationStack {
-            ZStack(alignment: .top) {
-                ScrollViewReader { scroll in
-                    ScrollView {
-                        LazyVStack(alignment: .leading, spacing: 14) {
-                            Group {
-                                if !isFiltered {
-                                    CreatorRail()
-                                    CollectionRail(query: feedQuery).padding(.bottom, 6)
-                                }
-                                discoveryContext
-                                if skillsOnly {
-                                    Text(String(localized: "可在支持 Agent Skills 的工具中使用，包含完整说明与源文件；具体依赖请查看详情。"))
-                                        .font(.subheadline).foregroundStyle(Palette.muted).padding(.horizontal, 20)
-                                }
-                                if let feed = library.feed {
-                                    FeedResults(store: feed.discovery, query: feedQuery, loadsOnAppear: false, fallback: items, layout: feedLayout)
-                                } else if items.isEmpty {
-                                    if needsFirstVideoUpdate {
-                                        ContentUnavailableView {
-                                            Label(String(localized: "视频内容需要联网更新"), systemImage: "play.rectangle")
-                                        } description: {
-                                            Text(String(localized: "首次联网更新后可浏览视频 Prompt。你也可以先查看其他类型的内容。"))
-                                        } actions: {
-                                            Button(library.isRefreshing ? String(localized: "正在更新…") : String(localized: "检查内容更新")) {
-                                                Task { await library.refresh(force: true) }
-                                            }.buttonStyle(.borderedProminent).disabled(library.isRefreshing).accessibilityIdentifier("loadVideoExamples")
-                                            Button(String(localized: "查看其他内容")) { kind = nil; skillsOnly = false; topic = nil; model = nil }
-                                                .buttonStyle(.bordered).accessibilityIdentifier("browseOtherIdeas")
-                                        }
-                                    } else {
-                                        ContentUnavailableView(String(localized: "暂无匹配内容"), systemImage: "sparkle", description: Text(String(localized: "试试其他分类，或清除筛选条件。")))
+            ScrollViewReader { scroll in
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 14) {
+                        Group {
+                            if !isFiltered {
+                                CreatorRail()
+                                CollectionRail(query: feedQuery).padding(.bottom, 6)
+                            }
+                            discoveryContext
+                            if skillsOnly {
+                                Text(String(localized: "可在支持 Agent Skills 的工具中使用，包含完整说明与源文件；具体依赖请查看详情。"))
+                                    .font(.subheadline).foregroundStyle(Palette.muted).padding(.horizontal, 20)
+                            }
+                            if let feed = library.feed {
+                                FeedResults(store: feed.discovery, query: feedQuery, loadsOnAppear: false, fallback: items, layout: feedLayout)
+                            } else if items.isEmpty {
+                                if needsFirstVideoUpdate {
+                                    ContentUnavailableView {
+                                        Label(String(localized: "视频内容需要联网更新"), systemImage: "play.rectangle")
+                                    } description: {
+                                        Text(String(localized: "首次联网更新后可浏览视频 Prompt。你也可以先查看其他类型的内容。"))
+                                    } actions: {
+                                        Button(library.isRefreshing ? String(localized: "正在更新…") : String(localized: "检查内容更新")) {
+                                            Task { await library.refresh(force: true) }
+                                        }.buttonStyle(.borderedProminent).disabled(library.isRefreshing).accessibilityIdentifier("loadVideoExamples")
+                                        Button(String(localized: "查看其他内容")) { kind = nil; skillsOnly = false; topic = nil; model = nil }
+                                            .buttonStyle(.bordered).accessibilityIdentifier("browseOtherIdeas")
                                     }
                                 } else {
-                                    PromptGrid(items: items).padding(.horizontal, 12)
+                                    ContentUnavailableView(String(localized: "暂无匹配内容"), systemImage: "sparkle", description: Text(String(localized: "试试其他分类，或清除筛选条件。")))
                                 }
+                            } else {
+                                PromptGrid(items: items).padding(.horizontal, 12)
                             }
-                        }.id("discovery-top").padding(.bottom, 24)
-                            .frame(minHeight: viewportHeight, alignment: .top)
-                            .transaction { $0.animation = nil }
-                    }
-                    .accessibilityIdentifier("discoveryScroll")
-                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { viewportHeight = $0 }
-                    .onGeometryChange(for: PromptGridLayout.self) { proxy in
-                        PromptGridLayout.measured(in: proxy, inset: 12)
-                    } action: { if !$0.widths.isEmpty { feedLayout = $0 } }
-                    .plainTopEdge()
-                    .scrollClipDisabled()
-                    .background(Palette.paper).foregroundStyle(Palette.ink)
-                    .readingChrome($chromeCollapsed)
-                    .safeAreaInset(edge: .top, spacing: 0) {
-                        // Reserve space for native refresh without moving content
-                        // when chrome collapses. Controls are overlaid independently
-                        // so their layout is separate from the scrolling cards.
-                        Color.clear.frame(height: headerHeight).allowsHitTesting(false)
-                    }
-                    .pageRefreshable {
-                        // SwiftUI can cancel the refresh action when lazy sections
-                        // move during overscroll. The user's bounded request owns its
-                        // lifetime; query changes still cancel it inside the store.
-                        await Task { @MainActor in
-                            async let metadata: Void = library.refresh(force: true)
-                            if let feed = library.feed {
-                                await feed.discovery.load(feedQuery, force: true)
-                            }
-                            await metadata
-                        }.value
-                    }
-                    .onChange(of: feedQuery) { _, query in
-                        // One reset for the complete query; no intermediate kind +
-                        // previous model/tag combinations or animated scroll jump.
-                        var transaction = Transaction(); transaction.disablesAnimations = true
-                        withTransaction(transaction) {
-                            library.feed?.discovery.select(query)
-                            chromeCollapsed = false
-                            scroll.scrollTo("discovery-top", anchor: .top)
                         }
+                    }.id("discovery-top").padding(.bottom, 24)
+                        .frame(minHeight: viewportHeight, alignment: .top)
+                        .transaction { $0.animation = nil }
+                }
+                .accessibilityIdentifier("discoveryScroll")
+                // The bar's height leaves when it collapses; this margin takes its
+                // place so the scroll view's total inset, and the reader, never move.
+                .contentMargins(.top, chromeCollapsed ? headerHeight : 0, for: .scrollContent)
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { viewportHeight = $0 }
+                .onGeometryChange(for: PromptGridLayout.self) { proxy in
+                    PromptGridLayout.measured(in: proxy, inset: 12)
+                } action: { if !$0.widths.isEmpty { feedLayout = $0 } }
+                .scrollClipDisabled()
+                .background(Palette.paper).foregroundStyle(Palette.ink)
+                .readingChrome($chromeCollapsed)
+                .rootHeaderBar { discoveryChrome }
+                .pageRefreshable {
+                    // SwiftUI can cancel the refresh action when lazy sections
+                    // move during overscroll. The user's bounded request owns its
+                    // lifetime; query changes still cancel it inside the store.
+                    await Task { @MainActor in
+                        async let metadata: Void = library.refresh(force: true)
+                        if let feed = library.feed {
+                            await feed.discovery.load(feedQuery, force: true)
+                        }
+                        await metadata
+                    }.value
+                }
+                .onChange(of: feedQuery) { _, query in
+                    // One reset for the complete query; no intermediate kind +
+                    // previous model/tag combinations or animated scroll jump.
+                    var transaction = Transaction(); transaction.disablesAnimations = true
+                    withTransaction(transaction) {
+                        library.feed?.discovery.select(query)
+                        chromeCollapsed = false
+                        scroll.scrollTo("discovery-top", anchor: .top)
                     }
                 }
-                discoveryChrome.zIndex(1)
             }
             .toolbar(.hidden, for: .navigationBar)
             .sheet(isPresented: $settingsPresented) { SettingsView().promptSheet() }
@@ -189,20 +184,16 @@ struct DiscoverView: View {
         kind = next; skillsOnly = skills; topic = nil; model = nil
         library.feed?.discovery.select(feedQuery)
     }
+    // The bar itself shrinks, so the edge effect retreats to the status bar
+    // instead of veiling cards beneath an empty header.
     private var discoveryChrome: some View {
-        discoveryHeader
-            .offset(y: chromeCollapsed ? -headerHeight - 12 : 0)
-            .opacity(chromeCollapsed ? 0 : 1)
+        discoveryHeader.fixedSize(horizontal: false, vertical: true)
+            .animation(reduceMotion ? nil : Motion.chrome) {
+                $0.offset(y: chromeCollapsed ? -headerHeight : 0).opacity(chromeCollapsed ? 0 : 1)
+            }
+            .frame(height: chromeCollapsed ? 0 : nil, alignment: .top)
             .allowsHitTesting(!chromeCollapsed)
             .accessibilityHidden(chromeCollapsed)
-            .background {
-                GeometryReader { proxy in
-                    ReadingTopFade(collapsed: chromeCollapsed)
-                        .frame(height: proxy.safeAreaInsets.top + (chromeCollapsed ? 0 : proxy.size.height) + ReadingTopFade.featherHeight)
-                        .offset(y: -proxy.safeAreaInsets.top)
-                }.allowsHitTesting(false).accessibilityHidden(true)
-            }
-            .animation(reduceMotion ? nil : .smooth(duration: 0.28), value: chromeCollapsed)
     }
     private var discoveryHeader: some View {
         VStack(spacing: 4) {
@@ -441,7 +432,7 @@ struct PromptCard: View {
         VStack(alignment: .leading, spacing: 0) {
             Button { detailPresented = true } label: {
                 PromptCardFace(preview: ContentPreview(item)).promptTransitionSource(id: item.id, in: transition)
-            }.buttonStyle(.plain).accessibilityLabel(item.displayTitle).accessibilityIdentifier("prompt-\(item.id)")
+            }.buttonStyle(.cardPress).accessibilityLabel(item.displayTitle).accessibilityIdentifier("prompt-\(item.id)")
                 .contextMenu {
                     Button {
                         UIPasteboard.general.string = item.displayContent.prompt
@@ -538,10 +529,9 @@ struct FavoritesView: View {
                 }.padding(.top, 2).padding(.bottom, 24)
             }
             .scrollDismissesKeyboard(.interactively)
-            .plainTopEdge().background(Palette.paper).foregroundStyle(Palette.ink)
-            .safeAreaInset(edge: .top, spacing: 0) {
+            .background(Palette.paper).foregroundStyle(Palette.ink)
+            .rootHeaderBar {
                 RootPageHeader(title: String(localized: "收藏"), settingsID: "savedSettings") { settingsPresented = true }
-                    .background(Palette.paper)
             }
             .toolbar(.hidden, for: .navigationBar)
             .sheet(isPresented: $settingsPresented) { SettingsView().promptSheet() }
