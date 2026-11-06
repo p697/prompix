@@ -4,7 +4,7 @@ import { promptSchema, type Prompt } from "../packages/schema/catalog.ts";
 import { enrichedPromptIssues, facetIDs, paletteSchema } from "../packages/schema/enrichment.ts";
 import {
   applyEnrichment, aspectLabel, enrichmentOutputJSONSchema, enrichmentRequest, labelledModel, packEnrichmentBatches,
-  needsPeopleReview, reviewEnrichmentBatch, rightsFor, validateEnrichmentItem, type EnrichmentCandidate,
+  publicationBlocker, reviewEnrichmentBatch, rightsFor, validateEnrichmentItem, type EnrichmentCandidate,
 } from "./enrichment-review.ts";
 import type { ModelCallSummary } from "./models/call.ts";
 import { ModelProviderError, type ModelProvider, type ModelRequest } from "./models/types.ts";
@@ -34,7 +34,7 @@ function output(id = "x-post-1", overrides: Record<string, unknown> = {}) {
     variables: [{ token: "[a feeling]", name: { zh: "情绪", en: "Feeling" }, default: null, hint: { zh: "想表达的情绪", en: "The mood to convey" } }],
     facets: { useCase: ["portraits"], style: ["cinematic"], subject: ["person", "city"] },
     en: { title: "Rainy neon portrait", summary: "A cinematic portrait from your own photo on a rainy neon street." },
-    shots: [], vocabularyGaps: [], people: { realPerson: "no", minor: "no" },
+    shots: [], vocabularyGaps: [], minors: "none", minorsReason: "Only an adult is depicted.",
     ...overrides,
   };
 }
@@ -83,16 +83,28 @@ test("the model cannot add facets beyond the per-group limit or invent variable 
   assert.match(!invented.ok ? invented.error : "", /not in the prompt/);
 });
 
-test("harmless contradictions are repaired; people flags route new items to review", () => {
+test("harmless contradictions are repaired", () => {
   const repaired = validateEnrichmentItem(candidate(), output("x-post-1", {
     inputs: { requirement: "required", count: 12, kinds: ["product", "product"], ownLikenessOnly: true },
     generation: { modelFamily: "other", modelVersion: null, mode: "i2i", outputAspect: "2.39:1", durationSeconds: null, hasAudio: null } }));
   assert.ok(repaired.ok, !repaired.ok ? repaired.error : "");
   assert.deepEqual(repaired.fields.inputs, { requirement: "required", kinds: ["product"] });
   assert.equal(repaired.fields.generation.outputAspect, undefined);
-  assert.equal(needsPeopleReview(repaired.evidence), false);
-  const flagged = validateEnrichmentItem(candidate(), output("x-post-1", { people: { realPerson: "unsure", minor: "no" } }));
-  assert.ok(flagged.ok && needsPeopleReview(flagged.evidence));
+});
+
+test("unsafe or undecidable content involving minors is excluded automatically", () => {
+  const judged = (minors: string, presentation = "general") => {
+    const outcome = validateEnrichmentItem(candidate(), output("x-post-1", { minors, minorsReason: "reason", presentation }));
+    assert.ok(outcome.ok); return outcome.evidence;
+  };
+  assert.equal(publicationBlocker(judged("none")), undefined);
+  assert.equal(publicationBlocker(judged("safe")), undefined, "an ordinary children's illustration is published");
+  assert.match(publicationBlocker(judged("unsafe")) ?? "", /^minors-unsafe/);
+  assert.match(publicationBlocker(judged("uncertain")) ?? "", /^minors-uncertain/);
+  assert.match(publicationBlocker(judged("safe", "suggestive")) ?? "", /^minors-with-suggestive/, "a possible minor never sits next to suggestive styling");
+  assert.equal(publicationBlocker(judged("none", "suggestive")), undefined);
+  assert.equal(publicationBlocker(judged("none"), "unknown"), "presentation-unknown");
+  assert.equal(validateEnrichmentItem(candidate(), output("x-post-1", { minors: "maybe" })).ok, false);
 });
 
 test("modes must fit the kind and reference modes need an input", () => {
@@ -107,7 +119,7 @@ test("out-of-order or missing items reject the whole call", async () => {
     (error: unknown) => error instanceof ModelProviderError && error.code === "invalid_output");
 });
 
-test("a refusal propagates so the batch goes to people, not to another model", async () => {
+test("a refusal propagates so the batch is excluded, not sent to another model", async () => {
   const refusing: ModelProvider = { ...provider(() => ({})), async complete() { throw new ModelProviderError("declined", "refused", false); } };
   await assert.rejects(reviewEnrichmentBatch(refusing, [candidate()]), (error: unknown) => error instanceof ModelProviderError && error.code === "refused");
 });
