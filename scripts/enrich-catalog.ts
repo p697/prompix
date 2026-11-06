@@ -14,6 +14,7 @@ import { trustSystemCertificates } from "../ingest/models/http.ts";
 import { createProvider, isProviderId, modelEnvironment } from "../ingest/models/registry.ts";
 import { ModelProviderError, type Effort } from "../ingest/models/types.ts";
 import { appendEvent, pipelineRoot } from "../ingest/pipeline-control.ts";
+import { estimateUSD } from "../ingest/models/pricing.ts";
 import { recordExclusion, refusedIDs } from "../ingest/exclusion-log.ts";
 import type { Palette } from "../packages/schema/enrichment.ts";
 import { withDailyStatus } from "../ingest/daily-status.ts";
@@ -85,15 +86,7 @@ function sample(items: Prompt[], count: number): string[] {
 const prepare = (item: Prompt) => prepareEnrichmentMedia(item, join(work!, "media", item.id),
   !!values["full-media"] || item.presentation === "unknown" || !item.presentation);
 
-/** Per-million-token list prices used to estimate spend; the console holds the real balance. */
-const prices: Record<string, { input: number; output: number; cachedInput: number }> = {
-  "claude-sonnet-5-5": { input: 2, output: 10, cachedInput: 0.2 }, "claude-opus-5-5": { input: 4, output: 20, cachedInput: 0.2 },
-  "claude-haiku-5-5": { input: 0.1, output: 0.5, cachedInput: 0.01 },
-};
-const cost = (model: string, usage: { inputTokens?: number; outputTokens?: number; cachedInputTokens?: number } = {}) => {
-  const price = prices[model];
-  return price ? ((usage.inputTokens ?? 0) * price.input + (usage.outputTokens ?? 0) * price.output + (usage.cachedInputTokens ?? 0) * price.cachedInput) / 1e6 : 0;
-};
+const cost = estimateUSD;
 
 /** Media preparation (local CPU and disk) and model calls (network) run as one pipeline
  * with separate limits. Calls start at --concurrency, rise to --max-concurrency while no

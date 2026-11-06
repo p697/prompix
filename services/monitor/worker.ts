@@ -1,6 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
 import { EmailMessage } from "cloudflare:email";
 import { timingSafeEqual } from "node:crypto";
+import { encodeEmail, reportMessage, reportSchema } from "./report.ts";
 import { acceptHeartbeat, acknowledge, defer, evaluate, heartbeatSchema, initialState, nextAlarm, type Heartbeat, type MonitorState, type Notice } from "./state.ts";
 
 export class IngestMonitor extends DurableObject<MonitorEnv> {
@@ -48,7 +49,6 @@ export class IngestMonitor extends DurableObject<MonitorEnv> {
   }
 }
 function message(notice: Notice, recipient: string, label: string): string {
-  if (!/^[^\s<>\r\n]+@[^\s<>\r\n]+$/.test(recipient)) throw new Error("Invalid recipient configuration");
   const descriptions: Record<Notice["kind"], string> = {
     source_degraded: "连续两次采集出现来源或审核服务失败。内容库可能仍可访问，但新增供给受影响，请检查分阶段运行记录。",
     run_failed: "采集任务失败。安全重试已耗尽或遇到不可重试错误，请检查采集状态和日志。",
@@ -60,10 +60,20 @@ function message(notice: Notice, recipient: string, label: string): string {
   };
   const subject = `${label === "production" ? "" : "[验收测试] "}Prompix · ${notice.kind === "recovered" ? "采集恢复" : "采集告警"}`;
   const body = `${descriptions[notice.kind]}\n\n时间（UTC）：${new Date(notice.at).toISOString()}\n通知编号：${notice.id}\n\n此邮件来自 Prompix 自动监控。同一故障不会重复发送告警；恢复后会通知。\n`;
-  const base64 = (text: string) => Buffer.from(text).toString("base64");
-  return [`From: Prompix <alerts@prompix.dev>`, `To: ${recipient}`, `Subject: =?UTF-8?B?${base64(subject)}?=`,
-    `Message-ID: <${notice.id}@prompix.dev>`, `Date: ${new Date(notice.at).toUTCString()}`, "MIME-Version: 1.0",
-    'Content-Type: text/plain; charset="UTF-8"', "Content-Transfer-Encoding: base64", "", base64(body).match(/.{1,76}/g)!.join("\r\n")].join("\r\n");
+  return encodeEmail(subject, body, notice.id, new Date(notice.at), recipient);
+}
+
+/** Bounded JSON body, or a response explaining why it was refused. */
+async function readJSON(request: Request, limit: number, headers: HeadersInit): Promise<{ value: unknown } | Response> {
+  if (!request.body) return new Response("Missing body", { status: 400, headers });
+  const reader = request.body.getReader(); let size = 0; const chunks: Uint8Array[] = [];
+  for (;;) {
+    const { done, value } = await reader.read(); if (done) break;
+    size += value.byteLength; if (size > limit) { await reader.cancel(); return new Response("Too large", { status: 413, headers }); }
+    chunks.push(value);
+  }
+  try { return { value: JSON.parse(Buffer.concat(chunks).toString("utf8")) }; }
+  catch { return new Response("Invalid JSON", { status: 400, headers }); }
 }
 
 export default {
@@ -75,19 +85,21 @@ export default {
     const path = new URL(request.url).pathname;
     const monitor = env.MONITOR.getByName("collector");
     if (request.method === "GET" && path === "/status") return Response.json(await monitor.status(), { headers });
+    // The daily report goes straight to the configured recipient; the pipeline retries on failure.
+    if (request.method === "POST" && path === "/report") {
+      const body = await readJSON(request, 32768, headers);
+      if (body instanceof Response) return body;
+      const report = reportSchema.safeParse(body.value);
+      if (!report.success) return new Response("Invalid report", { status: 400, headers });
+      try { await env.ALERT_EMAIL.send(new EmailMessage("alerts@prompix.dev", env.ALERT_RECIPIENT, reportMessage(report.data, env.ALERT_RECIPIENT, env.MONITOR_LABEL))); }
+      catch { return new Response("Report could not be sent", { status: 502, headers }); }
+      return Response.json({ sent: true }, { headers });
+    }
     if (request.method !== "POST" || path !== "/heartbeat") return new Response("Not found", { status: 404, headers });
     try {
-      if (!request.body) return new Response("Missing body", { status: 400, headers });
-      const reader = request.body.getReader(); let size = 0; const chunks: Uint8Array[] = [];
-      for (;;) {
-        const { done, value } = await reader.read(); if (done) break;
-        size += value.byteLength; if (size > 2048) { await reader.cancel(); return new Response("Too large", { status: 413, headers }); }
-        chunks.push(value);
-      }
-      let value: unknown;
-      try { value = JSON.parse(Buffer.concat(chunks).toString("utf8")); }
-      catch { return new Response("Invalid JSON", { status: 400, headers }); }
-      const event = heartbeatSchema.safeParse(value);
+      const body = await readJSON(request, 2048, headers);
+      if (body instanceof Response) return body;
+      const event = heartbeatSchema.safeParse(body.value);
       if (!event.success || Date.parse(event.data.finishedAt ?? event.data.startedAt) > Date.now() + 300000)
         return new Response("Invalid event", { status: 400, headers });
       return Response.json(await monitor.heartbeat(event.data), { headers });

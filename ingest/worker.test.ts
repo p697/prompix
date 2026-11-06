@@ -7,7 +7,7 @@ import type { Prompt } from "../packages/schema/catalog.ts";
 import { createTestDatabase } from "../services/feed/test-database.ts";
 import { activatePublication, stagePublication } from "../services/feed/publication.ts";
 import { readEvents, readWorkerStatus, updateConfig, type WorkerStatus } from "./pipeline-control.ts";
-import { intakeJob, intakeWindowMs, jobDue, maintenanceIntervalMs, retryAfterFailureMs, tick, type Job } from "./worker.ts";
+import { intakeJob, intakeWindowMs, jobDue, reportJob, maintenanceIntervalMs, retryAfterFailureMs, tick, type Job } from "./worker.ts";
 import { runMaintenance, takedownLimit } from "./worker-maintenance.ts";
 import { workerPlist } from "./worker-launchd.ts";
 
@@ -54,6 +54,19 @@ test("the intake runs once per six-hour UTC window and only while the pipeline i
   await updateConfig(root, "codex", undefined, config => ({ ...config, desired: "running" }));
   await tick(root, at(0), jobs, { now: () => now });
   assert.equal(runs, 1);
+});
+
+test("the daily report covers the UTC day that just ended, once the worker has run an intake", async () => {
+  const root = join(await mkdtemp(join(tmpdir(), "prompix-worker-")), "pipeline");
+  const sent: string[] = [];
+  const job = reportJob({}, root, async report => { sent.push(report.date); }, { now: () => now });
+  assert.equal(await job.run(), "每日采集还没开始，不发日报");
+  await updateConfig(root, "codex", undefined, config => config);
+  const { appendEvent } = await import("./pipeline-control.ts");
+  await appendEvent(root, "worker", "job.failed", { job: "intake", error: "x", durationMs: 1 });
+  const later = reportJob({}, root, async report => { sent.push(report.date); }, { now: () => Date.now() + 24 * hour });
+  await later.run();
+  assert.deepEqual(sent, [new Date(Date.now()).toISOString().slice(0, 10)]);
 });
 
 test("each tick writes a heartbeat, runs a due job once and records success or failure", async () => {

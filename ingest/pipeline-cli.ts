@@ -10,6 +10,7 @@ import { appendEvent, pipelineRoot, pipelineStages, readEvents, snapshot, stageL
 import { repo } from "./publication.ts";
 import { installWorker, restartWorker, uninstallWorker, workerPlistPath } from "./worker-launchd.ts";
 import { pipelineEnvironment, runMaintenance } from "./worker-maintenance.ts";
+import { collectDailyReport, reportWindowMs, sendDailyReport } from "./daily-report.ts";
 
 const usage = `用法：npm run pipeline -- <命令> [参数]
 
@@ -32,6 +33,7 @@ const usage = `用法：npm run pipeline -- <命令> [参数]
 后台进程（launchd 保活，开机自启；每 12 小时做一次来源维护复查）
   worker install | uninstall | restart   安装、卸载，或在更新代码后重启
   maintenance                            立刻做一次来源维护复查（X、ClawHub），确认已删的来源自动下架
+  report [--since 时间] [--send]          生成日报（默认上一个 UTC 日；--since 到现在），--send 发到监控邮箱
 
 环节：${pipelineStages.join(", ")}
 提供方：${providerIds.join(", ")}`;
@@ -42,7 +44,7 @@ const describeRoute = (route: StageRoute) => describeTarget(route) + (route.fall
 const time = (value?: string) => value ? new Date(value).toLocaleString("zh-CN", { hour12: false, month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }) : "未知";
 const ago = (value: string) => { const minutes = Math.round((Date.now() - Date.parse(value)) / 60000); return minutes < 1 ? "刚刚" : minutes < 60 ? `${minutes} 分钟前` : `${Math.round(minutes / 60)} 小时前`; };
 const desiredLabel = { stopped: "已停止", running: "运行", paused: "暂停" } as const;
-const jobLabels: Record<string, string> = { maintenance: "来源维护复查", intake: "每日采集发布" };
+const jobLabels: Record<string, string> = { maintenance: "来源维护复查", intake: "每日采集发布", report: "每日日报" };
 
 function describeEvent(event: PipelineEvent): string {
   const head = `${time(event.at)}  ${event.actor}`;
@@ -124,7 +126,7 @@ async function testProvider(id: string, model: string | undefined, imagePath: st
 export async function main(argv = process.argv.slice(2)) {
   const { values, positionals } = parseArgs({ args: argv, allowPositionals: true, options: {
     json: { type: "boolean" }, brief: { type: "boolean" }, by: { type: "string" }, reason: { type: "string" },
-    model: { type: "string" }, effort: { type: "string" }, fallback: { type: "string" }, "fallback-model": { type: "string" }, "fallback-effort": { type: "string" }, image: { type: "string" }, tail: { type: "string" }, help: { type: "boolean", short: "h" } } });
+    model: { type: "string" }, effort: { type: "string" }, fallback: { type: "string" }, "fallback-model": { type: "string" }, "fallback-effort": { type: "string" }, image: { type: "string" }, tail: { type: "string" }, send: { type: "boolean" }, since: { type: "string" }, help: { type: "boolean", short: "h" } } });
   const [command, ...rest] = positionals;
   const root = pipelineRoot();
   switch (command) {
@@ -211,6 +213,20 @@ export async function main(argv = process.argv.slice(2)) {
       const report = await runMaintenance(await pipelineEnvironment());
       await appendEvent(root, actor, "job.finished", { job: "maintenance", summary: `手动：来源已删 ${report.removed} 条，本次下架 ${report.takenDown.length} 条`, report });
       console.log(values.json ? JSON.stringify(report) : `来源维护复查完成：来源已删 ${report.removed} 条，本次下架 ${report.takenDown.length} 条`);
+      return;
+    }
+    case "report": {
+      const actor = values.send ? actorOf(values) : "manual";
+      const end = values.since ? Date.now() : Math.floor(Date.now() / reportWindowMs) * reportWindowMs;
+      const start = values.since ? Date.parse(values.since) : end - reportWindowMs;
+      if (!Number.isFinite(start) || start >= end) throw new Error("--since 要写一个过去的时间，例如 2026-11-06T15:00:00Z");
+      const env = await pipelineEnvironment(), report = await collectDailyReport(start, end, env, root);
+      console.log(values.json ? JSON.stringify(report) : report.text);
+      if (values.send) {
+        await sendDailyReport(report, env);
+        await appendEvent(root, actor, "report.sent", { date: report.date, ok: report.ok, since: new Date(start).toISOString() });
+        console.log("\n已发送到监控邮箱");
+      }
       return;
     }
     case "test-provider":
