@@ -15,6 +15,8 @@ Prompix is built mostly by AI coding agents. These rules apply to every agent an
 - Every change goes through a pull request. Merge your own PR with a squash merge as soon as your own verification passes and CI (when it runs) is green. Do not ask the owner for permission to merge; that is the default. If verification or CI fails, fix it before merging. Right after opening the PR, enable auto-merge with squash (`gh pr merge --auto --squash`); `main` requires the `content` and `ios` checks, so it lands only when CI passes.
 - After a PR is merged or abandoned: delete the remote branch, remove the worktree and the local branch, then fast-forward the main checkout to `origin/main`. If the main checkout has uncommitted changes, leave it alone and report it.
 - Write commit messages and PR titles in concise, imperative English.
+- Drive agreed work to the end without waiting on the owner. Once a change is merged, deploy it yourself (for example `npx wrangler deploy --config services/<name>/wrangler.jsonc` from the updated main checkout) and verify it on the live service. Then move on to the next agreed step. Ask only for real product decisions or for actions the safety rules reserve for the owner.
+- To wait for CI or a merge, run one blocking command in the background (for example `gh pr checks <n> --watch`) that wakes you when it ends. Do not ask the owner to report progress, and do not poll in a loop.
 
 ## Data pipeline control
 
