@@ -237,7 +237,7 @@ struct WorkPeek: View {
                         .font(Typography.meta(size: 10)).tracking(1.2)
                 }
                 Text(title).font(.headline).lineLimit(2)
-                Text(text.replacingOccurrences(of: "\n", with: " ")).font(Typography.prompt(size: 14)).foregroundStyle(Palette.muted).lineLimit(3)
+                Text(text.replacingOccurrences(of: "\n", with: " ")).font(Typography.prompt(size: 14, for: text)).foregroundStyle(Palette.muted).lineLimit(3)
             }.padding(.horizontal, 16).padding(.bottom, 16).padding(.top, preview.usesTextArtwork ? 16 : 0)
         }.frame(width: 320).background(Palette.surface).foregroundStyle(Palette.ink)
     }

@@ -61,7 +61,7 @@ struct CollectionsDirectory: View {
                     NavigationLink { CollectionDetail(collection: collection) } label: {
                         VStack(alignment: .leading, spacing: 12) {
                             HStack(spacing: 4) {
-                                ForEach(collection.previews(in: library).prefix(2)) { item in
+                                ForEach(collection.previews(in: library).sorted { !$0.usesTextArtwork && $1.usesTextArtwork }.prefix(2)) { item in
                                     Artwork(preview: item, compact: true).frame(maxWidth: .infinity).clipped()
                                 }
                             }.aspectRatio(1, contentMode: .fit)
@@ -152,14 +152,8 @@ struct CollectionRail: View {
     var body: some View {
         let selected = covers
         VStack(alignment: .leading, spacing: 2) {
-            HStack(alignment: .firstTextBaseline) {
-                Text(String(localized: "按用途探索")).font(Typography.editorial(.title3))
-                    .foregroundStyle(Palette.ink).accessibilityAddTraits(.isHeader)
-                Spacer(minLength: 12)
-                NavigationLink { CollectionsDirectory() } label: {
-                    Text(String(localized: "查看全部")).font(.footnote).foregroundStyle(Palette.muted).frame(minHeight: 44)
-                }.accessibilityIdentifier("allCollections")
-            }.padding(.horizontal, 20)
+            SectionHeader(title: String(localized: "按用途"), linkID: "allCollections") { CollectionsDirectory() }
+                .padding(.horizontal, 20)
             if typeSize.isAccessibilitySize || voiceOverEnabled {
                 VStack(spacing: 12) { ForEach(collections.prefix(1)) { collection in
                     NavigationLink { CollectionDetail(collection: collection) } label: {

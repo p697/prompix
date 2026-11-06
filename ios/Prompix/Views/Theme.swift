@@ -55,6 +55,27 @@ struct ChipRow<Value: Hashable>: View {
     }
 }
 
+/// Every section heading in the app: 15 pt semibold, with an optional quiet link.
+struct SectionHeader<Destination: View>: View {
+    let title: String
+    var linkID = ""
+    @ViewBuilder var destination: () -> Destination
+    var body: some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text(title).font(.subheadline.weight(.semibold)).foregroundStyle(Palette.ink).accessibilityAddTraits(.isHeader)
+            Spacer(minLength: 12)
+            if Destination.self != EmptyView.self {
+                NavigationLink(destination: destination) {
+                    Text(String(localized: "查看全部")).font(.footnote).foregroundStyle(Palette.muted).frame(minHeight: 44)
+                }.accessibilityIdentifier(linkID)
+            }
+        }.frame(minHeight: 44)
+    }
+}
+extension SectionHeader where Destination == EmptyView {
+    init(title: String) { self.init(title: title) { EmptyView() } }
+}
+
 /// An empty place says one plain sentence and, at most, one more; no illustration.
 struct QuietEmpty: View {
     let title: String

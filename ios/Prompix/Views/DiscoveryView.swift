@@ -520,13 +520,14 @@ struct FavoritesView: View {
             }
             .background(Palette.paper).foregroundStyle(Palette.ink)
             .rootHeader(title: String(localized: "收藏")) {
+                // Settings keeps its corner; the deck button appears beside it without moving it.
                 HStack(spacing: 8) {
-                    Button { settingsPresented = true } label: { PrompixIcon.person.image.frame(width: 44, height: 44) }
-                        .accessibilityLabel(String(localized: "设置")).accessibilityIdentifier("savedSettings")
                     if scope == .decks {
                         Button { namingDeck = true } label: { PrompixIcon.plus.image.frame(width: 44, height: 44) }
                             .disabled(!library.decks.readable).accessibilityLabel(String(localized: "新建卡组")).accessibilityIdentifier("newDeck")
                     }
+                    Button { settingsPresented = true } label: { PrompixIcon.person.image.frame(width: 44, height: 44) }
+                        .accessibilityLabel(String(localized: "设置")).accessibilityIdentifier("savedSettings")
                 }
             } bar: {
                 Picker(String(localized: "收藏"), selection: $scope) {

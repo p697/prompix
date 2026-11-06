@@ -65,10 +65,10 @@ struct FeedCreatorSearch: View {
         VStack(alignment: .leading, spacing: 8) {
             if !items.isEmpty {
                 HStack {
-                    Text(String(localized: "创作者")).font(.subheadline.weight(.medium)).accessibilityAddTraits(.isHeader)
+                    Text(String(localized: "创作者")).font(.subheadline.weight(.semibold)).accessibilityAddTraits(.isHeader)
                     Spacer()
                     NavigationLink { CreatorsView(query: query) } label: {
-                        Text(String(localized: "查看全部")).font(.footnote).frame(minHeight: 44)
+                        Text(String(localized: "查看全部")).font(.footnote).foregroundStyle(Palette.muted).frame(minHeight: 44)
                     }.accessibilityIdentifier("allSearchCreators")
                 }
                 ForEach(items.prefix(3)) { item in

@@ -179,13 +179,8 @@ struct CreatorRail: View {
     private var content: some View {
         let entries = entries
         return VStack(alignment: .leading, spacing: 4) {
-            HStack {
-                Text(String(localized: "创作者")).font(.subheadline.weight(.medium)).accessibilityAddTraits(.isHeader)
-                Spacer()
-                NavigationLink { CreatorsView() } label: {
-                    Text(String(localized: "查看全部")).font(.footnote).frame(minHeight: 44)
-                }.foregroundStyle(Palette.muted).accessibilityIdentifier("allCreators")
-            }.padding(.horizontal, 16)
+            SectionHeader(title: String(localized: "创作者"), linkID: "allCreators") { CreatorsView() }
+                .padding(.horizontal, 20)
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(alignment: .top, spacing: 12) {
                     if entries.isEmpty {

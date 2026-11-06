@@ -17,7 +17,9 @@ struct Artwork: View {
             ZStack {
                 if item.usesTextArtwork { noteArtwork(size: proxy.size) }
                 else if let name = item.media?.image, UIImage(named: name) != nil { photo(name, size: proxy.size) }
-                else if let url = item.media?.imageURL { RemoteImage(url: url, contentMode: compact || fillsFrame ? .fill : .fit).frame(width: proxy.size.width, height: proxy.size.height).clipped() }
+                else if let url = item.media?.imageURL { RemoteImage(url: url, contentMode: compact || fillsFrame ? .fill : .fit)
+                    // A web page reads from its top-left corner; never crop away its left edge.
+                    .frame(width: proxy.size.width, height: proxy.size.height, alignment: item.kind == .web ? .topLeading : .center).clipped() }
                 else if item.kind == .web, UIImage(named: "web-\(item.id)") != nil {
                     Image("web-\(item.id)").resizable().scaledToFill().frame(width: proxy.size.width, height: proxy.size.height, alignment: .top).clipped()
                 }
