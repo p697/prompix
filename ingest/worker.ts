@@ -1,5 +1,6 @@
-import { spawn } from "node:child_process";
-import { mkdir, open, readFile, rm } from "node:fs/promises";
+import { execFile, spawn } from "node:child_process";
+import { promisify } from "node:util";
+import { mkdir, open, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { trustSystemCertificates } from "./models/http.ts";
@@ -96,6 +97,18 @@ function runDaily(env: NodeJS.ProcessEnv): Promise<number> {
   });
 }
 
+/** This Mac inspects HTTPS with a root kept in the system keychain. The worker trusts it
+ * in-process (trustSystemCertificates), but Node children, including the wrangler uploads the
+ * daily pipeline runs, only accept it from a file: export the keychain roots for them. */
+export async function childCertificates(root: string): Promise<NodeJS.ProcessEnv> {
+  if (process.env.NODE_EXTRA_CA_CERTS || process.platform !== "darwin") return {};
+  const { stdout } = await promisify(execFile)("/usr/bin/security", ["find-certificate", "-a", "-p",
+    "/Library/Keychains/System.keychain", "/System/Library/Keychains/SystemRootCertificates.keychain"], { maxBuffer: 16 * 1024 * 1024 });
+  const path = join(root, "system-roots.pem");
+  await writeFile(path, stdout, { mode: 0o600 });
+  return { NODE_EXTRA_CA_CERTS: path };
+}
+
 /** A second worker exits at once; a lock left by a killed worker is taken over. */
 async function singleInstance(root: string): Promise<(() => Promise<void>) | undefined> {
   await mkdir(root, { recursive: true });
@@ -121,7 +134,7 @@ async function main() {
   const root = pipelineRoot();
   const release = await singleInstance(root);
   if (!release) { console.log(JSON.stringify({ event: "worker_already_running" })); return; }
-  const env = await pipelineEnvironment();
+  const env = { ...await pipelineEnvironment(), ...await childCertificates(root) };
   // Maintenance first: it keeps the verifications every publication requires current.
   const startedAt = new Date().toISOString(), jobs = [maintenanceJob(env), intakeJob(env)];
   let stopping = false, sleeping: (() => void) | undefined;
