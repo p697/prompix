@@ -923,7 +923,7 @@ private struct PromptNeeds: View {
         guard let inputs = item.inputs, inputs.requirement != "none" else { return nil }
         let names = inputs.kinds.map { kind in
             switch kind {
-            case "face": inputs.ownLikenessOnly == true ? String(localized: "你自己的照片") : String(localized: "人像照片")
+            case "face": String(localized: "人像照片")
             case "product": String(localized: "产品照")
             case "style": String(localized: "风格参考图")
             case "scene": String(localized: "场景照片")
