@@ -78,6 +78,7 @@ npm run pipeline -- test-provider codex-cli --image /path/to/photo.jpg --by code
 
 npm run pipeline -- target 100 --by codex --reason "先每天 100 条"
 npm run pipeline -- route review kimi-code --model k3.1-pro --by codex --reason "用 Kimi 闲置额度"
+npm run pipeline -- route translate codex-cli --model gpt-6.1-terra --fallback anthropic-api --fallback-model claude-haiku-5-5 --by claude-code
 npm run pipeline -- start --by codex
 npm run pipeline -- pause --by claude-code --reason "额度快用完"
 npm run pipeline -- note "Lucy 说周末前别动安全复核" --by claude-code
@@ -121,7 +122,8 @@ npm run pipeline -- note "Lucy 说周末前别动安全复核" --by claude-code
 
 - 常驻在这台 Mac 上，用 launchd 保活；每轮先读 `config.json`，所以改路由、改目标、暂停都在下一轮生效，不用重启。
 - 沿用 Supabase 里已有的任务队列；每个环节有自己的并发数。审核按批处理：订阅命令行每次调用打包 6–10 条，并行 3–4 个，用来摊薄每次调用约 1 万 token 的系统提示开销（Codex 实测）。
-- 每个提供方单独统计 token 和限流；遇到 `rate_limited` 先退避，持续受限时暂停该环节并记录，等指挥官或你决定是否换路由。之后可在路由里加备用提供方。
+- 每个提供方单独统计 token 和限流；遇到 `rate_limited` 先退避，持续受限时暂停该环节并记录，等指挥官或你决定是否换路由。
+- 每个环节可以配一个备用路由（`route … --fallback <提供方>`，`--fallback none` 取消）。主路由报 `unavailable`（未登录、无此模型、没有余额）或 `rate_limited`（限流、额度用完）时，这一次调用改走备用，并在记录里写一条 `route.fallback`。拒答、输出不合格等针对内容本身的结果不会交给备用模型。调用记录写的是实际回答的模型。
 - 保留现有的安全闸：许可和署名检查、去重、来源新鲜度、尺度标签（暗示性和未定的内容默认隐藏）。没有人工环节：判定全部由流水线完成，拿不准的一律不发布。
   - 涉及未成年人：凡带性暗示、暴露，或把未成年人当作可替换模特的，一律拒绝；判断不了年龄又涉及人物尺度的，也不发布。
   - 真人：按规则自动处理（`ownLikenessOnly` 提示和尺度判定）。

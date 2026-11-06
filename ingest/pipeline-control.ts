@@ -17,11 +17,13 @@ export const stageLabels: Record<PipelineStage, string> = {
   prefilter: "预筛（只看文字）", review: "合并审核（图和文字）", safety: "安全复核", translate: "翻译", translationCheck: "翻译检查",
 };
 
-const routeSchema = z.object({
+const targetSchema = z.object({
   provider: z.enum(providerIds),
   model: z.string().min(1).max(120).optional(),
   effort: z.enum(["low", "medium", "high"]).optional(),
 }).strict();
+/** A stage may name a fallback route, used whenever the primary is unavailable or rate limited. */
+const routeSchema = targetSchema.extend({ fallback: targetSchema.optional() }).strict();
 export type StageRoute = z.infer<typeof routeSchema>;
 
 export const pipelineConfigSchema = z.object({
