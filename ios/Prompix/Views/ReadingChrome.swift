@@ -100,16 +100,14 @@ struct ReadingActionBar: View {
     var ready = true
     var collapsed = false
     var copied = false
-    /// The one-step action names its tool, for example "复制并打开 ChatGPT".
-    var useTitle: String? = nil
+    /// Skills with a verified installer copy that command instead of the text.
+    var copyTitle: String? = nil
     var edit: () -> Void = {}
     var copy: () -> Void = {}
-    var use: () -> Void = {}
-    var chooseTool: (() -> Void)? = nil
     @Namespace private var transition
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Environment(\.dynamicTypeSize) private var typeSize
     @Environment(\.colorScheme) private var colorScheme
+    private var title: String { copied ? String(localized: "已复制") : copyTitle ?? (isSkill ? String(localized: "复制 Skill") : String(localized: "复制 Prompt")) }
     var body: some View {
         Group {
             if #available(iOS 26, *) { GlassEffectContainer(spacing: 12) { buttons } }
@@ -124,32 +122,20 @@ struct ReadingActionBar: View {
     private var buttons: some View {
         HStack(spacing: 10) {
             Button(action: edit) {
-                Image(systemName: "square.and.pencil").font(.body).frame(width: 50, height: 50)
+                PrompixIcon.edit.image.frame(width: 50, height: 50)
             }.buttonStyle(.plain).readingGlass().actionGlassIdentity("edit", in: transition)
-                .accessibilityLabel(String(localized: "编辑后使用")).accessibilityIdentifier("editPromptAction")
+                .accessibilityLabel(String(localized: "写我的版本")).accessibilityIdentifier("editPromptAction")
             Button(action: copy) {
-                Image(systemName: copied ? "checkmark" : "doc.on.doc").font(.body).frame(width: 50, height: 50)
-            }.buttonStyle(.plain).readingGlass().actionGlassIdentity("copy", in: transition)
-                .accessibilityLabel(copied ? String(localized: "已复制") : String(localized: "复制 Prompt"))
-                .accessibilityIdentifier("copyPrompt").sensoryFeedback(.success, trigger: copied)
-            Button(action: use) {
                 HStack(spacing: 8) {
-                    Image(systemName: "arrow.up.right")
-                    if !collapsed {
-                        Text(typeSize.isAccessibilitySize ? String(localized: "使用") : useTitle ?? (isSkill ? String(localized: "使用这个 Skill") : String(localized: "使用 Prompt")))
-                            .lineLimit(1).minimumScaleFactor(0.8)
-                    }
+                    (copied ? PrompixIcon.check : PrompixIcon.copy).image
+                    if !collapsed { Text(title).lineLimit(1).minimumScaleFactor(0.8) }
                 }.font(.body.weight(.semibold)).frame(minWidth: 50, maxWidth: collapsed ? 50 : .infinity, minHeight: 50)
                     .foregroundStyle(Palette.onGlassAccent(for: colorScheme))
+                    .contentTransition(.opacity)
             }.buttonStyle(.plain)
-                .contextMenu {
-                    if let chooseTool {
-                        Button(action: chooseTool) { Label(String(localized: "选择其他工具"), systemImage: "square.grid.2x2") }
-                    }
-                }
-                .readingGlass(prominent: true).actionGlassIdentity("use", in: transition)
-                .accessibilityLabel(useTitle ?? (isSkill ? String(localized: "使用这个 Skill") : String(localized: "使用 Prompt")))
-                .accessibilityIdentifier("usePrompt")
+                .readingGlass(prominent: true).actionGlassIdentity("copy", in: transition)
+                .accessibilityLabel(title).accessibilityIdentifier("copyPrompt")
+                .sensoryFeedback(.success, trigger: copied)
         }
         .disabled(!ready)
         .accessibilityHint(ready ? "" : String(localized: "正在加载内容…"))

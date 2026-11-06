@@ -41,11 +41,11 @@ struct PendingPromptDetail: View {
             }
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button {} label: { Label(String(localized: "分享"), systemImage: "square.and.arrow.up").frame(minWidth: 44, minHeight: 44) }
+                    Button {} label: { Label { Text(String(localized: "分享")) } icon: { PrompixIcon.share.image }.frame(minWidth: 44, minHeight: 44) }
                         .disabled(true).accessibilityIdentifier("sharePrompt")
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button {} label: { Label(String(localized: "收藏 Prompt"), systemImage: "bookmark").frame(minWidth: 44, minHeight: 44) }
+                    Button {} label: { Label { Text(String(localized: "收藏 Prompt")) } icon: { PrompixIcon.saved.image }.frame(minWidth: 44, minHeight: 44) }
                         .disabled(true).accessibilityIdentifier("detailFavorite")
                 }
             }

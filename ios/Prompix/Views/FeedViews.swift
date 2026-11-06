@@ -149,10 +149,8 @@ struct FeedPromptCard: View {
     @State private var savedFeedback = false
     @State private var copiedFeedback = false
     @Namespace private var transition
-    @Environment(\.openURL) private var openURL
     @Environment(\.feedDetailHost) private var host
-    @AppStorage("preferredPromptDestination") private var preferredDestination = ""
-    private enum Action { case copy, save, use }
+    private enum Action { case copy, save }
     private var isPresenting: Bool { host.map { $0.presentedID == card.id } ?? detailPresented }
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -167,19 +165,14 @@ struct FeedPromptCard: View {
             }.buttonStyle(.cardPress).accessibilityLabel(card.title).accessibilityIdentifier("prompt-\(card.id)")
                 .contextMenu {
                     Button { perform(.copy) } label: {
-                        Label(card.contentType == "skill" ? String(localized: "复制 Skill") : String(localized: "复制 Prompt"), systemImage: "doc.on.doc")
+                        Label { Text(card.contentType == "skill" ? String(localized: "复制 Skill") : String(localized: "复制 Prompt")) } icon: { PrompixIcon.copy.image }
                     }.disabled(actionID != nil)
-                    if card.contentType != "skill", let name = PromptDestination.names[preferredDestination] {
-                        Button { perform(.use) } label: {
-                            Label(String(format: String(localized: "action.copyOpen", table: "UsePrompt"), locale: .current, name), systemImage: "arrow.up.right")
-                        }.disabled(actionID != nil)
-                    }
                     Button { perform(.save) } label: {
                         Label(library.savedIDs.contains(card.id) ? String(localized: "取消收藏") : String(localized: "收藏 Prompt"),
                               systemImage: library.savedIDs.contains(card.id) ? "bookmark.slash" : "bookmark")
                     }.disabled(actionID != nil)
                     Button { library.recommendations.record(.dismiss, card: card) } label: {
-                        Label(RecommendationCopy.text("feedback.less"), systemImage: "minus.circle")
+                        Label { Text(RecommendationCopy.text("feedback.less")) } icon: { PrompixIcon.less.image }
                     }
                 } preview: {
                     WorkPeek(preview: ContentPreview(card), title: card.title,
@@ -218,12 +211,8 @@ struct FeedPromptCard: View {
                 guard actionID == owner, !library.isRemoved(item) else { throw FeedError.removed }
                 if save { if library.toggle(item) { savedFeedback.toggle() } }
                 else {
-                    // Using from the peek opens the remembered tool when it suits this work; otherwise it copies.
-                    let destination = kind == .use ? PromptDestination.choices(for: item).first { $0.id == preferredDestination } : nil
-                    let transfer = destination?.transfer(item.displayContent.prompt)
-                    UIPasteboard.general.string = transfer?.text ?? item.displayContent.prompt
+                    UIPasteboard.general.string = item.displayContent.prompt
                     library.recommendations.record(.use, card: card); copiedFeedback.toggle()
-                    if let transfer { openURL(transfer.url) }
                 }
             } catch is CancellationError { }
             catch { if !Task.isCancelled, actionID == owner { library.reportContentFailure(error) } }
@@ -314,7 +303,7 @@ struct FeedReadingPresentation: View {
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .topBarLeading) {
-                        Button { dismiss() } label: { Image(systemName: "chevron.left").frame(minWidth: 44, minHeight: 44) }
+                        Button { dismiss() } label: { PrompixIcon.back.image.frame(minWidth: 44, minHeight: 44) }
                             .accessibilityLabel(String(localized: "返回列表")).accessibilityIdentifier("closePromptDetail")
                     }
                 }

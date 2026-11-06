@@ -32,13 +32,15 @@ struct RootView: View {
         if #available(iOS 18, *) {
             TabView(selection: selection) {
                 Tab(value: MainTab.discover) { DiscoverView() } label: {
-                    Label { Text(String(localized: "发现")) } icon: { TabSymbol.image("safari") }
+                    Label { Text(String(localized: "发现")) } icon: { PrompixIcon.discover.image(size: 24) }
                 }
                 Tab(value: MainTab.saved) { FavoritesView() } label: {
-                    Label { Text(String(localized: "收藏")) } icon: { TabSymbol.image("heart") }
+                    Label { Text(String(localized: "收藏")) } icon: { PrompixIcon.saved.image(size: 24) }
                 }
                 if #available(iOS 27, *) {
-                    Tab(String(localized: "搜索"), systemImage: "magnifyingglass", value: MainTab.search, role: .prominent) { search }
+                    Tab(value: MainTab.search, role: .prominent) { search } label: {
+                        Label { Text(String(localized: "搜索")) } icon: { PrompixIcon.search.image(size: 24) }
+                    }
                 } else {
                     Tab(value: MainTab.search, role: .search) { search }
                 }
@@ -48,9 +50,9 @@ struct RootView: View {
         } else {
             TabView(selection: selection) {
                 DiscoverView().tag(MainTab.discover)
-                    .tabItem { Label { Text(String(localized: "发现")) } icon: { TabSymbol.image("safari") } }
+                    .tabItem { Label { Text(String(localized: "发现")) } icon: { PrompixIcon.discover.image(size: 24) } }
                 FavoritesView().tag(MainTab.saved)
-                    .tabItem { Label { Text(String(localized: "收藏")) } icon: { TabSymbol.image("heart") } }
+                    .tabItem { Label { Text(String(localized: "收藏")) } icon: { PrompixIcon.saved.image(size: 24) } }
                 search.tag(MainTab.search)
                     .tabItem { Label(String(localized: "搜索"), systemImage: "magnifyingglass") }
             }
@@ -199,7 +201,7 @@ struct DiscoverView: View {
         } label: {
             HStack(spacing: 4) {
                 Text(feedSort == "latest" ? String(localized: "最新") : String(localized: "推荐")).font(Typography.meta(size: 12)).tracking(1.2)
-                Image(systemName: "chevron.down").font(.system(size: 9, weight: .semibold))
+                PrompixIcon.chevronDown.image(size: 12)
             }.foregroundStyle(Palette.muted).frame(minWidth: 44, minHeight: 44).contentShape(Rectangle())
         }.accessibilityLabel(String(localized: "排序")).accessibilityIdentifier("discoverySort")
     }
@@ -213,7 +215,7 @@ struct DiscoverView: View {
                     .accessibilityIdentifier("clearFilters")
             }
         } label: {
-            Image(systemName: "line.3.horizontal.decrease").frame(width: 44, height: 44)
+            PrompixIcon.filter.image.frame(width: 44, height: 44)
                 .overlay(alignment: .topTrailing) {
                     if refined { Circle().fill(Palette.accent).frame(width: 7, height: 7).padding(9) }
                 }
@@ -441,7 +443,7 @@ struct PromptCard: View {
                     Button {
                         UIPasteboard.general.string = item.displayContent.prompt
                         copiedFeedback.toggle()
-                    } label: { Label(item.isSkill ? String(localized: "复制 Skill") : String(localized: "复制 Prompt"), systemImage: "doc.on.doc") }
+                    } label: { Label { Text(item.isSkill ? String(localized: "复制 Skill") : String(localized: "复制 Prompt")) } icon: { PrompixIcon.copy.image } }
                     Button {
                         if library.toggle(item) { savedFeedback.toggle() }
                     } label: { Label(library.isSaved(item) ? String(localized: "取消收藏") : String(localized: "收藏 Prompt"), systemImage: library.isSaved(item) ? "bookmark.slash" : "bookmark") }
@@ -492,7 +494,7 @@ private struct PromptReadingPresentation: View {
                 .toolbar {
                     ToolbarItem(placement: .topBarLeading) {
                         Button { dismiss() } label: {
-                            Image(systemName: "chevron.left").frame(minWidth: 44, minHeight: 44)
+                            PrompixIcon.back.image.frame(minWidth: 44, minHeight: 44)
                         }.accessibilityLabel(String(localized: "返回列表"))
                             .accessibilityIdentifier("closePromptDetail")
                     }
@@ -520,10 +522,10 @@ struct FavoritesView: View {
             .background(Palette.paper).foregroundStyle(Palette.ink)
             .rootHeader(title: String(localized: "收藏")) {
                 HStack(spacing: 8) {
-                    Button { settingsPresented = true } label: { Image(systemName: "person").frame(width: 44, height: 44) }
+                    Button { settingsPresented = true } label: { PrompixIcon.person.image.frame(width: 44, height: 44) }
                         .accessibilityLabel(String(localized: "设置")).accessibilityIdentifier("savedSettings")
                     if scope == .decks {
-                        Button { namingDeck = true } label: { Image(systemName: "plus").frame(width: 44, height: 44) }
+                        Button { namingDeck = true } label: { PrompixIcon.plus.image.frame(width: 44, height: 44) }
                             .disabled(!library.decks.readable).accessibilityLabel(String(localized: "新建卡组")).accessibilityIdentifier("newDeck")
                     }
                 }
@@ -531,7 +533,7 @@ struct FavoritesView: View {
                 Picker(String(localized: "收藏"), selection: $scope) {
                     Text(String(localized: "卡组")).tag(SavedScope.decks)
                     Text(String(localized: "创作者")).tag(SavedScope.creators)
-                    Text(String(localized: "我的改写")).tag(SavedScope.drafts)
+                    Text(String(localized: "我的版本")).tag(SavedScope.drafts)
                 }.pickerStyle(.segmented).padding(.horizontal, 20).padding(.bottom, 8)
                     .accessibilityIdentifier("savedScope")
             }
@@ -540,12 +542,16 @@ struct FavoritesView: View {
         }
     }
     @ViewBuilder private var draftedContent: some View {
-        let drafted = library.draftedIDs
-        let candidates = library.favorites + library.prompts.filter { !library.savedIDs.contains($0.id) }
-        let items = candidates.filter { drafted.contains($0.id) }
+        let drafted = library.draftedIDs, kept = library.versionedWorks
+        let keptIDs = Set(kept.map(\.id))
+        // Drafts saved before versions kept no copy of their work; find those in the catalog or saved works.
+        let earlier = (library.favorites + library.prompts).filter { drafted.contains($0.id) && !keptIDs.contains($0.id) }
+        var seen = Set<String>()
+        let items = (kept + earlier).filter { seen.insert($0.id).inserted }
         if items.isEmpty {
-            ContentUnavailableView(String(localized: "还没有改写过的 Prompt"), systemImage: "square.and.pencil",
-                                   description: Text(String(localized: "在详情页改写并保存后，会集中出现在这里。")))
+            ContentUnavailableView {
+                Label { Text(String(localized: "还没有自己的版本")) } icon: { PrompixIcon.edit.image(size: 40) }
+            } description: { Text(String(localized: "在详情页点铅笔，就能基于任意 Prompt 写自己的版本。")) }
         } else { PromptGrid(items: items, origin: .favorite).padding(.horizontal, PromptGridLayout.inset) }
     }
 }
@@ -595,7 +601,7 @@ private struct DeckGrid: View {
                     VStack(alignment: .leading, spacing: 8) {
                         RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Palette.line, lineWidth: 1)
                             .aspectRatio(DeckTile.coverRatio, contentMode: .fit)
-                            .overlay { Image(systemName: "plus").font(.title3).foregroundStyle(Palette.muted) }
+                            .overlay { PrompixIcon.plus.image(size: 24).foregroundStyle(Palette.muted) }
                         Text(String(localized: "新建卡组")).font(.subheadline).foregroundStyle(Palette.muted)
                     }.contentShape(Rectangle())
                 }.buttonStyle(.cardPress).accessibilityLabel(String(localized: "新建卡组")).accessibilityIdentifier("newDeckTile")
@@ -692,7 +698,7 @@ private struct DeckDetail: View {
                     Menu {
                         Button { renaming = true } label: { Label(String(localized: "重命名"), systemImage: "pencil") }
                         Button(role: .destructive) { confirmsDelete = true } label: { Label(String(localized: "删除卡组"), systemImage: "trash") }
-                    } label: { Image(systemName: "ellipsis").frame(minWidth: 44, minHeight: 44) }
+                    } label: { PrompixIcon.more.image.frame(minWidth: 44, minHeight: 44) }
                         .accessibilityLabel(deck.name).accessibilityIdentifier("deckActions")
                 }
             }

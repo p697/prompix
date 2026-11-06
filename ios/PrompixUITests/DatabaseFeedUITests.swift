@@ -653,18 +653,18 @@ import UIKit
         XCTAssertFalse(app.progressIndicators.firstMatch.exists)
         XCTAssertTrue(app.buttons["copyPrompt"].exists)
         XCTAssertFalse(app.buttons["copyPrompt"].isEnabled)
-        XCTAssertTrue(app.buttons["usePrompt"].exists)
+        XCTAssertTrue(app.buttons["copyPrompt"].exists)
         XCTAssertTrue(app.buttons["sharePrompt"].exists)
         XCTAssertTrue(app.buttons["detailFavorite"].exists)
         capture("progressive-01-image-before-response")
         let pane = app.scrollViews["detailReadingPane"]
         pane.swipeUp(velocity: .slow)
         for _ in 0..<30 {
-            if app.buttons["usePrompt"].frame.width < 80 { break }
+            if app.buttons["copyPrompt"].frame.width < 80 { break }
             try await Task.sleep(for: .milliseconds(100))
         }
         let pendingY = title.frame.minY
-        let pendingActionWidth = app.buttons["usePrompt"].frame.width
+        let pendingActionWidth = app.buttons["copyPrompt"].frame.width
         XCTAssertLessThan(pendingActionWidth, 80, "Scrolling a pending detail should collapse its actions")
         capture("progressive-02-scrolled-before-response")
         try Data().write(to: directory().appending(path: "release-detail"))
@@ -672,7 +672,7 @@ import UIKit
         XCTAssertTrue(app.buttons["copyPrompt"].wait(for: \.isEnabled, toEqual: true, timeout: 8))
         XCTAssertFalse(app.otherElements["promptBodySkeleton"].exists)
         XCTAssertEqual(title.frame.minY, pendingY, accuracy: 5, "Completing the body must preserve reading position")
-        XCTAssertEqual(app.buttons["usePrompt"].frame.width, pendingActionWidth, accuracy: 2, "Body completion must preserve the compact action bar")
+        XCTAssertEqual(app.buttons["copyPrompt"].frame.width, pendingActionWidth, accuracy: 2, "Body completion must preserve the compact action bar")
         capture("progressive-03-complete-same-position")
         app.buttons["closePromptDetail"].tap()
         XCTAssertTrue(card.waitForExistence(timeout: 5)); card.tap()
@@ -696,7 +696,7 @@ import UIKit
             XCTAssertFalse(app.progressIndicators.firstMatch.exists)
             XCTAssertTrue(app.buttons["copyPrompt"].exists)
             XCTAssertFalse(app.buttons["copyPrompt"].isEnabled)
-            XCTAssertTrue(app.buttons["usePrompt"].exists)
+            XCTAssertTrue(app.buttons["copyPrompt"].exists)
             XCTAssertTrue(app.buttons["sharePrompt"].exists)
             XCTAssertTrue(app.buttons["detailFavorite"].exists)
             capture("progressive-08-preview-type-\(index)")
@@ -727,7 +727,7 @@ import UIKit
         XCTAssertEqual(app.staticTexts["detailTitle"].label, "Database item 0000")
         XCTAssertTrue(app.buttons["copyPrompt"].exists)
         XCTAssertFalse(app.buttons["copyPrompt"].isEnabled)
-        XCTAssertTrue(app.buttons["usePrompt"].exists)
+        XCTAssertTrue(app.buttons["copyPrompt"].exists)
         XCTAssertTrue(app.buttons["sharePrompt"].exists)
         XCTAssertTrue(app.buttons["detailFavorite"].exists)
         XCTAssertFalse(app.progressIndicators.firstMatch.exists)

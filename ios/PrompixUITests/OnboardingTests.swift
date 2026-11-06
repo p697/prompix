@@ -6,10 +6,6 @@ extension XCUIApplication {
         if !launchArguments.contains("-hasCompletedOnboarding") {
             launchArguments += ["-hasCompletedOnboarding", "YES"]
         }
-        // Without a remembered tool the main action always opens the use tray.
-        if !launchArguments.contains("-preferredPromptDestination") {
-            launchArguments += ["-preferredPromptDestination", "none"]
-        }
         launch()
     }
 }
@@ -104,56 +100,6 @@ extension XCUIApplication {
         app.buttons["interest-portrait"].tap()
         complete.tap()
         XCTAssertTrue(app.buttons["discoveryFilters"].waitForExistence(timeout: 5))
-    }
-
-    func testDetailTrialKeepsEditsWhenSwitchingOutgoingVersion() {
-        app.launchArguments.removeAll { $0 == "--reset-onboarding" }
-        app.launchPrompix()
-        XCTAssertTrue(app.buttons["kind-text"].waitForExistence(timeout: 10))
-        app.buttons["kind-text"].tap()
-        app.buttons["prompt-gentle-tarot"].tap()
-        let trial = app.buttons["usePrompt"]
-        XCTAssertTrue(trial.waitForExistence(timeout: 5)); trial.tap()
-        XCTAssertTrue(app.buttons["handoffOpen"].waitForExistence(timeout: 5))
-
-        func reveal(_ element: XCUIElement) {
-            let scroll = app.scrollViews["handoffScroll"]
-            for _ in 0..<8 {
-                let bottom = app.buttons["handoffOpen"].frame.minY - 8
-                if element.exists && element.isHittable && element.frame.maxY < bottom && element.frame.minY > 130 { return }
-                if element.exists && element.frame.minY < 130 { scroll.swipeDown() }
-                else { scroll.swipeUp() }
-            }
-            XCTAssertTrue(element.isHittable)
-        }
-        // Repeated runs may have an earlier test draft. Start from the reading version.
-        let version = app.buttons["handoffVersion"]
-        if version.exists { reveal(version); version.tap(); app.buttons["阅读版本"].tap() }
-        let edit = app.buttons["editPreparedPrompt"]
-        reveal(edit); edit.tap()
-        let editor = app.textViews["promptEditor"]
-        XCTAssertTrue(editor.waitForExistence(timeout: 5))
-        let original = editor.value as? String
-        let marker = " Experience QA draft."
-        editor.tap(); editor.typeText(marker)
-        let changed = editor.value as? String
-        XCTAssertTrue(changed?.contains(marker) == true)
-        app.buttons["finishPromptEditing"].tap()
-        XCTAssertTrue(version.waitForExistence(timeout: 5))
-        reveal(version); version.tap(); app.buttons["阅读版本"].tap()
-        capture("experience-reading-version")
-        reveal(edit); edit.tap()
-        XCTAssertTrue(editor.waitForExistence(timeout: 5))
-        XCTAssertEqual(editor.value as? String, original)
-        app.buttons["finishPromptEditing"].tap()
-        XCTAssertTrue(app.buttons["finishPromptUse"].waitForExistence(timeout: 5))
-        app.buttons["finishPromptUse"].tap()
-        XCTAssertTrue(trial.waitForExistence(timeout: 5)); trial.tap()
-        XCTAssertTrue(app.buttons["handoffOpen"].waitForExistence(timeout: 5))
-        reveal(edit); edit.tap()
-        XCTAssertTrue(editor.waitForExistence(timeout: 5))
-        XCTAssertEqual(editor.value as? String, changed, "Choosing the reading version must not overwrite personal edits.")
-        capture("experience-edits-preserved")
     }
 
     func testInterestControlsRemainReachableAtAccessibilitySize() {

@@ -78,10 +78,10 @@ import UIKit
         XCTAssertTrue(app.buttons["copyPrompt"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["closePromptDetail"].isHittable)
         capture("immersive-06-image-detail")
-        let expandedWidth = app.buttons["usePrompt"].frame.width
+        let expandedWidth = app.buttons["copyPrompt"].frame.width
         drag(from: 0.75, to: 0.28)
         XCTAssertTrue(app.otherElements["readingActionsCompact"].waitForExistence(timeout: 3))
-        XCTAssertLessThan(app.buttons["usePrompt"].frame.width, expandedWidth - 30)
+        XCTAssertLessThan(app.buttons["copyPrompt"].frame.width, expandedWidth - 30)
         capture("immersive-07-reading-compact")
         app.buttons["copyPrompt"].tap()
         XCTAssertEqual(app.buttons["copyPrompt"].label, "已复制")
@@ -123,26 +123,8 @@ import UIKit
         XCTAssertTrue(app.buttons["copyPrompt"].waitForExistence(timeout: 3))
         XCTAssertFalse(app.buttons["expandPrompt"].exists)
         capture("immersive-10-text-detail")
-        app.buttons["usePrompt"].tap()
-        XCTAssertTrue(app.buttons["handoffOpen"].waitForExistence(timeout: 3))
+        app.buttons["copyPrompt"].tap()
         capture("immersive-11-use-sheet")
-    }
-    func testRememberedToolMakesUseOneStep() {
-        app.terminate()
-        app.launchArguments += ["-preferredPromptDestination", "chatgpt"]
-        app.launchPrompix()
-        app.selectPrompixTab("搜索")
-        let field = app.searchFields["搜索 Prompt、Skills 或创作者"]
-        XCTAssertTrue(field.waitForExistence(timeout: 5)); field.tap(); field.typeText("塔罗\n")
-        app.buttons["prompt-gentle-tarot"].tap()
-        let use = app.buttons["usePrompt"]
-        XCTAssertTrue(use.waitForExistence(timeout: 3))
-        XCTAssertEqual(use.label, "复制并打开 ChatGPT")
-        use.press(forDuration: 0.8)
-        XCTAssertTrue(app.buttons["选择其他工具"].waitForExistence(timeout: 3))
-        capture("immersive-12-one-step-menu")
-        app.buttons["选择其他工具"].tap()
-        XCTAssertTrue(app.buttons["handoffOpen"].waitForExistence(timeout: 3))
     }
     func testDecksCollectSavedWorks() {
         app.selectPrompixTab("收藏")
@@ -219,7 +201,7 @@ import UIKit
             sleep(4) // Let the served page replace the cached one before choosing a card.
             let card = app.scrollViews["discoveryScroll"].buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'prompt-'")).firstMatch
             XCTAssertTrue(card.waitForExistence(timeout: 15)); card.tap()
-            XCTAssertTrue(app.buttons["usePrompt"].waitForExistence(timeout: 15))
+            XCTAssertTrue(app.buttons["copyPrompt"].waitForExistence(timeout: 15))
             sleep(2)
             capture("enriched-\(kind)")
             if kind == "kind-video" {
@@ -240,9 +222,9 @@ import UIKit
             XCTAssertTrue(app.buttons[kind].waitForExistence(timeout: 15)); app.buttons[kind].tap()
             let card = app.scrollViews["discoveryScroll"].buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'prompt-'")).firstMatch
             XCTAssertTrue(card.waitForExistence(timeout: 15)); card.tap()
-            XCTAssertTrue(app.buttons["usePrompt"].waitForExistence(timeout: 15))
+            XCTAssertTrue(app.buttons["copyPrompt"].waitForExistence(timeout: 15))
             sleep(4)
-            XCTAssertTrue(app.buttons["usePrompt"].exists, "The detail must stay open after \(kind) settles")
+            XCTAssertTrue(app.buttons["copyPrompt"].exists, "The detail must stay open after \(kind) settles")
             app.buttons["closePromptDetail"].tap()
         }
     }
@@ -283,13 +265,13 @@ import UIKit
         XCTAssertTrue(field.waitForExistence(timeout: 5)); field.tap(); field.typeText("小岛\n")
         let card = app.buttons["prompt-tiny-island"]
         XCTAssertTrue(card.waitForExistence(timeout: 5)); card.tap()
-        XCTAssertTrue(app.buttons["usePrompt"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["copyPrompt"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.tabBars.buttons["收藏"].isHittable)
         capture("refinement-detail")
         // A short edge drag cancels the native interactive return.
         app.coordinate(withNormalizedOffset: CGVector(dx: 0.005, dy: 0.48))
             .press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.15, dy: 0.48)), withVelocity: .slow, thenHoldForDuration: 2)
-        XCTAssertTrue(app.buttons["usePrompt"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["copyPrompt"].waitForExistence(timeout: 3))
         XCTAssertFalse(app.tabBars.buttons["收藏"].isHittable)
         capture("refinement-cancelled-return")
         app.coordinate(withNormalizedOffset: CGVector(dx: 0.005, dy: 0.48))
@@ -314,7 +296,7 @@ import UIKit
         XCTAssertTrue(field.waitForExistence(timeout: 5)); field.tap(); field.typeText("塔罗\n")
         app.buttons["prompt-gentle-tarot"].tap()
         XCTAssertTrue(app.buttons["copyPrompt"].waitForExistence(timeout: 3))
-        for id in ["copyPrompt", "editPromptAction", "usePrompt"] {
+        for id in ["copyPrompt", "editPromptAction", "copyPrompt"] {
             let action = app.buttons[id]
             XCTAssertTrue(action.isHittable)
             XCTAssertGreaterThanOrEqual(action.frame.width, 44)
