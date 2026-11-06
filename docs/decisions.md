@@ -1120,3 +1120,7 @@ Continue the frozen `additional-1000-20261023` baseline2982/target3982. Do not r
 ### 2026-11-06 — Soften reading text beneath the detail actions
 
 The owner keeps the detail action bar, including its collapse into three circular buttons while scrolling. Only the collision is fixed: reading scroll views opt into the system soft bottom scroll-edge effect so text fades beneath the bar. No layout, color or motion changes. Verified on the iOS 27.1 simulator and installed on the owner's iPhone Air (iOS 27.0.1).
+
+### 2026-11-06 — Keep the full detail preview on ordinary iPhones from iOS 27.1
+
+The iOS 27.1+ detail uses `ArrangementView`, which shows only the reading pane on an ordinary iPhone. The OS-version gate therefore replaced the full image with a 76pt thumbnail on every phone, while iOS 27.0 kept the full preview the owner approved. Layout now follows whether the media pane is actually laid out: when it is collapsed, the full preview sits above the reading content; only a visible split keeps the compact entry. Verified on an iPhone 18 Pro simulator with iOS 27.2; the expanded iPhone Duo split was not re-verified in this change.

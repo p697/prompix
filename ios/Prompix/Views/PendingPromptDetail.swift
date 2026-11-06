@@ -8,17 +8,23 @@ struct PendingPromptDetail: View {
     let position: DetailReadingPosition
     let retry: () -> Void
     @State private var actionsCollapsed = false
+    @State private var mediaPaneVisible = false
     private var preview: ContentPreview { ContentPreview(card) }
 
     var body: some View {
         Group {
             if #available(iOS 27.1, *), preview.hasDetailMedia {
                 ArrangementView {
-                    ScrollView { reading.padding(.bottom, 28).frame(maxWidth: 700).frame(maxWidth: .infinity) }
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 25) {
+                            if !mediaPaneVisible { media }
+                            reading
+                        }.padding(.bottom, 28).frame(maxWidth: 700).frame(maxWidth: .infinity)
+                    }
                         .preservingReadingPosition(position).readingChrome($actionsCollapsed).readingBottomEdge().accessibilityIdentifier("detailReadingPane")
                 } secondary: {
                     ScrollView { media.padding(.bottom, 24).frame(maxWidth: 600).frame(maxWidth: .infinity) }
-                        .preservingReadingPosition(position, media: true).accessibilityIdentifier("detailMediaPane")
+                        .preservingReadingPosition(position, media: true).reportsPaneVisibility($mediaPaneVisible).accessibilityIdentifier("detailMediaPane")
                 }.arrangementViewStyle(.split.axes(.horizontal))
             } else {
                 ScrollView {
@@ -52,7 +58,7 @@ struct PendingPromptDetail: View {
     private var reading: some View {
         VStack(alignment: .leading, spacing: 24) {
             PromptDetailHeading(title: card.title, summary: card.summary, creator: card.creator)
-            if #available(iOS 27.1, *), preview.hasDetailMedia {
+            if #available(iOS 27.1, *), preview.hasDetailMedia, mediaPaneVisible {
                 HStack(spacing: 14) {
                     Artwork(preview: preview).frame(width: 76, height: 86).clipped()
                         .clipShape(RoundedRectangle(cornerRadius: 10))
@@ -130,6 +136,12 @@ final class DetailReadingPosition {
 }
 
 extension View {
+    /// A collapsed arrangement does not lay out its secondary pane; narrow
+    /// screens then keep the full preview above the reading content.
+    func reportsPaneVisibility(_ visible: Binding<Bool>) -> some View {
+        onGeometryChange(for: Bool.self) { $0.size.width > 1 && $0.size.height > 1 } action: { visible.wrappedValue = $0 }
+            .onDisappear { visible.wrappedValue = false }
+    }
     @ViewBuilder func preservingReadingPosition(_ position: DetailReadingPosition?, media: Bool = false) -> some View {
         if #available(iOS 18, *), let position {
             modifier(RestoreReadingPosition(saved: position, media: media))
