@@ -12,7 +12,7 @@ const now = Date.parse("2026-10-15T23:59:00Z");
 function item(author: number, index: number, kind: Prompt["kind"]): Prompt {
   return { id: `work-${author}-${index}`, kind, title: `Work ${index}`, summary: "First-party fixture", prompt: "Original test body",
     example: "Example", tags: ["test"], model: "Synthetic", artwork: "test", previewLabel: "Preview", toolURL: null,
-    source: { name: "Prompix", url: null, license: "CC0", method: "test" },
+    source: { name: "Prompix", url: null, license: "CC0", method: "test" }, presentation: "general",
     media: kind === "text" ? null : { image: null, video: null, demoURL: null, imageURL: "https://api.prompix.dev/media/test.jpg" },
     creator: { id: `creator-${author}`, platform: "web", displayName: `Author ${String(author).padStart(2, "0")}`, profileURL: `https://example.com/${author}` } };
 }

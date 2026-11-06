@@ -13,7 +13,7 @@ const filters: FeedFilters = { locale: "original", q: "", sort: "discovery" };
 function item(id: string, visual = false): Prompt {
   return { id, kind: visual ? "image" : "text", title: id, summary: "Original visual feed fixture", prompt: "Create an original ceramic still life.",
     example: "A ceramic cup", tags: ["肖像"], model: "Fixture", toolURL: null, artwork: "test", previewLabel: "Preview",
-    source: { name: "Prompix", url: null, license: "Original", method: "Test fixture" },
+    source: { name: "Prompix", url: null, license: "Original", method: "Test fixture" }, presentation: "general",
     media: visual ? { image: "lake", video: null, demoURL: null } : null };
 }
 const input = (prompts: Prompt[]) => ({ schemaVersion: 1 as const, version: "fixture", prompts });

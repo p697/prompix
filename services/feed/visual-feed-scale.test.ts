@@ -13,7 +13,7 @@ for (const sort of ["discovery", "recommended"] as const) test(`10000-item ${sor
   const prompts: Prompt[] = Array.from({ length: 10000 }, (_, n) => ({
     id: `visual-scale-${n}`, kind: n < 3000 ? "text" : "image", title: `Original fixture ${n}`, summary: "Original scale acceptance fixture",
     prompt: "Create an original still life of a ceramic cup.", example: "A green cup", tags: ["fixture"], model: "Fixture",
-    toolURL: null, artwork: "test", previewLabel: "Preview", source: { name: "Prompix", url: null, license: "Original", method: "Scale acceptance" },
+    toolURL: null, artwork: "test", previewLabel: "Preview", source: { name: "Prompix", url: null, license: "Original", method: "Scale acceptance" }, presentation: "general",
     media: n < 3000 ? null : { image: "lake", video: null, demoURL: null },
   }));
   const release = await stagePublication(writer, { schemaVersion: 1, version: "scale", prompts });

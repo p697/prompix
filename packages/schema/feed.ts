@@ -15,8 +15,15 @@ export type FeedLocale = z.infer<typeof feedLocale>;
 /** Keep width and Latin accent matching consistent with the native search contract. */
 export const normalizeFeedSearch = (value: string) => value.normalize("NFKD").replace(/[\u0300-\u036f]/gu, "")
   .normalize("NFKC").toLowerCase().trim().replace(/\s+/gu, " ");
+/** Lists show general imagery unless the viewer opted into suggestive content. Unknown
+ * imagery stays out of every list until reviewed; explicit imagery is never published.
+ * Detail by ID is not filtered, so saved items and shared links keep working. */
+export const listPresentation = z.enum(["general", "suggestive"]);
+export const allowedPresentations = (presentation?: z.infer<typeof listPresentation>) =>
+  presentation === "suggestive" ? ["general", "suggestive"] : ["general"];
 export const feedFiltersSchema = z.object({
   locale: feedLocale.default("original"),
+  presentation: listPresentation.optional(),
   sort: z.enum(["curated", "latest", "discovery", "recommended"]).optional(),
   seed: z.string().regex(/^[a-f0-9]{32}$/).optional(),
   kind: z.enum(["text", "image", "video", "web", "skill"]).optional(),
@@ -56,7 +63,7 @@ export const feedDetailSchema = z.object({
 }).strict();
 
 export function parseFeedQuery(url: URL): { filters: FeedFilters; limit: number; cursor?: string } {
-  const allowed = new Set(["locale", "kind", "collection", "creator", "tag", "model", "q", "sort", "seed", "limit", "cursor"]);
+  const allowed = new Set(["locale", "presentation", "kind", "collection", "creator", "tag", "model", "q", "sort", "seed", "limit", "cursor"]);
   const values: Record<string, string> = {};
   for (const [key, value] of url.searchParams) {
     if (!allowed.has(key) || Object.hasOwn(values, key)) throw new Error("Invalid query parameters");
