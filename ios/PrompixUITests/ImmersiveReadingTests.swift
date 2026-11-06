@@ -187,6 +187,25 @@ import UIKit
         app.buttons["复制 Prompt"].tap()
         XCTAssertTrue(card.waitForExistence(timeout: 3))
     }
+    /// Uses the live content service, since bundled works carry no creator identities.
+    func testCreatorPageLeadsWithSaving() {
+        app.terminate()
+        app.launchArguments = ["-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN"]
+        app.launchPrompix()
+        XCTAssertTrue(app.buttons["discoveryFilters"].waitForExistence(timeout: 15))
+        app.revealDiscoveryRails()
+        let creator = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'creator-'")).firstMatch
+        XCTAssertTrue(creator.waitForExistence(timeout: 5)); creator.tap()
+        let save = app.buttons["saveCreator"]
+        XCTAssertTrue(app.scrollViews["creatorProfileScroll"].waitForExistence(timeout: 8))
+        capture("creator-01-profile")
+        XCTAssertTrue(save.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.descendants(matching: .any)["creatorExternalProfile"].exists)
+        save.tap()
+        XCTAssertEqual(save.label, "取消收藏创作者")
+        save.tap()
+        XCTAssertEqual(save.label, "收藏创作者")
+    }
     func testRefinedChromeAndInteractiveReturn() {
         XCTAssertTrue(app.buttons["discoveryFilters"].waitForExistence(timeout: 10))
         XCTAssertFalse(app.buttons["searchButton"].exists)
