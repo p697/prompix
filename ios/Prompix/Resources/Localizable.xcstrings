@@ -19,19 +19,19 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Original"
+            "value": "Originalfassung"
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Original"
+            "value": "Versión original"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Original"
+            "value": "Version originale"
           }
         },
         "ja": {
@@ -49,7 +49,7 @@
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Original"
+            "value": "Versão original"
           }
         },
         "zh-Hant": {
