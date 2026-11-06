@@ -1,26 +1,35 @@
+import { spawn } from "node:child_process";
 import { mkdir, open, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { trustSystemCertificates } from "./models/http.ts";
-import { appendEvent, pipelineRoot, processAlive, readConfig, readWorkerStatus, writeWorkerStatus, type WorkerStatus } from "./pipeline-control.ts";
+import { appendEvent, pipelineRoot, processAlive, readConfig, readWorkerStatus, writeWorkerStatus, type PipelineConfig, type WorkerStatus } from "./pipeline-control.ts";
+import { contentRoot, json, repo } from "./publication.ts";
 import { pipelineEnvironment, runMaintenance } from "./worker-maintenance.ts";
 
 /** Verifications last 24 hours, so twice a day keeps every publication unblocked. */
 export const maintenanceIntervalMs = 12 * 3600000;
 export const retryAfterFailureMs = 30 * 60000;
+/** The daily allowances open in four cumulative UTC windows (ingest/discovery-budget.ts). */
+export const intakeWindowMs = 6 * 3600000;
+const intakeTimeoutMs = 3 * 3600000;
 const tickMs = 60000;
 
-export type Job = { name: string; interval: number; run: () => Promise<string> };
+export type JobResult = string | { summary: string; published?: number };
+/** `aligned` jobs run once per interval-sized UTC window instead of an interval after the last
+ * run; `enabled` gates a job on the desired state (source maintenance ignores it). */
+export type Job = { name: string; interval: number; aligned?: boolean; enabled?: (config: PipelineConfig) => boolean; run: () => Promise<JobResult> };
 type Clock = { now: () => number };
 
 /** True when the job never ran, its last run is older than the interval, or a failed run
  * has waited out its backoff. A run still marked as started (the worker was killed) is due. */
-export function jobDue(job: Pick<Job, "name" | "interval">, status: WorkerStatus | undefined, now: number): boolean {
+export function jobDue(job: Pick<Job, "name" | "interval" | "aligned">, status: WorkerStatus | undefined, now: number): boolean {
   const last = status?.jobs?.[job.name];
   if (!last) return true;
   const started = Date.parse(last.startedAt);
   if (!last.finishedAt) return true;
-  return now - started >= (last.ok === false ? retryAfterFailureMs : job.interval);
+  if (last.ok === false) return now - started >= retryAfterFailureMs;
+  return job.aligned ? Math.floor(started / job.interval) < Math.floor(now / job.interval) : now - started >= job.interval;
 }
 
 /** One pass: heartbeat, then at most one due job. Jobs never overlap. */
@@ -33,14 +42,16 @@ export async function tick(root: string, startedAt: string, jobs: Job[], clock: 
     today: previous?.today.date === at.slice(0, 10) ? previous.today : { date: at.slice(0, 10), published: 0, reviewed: 0, held: 0, rejected: 0 },
     ...(previous?.jobs ? { jobs: previous.jobs } : {}), ...(previous?.lastError ? { lastError: previous.lastError } : {}) };
   await writeWorkerStatus(root, base);
-  const job = jobs.find(candidate => jobDue(candidate, base, clock.now()));
+  const job = jobs.find(candidate => (candidate.enabled?.(config) ?? true) && jobDue(candidate, base, clock.now()));
   if (!job) return;
   const running = { ...base.jobs, [job.name]: { startedAt: at } };
   await writeWorkerStatus(root, { ...base, stage: job.name, jobs: running });
   try {
-    const summary = await job.run();
+    const result = await job.run(), summary = typeof result === "string" ? result : result.summary;
+    const published = typeof result === "string" ? 0 : result.published ?? 0;
     const finishedAt = new Date(clock.now()).toISOString();
-    await writeWorkerStatus(root, { ...base, heartbeatAt: finishedAt, jobs: { ...running, [job.name]: { startedAt: at, finishedAt, ok: true, summary: summary.slice(0, 500) } } });
+    const today = base.today.date === finishedAt.slice(0, 10) ? { ...base.today, published: base.today.published + published } : base.today;
+    await writeWorkerStatus(root, { ...base, today, heartbeatAt: finishedAt, jobs: { ...running, [job.name]: { startedAt: at, finishedAt, ok: true, summary: summary.slice(0, 500) } } });
     await appendEvent(root, "worker", "job.finished", { job: job.name, summary });
   } catch (error) {
     const finishedAt = new Date(clock.now()).toISOString(), message = (error as Error).message.slice(0, 500);
@@ -56,6 +67,33 @@ export function maintenanceJob(env: NodeJS.ProcessEnv): Job {
     const x = report.x as { recheck?: { checked?: number; verified?: number } } | undefined;
     return `X 复查 ${x?.recheck?.checked ?? 0} 条，确认在线 ${x?.recheck?.verified ?? 0} 条；来源已删 ${report.removed} 条，本次下架 ${report.takenDown.length} 条`;
   } };
+}
+
+type IntakeReport = { published?: boolean; error?: string; changes?: { added?: { total?: number } };
+  sources?: { enrichment?: { enriched?: number; excluded?: number; deferred?: number }; "publication-quota"?: { selected?: number; deferred?: number } } };
+
+/** Collection, editorial and visual review, the 2.0 review, translation and publication: the
+ * daily pipeline in its own process, with every existing gate and allowance. Translation uses
+ * the pipeline's translate route; history campaigns are not drained here, since their items
+ * have no 2.0 review. Runs only while the desired state is running. */
+export function intakeJob(env: NodeJS.ProcessEnv, spawnDaily = runDaily): Job {
+  return { name: "intake", interval: intakeWindowMs, aligned: true, enabled: config => config.desired === "running" && config.dailyTarget > 0, run: async () => {
+    const { PROMPIX_HISTORY_CAMPAIGN: _, ...rest } = env;
+    const code = await spawnDaily({ ...rest, PROMPIX_TRANSLATION_PROVIDER: "pipeline" });
+    const report = await json<IntakeReport>(join(contentRoot, "status.json"), {});
+    if (code !== 0) throw new Error(report.error ?? `daily exited with ${code}`);
+    const added = report.changes?.added?.total ?? 0, enrichment = report.sources?.enrichment;
+    return { published: added, summary: `新发布 ${added} 条；2.0 审核通过 ${enrichment?.enriched ?? 0} 条，排除 ${enrichment?.excluded ?? 0} 条，顺延 ${enrichment?.deferred ?? 0} 条` };
+  } };
+}
+
+function runDaily(env: NodeJS.ProcessEnv): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, ["--import", "tsx", "ingest/daily.ts", "--publish"], { cwd: repo, env, stdio: ["ignore", "inherit", "inherit"] });
+    const timer = setTimeout(() => child.kill("SIGTERM"), intakeTimeoutMs);
+    child.on("error", reject);
+    child.on("exit", code => { clearTimeout(timer); resolve(code ?? 1); });
+  });
 }
 
 /** A second worker exits at once; a lock left by a killed worker is taken over. */
@@ -84,7 +122,8 @@ async function main() {
   const release = await singleInstance(root);
   if (!release) { console.log(JSON.stringify({ event: "worker_already_running" })); return; }
   const env = await pipelineEnvironment();
-  const startedAt = new Date().toISOString(), jobs = [maintenanceJob(env)];
+  // Maintenance first: it keeps the verifications every publication requires current.
+  const startedAt = new Date().toISOString(), jobs = [maintenanceJob(env), intakeJob(env)];
   let stopping = false, sleeping: (() => void) | undefined;
   const stop = () => { stopping = true; sleeping?.(); };
   process.on("SIGTERM", stop); process.on("SIGINT", stop);

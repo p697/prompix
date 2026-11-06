@@ -1,6 +1,8 @@
 import { historyPublicationRun, publishQualifiedHistory, type HistoryPublicationReport } from "./history-publication.ts";
 import { prepareXMaintenanceAdmission } from "./x-maintenance-admission.ts";
 import { limitNewPublications } from "./publication-quota.ts";
+import { enrichNewItems } from "./enrichment-daily.ts";
+import { routedProvider } from "./model-routes.ts";
 import { withPublisherDatabase } from "./database-publication.ts";
 import { prepareDiscoveredSkills } from "./discovered-skill-daily.ts";
 import { preparePublisherSkills } from "./publisher-skill-daily.ts";
@@ -307,6 +309,14 @@ async function run() {
       const quota = await withPublisherDatabase(db => limitNewPublications(db, complete));
       complete = quota.prompts;
       report.sources["publication-quota"] = quota.report;
+    }
+    // A new item enters only with a valid 2.0 review and a publishable label, minors judged.
+    if (previous && publication.previous?.database) {
+      const routed = publishing ? await routedProvider("review", "enrichment:daily") : undefined;
+      const enrichment = await enrichNewItems(complete, new Map(previous.prompts.map(item => [item.id, item])), root,
+        routed ? { provider: routed.provider, effort: routed.effort, record: routed.record } : {});
+      complete = enrichment.prompts;
+      report.sources.enrichment = enrichment.report;
     }
     if (publishing) complete = await mirrorCreatorAvatars(complete, async url => {
       const mirrored = await publishAvatar(url, root, mediaMap, upload);

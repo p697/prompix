@@ -65,6 +65,10 @@ node --env-file=$HOME/.config/prompix/database.env --env-file=$HOME/.config/prom
 
 翻译和复核走模型插件层（默认 `anthropic-api` + `claude-sonnet-5-5`，分别记为 `translate`、`translationCheck` 环节）。原来的 Codex gpt-6-luna 和 gpt-6.1-sol 在 2026-11-06 的订阅上不可用。
 
+## 日常发布
+
+后台进程的每日采集发布在发布前调用 `enrichNewItems()`（`ingest/enrichment-daily.ts`），规则见 `docs/data-pipeline-v2.md` 的「后台进程」。结果按条目存在内容目录的 `enrichment/outcomes/`，绑定审核时的内容；内容不变就不再调用模型。审核失败的条目在之后的时段重试一次。
+
 ## 排除记录
 
 流水线不把任何条目交给人。判定不清就不发布，每次排除都在工作目录的 `exclusions.jsonl` 里留一行：时间、条目 ID、环节（media / translate / translationCheck / source / review / publish）、原因、提供方和模型（`ingest/exclusion-log.ts`）。拒答带 `refused: true`，同一内容不再发送；其他排除在下次重新采集或复查时可以再判一次。

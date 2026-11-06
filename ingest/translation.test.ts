@@ -211,6 +211,16 @@ test("JSON quality enums stay opaque while descriptive quality prose is translat
   const result = JSON.parse(localizePrompt(prose, "zh-Hans", cache)!.prompt);
   assert.equal(result.variant.quality, "high"); assert.notEqual(result.quality, description);
 });
+test("a rebuild keeps the reviewed 2.0 English card next to the translations", () => {
+  const en = { title: "Card title", summary: "Card summary." };
+  const reviewed = { ...item, localization: { sourceLanguage: "en", sourceFingerprint: translationFingerprint(item), translations: {}, en } };
+  assert.deepEqual(attachTranslations([reviewed], fillCache())[0].localization?.en, en);
+  const untranslated = attachTranslations([reviewed], emptyTranslationCache())[0];
+  assert.deepEqual(untranslated.localization, reviewed.localization);
+  assert.equal(attachTranslations([item], emptyTranslationCache())[0].localization, undefined);
+  const earlier = { ...item, localization: { sourceLanguage: "en", sourceFingerprint: translationFingerprint(item), translations: {} } };
+  assert.deepEqual(inheritPreviousTranslations([reviewed], [earlier])[0].localization?.en, en, "an older artifact never drops the card");
+});
 test("localization keeps original fields and rejects partial or malformed cache records", () => {
   const cache = fillCache();
   const translated = attachTranslations([item], cache)[0];
