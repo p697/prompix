@@ -32,6 +32,8 @@
 
 # Prompix 文档
 
+**数据管线 v2**：模型调用抽象成插件（Codex／Claude Code／Kimi 订阅，Kimi／DeepSeek／OpenAI／Anthropic API），任意 agent 用 `npm run pipeline` 查看和改变管线状态；见[设计与命令](data-pipeline-v2.md)。
+
 **补库期间日常复查预算**：新增仅用于已有来源复查的限时补库授权，仍使用共享累计账本；普通增长月限额和每日限额不变，到期回归普通限制。见[补库运行说明](backfill-campaign.md#补库期间保护日常复查)。
 
 **历史补库恢复至2000，再按质量推进10000**：原文＋简中独立队列，100美元有期限总预算，既有账本和失败记录保留；质量审核与订阅余量通过后由owner继续，无需逐步确认。见[运行与验收口径](backfill-campaign.md)。

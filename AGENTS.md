@@ -16,6 +16,13 @@ Prompix is built mostly by AI coding agents. These rules apply to every agent an
 - After a PR is merged or abandoned: delete the remote branch, remove the worktree and the local branch, then fast-forward the main checkout to `origin/main`. If the main checkout has uncommitted changes, leave it alone and report it.
 - Write commit messages and PR titles in concise, imperative English.
 
+## Data pipeline control
+
+- Operate the content pipeline only through `npm run pipeline -- <command>`; see [docs/data-pipeline-v2.md](docs/data-pipeline-v2.md). Never edit files under `~/.local/share/prompix/pipeline/` by hand.
+- Every change names its author: `--by codex`, `--by claude-code`, or the person. Add `--reason` when the owner gave one.
+- To answer "is the pipeline running and how is it going", run `status --brief`, then `log` only if something looks wrong. Do not poll more often than every two hours unless the owner asks; failures alert through the monitor.
+- Model choice is routing (`route <stage> <provider>`), not code. Add a vendor as an adapter under `ingest/models/`.
+
 ## Secrets
 
 - Never commit secrets. Real values live outside the repository in `~/.config/prompix/*.env`; only variable names may appear in the repository, for example in an `.env.example` file.
