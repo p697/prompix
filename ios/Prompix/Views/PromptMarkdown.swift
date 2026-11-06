@@ -227,7 +227,7 @@ private struct PromptMarkdownContent: View, Equatable {
                 .padding(.leading, CGFloat(min(max(block.listDepth - 1, 0), 3)) * 14)
             }
         }
-        .font(.body)
+        .font(.system(.body, design: .serif))
         .foregroundStyle(Palette.ink)
         .tint(Palette.accent)
         .textSelection(.enabled)

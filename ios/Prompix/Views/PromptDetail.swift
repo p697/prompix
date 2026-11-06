@@ -165,7 +165,7 @@ struct PromptDetail: View {
     }
     private var readingContent: some View {
         VStack(alignment: .leading, spacing: 24) {
-            PromptDetailHeading(title: content.title, summary: content.summary, creator: item.creator)
+            PromptDetailHeading(meta: ContentPreview(item).metaLine, title: content.title, summary: content.summary, creator: item.creator)
             if #available(iOS 27.1, *), hasMediaPreview, mediaPaneVisible { compactPreview }
             languagePicker
             PromptMarkdown(content.prompt)
