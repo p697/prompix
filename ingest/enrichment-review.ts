@@ -44,11 +44,13 @@ ${presentationStandard}
 - sourceLanguage: the main language of the prompt text as a lowercase ISO 639-1 code (en, zh, ja, ko, …), or und when it has no natural-language text.
 - en: always required, even when the prompt is already English. English card title (at most 80 characters) and summary (one or two sentences) describing what the prompt makes. When the candidate provides englishCard, copy it.
 - shots: only when the prompt itself is written as two or more distinct shots or scenes in sequence (for example "Shot 1 … Shot 2 …" or timed segments). Number from 1; startSec and endSec only when stated; text is that shot's description from the prompt, in the prompt's language. Otherwise an empty list.
-Do not infer age, ethnicity, identity or other personal traits of anyone depicted.
+- people: flags that send a candidate to a person before it is added; they never change other fields. realPerson yes when the prompt names, or the images show, a specific real identifiable individual (a celebrity, public figure or named private person), including requests to recreate a named person's likeness; unsure when someone looks like a specific recognisable person but you cannot tell; no for generic, fictional or anonymous people, and for templates that apply to the user's own uploaded photo. minor yes when the prompt says or the images plainly show that someone is a child or teenager; unsure when a depicted person may be under 18 and you cannot rule it out; no otherwise.
+Apart from the minor flag, do not infer age, ethnicity, identity or other personal traits of anyone depicted.
 
 Facet ids:
 ${facetGroups.map(group => `${group}: ${facetDefinitions[group].map(facet => `${facet.id} (${facet.en})`).join(", ")}`).join("\n")}`;
 
+const peopleFlags = ["no", "yes", "unsure"] as const;
 const nullable = (schema: JsonSchema): JsonSchema => ({ anyOf: [schema, { type: "null" }] });
 const object = (properties: Record<string, JsonSchema>): JsonSchema => ({ type: "object", additionalProperties: false, required: Object.keys(properties), properties });
 const string: JsonSchema = { type: "string" };
@@ -73,6 +75,7 @@ export const enrichmentOutputJSONSchema: JsonSchema = object({
     en: object({ title: string, summary: string }),
     shots: array(object({ index: { type: "integer" }, startSec: nullable({ type: "number" }), endSec: nullable({ type: "number" }), text: string })),
     vocabularyGaps: array(string),
+    people: object({ realPerson: enumOf(peopleFlags), minor: enumOf(peopleFlags) }),
   })),
 });
 
@@ -97,6 +100,7 @@ const itemOutputSchema = z.object({
   en: englishCardSchema.optional(),
   shots: z.array(z.unknown()),
   vocabularyGaps: z.array(z.string().trim().min(1).max(80)).max(8),
+  people: z.object({ realPerson: z.enum(peopleFlags), minor: z.enum(peopleFlags) }).strict(),
 }).strict();
 
 export type EnrichmentFields = {
@@ -104,7 +108,10 @@ export type EnrichmentFields = {
   variables: z.infer<typeof variablesSchema>; facets: z.infer<typeof facetsSchema>;
   en: z.infer<typeof englishCardSchema>; shots?: z.infer<typeof shotsSchema>;
 };
-export type EnrichmentEvidence = { sourceLanguage: string; presentation: z.infer<typeof presentationSchema>; presentationReason: string; vocabularyGaps: string[] };
+export type EnrichmentEvidence = { sourceLanguage: string; presentation: z.infer<typeof presentationSchema>; presentationReason: string; vocabularyGaps: string[];
+  people: { realPerson: typeof peopleFlags[number]; minor: typeof peopleFlags[number] } };
+/** New items with any people flag other than "no" wait for a person. */
+export const needsPeopleReview = (evidence: EnrichmentEvidence) => evidence.people.realPerson !== "no" || evidence.people.minor !== "no";
 export type EnrichmentOutcome =
   | { id: string; ok: true; fields: EnrichmentFields; evidence: EnrichmentEvidence }
   | { id: string; ok: false; error: string };
@@ -154,10 +161,28 @@ export function packEnrichmentBatches(candidates: readonly EnrichmentCandidate[]
   return batches;
 }
 
+/** Repairs that cannot change meaning: duplicate kinds collapse, and optional details that
+ * contradict their own field (an own-likeness flag without a face, a count beyond the limit,
+ * a ratio that is not W:H) are dropped. Everything else still fails the item. */
+function normalizeOutput(value: unknown): unknown {
+  if (!value || typeof value !== "object") return value;
+  const output = structuredClone(value) as { inputs?: Record<string, unknown>; generation?: Record<string, unknown> };
+  const inputs = output.inputs;
+  if (inputs && Array.isArray(inputs.kinds)) {
+    const kinds = [...new Set(inputs.kinds as unknown[])];
+    inputs.kinds = kinds;
+    if (!kinds.includes("face")) delete inputs.ownLikenessOnly;
+    if (inputs.requirement === "none" || typeof inputs.count !== "number" || inputs.count > 8) delete inputs.count;
+  }
+  if (output.generation && typeof output.generation.outputAspect === "string" && !/^[1-9]\d{0,2}:[1-9]\d{0,2}$/.test(output.generation.outputAspect))
+    delete output.generation.outputAspect;
+  return output;
+}
+
 /** Per-item validation. Anything off-vocabulary, inconsistent or missing fails that item. */
 export function validateEnrichmentItem(candidate: EnrichmentCandidate, raw: unknown): EnrichmentOutcome {
   const id = candidate.item.id;
-  const parsed = itemOutputSchema.safeParse(dropNulls(raw));
+  const parsed = itemOutputSchema.safeParse(normalizeOutput(dropNulls(raw)));
   if (!parsed.success) return { id, ok: false, error: `Invalid fields: ${parsed.error.issues.slice(0, 3).map(issue => `${issue.path.join(".")} ${issue.message}`).join("; ")}`.slice(0, 500) };
   const value = parsed.data;
   if (value.id !== id) return { id, ok: false, error: "Output id does not match the candidate" };
@@ -173,7 +198,7 @@ export function validateEnrichmentItem(candidate: EnrichmentCandidate, raw: unkn
   const fields: EnrichmentFields = { inputs: value.inputs, generation, variables: value.variables, facets: value.facets, en, ...(shots ? { shots } : {}) };
   const issues = enrichmentConsistencyIssues({ ...candidate.item, ...fields });
   if (issues.length) return { id, ok: false, error: issues[0].slice(0, 500) };
-  return { id, ok: true, fields, evidence: { sourceLanguage: value.sourceLanguage, presentation: value.presentation, presentationReason: value.presentationReason, vocabularyGaps: value.vocabularyGaps } };
+  return { id, ok: true, fields, evidence: { sourceLanguage: value.sourceLanguage, presentation: value.presentation, presentationReason: value.presentationReason, vocabularyGaps: value.vocabularyGaps, people: value.people } };
 }
 
 export type EnrichmentRecord = (summary: ModelCallSummary) => Promise<void>;

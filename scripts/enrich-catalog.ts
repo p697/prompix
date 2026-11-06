@@ -28,7 +28,7 @@ process.umask(0o077);
 const { values, positionals } = parseArgs({ allowPositionals: true, options: {
   catalog: { type: "string" }, work: { type: "string" }, ids: { type: "string" }, run: { type: "string" }, count: { type: "string" },
   provider: { type: "string" }, model: { type: "string" }, effort: { type: "string" }, batch: { type: "string" },
-  concurrency: { type: "string" }, "max-concurrency": { type: "string" }, budget: { type: "string" }, runs: { type: "string" }, by: { type: "string" },
+  concurrency: { type: "string" }, "full-media": { type: "boolean" }, "max-concurrency": { type: "string" }, budget: { type: "string" }, runs: { type: "string" }, by: { type: "string" },
 } });
 const [command] = positionals;
 const work = values.work;
@@ -94,7 +94,8 @@ async function prepare(item: Prompt): Promise<Prepared> {
   else try {
     // Text and web items can carry a preview image; they are prepared like a still image.
     const media = await prepareVisualMedia(item.kind === "video" ? item : { ...item, kind: "image" }, directory);
-    const full = item.presentation === "unknown" || !item.presentation;
+    // New items are judged for people flags as well, so they always get the full gallery and frames.
+    const full = values["full-media"] || item.presentation === "unknown" || !item.presentation;
     const posters = media.attachments.filter(attachment => attachment.role !== "video-frame");
     const frames = media.attachments.filter(attachment => attachment.role === "video-frame");
     const chosen = [...(full ? posters : posters.slice(0, 1)), ...(full ? frames : frames.filter((_, index) => index === 1 || index === 4))];

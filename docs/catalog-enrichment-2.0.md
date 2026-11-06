@@ -52,8 +52,21 @@ node --env-file=$HOME/.config/prompix/database.env --env-file=$HOME/.config/prom
 - `review`：下载并校验镜像媒体（与图片审核同一套校验），算 palette，按批调用。媒体准备最多 4 个并发；模型调用从 `--concurrency` 起步，一分钟内没遇到限流就翻倍到 `--max-concurrency`，遇到 429 减半并暂停 30 秒。可中断后重跑，已有结果的条目跳过。拒答的条目写入 `human-queue.jsonl`，不重试、不换模型；超时和临时失败最多重试 4 次；整包格式错误时用同一模型逐条重试一次。按实测 token 和标价估算累计花费，到 `--budget` 停止派发。
 - `publish`：在发布锁下读取线上当前版本，只给审核时内容未变的条目补字段，正文一律不动。unknown 用新判定；已有尺度只许变严。判成 explicit 的必须先用 `npm run remove` 登记下架，否则整次发布中止。X 来源要有 24 小时内的复查，已失效的和日常发布一样暂不进入本版（不进下架名单）；ClawHub 来源同样要 24 小时内核验。日常复查停了的话，先跑一次维护复查（`prepareXAvailability`，带已发布 ID）和 `npm run collect:community-skills`。`dry-run` 只写出发布输入和报告。
 
+## 新增条目：重译被语义复核挡下的历史库存
+
+`scripts/add-history-items.ts`。历史补库 campaign（`history-2000-v1`）里有约 700 条已采集、已过编辑和图片审核、也已翻译的 X 条目，因为简中译文被独立语义复核判为 needs-review 而没有上线。主要问题是含义偏差、遗漏，以及把要原样出现在画面里的英文文字也译成了中文。这个命令不搜索、不新采集，按顺序：
+
+1. `retranslate`：只重译简中。把每条的复核意见附在它引用的原文段落上交给译者，原文和其他语言不动，校验器与原翻译环节相同。
+2. `semantic`：另起一次调用独立复核新译文，每 4 条一批；带证据的结论照原规则严格校验，自相矛盾的 pass 按 needs-review 处理。
+3. `select`：和线上版本及彼此去重，排除 hold 和已下架。
+4. `recheck`：用 twitterapi.io 复查来源是否仍在线，写入 campaign 的 `source-revalidation`。
+5. 2.0 审核：`enrich-catalog review --catalog <work>/candidates.json`，同时给出人物安全标记。
+6. `publish`：走 history publisher。逐批重新核验原编辑和图片审核证据、来源时效与翻译完整性；可识别真人、可能未成年的条目写入 `people-review.json` 等人工处理，不发布。尺度只取原图片审核和新审核中更严的那个。
+
+翻译和复核走模型插件层（默认 `anthropic-api` + `claude-sonnet-5-5`，分别记为 `translate`、`translationCheck` 环节）。原来的 Codex gpt-6-luna 和 gpt-6.1-sol 在 2026-11-06 的订阅上不可用。
+
 ## 存量补字段进度
 
-- [ ] 50 条试跑：codex-cli、anthropic-api（Sonnet 5.5、Opus 5.5）对比
-- [ ] 全量 3,130 条补字段，250 条 unknown 看真实画面重判，explicit 下架
-- [ ] 发布新 release 并线上核对
+- [x] 50 条试跑：Codex、Sonnet 5.5、Opus 5.5，另有 Haiku 5.5 20 条评估。全量选 Sonnet 5.5
+- [x] 全量补字段：3,126 条审核（4 条媒体下载失败，后补审），3,115 条合格，估算 $35.99；unknown 249 条重判，没有 explicit
+- [x] 2026-11-06 发布 `feed-40add1c8…`：3,108 条，其中 3,093 条带新字段；22 条 X 来源失效，暂不进入本版；线上只读核对通过

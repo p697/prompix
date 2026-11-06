@@ -1168,3 +1168,8 @@ Following the 2.0 discover board, feed cards drop their titles and badges: a car
 ### 2026-11-06 — Place the creator and use rails inside the discover feed
 
 The first screen of discovery is now all work. The creator rail and the use rail sit together after the first twelve feed items (`FeedInterleave`), so later pages never move them; they are hidden while filtering, as before, and appear only once the feed has more than twelve items. Creator discovery therefore loads when its rail first scrolls into view rather than at launch. UI tests reach the rails through `revealDiscoveryRails()`.
+
+### 2026-11-06 — Retranslate held history items through the provider layer
+
+About 700 collected, reviewed and translated history items never went live because the independent semantic review held their Simplified Chinese text. They are translated again with each item's findings attached to the quoted segment, then reviewed again in a separate call; everything else (editorial and visual evidence, source checks, deduplication, holds, quota) still passes through the history publisher. The Codex gpt-6 models used by the original translation and semantic stages were unavailable on the subscription, and the owner prefers the metered Anthropic API for this bulk round, so both stages run through the provider layer with the unchanged instructions and validators. New items carry people flags from the combined review; a possible real identifiable person or minor waits for a person instead of being published.
+

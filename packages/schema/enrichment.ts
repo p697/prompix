@@ -46,12 +46,12 @@ export const generationSchema = z.object({
 
 export const variableSchema = z.object({
   /** The placeholder exactly as it appears in the prompt, such as "[a feeling]". */
-  token: nonempty.max(120),
+  token: nonempty.max(300),
   name: bilingual(60),
   default: nonempty.max(200).optional(),
   hint: bilingual(200).optional(),
 }).strict();
-export const variablesSchema = z.array(variableSchema).max(16)
+export const variablesSchema = z.array(variableSchema).max(32)
   .refine(values => unique(values.map(value => value.token)), "Duplicate variable token");
 
 const facetList = (group: FacetGroup) =>
