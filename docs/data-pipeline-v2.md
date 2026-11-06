@@ -111,6 +111,7 @@ npm run pipeline -- note "Lucy 说周末前别动安全复核" --by claude-code
   - 翻译走管线的 `translate` 路由（`PROMPIX_TRANSLATION_PROVIDER=pipeline`），不再写死 Codex gpt-6-luna。
   - 不处理历史补库 campaign，因为那里的条目没有经过 2.0 审核。
   - 发布前多一道 2.0 审核闸（`ingest/enrichment-daily.ts`，走 `review` 路由）。新条目必须有针对当前内容的有效审核，尺度也必须定得下来：涉及未成年人不安全或不确定的、explicit、unknown 一律不发布；拒答的永不再送审；还没审到的顺延到下一个时段。每次排除写一行到内容目录的 `enrichment/exclusions.jsonl`。
+  - 译文复核（`ingest/translation-check-daily.ts`，走 `translationCheck` 路由）：第一次进入版本的译文必须先通过独立的语义复核（漏译、偏义、画面文字和指定回答语言被改等），已上线的译文不重审。没通过的、还没审到的，只在本版里隐去那一种语言，条目照常发布，读者看到原文。结论按译文记在内容目录的 `translations/semantic-ledger.json`；拒答的不再送审。
   - 已上线条目内容没变的，保留它 2.0 审核的结果。从来源重建时丢掉的字段补回来；尺度取两者中更严的，但 unknown 不会覆盖已经判定过的尺度。内容有改动的重新审核，审核通过前继续用线上原版。
 - 密钥从 `~/.config/prompix/*.env` 读取，和旧定时任务用同一组文件。
 - 子进程（每日流程和它调用的 wrangler）不认后台进程自己加载的系统证书，所以后台进程启动时把系统钥匙串里的根证书导出到控制目录的 `system-roots.pem`，再通过 `NODE_EXTRA_CA_CERTS` 传给子进程。
