@@ -15,6 +15,7 @@ import { createProvider, isProviderId, modelEnvironment } from "../ingest/models
 import { ModelProviderError, type Effort } from "../ingest/models/types.ts";
 import { computePalette } from "../ingest/palette.ts";
 import { appendEvent, pipelineRoot } from "../ingest/pipeline-control.ts";
+import { recordExclusion, refusedIDs } from "../ingest/exclusion-log.ts";
 import { prepareVisualMedia, VisualMediaPreparationError } from "../ingest/visual-media.ts";
 import type { Palette } from "../packages/schema/enrichment.ts";
 import { withDailyStatus } from "../ingest/daily-status.ts";
@@ -94,7 +95,7 @@ async function prepare(item: Prompt): Promise<Prepared> {
   else try {
     // Text and web items can carry a preview image; they are prepared like a still image.
     const media = await prepareVisualMedia(item.kind === "video" ? item : { ...item, kind: "image" }, directory);
-    // New items are judged for people flags as well, so they always get the full gallery and frames.
+    // New items are also judged for minors, so they always get the full gallery and frames.
     const full = values["full-media"] || item.presentation === "unknown" || !item.presentation;
     const posters = media.attachments.filter(attachment => attachment.role !== "video-frame");
     const frames = media.attachments.filter(attachment => attachment.role === "video-frame");
@@ -131,7 +132,7 @@ const cost = (model: string, usage: { inputTokens?: number; outputTokens?: numbe
 
 /** Media preparation (local CPU and disk) and model calls (network) run as one pipeline
  * with separate limits. Calls start at --concurrency, rise to --max-concurrency while no
- * rate limit is seen, and halve with a pause on each 429. Refusals go to people. */
+ * rate limit is seen, and halve with a pause on each 429. A refusal excludes its batch for good. */
 async function review(items: Prompt[]) {
   const providerID = values.provider ?? "anthropic-api", run = values.run, actor = values.by ?? "claude-code";
   if (!run || !/^[a-z0-9-]+$/.test(run)) throw new Error("--run <name> is required");
@@ -141,8 +142,8 @@ async function review(items: Prompt[]) {
   const directory = join(work!, "runs", run), outcomes = join(directory, "outcomes");
   await mkdir(outcomes, { recursive: true });
   const done = new Set((await readdir(outcomes)).map(name => name.replace(/\.json$/, "")));
-  const human = new Set((await readFile(join(directory, "human-queue.jsonl"), "utf8").catch(() => "")).split("\n").filter(Boolean).map(line => JSON.parse(line).id));
-  const pending = items.filter(item => !done.has(item.id) && !human.has(item.id));
+  const refused = await refusedIDs(join(directory, "exclusions.jsonl"));
+  const pending = items.filter(item => !done.has(item.id) && !refused.has(item.id));
   const batchSize = Number(values.batch ?? 6), budget = Number(values.budget ?? Infinity), maximum = Number(values["max-concurrency"] ?? 32);
   let limit = Number(values.concurrency ?? 16), active = 0, spent = 0, cleanSince = Date.now(), pausedUntil = 0, stopped = "";
   for (const line of (await readFile(join(directory, "batches.jsonl"), "utf8").catch(() => "")).split("\n").filter(Boolean)) {
@@ -154,7 +155,7 @@ async function review(items: Prompt[]) {
   const producer = pool(pending, 4, async item => {
     const media = await prepare(item);
     prepared++;
-    if (media.error) { deferred++; await appendFile(join(directory, "deferred.jsonl"), JSON.stringify({ id: item.id, error: media.error }) + "\n"); return; }
+    if (media.error) { deferred++; await recordExclusion(join(directory, "exclusions.jsonl"), { id: item.id, stage: "media", reason: `Media could not be prepared: ${media.error}` }); return; }
     ready.push({ item, images: media.images.map(({ sourceRole: _, ...image }) => image), ...(media.video ? { video: media.video } : {}) });
   }).finally(() => { producing = false; });
   const call = async (entry: { batch: EnrichmentCandidate[]; attempts: number }) => {
@@ -175,8 +176,9 @@ async function review(items: Prompt[]) {
         limit = Math.max(2, Math.floor(limit / 2)); cleanSince = pausedUntil = Date.now() + 30_000;
         console.log(`  rate limited: ${limit} calls after a 30 s pause`);
       }
-      // A refusal is final for these items: people review them; no other model is tried.
-      if (code === "refused") for (const candidate of batch) await appendFile(join(directory, "human-queue.jsonl"), JSON.stringify({ id: candidate.item.id, reason: "refused" }) + "\n");
+      // A refusal is final for these items: excluded and never sent to another model.
+      if (code === "refused") for (const candidate of batch)
+        await recordExclusion(join(directory, "exclusions.jsonl"), { id: candidate.item.id, stage: "review", reason: "The model declined to review this content", refused: true, provider: provider.id, model: provider.model });
       else if (error instanceof ModelProviderError && error.retryable && entry.attempts < 4) queue.push({ batch, attempts: entry.attempts + 1 });
       else if (code === "invalid_output" && batch.length > 1 && entry.attempts < 1)
         // A malformed envelope loses the whole call; retry the same model one item at a time.

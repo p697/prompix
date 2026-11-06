@@ -20,7 +20,7 @@ function restoreSegmentIDs(result: TranslationResponse, segments: readonly Segme
 export class TranslationProviderError extends Error {
   constructor(message: string, public readonly permanent = false) { super(message); }
 }
-/** The model declined: final for these segments; their items go to people, never to another model. */
+/** The model declined: final for these segments; their items are excluded, never sent to another model. */
 export class TranslationRefused extends TranslationProviderError {
   constructor(message: string) { super(message, true); }
 }

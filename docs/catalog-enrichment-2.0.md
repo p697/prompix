@@ -33,7 +33,7 @@
 - `reviewEnrichmentBatch(provider, candidates)`：只经 `ingest/models/` 的提供方和 `completeValidated` 调用，记录走 `review` 环节（路由用 `npm run pipeline -- route review …`）。原始内容只放在不可信数据块里。
 - 返回给模型的 JSON Schema 只用类型、枚举和必填，不带长度、数值、数组长度约束（有的厂商会拒收），精确限制由 zod 在本地再校验一遍。
 - 一条不合格（词表外的值、超过数量上限、占位符不在原文里、模式和类型不符、参考图模式却不要输入）只判这一条失败；条目顺序或 id 对不上判整包失败。
-- 拒答原样抛出，不换模型重试：调用方把整包送人工。
+- 拒答原样抛出，不换模型重试：调用方把整包判为不发布，并写入排除记录。
 - `applyEnrichment(item, outcome, { palette, video, policy })` 生成新条目，正文字段一律不动。`policy: "label"` 用于新条目，以模型的尺度为准；`"stricter-only"` 用于存量：unknown 重判；已有标签只能变严（general→suggestive），不会放宽。
 
 ## 补字段命令
@@ -60,10 +60,14 @@ node --env-file=$HOME/.config/prompix/database.env --env-file=$HOME/.config/prom
 2. `semantic`：另起一次调用独立复核新译文，每 4 条一批；带证据的结论照原规则严格校验，自相矛盾的 pass 按 needs-review 处理。
 3. `select`：和线上版本及彼此去重，排除 hold 和已下架。
 4. `recheck`：用 twitterapi.io 复查来源是否仍在线，写入 campaign 的 `source-revalidation`。
-5. 2.0 审核：`enrich-catalog review --catalog <work>/candidates.json`，同时给出人物安全标记。
-6. `publish`：走 history publisher。逐批重新核验原编辑和图片审核证据、来源时效与翻译完整性；可识别真人、可能未成年的条目写入 `people-review.json` 等人工处理，不发布。尺度只取原图片审核和新审核中更严的那个。
+5. 2.0 审核：`enrich-catalog review --catalog <work>/candidates.json --full-media`，同时判定是否涉及未成年人（none / safe / unsafe / uncertain）。
+6. `publish`：走 history publisher。逐批重新核验原编辑和图片审核证据、来源时效与翻译完整性。未成年人判定为 unsafe 或 uncertain、可能未成年又是 suggestive、尺度为 unknown 或 explicit 的，一律自动排除；尺度只取原图片审核和新审核中更严的那个。
 
 翻译和复核走模型插件层（默认 `anthropic-api` + `claude-sonnet-5-5`，分别记为 `translate`、`translationCheck` 环节）。原来的 Codex gpt-6-luna 和 gpt-6.1-sol 在 2026-11-06 的订阅上不可用。
+
+## 排除记录
+
+流水线不把任何条目交给人。判定不清就不发布，每次排除都在工作目录的 `exclusions.jsonl` 里留一行：时间、条目 ID、环节（media / translate / translationCheck / source / review / publish）、原因、提供方和模型（`ingest/exclusion-log.ts`）。拒答带 `refused: true`，同一内容不再发送；其他排除在下次重新采集或复查时可以再判一次。
 
 ## 存量补字段进度
 
@@ -71,5 +75,5 @@ node --env-file=$HOME/.config/prompix/database.env --env-file=$HOME/.config/prom
 - [x] 全量补字段：3,126 条审核（4 条媒体下载失败，后补审），3,115 条合格，估算 $35.99；unknown 249 条重判，没有 explicit
 - [x] 2026-11-06 发布 `feed-40add1c8…`：3,108 条，其中 3,093 条带新字段；22 条 X 来源失效，暂不进入本版；线上只读核对通过
 - [x] 补审 12 条后发布 `feed-5cc5250a…`：3,105 条带新字段，最后 1 条 unknown 改判 general；3 条 prompts.chat 文字 Prompt 一直被判成 Skill 模式，保持原样
-- [x] 新增：677 条被挡下的历史库存重译（4 条被校验器拒收），521 条通过新复核，去重后 516 条，复查后 469 条仍在线；2.0 审核全部合格，53 条带人物标记留给人工（`people-review.json`），发布 416 条 `feed-fca61a66…`，线上共 3,524 条。花费：重译 $9.83、复核 $6.33、2.0 审核 $7.72，X 复查约 $0.08
-- [ ] 剩余：152 条重译后仍被复核挡下，47 条来源已失效，53 条等人工处理人物标记
+- [x] 新增：677 条被挡下的历史库存重译（4 条被校验器拒收），521 条通过新复核，去重后 516 条，复查后 469 条仍在线；2.0 审核全部合格，53 条带人物标记，按当时的规则暂未发布，发布 416 条 `feed-fca61a66…`，线上共 3,524 条。花费：重译 $9.83、复核 $6.33、2.0 审核 $7.72，X 复查约 $0.08
+- [x] 2026-11-06 规则调整：没有任何条目交人工。53 条原人物标记条目按新规则重新判定，结果见下一节

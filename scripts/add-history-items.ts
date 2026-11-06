@@ -6,7 +6,8 @@
  *   select       approved retranslations not live yet, deduplicated against the live edition and each other
  *   recheck      confirm the candidates' sources are still online (third-party lookup, bounded requests)
  *   (2.0 review) enrich-catalog review --catalog <work>/candidates.json --work <work>
- *   publish      history publisher: original evidence re-verified, people flags and unreviewed items held back
+ *   publish      history publisher: original evidence re-verified; unsafe or undecidable items excluded
+ * Nothing waits for a person: every exclusion is one line in <work>/exclusions.jsonl (id, stage, reason, model).
  */
 import { createHash } from "node:crypto";
 import { mkdir, readdir } from "node:fs/promises";
@@ -16,7 +17,8 @@ import type { Prompt } from "../packages/schema/catalog.ts";
 import { withPublisherDatabase } from "../ingest/database-publication.ts";
 import { prepareDailyStaging } from "../ingest/daily-publication.ts";
 import { withDailyStatus } from "../ingest/daily-status.ts";
-import { applyEnrichment, needsPeopleReview, type EnrichmentOutcome } from "../ingest/enrichment-review.ts";
+import { applyEnrichment, publicationBlocker, type EnrichmentOutcome } from "../ingest/enrichment-review.ts";
+import { recordExclusion, refusedIDs } from "../ingest/exclusion-log.ts";
 import { readHistoryAllowance } from "../ingest/history-allowance.ts";
 import { uniqueHistoryItems } from "../ingest/history-cohort.ts";
 import { readHistoryAvailability } from "../ingest/history-freshness.ts";
@@ -73,7 +75,7 @@ async function heldBySemanticReview() {
   }
   return latest;
 }
-const intakeTranslations = join(work, "translations");
+const intakeTranslations = join(work, "translations"), exclusionsPath = join(work, "exclusions.jsonl");
 /** Translation and its semantic check use the provider layer; every call is summarized in the control log. */
 async function routedProvider() {
   const id = values.provider ?? "anthropic-api";
@@ -93,8 +95,8 @@ switch (command) {
     const held = await heldBySemanticReview(), published = await live();
     const liveIDs = new Set(published.map(item => item.id)), removedIDs = new Set(moderationSchema.parse(await json(join(contentRoot, "moderation.json"), { removedIDs: [] })).removedIDs);
     const items: Prompt[] = [], findings = new Map<string, Finding[]>();
-    // Items whose translation the model declined wait for a person; they are never sent again.
-    const refusedPath = join(work, "refused-items.json"), refused = new Set(await json<string[]>(refusedPath, []));
+    // Content the model declined to translate is excluded for good and never sent again.
+    const refused = await refusedIDs(exclusionsPath);
     const catalogs = new Map<string, Prompt[]>();
     for (const [id, verdict] of held) {
       if (verdict.verdict === "pass" || liveIDs.has(id) || removedIDs.has(id) || refused.has(id)) continue;
@@ -125,14 +127,21 @@ switch (command) {
     })).catch(async error => {
       if (!(error instanceof TranslationRefused)) throw error;
       // Record the items and let this batch count as unanswered, so the other batches continue.
-      for (const segment of segments) for (const id of segmentItems.get(segment.id) ?? []) refused.add(id);
-      await atomic(refusedPath, [...refused].sort());
+      for (const id of new Set(segments.flatMap(segment => segmentItems.get(segment.id) ?? []))) if (!refused.has(id)) {
+        refused.add(id);
+        await recordExclusion(exclusionsPath, { id, stage: "translate", reason: "The model declined to translate this content", refused: true, provider: routed.id, model: routed.model });
+      }
       return { translations: [] };
     });
     const report = await runTranslations({ items, cache, provider, providerName: routed.id, model: routed.model, locales: ["zh-Hans"],
       concurrency: Number(values.concurrency ?? 3), maxRequests: 1000, maxUSD: 5, maxCharacters: 12000, maxOutputTokens: 24000,
       persist: async state => { await atomic(cachePath, state); } });
-    const localized = attachTranslations(items, cache).filter(item => !refused.has(item.id) && item.localization?.translations["zh-Hans"]);
+    const attached = attachTranslations(items, cache), localized = attached.filter(item => !refused.has(item.id) && item.localization?.translations["zh-Hans"]);
+    for (const item of attached) if (!refused.has(item.id) && !item.localization?.translations["zh-Hans"]) {
+      const ids = new Set(promptSegments(item).map(segment => segment.id));
+      const failure = report.failures.find(entry => entry.ids.some(id => ids.has(id)));
+      await recordExclusion(exclusionsPath, { id: item.id, stage: "translate", reason: `Translation rejected: ${failure?.reason ?? "incomplete"}`, provider: routed.id, model: routed.model });
+    }
     await atomic(join(work, "retranslated.json"), { schemaVersion: 1, version: "history-retranslated", prompts: localized });
     await atomic(join(work, "retranslate-origins.json"), Object.fromEntries(items.map(item => [item.id, held.get(item.id)!.directory])));
     console.log(JSON.stringify({ held: items.length, refused: refused.size, translated: localized.length, attempted: report.attempted, rejected: report.rejected, failed: report.failed, pendingSegments: report.pendingSegments, failures: report.failures?.slice(0, 4) }));
@@ -154,14 +163,19 @@ switch (command) {
             : await reviewTranslationSemanticsWith(reviewer, group, "zh-Hans", output, "high", record("history-intake:semantic"));
         } catch (error) {
           if (!(error instanceof ModelProviderError && error.code === "refused")) throw error;
-          // A declined review is final for this group: people decide, no other model is asked.
-          const refusedPath = join(work, "refused-items.json");
-          await atomic(refusedPath, [...new Set([...await json<string[]>(refusedPath, []), ...group.map(item => item.id)])].sort());
+          // A declined review is final for this group: excluded, and no other model is asked.
+          for (const item of group) await recordExclusion(exclusionsPath, { id: item.id, stage: "translationCheck", reason: "The model declined to review this content", refused: true, provider: reviewer.id, model: reviewer.model });
           held += group.length; continue;
         }
         if (!existing) await atomic(join(output, "result.json"), review);
         const approved = new Set(review.reviews!.filter(value => value.verdict === "pass").map(value => value.id));
-        for (const item of group) if (approved.has(item.id)) passed.push(item); else held++;
+        for (const item of group) {
+          if (approved.has(item.id)) { passed.push(item); continue; }
+          held++;
+          const finding = review.reviews!.find(value => value.id === item.id) as { issues?: Finding[] } | undefined;
+          await recordExclusion(exclusionsPath, { id: item.id, stage: "translationCheck", reason: `Translation held: ${finding?.issues?.map(issue => issue.reason).join(" / ") || "needs review"}`,
+            provider: reviewer.id, model: (review as { model?: string }).model ?? reviewer.model });
+        }
       }
     }));
     await atomic(join(work, "semantic-passed.json"), { schemaVersion: 1, version: "history-semantic-passed", prompts: passed });
@@ -203,7 +217,10 @@ switch (command) {
         now, excerpts: await json(join(contentRoot, "x-excerpt-reviews.json"), {}), apply: async (matched, unresolved, result) => {
           for (const item of matched) state[item.id] = { checkedAt: now, status: "ready", revision: item.source.revision, checkedBy: result.provider };
           // Omission never proves deletion; an unconfirmed source is withheld, not removed.
-          for (const item of unresolved) state[item.id] = { checkedAt: now, status: "withheld", checkedBy: result.provider };
+          for (const item of unresolved) {
+            state[item.id] = { checkedAt: now, status: "withheld", checkedBy: result.provider };
+            await recordExclusion(exclusionsPath, { id: item.id, stage: "source", reason: "Source post is gone or changed since collection", provider: result.provider });
+          }
           await atomic(join(root, "x-availability", "state.json"), state);
         } });
       console.log(JSON.stringify({ selected: selected.length, standalone: candidates.length, ...report }));
@@ -213,7 +230,7 @@ switch (command) {
   case "publish": {
     if (!values.run) throw new Error("--run <enrichment run> is required");
     const outcomes = join(work, "runs", values.run, "outcomes");
-    const report: HistoryPublicationReport & { enriched?: number; peopleReview?: string[]; unreviewed?: number } = { startedAt: new Date().toISOString(), published: false };
+    const report: HistoryPublicationReport & { enriched?: number; excluded?: number } = { startedAt: new Date().toISOString(), published: false };
     const allowance = await readHistoryAllowance();
     const reviewed = new Map((await json<{ prompts: Prompt[] }>(candidatesPath, { prompts: [] })).prompts.map(item => [item.id, reviewedContent(item)]));
     await withDailyStatus(contentRoot, report, async () => {
@@ -234,21 +251,23 @@ switch (command) {
         },
         // The publisher has already applied removals, holds, deduplication and source availability.
         limit: async items => {
-          const accepted: Prompt[] = [], people: string[] = [];
-          let unreviewed = 0;
+          const accepted: Prompt[] = [];
+          let excluded = 0;
+          const exclude = async (id: string, reason: string, model?: string) => { excluded++; await recordExclusion(exclusionsPath, { id, stage: "review", reason, ...(model ? { model } : {}) }); };
           for (const item of items) {
             const outcome = await json<EnrichmentOutcome | null>(join(outcomes, `${item.id}.json`), null);
             const media = await json<{ palette?: Palette; video?: { durationSeconds: number; hasAudio: boolean } } | null>(join(work, "media", item.id, "prepared.json"), null);
-            if (!outcome?.ok || !media || reviewed.get(item.id) !== reviewedContent(item)) { unreviewed++; continue; }
-            if (needsPeopleReview(outcome.evidence)) { people.push(item.id); continue; }
+            if (!outcome || !media) { await exclude(item.id, "No 2.0 review or prepared media"); continue; }
+            if (!outcome.ok) { await exclude(item.id, `2.0 review invalid: ${outcome.error}`, (outcome as { model?: string }).model); continue; }
+            if (reviewed.get(item.id) !== reviewedContent(item)) { await exclude(item.id, "Content changed after the 2.0 review"); continue; }
             // The earlier full-gallery visual label stands unless the new review is stricter.
             const enriched = applyEnrichment(item, outcome, { palette: media.palette, video: media.video, policy: "stricter-only" });
             // A new item is added only with a settled, publishable label.
-            if (enriched.presentation !== "general" && enriched.presentation !== "suggestive") { unreviewed++; continue; }
+            const blocker = publicationBlocker(outcome.evidence, enriched.presentation);
+            if (blocker) { await exclude(item.id, blocker, (outcome as { model?: string }).model); continue; }
             accepted.push(enriched);
           }
-          report.enriched = accepted.length; report.peopleReview = people; report.unreviewed = unreviewed;
-          await atomic(join(work, "people-review.json"), people);
+          report.enriched = accepted.length; report.excluded = excluded;
           return withPublisherDatabase(db => limitNewPublications(db, accepted, new Date(), allowance));
         },
       });

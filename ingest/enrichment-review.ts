@@ -44,13 +44,13 @@ ${presentationStandard}
 - sourceLanguage: the main language of the prompt text as a lowercase ISO 639-1 code (en, zh, ja, ko, …), or und when it has no natural-language text.
 - en: always required, even when the prompt is already English. English card title (at most 80 characters) and summary (one or two sentences) describing what the prompt makes. When the candidate provides englishCard, copy it.
 - shots: only when the prompt itself is written as two or more distinct shots or scenes in sequence (for example "Shot 1 … Shot 2 …" or timed segments). Number from 1; startSec and endSec only when stated; text is that shot's description from the prompt, in the prompt's language. Otherwise an empty list.
-- people: flags that send a candidate to a person before it is added; they never change other fields. realPerson yes when the prompt names, or the images show, a specific real identifiable individual (a celebrity, public figure or named private person), including requests to recreate a named person's likeness; unsure when someone looks like a specific recognisable person but you cannot tell; no for generic, fictional or anonymous people, and for templates that apply to the user's own uploaded photo. minor yes when the prompt says or the images plainly show that someone is a child or teenager; unsure when a depicted person may be under 18 and you cannot rule it out; no otherwise.
-Apart from the minor flag, do not infer age, ethnicity, identity or other personal traits of anyone depicted.
+- minors: none when nobody depicted or described may be under 18. safe when a child or teenager appears only in ordinary, non-sexual content where the child is part of the story or subject, such as illustration, education or a family scene. unsafe when anyone who is or may be under 18 is sexualized, shown in revealing clothing or poses, or treated as an interchangeable model for fashion, beauty or body-focused output, including templates that ask for a child's photo to restyle. uncertain when a depicted person may be under 18 and the output focuses on their body, attire or attractiveness, so age cannot be ruled out where it matters. Explain in minorsReason. unsafe and uncertain items are never published.
+Apart from the minors judgment, do not infer age, ethnicity, identity or other personal traits of anyone depicted.
 
 Facet ids:
 ${facetGroups.map(group => `${group}: ${facetDefinitions[group].map(facet => `${facet.id} (${facet.en})`).join(", ")}`).join("\n")}`;
 
-const peopleFlags = ["no", "yes", "unsure"] as const;
+export const minorJudgments = ["none", "safe", "unsafe", "uncertain"] as const;
 const nullable = (schema: JsonSchema): JsonSchema => ({ anyOf: [schema, { type: "null" }] });
 const object = (properties: Record<string, JsonSchema>): JsonSchema => ({ type: "object", additionalProperties: false, required: Object.keys(properties), properties });
 const string: JsonSchema = { type: "string" };
@@ -75,7 +75,8 @@ export const enrichmentOutputJSONSchema: JsonSchema = object({
     en: object({ title: string, summary: string }),
     shots: array(object({ index: { type: "integer" }, startSec: nullable({ type: "number" }), endSec: nullable({ type: "number" }), text: string })),
     vocabularyGaps: array(string),
-    people: object({ realPerson: enumOf(peopleFlags), minor: enumOf(peopleFlags) }),
+    minors: enumOf(minorJudgments),
+    minorsReason: string,
   })),
 });
 
@@ -100,7 +101,8 @@ const itemOutputSchema = z.object({
   en: englishCardSchema.optional(),
   shots: z.array(z.unknown()),
   vocabularyGaps: z.array(z.string().trim().min(1).max(80)).max(8),
-  people: z.object({ realPerson: z.enum(peopleFlags), minor: z.enum(peopleFlags) }).strict(),
+  minors: z.enum(minorJudgments),
+  minorsReason: z.string().trim().min(1).max(600),
 }).strict();
 
 export type EnrichmentFields = {
@@ -109,9 +111,17 @@ export type EnrichmentFields = {
   en: z.infer<typeof englishCardSchema>; shots?: z.infer<typeof shotsSchema>;
 };
 export type EnrichmentEvidence = { sourceLanguage: string; presentation: z.infer<typeof presentationSchema>; presentationReason: string; vocabularyGaps: string[];
-  people: { realPerson: typeof peopleFlags[number]; minor: typeof peopleFlags[number] } };
-/** New items with any people flag other than "no" wait for a person. */
-export const needsPeopleReview = (evidence: EnrichmentEvidence) => evidence.people.realPerson !== "no" || evidence.people.minor !== "no";
+  minors: typeof minorJudgments[number]; minorsReason: string };
+/** Why an item must not be published, decided automatically; undefined when nothing blocks it.
+ * A possible minor next to suggestive presentation is treated as uncertain. */
+export function publicationBlocker(evidence: EnrichmentEvidence, presentation = evidence.presentation): string | undefined {
+  if (evidence.minors === "unsafe") return `minors-unsafe: ${evidence.minorsReason}`;
+  if (evidence.minors === "uncertain") return `minors-uncertain: ${evidence.minorsReason}`;
+  if (evidence.minors === "safe" && presentation !== "general") return `minors-with-${presentation}: ${evidence.minorsReason}`;
+  if (presentation === "explicit") return "explicit";
+  if (presentation === "unknown") return "presentation-unknown";
+  return undefined;
+}
 export type EnrichmentOutcome =
   | { id: string; ok: true; fields: EnrichmentFields; evidence: EnrichmentEvidence }
   | { id: string; ok: false; error: string };
@@ -198,13 +208,13 @@ export function validateEnrichmentItem(candidate: EnrichmentCandidate, raw: unkn
   const fields: EnrichmentFields = { inputs: value.inputs, generation, variables: value.variables, facets: value.facets, en, ...(shots ? { shots } : {}) };
   const issues = enrichmentConsistencyIssues({ ...candidate.item, ...fields });
   if (issues.length) return { id, ok: false, error: issues[0].slice(0, 500) };
-  return { id, ok: true, fields, evidence: { sourceLanguage: value.sourceLanguage, presentation: value.presentation, presentationReason: value.presentationReason, vocabularyGaps: value.vocabularyGaps, people: value.people } };
+  return { id, ok: true, fields, evidence: { sourceLanguage: value.sourceLanguage, presentation: value.presentation, presentationReason: value.presentationReason, vocabularyGaps: value.vocabularyGaps, minors: value.minors, minorsReason: value.minorsReason } };
 }
 
 export type EnrichmentRecord = (summary: ModelCallSummary) => Promise<void>;
 
 /** One call. Provider errors (refusal included) propagate unchanged: the caller decides,
- * and a refusal sends the whole batch to people instead of another model. */
+ * and a refusal excludes the whole batch rather than trying another model. */
 export async function reviewEnrichmentBatch(provider: ModelProvider, candidates: readonly EnrichmentCandidate[],
   options: { effort?: Effort; timeoutMs?: number; record?: EnrichmentRecord } = {}): Promise<EnrichmentBatchResult> {
   const request = { ...enrichmentRequest(candidates, options.effort), ...(options.timeoutMs ? { timeoutMs: options.timeoutMs } : {}) };
