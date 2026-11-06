@@ -1177,3 +1177,7 @@ About 700 collected, reviewed and translated history items never went live becau
 ### 2026-11-06 — The pipeline decides every item; no manual review queue
 
 The owner removed the manual review step: every item is decided by the pipeline. Cases that used to wait for a person now fail closed. Model refusals, unclear presentation, insufficient source evidence and any item where minors appear in a sexualized, revealing or swappable-model context are excluded automatically, with the item ID, stage, reason and model logged. An item whose age cannot be judged and that involves a person's presentation is also excluded. Real people are handled by the existing automated rules. An excluded item may be judged again when it is collected or rechecked later. Safety standards do not change; only the human step is gone.
+
+### 2026-11-06 — Make the detail action one step after the first use
+
+The 2.0 boards ask for "one-step use": once a tool has been chosen in the use tray, the detail's main action names that tool and copies (or prefills) the Prompt and opens it in one tap. A long press offers "choose another tool". The tray still opens the first time, when the remembered tool is not among this item's choices, when the Prompt has blanks to fill, and as the fallback when the tool cannot be opened. UI tests launch with `-preferredPromptDestination none` so the tray path stays deterministic.
