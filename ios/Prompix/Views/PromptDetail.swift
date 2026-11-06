@@ -117,7 +117,7 @@ struct PromptDetail: View {
             ArrangementView {
                 ScrollView {
                     readingContent.padding(.bottom, 28).frame(maxWidth: 700).frame(maxWidth: .infinity)
-                }.preservingReadingPosition(readingPosition).readingChrome($actionsCollapsed).accessibilityIdentifier("detailReadingPane")
+                }.preservingReadingPosition(readingPosition).readingChrome($actionsCollapsed).readingBottomEdge().accessibilityIdentifier("detailReadingPane")
             } secondary: {
                 ScrollView {
                     largePreview.padding(.bottom, 24).frame(maxWidth: 600).frame(maxWidth: .infinity)
@@ -129,7 +129,7 @@ struct PromptDetail: View {
                     largePreview
                     readingContent
                 }.padding(.bottom, 28).frame(maxWidth: 700).frame(maxWidth: .infinity)
-            }.preservingReadingPosition(readingPosition).readingChrome($actionsCollapsed).accessibilityIdentifier("detailReadingPane")
+            }.preservingReadingPosition(readingPosition).readingChrome($actionsCollapsed).readingBottomEdge().accessibilityIdentifier("detailReadingPane")
         }
     }
     private var compactPreview: some View {
