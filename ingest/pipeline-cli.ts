@@ -7,6 +7,9 @@ import { trustSystemCertificates } from "./models/http.ts";
 import { createProvider, isProviderId, modelEnvironment, providerAvailability, providerDefinitions } from "./models/registry.ts";
 import { ModelProviderError, providerIds, type ModelImage } from "./models/types.ts";
 import { appendEvent, pipelineRoot, pipelineStages, readEvents, snapshot, stageLabels, updateConfig, type PipelineEvent, type PipelineSnapshot } from "./pipeline-control.ts";
+import { repo } from "./publication.ts";
+import { installWorker, restartWorker, uninstallWorker, workerPlistPath } from "./worker-launchd.ts";
+import { pipelineEnvironment, runMaintenance } from "./worker-maintenance.ts";
 
 const usage = `用法：npm run pipeline -- <命令> [参数]
 
@@ -25,12 +28,17 @@ const usage = `用法：npm run pipeline -- <命令> [参数]
 测试
   test-provider <提供方> [--model m] [--image 图片路径]   发一次很小的结构化请求
 
+后台进程（launchd 保活，开机自启；每 12 小时做一次来源维护复查）
+  worker install | uninstall | restart   安装、卸载，或在更新代码后重启
+  maintenance                            立刻做一次来源维护复查（X、ClawHub），确认已删的来源自动下架
+
 环节：${pipelineStages.join(", ")}
 提供方：${providerIds.join(", ")}`;
 
 const time = (value?: string) => value ? new Date(value).toLocaleString("zh-CN", { hour12: false, month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }) : "未知";
 const ago = (value: string) => { const minutes = Math.round((Date.now() - Date.parse(value)) / 60000); return minutes < 1 ? "刚刚" : minutes < 60 ? `${minutes} 分钟前` : `${Math.round(minutes / 60)} 小时前`; };
 const desiredLabel = { stopped: "已停止", running: "运行", paused: "暂停" } as const;
+const jobLabels: Record<string, string> = { maintenance: "来源维护复查" };
 
 function describeEvent(event: PipelineEvent): string {
   const head = `${time(event.at)}  ${event.actor}`;
@@ -39,6 +47,8 @@ function describeEvent(event: PipelineEvent): string {
     return `${head}  改了 ${changes.map(change => `${change.path}: ${JSON.stringify(change.from)} → ${JSON.stringify(change.to)}`).join("；") || "（无变化）"}${event.reason ? `（${event.reason}）` : ""}`;
   }
   if (event.type === "note") return `${head}  备注：${event.text}`;
+  if (event.type === "job.finished") return `${head}  ${jobLabels[String(event.job)] ?? event.job}完成：${event.summary}`;
+  if (event.type === "job.failed") return `${head}  ${jobLabels[String(event.job)] ?? event.job}失败：${event.error}`;
   if (event.type === "provider.test" || event.type === "model.call") {
     const tokens = event.usage as { inputTokens?: number; outputTokens?: number } | undefined;
     return `${head}  ${event.type === "provider.test" ? "测试" : "调用"} ${event.provider}·${event.model} ${event.ok ? "成功" : `失败（${event.error}）`} ${event.durationMs} ms${tokens?.inputTokens !== undefined ? ` · 输入 ${tokens.inputTokens} / 输出 ${tokens.outputTokens} token` : ""}`;
@@ -67,7 +77,9 @@ function describeStatus(view: PipelineSnapshot, brief: boolean): string {
     const route = config.routing[stage];
     return `  ${stageLabels[stage]}：${route.provider} · ${route.model ?? providerDefinitions[route.provider].defaultModel ?? "未指定模型"}${route.effort ? ` · ${route.effort}` : ""}`;
   });
-  return [workerLine, desired, ...describeLegacy(view.legacy), "模型路由：", ...routes,
+  const jobs = Object.entries(worker?.jobs ?? {}).map(([name, job]) => `  ${jobLabels[name] ?? name}：${time(job.startedAt)} ${
+    !job.finishedAt ? "进行中" : job.ok ? `完成，${job.summary ?? ""}` : `失败，${job.summary ?? ""}`}`);
+  return [workerLine, desired, ...(jobs.length ? ["后台任务：", ...jobs] : []), ...describeLegacy(view.legacy), "模型路由：", ...routes,
     "最近记录：", ...(view.events.length ? view.events.slice(-5).map(event => `  ${describeEvent(event)}`) : ["  （还没有记录）"]),
     `控制目录：${view.root}`].join("\n");
 }
@@ -165,6 +177,30 @@ export async function main(argv = process.argv.slice(2)) {
       if (!rest.length) throw new Error("请写备注内容");
       await appendEvent(root, actorOf(values), "note", { text: rest.join(" ") });
       console.log("已记录");
+      return;
+    }
+    case "worker": {
+      const action = rest[0];
+      if (action === "install") {
+        await installWorker({ node: process.execPath, repo, root });
+        await appendEvent(root, actorOf(values), "worker.installed", { plist: workerPlistPath(), repo });
+        console.log(`已安装并启动后台进程（${workerPlistPath()}），代码目录 ${repo}`);
+      } else if (action === "uninstall") {
+        await uninstallWorker();
+        await appendEvent(root, actorOf(values), "worker.uninstalled", {});
+        console.log("已停止并卸载后台进程");
+      } else if (action === "restart") {
+        await restartWorker();
+        await appendEvent(root, actorOf(values), "worker.restarted", {});
+        console.log("已重启后台进程");
+      } else throw new Error("用法：worker install | uninstall | restart");
+      return;
+    }
+    case "maintenance": {
+      const actor = actorOf(values);
+      const report = await runMaintenance(await pipelineEnvironment());
+      await appendEvent(root, actor, "job.finished", { job: "maintenance", summary: `手动：来源已删 ${report.removed} 条，本次下架 ${report.takenDown.length} 条`, report });
+      console.log(values.json ? JSON.stringify(report) : `来源维护复查完成：来源已删 ${report.removed} 条，本次下架 ${report.takenDown.length} 条`);
       return;
     }
     case "test-provider":
