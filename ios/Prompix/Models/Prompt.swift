@@ -47,6 +47,8 @@ struct Prompt: Codable, Identifiable, Hashable {
     var displayKind: String { isSkill ? "Skill" : kind.title }
     var displaySymbol: String { isSkill ? "square.stack.3d.up" : kind.symbol }
     var displayModel: String { Self.localizedModel(model) }
+    /// Sources that never named a model say "Unspecified"; the interface then names none.
+    static func namesModel(_ value: String) -> Bool { value.caseInsensitiveCompare("Unspecified") != .orderedSame }
     static func localizedModel(_ value: String) -> String {
         switch value {
         case "通用对话模型": String(localized: "通用对话模型")

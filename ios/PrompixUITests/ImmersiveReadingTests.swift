@@ -188,7 +188,8 @@ import UIKit
         XCTAssertTrue(card.waitForExistence(timeout: 3))
     }
     /// Uses the live content service, since bundled works carry no creator identities.
-    func testCreatorPageLeadsWithSaving() {
+    func testCreatorPageLeadsWithSaving() throws {
+        guard ProcessInfo.processInfo.environment["PROMPIX_LIVE_UI"] == "1" else { throw XCTSkip("Explicit live service check only") }
         app.terminate()
         app.launchArguments = ["-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN"]
         app.launchPrompix()
@@ -205,6 +206,28 @@ import UIKit
         XCTAssertEqual(save.label, "取消收藏创作者")
         save.tap()
         XCTAssertEqual(save.label, "收藏创作者")
+    }
+    /// Live: an enriched image and video show their needs, glow and shots.
+    func testEnrichedDetailsShowNeedsAndShots() throws {
+        guard ProcessInfo.processInfo.environment["PROMPIX_LIVE_UI"] == "1" else { throw XCTSkip("Explicit live service check only") }
+        app.terminate()
+        app.launchArguments = ["-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN"]
+        app.launchPrompix()
+        for kind in ["kind-image", "kind-video"] {
+            XCTAssertTrue(app.buttons[kind].waitForExistence(timeout: 15)); app.buttons[kind].tap()
+            sleep(4) // Let the served page replace the cached one before choosing a card.
+            let card = app.scrollViews["discoveryScroll"].buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'prompt-'")).firstMatch
+            XCTAssertTrue(card.waitForExistence(timeout: 15)); card.tap()
+            XCTAssertTrue(app.buttons["usePrompt"].waitForExistence(timeout: 15))
+            sleep(2)
+            capture("enriched-\(kind)")
+            if kind == "kind-video" {
+                let shots = app.descendants(matching: .any)["promptShots"]
+                for _ in 0..<4 { if shots.exists { break }; app.swipeUp() }
+                capture("enriched-video-shots")
+            }
+            app.buttons["closePromptDetail"].tap()
+        }
     }
     func testRefinedChromeAndInteractiveReturn() {
         XCTAssertTrue(app.buttons["discoveryFilters"].waitForExistence(timeout: 10))

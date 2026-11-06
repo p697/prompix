@@ -34,8 +34,8 @@ struct Artwork: View {
                 }
                 if item.kind == .video && showsVideoBadge {
                     VStack { Spacer(); HStack {
-                        Image(systemName: "play.fill").font(.system(size: 9, weight: .semibold))
-                            .foregroundStyle(.white).padding(.horizontal, 8).padding(.vertical, 6).background(.black.opacity(0.45), in: Capsule())
+                        Text(item.durationLabel.map { "▶ " + $0 } ?? "▶").font(Typography.meta(size: 10)).tracking(0.6)
+                            .foregroundStyle(.white).padding(.horizontal, 8).padding(.vertical, 5).background(.black.opacity(0.45), in: Capsule())
                         Spacer()
                     }.padding(8) }
                 }
