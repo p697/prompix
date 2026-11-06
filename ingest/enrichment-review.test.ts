@@ -52,7 +52,7 @@ test("a valid answer becomes a fully enriched item without touching the text", (
   const outcome = validateEnrichmentItem(candidate(original), output());
   assert.ok(outcome.ok, !outcome.ok ? outcome.error : "");
   const palette = paletteFromPixels(new Uint8Array([10, 10, 10, 10, 10, 10, 200, 0, 0, 255, 255, 255]));
-  const enriched = applyEnrichment(original, outcome, { palette, policy: "keep-unless-unknown" });
+  const enriched = applyEnrichment(original, outcome, { palette, policy: "stricter-only" });
   for (const field of ["title", "summary", "prompt", "example", "tags", "model"] as const) assert.deepEqual(enriched[field], original[field]);
   assert.deepEqual(enrichedPromptIssues(enriched), []);
   assert.deepEqual(enriched.generation, { modelFamily: "gpt-image", modelVersion: "2", mode: "i2i", outputAspect: "9:16" }, "the label decides the family");
@@ -113,19 +113,23 @@ test("source text stays in the untrusted block and the schema is vendor-neutral"
 test("existing English translations are reused instead of the model's wording", () => {
   const translated = item({ localization: { sourceLanguage: "en", sourceFingerprint: translationFingerprint(item()), translations: {
     en: { title: "Existing title", summary: "Existing summary.", prompt: "p", example: "e", previewLabel: "Image" } } } });
-  const outcome = validateEnrichmentItem(candidate(translated), output("x-post-1", { en: null }));
+  const outcome = validateEnrichmentItem(candidate(translated), output("x-post-1", { en: { title: "Model wording", summary: "Model summary." } }));
   assert.ok(outcome.ok);
   assert.deepEqual(outcome.fields.en, { title: "Existing title", summary: "Existing summary." });
   assert.equal(validateEnrichmentItem(candidate(), output("x-post-1", { en: null })).ok, false, "new items need English");
 });
 
-test("backfill keeps existing labels and re-judges only unknown", () => {
-  const outcome = validateEnrichmentItem(candidate(), output("x-post-1", { presentation: "suggestive" }));
-  assert.ok(outcome.ok);
+test("backfill re-judges unknown and only ever tightens settled labels", () => {
   const palette = paletteFromPixels(new Uint8Array([0, 0, 0, 128, 128, 128, 255, 255, 255]));
-  assert.equal(applyEnrichment(item(), outcome, { palette, policy: "keep-unless-unknown" }).presentation, "general");
-  assert.equal(applyEnrichment(item({ presentation: "unknown" }), outcome, { palette, policy: "keep-unless-unknown" }).presentation, "suggestive");
-  assert.equal(applyEnrichment(item(), outcome, { palette, policy: "label" }).presentation, "suggestive");
+  const judged = (presentation: string) => { const outcome = validateEnrichmentItem(candidate(), output("x-post-1", { presentation })); assert.ok(outcome.ok); return outcome; };
+  const apply = (from: Prompt["presentation"], to: string, policy: "label" | "stricter-only" = "stricter-only") =>
+    applyEnrichment(item({ presentation: from }), judged(to), { palette, policy }).presentation;
+  assert.equal(apply("general", "suggestive"), "suggestive");
+  assert.equal(apply("suggestive", "general"), "suggestive", "never loosened");
+  assert.equal(apply("suggestive", "unknown"), "suggestive");
+  assert.equal(apply("unknown", "general"), "general");
+  assert.equal(apply("unknown", "unknown"), "unknown");
+  assert.equal(apply("suggestive", "general", "label"), "general", "new items take the review's label");
 });
 
 test("multi-shot prompts keep numbered shots; one shot is not a sequence", () => {

@@ -34,7 +34,23 @@
 - 返回给模型的 JSON Schema 只用类型、枚举和必填，不带长度、数值、数组长度约束（有的厂商会拒收），精确限制由 zod 在本地再校验一遍。
 - 一条不合格（词表外的值、超过数量上限、占位符不在原文里、模式和类型不符、参考图模式却不要输入）只判这一条失败；条目顺序或 id 对不上判整包失败。
 - 拒答原样抛出，不换模型重试：调用方把整包送人工。
-- `applyEnrichment(item, outcome, { palette, video, policy })` 生成新条目，正文字段一律不动。`policy: "label"` 用于新条目，以模型的尺度为准；`"keep-unless-unknown"` 用于存量，已有标签不变，只重判 unknown。
+- `applyEnrichment(item, outcome, { palette, video, policy })` 生成新条目，正文字段一律不动。`policy: "label"` 用于新条目，以模型的尺度为准；`"stricter-only"` 用于存量：unknown 重判；已有标签只能变严（general→suggestive），不会放宽。
+
+## 补字段命令
+
+`scripts/enrich-catalog.ts`。所有工作文件放在 `--work` 指定的外置目录（媒体、每条结果、批次记录），不进仓库。
+
+```bash
+W=/Volumes/Lucy-SSD/Prompix-Codex/enrichment-2.0/full
+npx tsx scripts/enrich-catalog.ts review --work $W --catalog /external/catalog.json --run sonnet-55 \
+  --provider anthropic-api --model claude-sonnet-5-5 --batch 6 --concurrency 16 --max-concurrency 32 --budget 80
+npx tsx scripts/enrich-catalog.ts report --work $W --catalog /external/catalog.json --runs sonnet-55
+node --env-file=$HOME/.config/prompix/database.env --env-file=$HOME/.config/prompix/publication.env \
+  --import tsx scripts/enrich-catalog.ts dry-run --work $W --run sonnet-55   # 先看报告，再把 dry-run 换成 publish
+```
+
+- `review`：下载并校验镜像媒体（与图片审核同一套校验），算 palette，按批调用。媒体准备最多 4 个并发；模型调用从 `--concurrency` 起步，一分钟内没遇到限流就翻倍到 `--max-concurrency`，遇到 429 减半并暂停 30 秒。可中断后重跑，已有结果的条目跳过。拒答的条目写入 `human-queue.jsonl`，不重试、不换模型；超时和临时失败最多重试 4 次；整包格式错误时用同一模型逐条重试一次。按实测 token 和标价估算累计花费，到 `--budget` 停止派发。
+- `publish`：在发布锁下读取线上当前版本，只给审核时内容未变的条目补字段，正文一律不动。unknown 用新判定；已有尺度只许变严。判成 explicit 的必须先用 `npm run remove` 登记下架，否则整次发布中止。`dry-run` 只写出发布输入和报告。
 
 ## 存量补字段进度
 

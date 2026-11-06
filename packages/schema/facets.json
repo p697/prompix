@@ -22,6 +22,8 @@
     { "id": "coding", "zh": "编程开发", "en": "Coding", "interest": "coding" },
     { "id": "automation", "zh": "自动化", "en": "Automation", "interest": "skills" },
     { "id": "everyday", "zh": "日常生活", "en": "Everyday life", "interest": "lifestyle" },
+    { "id": "wallpapers", "zh": "壁纸", "en": "Wallpapers", "interest": "illustration" },
+    { "id": "stickers", "zh": "表情与贴纸", "en": "Stickers & emoji", "interest": "illustration" },
     { "id": "fun", "zh": "好玩一点", "en": "Just for fun", "interest": "lifestyle" }
   ],
   "style": [
