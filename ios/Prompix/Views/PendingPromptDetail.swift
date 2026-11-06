@@ -16,23 +16,23 @@ struct PendingPromptDetail: View {
             if #available(iOS 27.1, *), preview.hasDetailMedia {
                 ArrangementView {
                     ScrollView {
-                        VStack(alignment: .leading, spacing: 25) {
+                        VStack(alignment: .leading, spacing: 0) {
                             if !mediaPaneVisible { media }
                             reading
                         }.padding(.bottom, 28).frame(maxWidth: 700).frame(maxWidth: .infinity)
-                    }
+                    }.ignoresSafeArea(edges: mediaPaneVisible ? [] : .top)
                         .preservingReadingPosition(position).readingChrome($actionsCollapsed).readingBottomEdge().accessibilityIdentifier("detailReadingPane")
                 } secondary: {
-                    ScrollView { media.padding(.bottom, 24).frame(maxWidth: 600).frame(maxWidth: .infinity) }
+                    ScrollView { media.padding(.bottom, 24).frame(maxWidth: 600).frame(maxWidth: .infinity) }.ignoresSafeArea(edges: .top)
                         .preservingReadingPosition(position, media: true).reportsPaneVisibility($mediaPaneVisible).accessibilityIdentifier("detailMediaPane")
                 }.arrangementViewStyle(.split.axes(.horizontal))
             } else {
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 25) {
+                    VStack(alignment: .leading, spacing: 0) {
                         media
                         reading
                     }.padding(.bottom, 28).frame(maxWidth: 700).frame(maxWidth: .infinity)
-                }.preservingReadingPosition(position).readingChrome($actionsCollapsed).readingBottomEdge().accessibilityIdentifier("detailReadingPane")
+                }.ignoresSafeArea(edges: preview.hasDetailMedia ? .top : []).preservingReadingPosition(position).readingChrome($actionsCollapsed).readingBottomEdge().accessibilityIdentifier("detailReadingPane")
             }
         }.foregroundStyle(Palette.ink)
             .onChange(of: actionsCollapsed) { _, value in position.actionsCollapsed = value }
@@ -52,7 +52,7 @@ struct PendingPromptDetail: View {
     }
     @ViewBuilder private var media: some View {
         if preview.hasDetailMedia {
-            PromptDetailArtwork(preview: preview).artworkGlow(preview.palette).padding(.horizontal, 12).padding(.top, 8).accessibilityIdentifier("detailPreviewArtwork")
+            DetailHero(preview: preview, title: card.title).accessibilityIdentifier("detailPreviewArtwork")
         }
     }
     private var reading: some View {
@@ -94,12 +94,64 @@ struct PromptDetailHeading: View {
     }
 }
 
-struct PromptDetailArtwork: View {
+/// The work edge to edge, fading into the page. Tall work is cropped to 3:4 so the
+/// title stays on the first screen; the full frame opens on tap. Several images
+/// page sideways in place, with a counter.
+struct DetailHero: View {
     let preview: ContentPreview
+    var title = ""
+    var open: ((Int) -> Void)? = nil
+    @State private var page = 0
+    private var urls: [URL] { preview.media?.galleryURLs ?? [] }
+    private var ratio: Double {
+        max(0.75, min(1.8, preview.media?.aspectRatio ?? (preview.kind == .image ? 0.95 : 1.15)))
+    }
     var body: some View {
-        Artwork(preview: preview)
-            .aspectRatio(preview.media?.aspectRatio.map { max(0.65, min(1.8, $0)) } ?? (preview.kind == .image ? 0.95 : 1.15), contentMode: .fit)
-            .clipShape(RoundedRectangle(cornerRadius: PromptCardGeometry.cornerRadius, style: .continuous))
+        Color.clear.aspectRatio(ratio, contentMode: .fit)
+            .overlay { pages }
+            .clipped()
+            .overlay {
+                VStack(spacing: 0) {
+                    LinearGradient(colors: [Palette.paper.opacity(0.35), Palette.paper.opacity(0)], startPoint: .top, endPoint: .bottom).frame(height: 130)
+                    Spacer(minLength: 0)
+                    LinearGradient(colors: [Palette.paper.opacity(0), Palette.paper], startPoint: .top, endPoint: .bottom).frame(height: 110)
+                }.allowsHitTesting(false).accessibilityHidden(true)
+            }
+            .overlay(alignment: .bottomTrailing) {
+                if urls.count > 1 {
+                    Text(verbatim: "\(page + 1) / \(urls.count)").font(Typography.meta(size: 11)).tracking(1).monospacedDigit()
+                        .padding(.horizontal, 10).frame(height: 26).readingGlass()
+                        .padding(.trailing, 16).padding(.bottom, 44)
+                        .allowsHitTesting(false).accessibilityHidden(true)
+                }
+            }
+            .contentShape(Rectangle())
+            .onTapGesture { open?(page) }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(title)
+            .accessibilityValue(urls.count > 1 ? "\(page + 1) / \(urls.count)" : "")
+            .accessibilityAddTraits(open == nil ? .isImage : [.isImage, .isButton])
+            .accessibilityAction { open?(page) }
+            .accessibilityActions {
+                if urls.count > 1 {
+                    if page < urls.count - 1 { Button(String(localized: "下一张")) { page += 1 } }
+                    if page > 0 { Button(String(localized: "上一张")) { page -= 1 } }
+                }
+            }
+    }
+    @ViewBuilder private var pages: some View {
+        if urls.count > 1 {
+            TabView(selection: $page) {
+                ForEach(urls.indices, id: \.self) { index in
+                    Group {
+                        if index == 0 { Artwork(preview: preview, fillsFrame: true, showsVideoBadge: false) }
+                        else { RemoteImage(url: urls[index], contentMode: .fill) }
+                    }.frame(maxWidth: .infinity, maxHeight: .infinity).clipped().tag(index)
+                }
+            }.tabViewStyle(.page(indexDisplayMode: .never))
+        } else {
+            Artwork(preview: preview, fillsFrame: true, showsVideoBadge: false)
+        }
     }
 }
 
