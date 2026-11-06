@@ -322,6 +322,7 @@ import CryptoKit
             app.launchArguments = ["--legacy-feed", "--simulate-network-failure", "-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh-Hans"]
             app.launchPrompix()
             XCTAssertFalse(app.otherElements["catalogUpdateStatus"].exists)
+            app.revealDiscoveryRails()
             XCTAssertTrue(app.buttons["allCreators"].exists)
         }
         func openOriginalEditor() {
@@ -532,6 +533,7 @@ import CryptoKit
         directoryHistory.append("After cached launch: \(directory.path)")
         XCTAssertEqual(try readSnapshot(CatalogSnapshot.self, from: directory, file: "catalog.json").version, oldCatalog.version,
                        "The app launched by XCTest must use the staged legacy catalog.")
+        app.revealDiscoveryRails()
         XCTAssertTrue(app.staticTexts["68"].exists)
         XCTAssertTrue(app.buttons["allCreators"].isHittable)
         XCTAssertTrue(app.buttons["loadCreators"].isHittable)
@@ -603,6 +605,7 @@ import CryptoKit
         XCTAssertFalse(creatorIDs.isEmpty)
         XCTAssertTrue(favorites.allSatisfy { saved in catalog.prompts.contains { $0.id == saved.id } },
                       "The acceptance seeds must still be published; restage if they were intentionally removed.")
+        app.revealDiscoveryRails()
         XCTAssertTrue(app.staticTexts[catalog.prompts.count.formatted()].exists)
         XCTAssertFalse(app.buttons["loadCreators"].exists)
         XCTAssertTrue(app.buttons["allCreators"].isHittable)
@@ -642,6 +645,7 @@ import CryptoKit
             throw XCTSkip("Stage the legacy creatorless catalog in a dedicated simulator before this test.")
         }
         launch()
+        app.revealDiscoveryRails()
         XCTAssertTrue(app.staticTexts["68"].exists)
         XCTAssertTrue(app.buttons["allCreators"].isHittable)
         XCTAssertTrue(app.buttons["loadCreators"].isHittable)
@@ -706,6 +710,7 @@ import CryptoKit
 
     func testSavedHeaderAndCreatorEntryAtLargeText() throws {
         launch()
+        app.revealDiscoveryRails()
         let allCreators = app.buttons["allCreators"]
         XCTAssertTrue(allCreators.isHittable)
         capture("feedback-large-home")
@@ -805,6 +810,7 @@ import CryptoKit
         }, object: nil)
         XCTAssertEqual(XCTWaiter.wait(for: [downloaded], timeout: 90), .completed)
         XCTAssertEqual(try? Data(contentsOf: try acceptanceDirectory().appendingPathComponent("drafts.json")), drafts)
+        app.revealDiscoveryRails()
         XCTAssertTrue(app.buttons["allCreators"].exists)
         capture("independent-01-refreshed-discovery")
         app.selectPrompixTab("搜索")
@@ -1606,6 +1612,7 @@ import CryptoKit
 
     func testCreatorAndSkillJourney() {
         launch()
+        app.revealDiscoveryRails()
         XCTAssertTrue(app.buttons["allCreators"].waitForExistence(timeout: 10), "Stage the creator/Skill candidate catalog before running this journey.")
         capture("01-home-creators-and-collections")
         let creator = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'creator-' ")).firstMatch
@@ -1655,6 +1662,7 @@ import CryptoKit
                          ("pt-BR", "Português (Brasil)"), ("fr", "Français"), ("de", "Deutsch")]
         for (language, contentLanguage) in languages {
             launch(language)
+            app.revealDiscoveryRails()
             XCTAssertTrue(app.buttons["allCreators"].waitForExistence(timeout: 5))
             capture("language-\(language)-home")
             app.buttons["allCreators"].tap()
@@ -1751,6 +1759,7 @@ import CryptoKit
         measure(metrics: [XCTApplicationLaunchMetric(waitUntilResponsive: true)], options: options) {
             app.terminate()
             launch(locale)
+            app.revealDiscoveryRails()
             XCTAssertTrue(app.staticTexts[catalog.prompts.count.formatted()].exists)
             XCTAssertTrue(app.buttons["allCreators"].exists)
             XCTAssertTrue(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'creator-' ")).firstMatch.exists)
@@ -2026,7 +2035,8 @@ extension XCUIApplication {
         }
         if buttons["kind-all"].isHittable { buttons["kind-all"].tap() }
         let all = buttons["allCollections"]
-        for _ in 0..<5 { if all.isHittable { break }; swipeDown() }
+        revealDiscoveryRails()
+        for _ in 0..<3 { if all.isHittable { break }; scrollViews["discoveryScroll"].swipeUp(velocity: .slow) }
         XCTAssertTrue(all.isHittable); all.tap()
     }
     @MainActor func expandPromptInformation() {
@@ -2045,6 +2055,15 @@ extension XCUIApplication {
         let target = tab.exists ? tab : buttons.matching(NSPredicate(format: "label == %@", title)).firstMatch
         XCTAssertTrue(target.waitForExistence(timeout: 5))
         target.tap()
+    }
+    /// Creators and uses sit a screen or two into the discover feed.
+    @MainActor func revealDiscoveryRails() {
+        let rail = buttons["allCreators"], scroll = scrollViews["discoveryScroll"]
+        for _ in 0..<10 {
+            if rail.exists && rail.isHittable { return }
+            scroll.swipeUp(velocity: .slow)
+        }
+        XCTAssertTrue(rail.isHittable, "The creator rail must be reachable inside the feed")
     }
     /// Settings live in the Saved tab's header.
     @MainActor func openPrompixSettings() {

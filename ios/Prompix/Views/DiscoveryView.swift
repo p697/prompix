@@ -97,17 +97,13 @@ struct DiscoverView: View {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 14) {
                         Group {
-                            if !isFiltered {
-                                CreatorRail()
-                                CollectionRail(query: feedQuery).padding(.bottom, 6)
-                            }
                             discoveryContext
                             if skillsOnly {
                                 Text(String(localized: "可在支持 Agent Skills 的工具中使用，包含完整说明与源文件；具体依赖请查看详情。"))
                                     .font(.subheadline).foregroundStyle(Palette.muted).padding(.horizontal, 20)
                             }
                             if let feed = library.feed {
-                                FeedResults(store: feed.discovery, query: feedQuery, loadsOnAppear: false, fallback: items, layout: feedLayout)
+                                FeedResults(store: feed.discovery, query: feedQuery, loadsOnAppear: false, fallback: items, layout: feedLayout, interlude: rails)
                             } else if items.isEmpty {
                                 if needsFirstVideoUpdate {
                                     ContentUnavailableView {
@@ -125,7 +121,7 @@ struct DiscoverView: View {
                                     ContentUnavailableView(String(localized: "暂无匹配内容"), systemImage: "sparkle", description: Text(String(localized: "试试其他分类，或清除筛选条件。")))
                                 }
                             } else {
-                                PromptGrid(items: items).padding(.horizontal, PromptGridLayout.inset)
+                                FeedInterleave(items: items, interlude: rails) { PromptGrid(items: $0).padding(.horizontal, PromptGridLayout.inset) }
                             }
                         }
                     }.id("discovery-top").padding(.bottom, 24)
@@ -177,6 +173,14 @@ struct DiscoverView: View {
                 if feedSort == "recommended" { await library.feed?.discovery.load(feedQuery, force: true) }
             }
         }
+    }
+    // Creators and uses sit a screen or two into the feed, so the first screen is all work.
+    private var rails: AnyView? {
+        guard !isFiltered else { return nil }
+        return AnyView(VStack(alignment: .leading, spacing: 14) {
+            CreatorRail()
+            CollectionRail(query: feedQuery)
+        })
     }
     private func selectKind(_ next: PromptKind?, _ skills: Bool) {
         kind = next; skillsOnly = skills; topic = nil; model = nil
