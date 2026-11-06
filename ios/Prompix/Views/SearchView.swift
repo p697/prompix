@@ -51,12 +51,8 @@ struct SearchView: View {
                 LazyVStack(alignment: .leading, spacing: 20) {
                     KindPicker(selection: $kind, skillsOnly: $skillsOnly)
                     if isBrowsing {
-                        Text(String(localized: "搜索全部已发布内容，联网时自动更新。"))
-                            .font(.footnote).foregroundStyle(Palette.muted)
-                            .fixedSize(horizontal: false, vertical: true).padding(.horizontal, 20)
-                        browseSuggestions
-                        CollectionRail()
-                        CreatorRail()
+                        if !recent.isEmpty { recentSearches }
+                        SearchUseTiles()
                     } else {
                         searchResults
                     }
@@ -66,7 +62,7 @@ struct SearchView: View {
             .scrollDismissesKeyboard(.interactively)
             .plainTopEdge().paperScreen()
             .navigationTitle(String(localized: "搜索"))
-            .navigationBarTitleDisplayMode(.inline)
+            .navigationBarTitleDisplayMode(.large)
             .searchable(text: searchText, isPresented: $searchPresented, prompt: String(localized: "搜索 Prompt、Skills 或创作者"))
             .autocorrectionDisabled().textInputAutocapitalization(.never)
             .onSubmit(of: .search) { rememberQuery() }
@@ -74,16 +70,7 @@ struct SearchView: View {
                 await library.refresh(force: true)
                 await library.feed?.search.load(FeedQuery(kind: skillsOnly ? "skill" : kind?.rawValue, q: query), force: true)
             }
-            .task { await library.refresh() }
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        Task { await library.refresh(force: true) }
-                    } label: {
-                        Label(String(localized: "更新内容"), systemImage: "arrow.clockwise")
-                    }.disabled(library.isRefreshing).accessibilityIdentifier("refreshSearchCatalog")
-                }
-            })
+            .task { await library.refresh() })
         }
         .task(id: isSelected ? activation : nil) {
             guard isSelected, handledActivation != activation else { return }
@@ -123,43 +110,28 @@ struct SearchView: View {
         }
     }
 
-    private var browseSuggestions: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            if !recent.isEmpty {
-                HStack {
-                    Text(String(localized: "最近搜索")).font(.subheadline.weight(.medium))
-                        .accessibilityAddTraits(.isHeader)
-                    Spacer()
-                    Button(String(localized: "清除")) {
-                        recent = []
-                        UserDefaults.standard.removeObject(forKey: "recentSearches")
-                    }.font(.footnote).frame(minHeight: 44).accessibilityIdentifier("clearRecentSearches")
-                }
-                ForEach(recent, id: \.self) { term in
-                    searchSuggestion(term, symbol: "clock")
-                }
-            } else {
-                Text(String(localized: "试试这些用途")).font(.subheadline.weight(.medium))
+    private var recentSearches: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text(String(localized: "最近")).font(.subheadline.weight(.semibold)).foregroundStyle(Palette.muted)
                     .accessibilityAddTraits(.isHeader)
-                ForEach(["塔罗", "网站", "电影"], id: \.self) { term in
-                    searchSuggestion(NSLocalizedString(term, comment: "Suggested search"), symbol: "magnifyingglass")
-                }
+                Spacer()
+                Button(String(localized: "清除")) {
+                    recent = []
+                    UserDefaults.standard.removeObject(forKey: "recentSearches")
+                }.font(.footnote).foregroundStyle(Palette.muted).frame(minHeight: 44).accessibilityIdentifier("clearRecentSearches")
+            }.padding(.horizontal, 20)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(recent, id: \.self) { term in
+                        Button { query = term; rememberQuery() } label: {
+                            Text(term).font(.subheadline).padding(.horizontal, 14).frame(minHeight: 34)
+                                .background(Palette.soft, in: Capsule()).frame(minHeight: 44).contentShape(Rectangle())
+                        }.buttonStyle(.plain).accessibilityIdentifier("searchSuggestion-\(term)")
+                    }
+                }.padding(.horizontal, 20)
             }
-        }.padding(.horizontal, 20)
-    }
-
-    private func searchSuggestion(_ term: String, symbol: String) -> some View {
-        Button {
-            query = term
-            rememberQuery()
-        } label: {
-            HStack(spacing: 12) {
-                Image(systemName: symbol).font(.footnote).foregroundStyle(Palette.muted)
-                Text(term).font(.body)
-                Spacer(minLength: 12)
-                Image(systemName: "arrow.up.left").font(.footnote).foregroundStyle(Palette.muted)
-            }.frame(minHeight: 44).contentShape(Rectangle())
-        }.buttonStyle(.plain).accessibilityIdentifier("searchSuggestion-\(term)")
+        }
     }
 
     @ViewBuilder private var searchResults: some View {
@@ -230,4 +202,46 @@ private struct LocalSearchRequest: Equatable {
     let query: PromptQuery
     let catalog: [Prompt]
     let includesCreators: Bool
+}
+
+/// Four uses as photo tiles; the full list sits behind "查看全部".
+private struct SearchUseTiles: View {
+    @Environment(Library.self) private var library
+    private var collections: [Collection] {
+        ["portraits", "graphics", "video", "web"].compactMap { id in Collection.all.first { $0.id == id } }
+    }
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text(String(localized: "按用途")).font(.subheadline.weight(.semibold)).foregroundStyle(Palette.muted)
+                    .accessibilityAddTraits(.isHeader)
+                Spacer()
+                NavigationLink { CollectionsDirectory() } label: {
+                    Text(String(localized: "查看全部")).font(.footnote).foregroundStyle(Palette.muted).frame(minHeight: 44)
+                }.accessibilityIdentifier("searchAllCollections")
+            }
+            LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], spacing: 8) {
+                ForEach(collections) { collection in
+                    NavigationLink { CollectionDetail(collection: collection) } label: { tile(collection) }
+                        .buttonStyle(.cardPress).accessibilityIdentifier("searchUse-\(collection.id)")
+                }
+            }
+        }.padding(.horizontal, 20)
+    }
+    /// The service's browse covers first, then the bundled catalog.
+    private func cover(_ collection: Collection) -> ContentPreview? {
+        let served = library.feed?.browse.value?.collections.first { $0.id == collection.id }?.covers.map(ContentPreview.init) ?? []
+        return (served + collection.previews(in: library)).first { !$0.usesTextArtwork && !library.isRemoved(id: $0.id) }
+    }
+    private func tile(_ collection: Collection) -> some View {
+        ZStack(alignment: .bottomLeading) {
+            Palette.soft
+            if let cover = cover(collection) {
+                Artwork(preview: cover, compact: true, fillsFrame: true, showsVideoBadge: false)
+                LinearGradient(colors: [.black.opacity(0), .black.opacity(0.6)], startPoint: .top, endPoint: .bottom)
+            }
+            Text(collection.title).font(.subheadline.weight(.semibold)).foregroundStyle(.white)
+                .lineLimit(2).multilineTextAlignment(.leading).padding(12)
+        }.frame(height: 84).clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous)).contentShape(Rectangle())
+    }
 }
