@@ -1172,3 +1172,7 @@ The first screen of discovery is now all work. The creator rail and the use rail
 ### 2026-11-06 — Make the detail action one step after the first use
 
 The 2.0 boards ask for "one-step use": once a tool has been chosen in the use tray, the detail's main action names that tool and copies (or prefills) the Prompt and opens it in one tap. A long press offers "choose another tool". The tray still opens the first time, when the remembered tool is not among this item's choices, when the Prompt has blanks to fill, and as the fallback when the tool cannot be opened. UI tests launch with `-preferredPromptDestination none` so the tray path stays deterministic.
+
+### 2026-11-06 — Keep decks local, separate and optional
+
+Saved works gain decks, stored in their own `decks.json` beside `favorites.json`; an unreadable deck file is kept and never overwritten, and it never blocks saving a work. "全部收藏" is every favorite, not a stored deck, and unsaving removes a work from all decks. Until the owner makes a deck, the deck scope opens straight onto every saved work and the detail bookmark stays one tap; with decks, the bookmark opens a "收藏到" sheet. This departs slightly from the board, which always shows the sheet, to avoid an empty extra step. iCloud sync is left for later. A new "我的改写" scope lists works with saved drafts.
