@@ -7,7 +7,7 @@ import { atomic, json } from "./publication.ts";
 import { checkXAvailability } from "./x.ts";
 import { convertXDiscovery } from "./x-intake.ts";
 import { readXExcerptReviews } from "./x-excerpts.ts";
-import { isNativeXDraft, nativeXSourceIssue, nativeXPostIDs, nativeXSourceDigest } from "./x-source.ts";
+import { isNativeXDraft, nativeXSourceIssue, nativeXPostIDs, nativeXSourceDigest, xSourceLifetime } from "./x-source.ts";
 import { mergeCreatorCache, type CreatorCache } from "./creators.ts";
 import { reviewsSchema } from "./editorial.ts";
 import { editorialCacheSchema, editorialDecisionKey, editorialQueue } from "./editorial-runner.ts";
@@ -148,7 +148,9 @@ export async function prepareXAvailability(root: string, options: { enabled: boo
     // A recently recorded standalone result cannot defer a now-known joint
     // dependency check. Keep the daily official quota; retry at its next window.
     const incompleteScope = threadIDs.has(item.source.post!.id) && thirdPartyCheck(record) && !nativeXPostIDs(item).every(id => record?.scopeIDs?.includes(id));
-    const needsCheck = incompleteScope || !record || (record.status === "ready" && record.revision !== item.source.revision) || nowMS - checked >= 12 * 3600_000;
+    const needsCheck = incompleteScope || !record || (record.status === "ready" && record.revision !== item.source.revision) ||
+      // Recheck half a day before the verification lapses; maintenance runs every 12 hours.
+      nowMS - checked >= xSourceLifetime(item.source.post!.createdAt, checked) - 12 * 3600_000;
     if (needsCheck && admitted && !protectedIDs.has(item.id) && !admitted.has(item.id)) {
       report.deferredDrafts++; return false;
     }

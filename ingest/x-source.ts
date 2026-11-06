@@ -4,6 +4,12 @@ import { createHash } from "node:crypto";
 export const nativeXSourceName = "X";
 export const nativeXPublicationBlocker = "Native X drafts await complete source attribution";
 export const nativeXSourceLifetime = 24 * 3600_000;
+const settledXSourceLifetime = 7 * 24 * 3600_000;
+/** Authors delete most posts soon after posting, so a post that was already a week old
+ * when checked stays verified for a week; newer posts must be rechecked daily. */
+export function xSourceLifetime(createdAt: string, checkedAt: number) {
+  return checkedAt - Date.parse(createdAt) >= settledXSourceLifetime ? settledXSourceLifetime : nativeXSourceLifetime;
+}
 export function isNativeXDraft(item: Pick<Prompt, "source">): boolean { return item.source.name === nativeXSourceName; }
 
 /** Freshness is deliberately excluded: a successful recheck does not rewrite editorial decisions. */
@@ -36,7 +42,7 @@ export function nativeXSourceIssue(item: Pick<Prompt, "id" | "source" | "creator
   } else if (post.parentID || item.source.mediaPostID) return nativeXPublicationBlocker;
   for (const source of [...(context ?? []), post]) {
   const checked = Date.parse(source.checkedAt), created = Date.parse(source.createdAt);
-  if (!Number.isFinite(checked) || !Number.isFinite(created) || created > checked + 60_000 || checked > now + 60_000 || now - checked >= nativeXSourceLifetime)
+  if (!Number.isFinite(checked) || !Number.isFinite(created) || created > checked + 60_000 || checked > now + 60_000 || now - checked >= xSourceLifetime(source.createdAt, checked))
     return "X source must be rechecked before publication";
   }
 }

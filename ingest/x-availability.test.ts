@@ -139,6 +139,28 @@ test("maintenance orders by latest successful check rather than the original dis
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
+test("posts older than a week when checked stay verified for a week and are rechecked weekly", async () => {
+  const day = 24 * 3600_000, at = (offset: number) => new Date(Date.parse(now) + offset).toISOString();
+  const old = { capturedAt: at(-20 * day), posts: [{ ...post, created_at: at(-20 * day) }], creators: [creator] };
+  const item = convertXDiscovery([{ name: "fixture", data: old }]).candidates[0];
+  const ready = (checkedAt: string) => ({ [item.id]: { checkedAt, status: "ready" as const, revision: item.source.revision } });
+  assert.equal(filterXAvailability([item], ready(now), Date.parse(now) + 6 * day).prompts.length, 1);
+  assert.equal(filterXAvailability([item], ready(now), Date.parse(now) + 7 * day).prompts.length, 0);
+  // A post still under a week old at its check keeps the daily lifetime.
+  assert.equal(filterXAvailability([item], ready(at(-14 * day)), Date.parse(now)).prompts.length, 0);
+  const root = await mkdtemp(join(tmpdir(), "prompix-x-tiered-"));
+  try {
+    await atomic(join(root, "x-discovery", "2026-10-12.json"), old);
+    let lookups = 0;
+    const lookup = async () => { lookups++; return { posts: old.posts, creators: [creator], media: [], unavailable: [] }; };
+    for (const [checked, due] of [[at(-2 * day), 0], [at(-6.6 * day), 1]] as const) {
+      await atomic(join(root, "x-availability", "state.json"), ready(checked));
+      await prepareXAvailability(root, { enabled: true, bearer: "fixture", now, maxRequests: 4, lookup });
+      assert.equal(lookups, due);
+    }
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
 test("fresh complete discovery avoids a duplicate paid read without extending its source timestamp", async () => {
   const root = await mkdtemp(join(tmpdir(), "prompix-x-fresh-"));
   try {
