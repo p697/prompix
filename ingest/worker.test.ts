@@ -26,6 +26,21 @@ test("a job is due when it never ran, its interval passed, a failure waited out 
   assert.equal(jobDue(job, status({ startedAt: at(hour) }), now), true);
 });
 
+test("the heartbeat continues while a long job runs", async t => {
+  t.mock.timers.enable({ apis: ["setInterval"] });
+  const root = join(await mkdtemp(join(tmpdir(), "prompix-worker-")), "pipeline");
+  let clock = now, finish!: () => void;
+  const running = tick(root, at(0), [{ name: "maintenance", interval: maintenanceIntervalMs, run: () => new Promise<string>(resolve => { finish = () => resolve("done"); }) }], { now: () => clock });
+  while (!finish) await new Promise(resolve => setImmediate(resolve));
+  clock += 2 * hour; t.mock.timers.tick(60000);
+  for (let i = 0; i < 20 && (await readWorkerStatus(root))?.heartbeatAt !== new Date(clock).toISOString(); i++) await new Promise(resolve => setImmediate(resolve));
+  const during = await readWorkerStatus(root);
+  assert.equal(during?.heartbeatAt, new Date(clock).toISOString());
+  assert.equal(during?.stage, "maintenance");
+  finish(); await running;
+  assert.equal((await readWorkerStatus(root))?.jobs?.maintenance.summary, "done");
+});
+
 test("the intake runs once per six-hour UTC window and only while the pipeline is running", async () => {
   const window = { name: "maintenance", interval: intakeWindowMs, aligned: true };
   // now is 12:00 UTC, the start of the third window.

@@ -46,8 +46,13 @@ export async function tick(root: string, startedAt: string, jobs: Job[], clock: 
   if (!job) return;
   const running = { ...base.jobs, [job.name]: { startedAt: at } };
   await writeWorkerStatus(root, { ...base, stage: job.name, jobs: running });
+  // A job can run for hours; the heartbeat keeps going so the worker never looks gone.
+  let beats = Promise.resolve();
+  const beat = setInterval(() => { beats = beats.then(() => writeWorkerStatus(root, { ...base, stage: job.name, jobs: running,
+    heartbeatAt: new Date(clock.now()).toISOString() })).catch(() => undefined); }, tickMs);
+  const settle = async () => { clearInterval(beat); await beats; };
   try {
-    const result = await job.run(), summary = typeof result === "string" ? result : result.summary;
+    const result = await job.run().finally(settle), summary = typeof result === "string" ? result : result.summary;
     const published = typeof result === "string" ? 0 : result.published ?? 0;
     const finishedAt = new Date(clock.now()).toISOString();
     const today = base.today.date === finishedAt.slice(0, 10) ? { ...base.today, published: base.today.published + published } : base.today;
