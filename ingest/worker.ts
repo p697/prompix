@@ -4,9 +4,10 @@ import { mkdir, open, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { trustSystemCertificates } from "./models/http.ts";
-import { appendEvent, pipelineRoot, processAlive, readConfig, readWorkerStatus, writeWorkerStatus, type PipelineConfig, type WorkerStatus } from "./pipeline-control.ts";
+import { appendEvent, pipelineRoot, processAlive, readConfig, readEvents, readWorkerStatus, writeWorkerStatus, type PipelineConfig, type WorkerStatus } from "./pipeline-control.ts";
 import { contentRoot, json, repo } from "./publication.ts";
 import { pipelineEnvironment, runMaintenance } from "./worker-maintenance.ts";
+import { collectDailyReport, reportWindowMs, sendDailyReport } from "./daily-report.ts";
 
 /** Verifications last 24 hours, so twice a day keeps every publication unblocked. */
 export const maintenanceIntervalMs = 12 * 3600000;
@@ -16,7 +17,7 @@ export const intakeWindowMs = 6 * 3600000;
 const intakeTimeoutMs = 3 * 3600000;
 const tickMs = 60000;
 
-export type JobResult = string | { summary: string; published?: number };
+export type JobResult = string | { summary: string; published?: number; details?: Record<string, unknown> };
 /** `aligned` jobs run once per interval-sized UTC window instead of an interval after the last
  * run; `enabled` gates a job on the desired state (source maintenance ignores it). */
 export type Job = { name: string; interval: number; aligned?: boolean; enabled?: (config: PipelineConfig) => boolean; run: () => Promise<JobResult> };
@@ -58,12 +59,13 @@ export async function tick(root: string, startedAt: string, jobs: Job[], clock: 
     const finishedAt = new Date(clock.now()).toISOString();
     const today = base.today.date === finishedAt.slice(0, 10) ? { ...base.today, published: base.today.published + published } : base.today;
     await writeWorkerStatus(root, { ...base, today, heartbeatAt: finishedAt, jobs: { ...running, [job.name]: { startedAt: at, finishedAt, ok: true, summary: summary.slice(0, 500) } } });
-    await appendEvent(root, "worker", "job.finished", { job: job.name, summary });
+    await appendEvent(root, "worker", "job.finished", { job: job.name, summary, durationMs: Date.parse(finishedAt) - Date.parse(at), published,
+      ...(typeof result === "string" ? {} : result.details ?? {}) });
   } catch (error) {
     const finishedAt = new Date(clock.now()).toISOString(), message = (error as Error).message.slice(0, 500);
     await writeWorkerStatus(root, { ...base, heartbeatAt: finishedAt, lastError: { at: finishedAt, message: `${job.name}: ${message}` },
       jobs: { ...running, [job.name]: { startedAt: at, finishedAt, ok: false, summary: message } } });
-    await appendEvent(root, "worker", "job.failed", { job: job.name, error: message });
+    await appendEvent(root, "worker", "job.failed", { job: job.name, error: message, durationMs: Date.parse(finishedAt) - Date.parse(at) });
   }
 }
 
@@ -76,7 +78,22 @@ export function maintenanceJob(env: NodeJS.ProcessEnv): Job {
 }
 
 type IntakeReport = { published?: boolean; error?: string; changes?: { added?: { total?: number } };
-  sources?: { enrichment?: { enriched?: number; excluded?: number; deferred?: number }; "publication-quota"?: { selected?: number; deferred?: number } } };
+  editorial?: { requests?: number }; visualReview?: { requests?: number };
+  sources?: { enrichment?: { enriched?: number; excluded?: number; deferred?: number };
+    "translation-check"?: { passed?: number; held?: number; withheld?: number } } };
+
+/** The owner's email for the UTC day that just ended, sent at the first tick after midnight UTC.
+ * Days before the worker's first intake have nothing to report. */
+export function reportJob(env: NodeJS.ProcessEnv, root = pipelineRoot(), send = sendDailyReport, clock: Clock = { now: Date.now }): Job {
+  return { name: "report", interval: reportWindowMs, aligned: true, run: async () => {
+    const end = Math.floor(clock.now() / reportWindowMs) * reportWindowMs;
+    const intakes = (await readEvents(root, Number.MAX_SAFE_INTEGER)).filter(event => event.job === "intake" && Date.parse(event.at) < end);
+    if (!intakes.length) return "每日采集还没开始，不发日报";
+    const report = await collectDailyReport(end - reportWindowMs, end, env, root);
+    await send(report, env);
+    return `已发送 ${report.date} 的日报${report.ok ? "" : "（有问题）"}`;
+  } };
+}
 
 /** Collection, editorial and visual review, the 2.0 review, translation and publication: the
  * daily pipeline in its own process, with every existing gate and allowance. Translation uses
@@ -88,8 +105,11 @@ export function intakeJob(env: NodeJS.ProcessEnv, spawnDaily = runDaily): Job {
     const code = await spawnDaily({ ...rest, PROMPIX_TRANSLATION_PROVIDER: "pipeline" });
     const report = await json<IntakeReport>(join(contentRoot, "status.json"), {});
     if (code !== 0) throw new Error(report.error ?? `daily exited with ${code}`);
-    const added = report.changes?.added?.total ?? 0, enrichment = report.sources?.enrichment;
-    return { published: added, summary: `新发布 ${added} 条；2.0 审核通过 ${enrichment?.enriched ?? 0} 条，排除 ${enrichment?.excluded ?? 0} 条，顺延 ${enrichment?.deferred ?? 0} 条` };
+    const added = report.changes?.added?.total ?? 0, enrichment = report.sources?.enrichment, check = report.sources?.["translation-check"];
+    return { published: added, summary: `新发布 ${added} 条；2.0 审核通过 ${enrichment?.enriched ?? 0} 条，排除 ${enrichment?.excluded ?? 0} 条，顺延 ${enrichment?.deferred ?? 0} 条`,
+      // Subscription calls outside the provider layer, for the daily report.
+      details: { editorialRequests: report.editorial?.requests ?? 0, visualRequests: report.visualReview?.requests ?? 0,
+        excluded: enrichment?.excluded ?? 0, translationsHeld: check?.held ?? 0 } };
   } };
 }
 
@@ -141,7 +161,7 @@ async function main() {
   if (!release) { console.log(JSON.stringify({ event: "worker_already_running" })); return; }
   const env = { ...await pipelineEnvironment(), ...await childCertificates(root) };
   // Maintenance first: it keeps the verifications every publication requires current.
-  const startedAt = new Date().toISOString(), jobs = [maintenanceJob(env), intakeJob(env)];
+  const startedAt = new Date().toISOString(), jobs = [maintenanceJob(env), reportJob(env, root), intakeJob(env)];
   let stopping = false, sleeping: (() => void) | undefined;
   const stop = () => { stopping = true; sleeping?.(); };
   process.on("SIGTERM", stop); process.on("SIGINT", stop);
