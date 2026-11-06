@@ -115,9 +115,9 @@ import XCTest
         profile.setInterests(["portrait", "fashion", "illustration"])
         var portrait = card(0); portrait.presentation = "general"
         var revealing = card(1); revealing.presentation = "suggestive"
-        XCTAssertTrue(profile.reduceSuggestive)
+        XCTAssertFalse(profile.showsSuggestive)
         XCTAssertTrue(profile.allowsRecommended(portrait)); XCTAssertFalse(profile.allowsRecommended(revealing))
-        XCTAssertTrue(profile.setReduceSuggestive(false)); XCTAssertTrue(profile.allowsRecommended(revealing))
+        XCTAssertTrue(profile.setShowsSuggestive(true)); XCTAssertTrue(profile.allowsRecommended(revealing))
         XCTAssertEqual(profile.interests, ["portrait", "fashion", "illustration"])
         profile.record(.dismiss, card: revealing, now: now)
         XCTAssertFalse(profile.allowsRecommended(revealing), "Explicit negative feedback still applies")
@@ -130,7 +130,7 @@ import XCTest
         XCTAssertFalse(profile.allowsRecommended(prompt))
         profile.setInterests(["portrait", "fashion", "illustration"])
         XCTAssertFalse(profile.allowsRecommended(prompt), "Interest selection never opts into revealing imagery")
-        profile.setReduceSuggestive(false)
+        profile.setShowsSuggestive(true)
         XCTAssertTrue(profile.allowsRecommended(prompt))
         profile.record(.dismiss, prompt: prompt, now: now)
         profile.flush()
@@ -138,12 +138,12 @@ import XCTest
         restored.setLearning(false)
         XCTAssertFalse(restored.allowsRecommended(prompt), "Explicit dismissal survives restart and disabling learning")
         restored.reset()
-        XCTAssertFalse(restored.allowsRecommended(prompt), "Reset restores the default comfort preference")
+        XCTAssertFalse(restored.allowsRecommended(prompt), "Reset hides suggestive works again")
         prompt.presentation = "general"
         XCTAssertTrue(restored.allowsRecommended(prompt))
         prompt.presentation = "unknown"
         XCTAssertTrue(restored.allowsRecommended(prompt), "Unknown remains unknown, not a fabricated approval")
-        restored.setReduceSuggestive(false)
+        restored.setShowsSuggestive(true)
         prompt.presentation = "explicit"
         XCTAssertFalse(restored.allowsRecommended(prompt), "Explicit material is never an opt-in recommendation")
     }
@@ -273,6 +273,46 @@ import XCTest
         XCTAssertEqual(offline.items.count, 90); XCTAssertTrue(offline.isCached); XCTAssertNil(offline.nextCursor)
         XCTAssertTrue(query.parameters.allSatisfy { !["interests", "seen", "creatorPreferences", "events"].contains($0.name) })
     }
+    func testMatureSwitchRebuildsListsForTheNewAudience() async throws {
+        let log = AudienceLog()
+        let library = Library(directory: directory, feedService: AudienceServer(log: log, suggestive: false))
+        let query = try FeedQuery(locale: "original", sort: "latest").validated()
+        await library.feed?.discovery.load(query)
+        let previous = try XCTUnwrap(library.feed)
+        await library.setShowsSuggestive(true)
+        XCTAssertTrue(library.recommendations.showsSuggestive)
+        XCTAssertFalse(library.feed === previous, "Cursors belong to one audience, so the repository is replaced")
+        XCTAssertEqual(library.feed?.discovery.query, query)
+        XCTAssertEqual(library.feed?.discovery.items.count, 30)
+        let audiences = await log.audiences
+        XCTAssertEqual(audiences, [false, true])
+        XCTAssertTrue(FileManager.default.fileExists(atPath: directory.appending(path: "feed-cache-suggestive").path))
+        await library.setShowsSuggestive(true)
+        let unchanged = await log.audiences
+        XCTAssertEqual(unchanged.count, 2, "Setting the same value does not reload")
+    }
+}
+
+private actor AudienceLog {
+    private(set) var audiences: [Bool] = []
+    func record(_ suggestive: Bool) { audiences.append(suggestive) }
+}
+
+private actor AudienceServer: FeedServing {
+    let log: AudienceLog
+    let suggestive: Bool
+    init(log: AudienceLog, suggestive: Bool) { self.log = log; self.suggestive = suggestive }
+    nonisolated func presenting(suggestive: Bool) -> any FeedServing { AudienceServer(log: log, suggestive: suggestive) }
+    func page(query: FeedQuery, cursor: String?, release: String?) async throws -> FeedPage {
+        await log.record(suggestive)
+        return FeedPage(schemaVersion: 3, release: FeedFixture.release, items: (0..<30).map { FeedFixture.card(id: "audience-\($0)") }, nextCursor: nil)
+    }
+    func detail(id: String, revision: String?, locale: String) async throws -> FeedDetail { throw FeedError.notFound }
+    func creators(q: String, cursor: String?, release: String?) async throws -> FeedCreatorsPage { throw FeedError.notFound }
+    func browse(locale: String) async throws -> FeedBrowse { throw FeedError.notFound }
+    func creatorDiscovery(query: CreatorQuery, cursor: String?, release: String?) async throws -> FeedCreatorsPage { throw FeedError.notFound }
+    func state() async throws -> FeedState { throw FeedError.notFound }
+    func removals(after: String) async throws -> FeedRemovals { throw FeedError.notFound }
 }
 
 private actor RecommendationServer: FeedServing {

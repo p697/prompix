@@ -37,6 +37,7 @@ enum CatalogSyncState: Equatable, Sendable {
     private var languagePackBase: LanguagePackCatalog.Base?
     private(set) var feed: FeedRepository?
     private var databaseFeedRequested = false
+    private let feedService: (any FeedServing)?
     let recommendations: LocalRecommendations
     private let directory: URL
     private let installFileWriter: (Data, URL) throws -> Void
@@ -55,6 +56,7 @@ enum CatalogSyncState: Equatable, Sendable {
         self.recommendations = LocalRecommendations(directory: self.directory)
         self.installFileWriter = installFileWriter
         databaseFeedRequested = feedService != nil
+        self.feedService = feedService
         var checkpoint = FeedCheckpoint()
         do {
             try FileManager.default.createDirectory(at: self.directory, withIntermediateDirectories: true)
@@ -122,14 +124,34 @@ enum CatalogSyncState: Equatable, Sendable {
             let aliases = Self.creatorAliases(from: favorites, to: loadedCatalog.prompts)
             try applyCatalog(loadedCatalog, data: nil, aliases: aliases, availability: languagePackBase?.availableLanguages)
         } catch { self.error = String(localized: "灵感暂时没有加载成功。你仍然可以查看已保存的收藏。") }
-        if let feedService {
+        if feedService != nil {
             checkpoint.removedIDs = removedIDs.sorted()
-            feed = FeedRepository(service: feedService, cache: FeedCache(directory: self.directory.appending(path: "feed-cache")),
-                                  checkpoint: checkpoint, recommendations: recommendations) { [weak self] value in
-                guard let self else { throw CancellationError() }
-                try self.commitFeedRemovals(value)
-            }
+            feed = makeFeed(checkpoint: checkpoint)
         }
+    }
+
+    private func makeFeed(checkpoint: FeedCheckpoint) -> FeedRepository? {
+        guard let feedService else { return nil }
+        let suggestive = recommendations.showsSuggestive
+        let cache = FeedCache(directory: directory.appending(path: suggestive ? "feed-cache-suggestive" : "feed-cache"))
+        return FeedRepository(service: feedService.presenting(suggestive: suggestive), cache: cache,
+                              checkpoint: checkpoint, recommendations: recommendations) { [weak self] value in
+            guard let self else { throw CancellationError() }
+            try self.commitFeedRemovals(value)
+        }
+    }
+
+    /// Suggestive works are a separate audience on the service, so lists, cursors
+    /// and their cache are rebuilt for it rather than filtered in place.
+    func setShowsSuggestive(_ value: Bool) async {
+        guard value != recommendations.showsSuggestive, recommendations.setShowsSuggestive(value) else { return }
+        guard let previous = feed, let next = makeFeed(checkpoint: previous.checkpoint) else { return }
+        feed = next
+        if let query = previous.discovery.query { await next.discovery.load(query, force: true) }
+        if let query = previous.search.query { await next.search.load(query, force: true) }
+        if previous.browse.value != nil || previous.browse.failure != nil { await next.browse.load(force: true) }
+        if let query = previous.creatorDiscovery.query { await next.creatorDiscovery.load(query, force: true) }
+        if let query = previous.creators.query { await next.creators.load(query, force: true) }
     }
 
     private static func parseDate(_ value: String) -> Date? {

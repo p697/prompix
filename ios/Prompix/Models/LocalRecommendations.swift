@@ -50,7 +50,7 @@ enum InterestCatalog {
         var version = 1
         var interests: Set<String> = []
         var learningEnabled = true
-        var reduceSuggestive: Bool? = true
+        var showsSuggestive: Bool? = false
         var entries: [String: Entry] = [:]
     }
     static let maximumEntries = 3000
@@ -63,11 +63,11 @@ enum InterestCatalog {
     private var readable = true
     var interests: Set<String> { state.interests }
     var learningEnabled: Bool { state.learningEnabled }
-    var reduceSuggestive: Bool { state.reduceSuggestive ?? true }
+    var showsSuggestive: Bool { state.showsSuggestive ?? false }
     func allowsRecommended(_ card: FeedCard) -> Bool { allowsRecommended(id: card.id, presentation: card.presentation) }
     func allowsRecommended(_ prompt: Prompt) -> Bool { allowsRecommended(id: prompt.id, presentation: prompt.presentation) }
     private func allowsRecommended(id: String, presentation: String?) -> Bool {
-        presentation != "explicit" && state.entries[id]?.dismissed != true && (!reduceSuggestive || presentation != "suggestive")
+        presentation != "explicit" && state.entries[id]?.dismissed != true && (showsSuggestive || presentation != "suggestive")
     }
     var hiddenIDs: Set<String> { Set(state.entries.filter { $0.value.dismissed }.map(\.key)) }
 
@@ -99,8 +99,8 @@ enum InterestCatalog {
         var next = state; next.learningEnabled = value
         return changePreferences(next)
     }
-    @discardableResult func setReduceSuggestive(_ value: Bool) -> Bool {
-        var next = state; next.reduceSuggestive = value
+    @discardableResult func setShowsSuggestive(_ value: Bool) -> Bool {
+        var next = state; next.showsSuggestive = value
         return changePreferences(next)
     }
     /// Explicit reset is the only operation allowed to replace an unreadable file.
@@ -194,7 +194,7 @@ enum InterestCatalog {
             let seenPenalty = state.learningEnabled ? (age < 86400 ? 9.0 : age < 7 * 86400 ? 4.0 : 0) : 0
             // Unknown is not a safety approval. Until actual visual assessment
             // exists, softly diversify portrait/fashion-heavy candidate pools.
-            let unknownPortrait = reduceSuggestive && (card.presentation == nil || card.presentation == "unknown") && !Set(topics[index]).isDisjoint(with: ["portrait", "fashion"])
+            let unknownPortrait = !showsSuggestive && (card.presentation == nil || card.presentation == "unknown") && !Set(topics[index]).isDisjoint(with: ["portrait", "fashion"])
             return chosen + learned - (unknownPortrait ? 2 : 0) - seenPenalty - Double(index) / Double(max(1, cards.count))
         }
         let entries = state.entries, learningEnabled = state.learningEnabled

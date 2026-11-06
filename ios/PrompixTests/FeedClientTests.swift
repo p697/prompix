@@ -52,6 +52,19 @@ import XCTest
         XCTAssertEqual(parameters.first { $0.name == "sort" }?.value, "name")
         XCTAssertEqual(parameters.first { $0.name == "limit" }?.value, "30")
     }
+    func testSuggestiveAudienceIsOptInForListsOnly() async throws {
+        let (client, server) = connection()
+        let creator = Prompt.Creator(id: "test-author", platform: "web", displayName: "Test", profileURL: URL(string: "https://example.com/test")!)
+        server.set("/v3/feed", bytes: try FeedFixture.page())
+        server.set("/v3/creators", bytes: try JSONEncoder().encode(FeedCreatorsPage(schemaVersion: 3, release: FeedFixture.release, items: [.init(creator: creator, count: 1)], nextCursor: nil)))
+        _ = try await client.page(query: FeedQuery(locale: "original"))
+        let suggestive = client.presenting(suggestive: true)
+        _ = try await suggestive.page(query: FeedQuery(locale: "original"), cursor: nil, release: nil)
+        _ = try await suggestive.creatorDiscovery(query: CreatorQuery(), cursor: nil, release: nil)
+        _ = try await suggestive.presenting(suggestive: false).page(query: FeedQuery(locale: "original"), cursor: nil, release: nil)
+        let audiences = server.urls.map { URLComponents(url: $0, resolvingAgainstBaseURL: false)?.queryItems?.filter { $0.name == "presentation" }.map(\.value) ?? [] }
+        XCTAssertEqual(audiences, [[], ["suggestive"], ["suggestive"], []])
+    }
     private func connection() -> (FeedClient, FeedTestServer) {
         let server = FeedTestServer(), token = UUID().uuidString
         FeedTestServers.shared.insert(server, token: token)

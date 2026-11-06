@@ -185,12 +185,11 @@ extension XCUIApplication {
         selectThree()
         XCTAssertTrue(portrait.isSelected)
         capture("interests-accessibility-top")
-        let comfort = app.switches["reduceSuggestiveRecommendations"]
+        XCTAssertFalse(app.switches["showsSuggestiveContent"].exists, "Mature content is a settings choice, not part of onboarding")
         for _ in 0..<12 {
-            if comfort.isHittable { break }
+            if app.buttons["onboardingComplete"].isHittable { break }
             scroll.swipeUp()
         }
-        XCTAssertTrue(comfort.isHittable)
         XCTAssertTrue(app.buttons["onboardingComplete"].isHittable)
         capture("interests-accessibility-controls")
         app.buttons["onboardingComplete"].tap()
