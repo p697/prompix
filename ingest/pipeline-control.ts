@@ -57,9 +57,11 @@ export function defaultPipelineConfig(now = new Date()): PipelineConfig {
     routing: {
       prefilter: { provider: "codex-cli", model: "gpt-5.6-luna", effort: "low" },
       review: { provider: "codex-cli", model: "gpt-5.6-luna", effort: "low" },
-      safety: { provider: "codex-cli", model: "gpt-6.1-sol", effort: "medium" },
-      translate: { provider: "codex-cli", model: "gpt-6-luna", effort: "low" },
-      translationCheck: { provider: "codex-cli", model: "gpt-6.1-sol", effort: "medium" },
+      // A ChatGPT-account Codex login serves only the models Codex lists for it
+      // (gpt-6-astra and gpt-5.6-sol/terra/luna on 2026-11-06); gpt-6.1-sol and gpt-6-luna are refused.
+      safety: { provider: "codex-cli", model: "gpt-6-astra", effort: "medium" },
+      translate: { provider: "codex-cli", model: "gpt-5.6-terra", effort: "low" },
+      translationCheck: { provider: "codex-cli", model: "gpt-6-astra", effort: "medium" },
     },
     legacyContentDir: process.env.PROMPIX_CONTENT_DIR ?? join(homedir(), ".local/share/prompix/content"),
     updatedAt: now.toISOString(), updatedBy: "default",
