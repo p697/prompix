@@ -52,7 +52,7 @@ struct InterestSelection: View {
             }
             VStack(alignment: .leading, spacing: 8) {
                 Toggle(RecommendationCopy.text("comfort.title"), isOn: Binding(get: { library.recommendations.reduceSuggestive }, set: { library.recommendations.setReduceSuggestive($0) }))
-                    .accessibilityIdentifier("reduceSuggestiveRecommendations")
+                    .accessibilityIdentifier("reduceSuggestiveRecommendations").tint(Palette.muted)
                 if requiredCount == nil {
                     Text(RecommendationCopy.text("comfort.description")).font(.footnote).foregroundStyle(Palette.muted)
                 }
@@ -86,7 +86,7 @@ struct RecommendationPreferences: View {
                 InterestSelection()
                 VStack(alignment: .leading, spacing: 8) {
                     Toggle(RecommendationCopy.text("learning.title"), isOn: Binding(get: { library.recommendations.learningEnabled }, set: { library.recommendations.setLearning($0) }))
-                        .accessibilityIdentifier("recommendationLearning")
+                        .accessibilityIdentifier("recommendationLearning").tint(Palette.muted)
                     Text(RecommendationCopy.text("learning.description")).font(.footnote).foregroundStyle(Palette.muted)
                 }
                 Button(RecommendationCopy.text("reset.title"), role: .destructive) { confirmsReset = true }

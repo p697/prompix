@@ -1,52 +1,33 @@
 import SwiftUI
 
 enum Palette {
+    private static func rgb(_ value: UInt) -> Color {
+        Color(red: Double((value >> 16) & 255) / 255, green: Double((value >> 8) & 255) / 255,
+              blue: Double(value & 255) / 255)
+    }
     private static func adaptive(_ light: UInt, _ dark: UInt) -> Color {
         Color(uiColor: UIColor { traits in
-            let rgb = traits.userInterfaceStyle == .dark ? dark : light
-            return UIColor(red: CGFloat((rgb >> 16) & 255) / 255,
-                           green: CGFloat((rgb >> 8) & 255) / 255,
-                           blue: CGFloat(rgb & 255) / 255, alpha: 1)
+            let value = traits.userInterfaceStyle == .dark ? dark : light
+            return UIColor(red: CGFloat((value >> 16) & 255) / 255,
+                           green: CGFloat((value >> 8) & 255) / 255,
+                           blue: CGFloat(value & 255) / 255, alpha: 1)
         })
     }
 
-    // Neutral reading surfaces; the user's FIELD reference supplies the spectrum.
-    static let paper = adaptive(0xF9F9FC, 0x17161F)
-    static let surface = adaptive(0xFFFFFF, 0x24222F)
-    static let soft = adaptive(0xEEEDF7, 0x302C40)
-    static let ink = adaptive(0x272433, 0xF1EFFA)
-    static let muted = adaptive(0x6C687C, 0xB8B2CA)
-    static let accent = adaptive(0x4B3FD3, 0xC4BCFF)
-    static let highlight = adaptive(0xE4DFFD, 0xA79BE9)
-    static let highlightInk = Color(red: 0.20, green: 0.15, blue: 0.42)
-    static let noteMint = adaptive(0xE8EEFC, 0x252E46)
-    static let noteRose = adaptive(0xF5E8F4, 0x3A2941)
-    static let noteLavender = adaptive(0xEDE9FC, 0x312B49)
-    static let line = adaptive(0xDEDBEA, 0x484157)
+    // Darkroom in dark mode, photographic paper in light mode. The interface is
+    // black, grey and white only; artwork supplies every other color.
+    static let paper = adaptive(0xF4F3EF, 0x0B0B0C)
+    static let surface = adaptive(0xFBFAF7, 0x18181A)
+    static let soft = adaptive(0xE8E7E2, 0x1E1E20)
+    static let ink = adaptive(0x141415, 0xF5F5F2)
+    static let muted = adaptive(0x6B6B67, 0x9A9A97)
+    static let accent = ink
+    static let line = adaptive(0xDAD9D3, 0x2A2A2C)
 
-    // Decorative pigments never encode a state or carry body text by themselves.
-    static let spectrumBlue = Color(red: 0.282, green: 0.337, blue: 0.937)
-    static let spectrumIris = Color(red: 0.541, green: 0.471, blue: 0.898)
-    static let spectrumRose = Color(red: 0.804, green: 0.549, blue: 0.894)
-    static let spectrumIce = Color(red: 0.702, green: 0.816, blue: 0.984)
-    static let spectrumPetal = Color(red: 0.933, green: 0.769, blue: 0.906)
-
-    // The icon's icy top, violet body and blue base stay continuous across all seven pages.
-    static func onboardingGlass(at fraction: Double) -> LinearGradient {
-        let t = min(1, max(0, fraction))
-        func blend(_ start: (Double, Double, Double), _ end: (Double, Double, Double)) -> Color {
-            Color(red: start.0 + (end.0 - start.0) * t,
-                  green: start.1 + (end.1 - start.1) * t,
-                  blue: start.2 + (end.2 - start.2) * t)
-        }
-        return LinearGradient(stops: [
-            .init(color: blend((0.88, 0.95, 0.98), (0.91, 0.92, 0.97)), location: 0),
-            .init(color: blend((0.68, 0.81, 0.97), (0.88, 0.70, 0.83)), location: 0.35),
-            .init(color: blend((0.49, 0.65, 0.96), (0.65, 0.58, 0.87)), location: 0.75),
-            .init(color: blend((0.36, 0.52, 0.93), (0.34, 0.39, 0.71)), location: 1)
-        ], startPoint: .topLeading, endPoint: .bottomTrailing)
-    }
-
+    // Liquid Glass tints are resolved from the page appearance, because material
+    // snapshots can carry temporary UIKit traits during an interactive zoom.
+    static func glassAccent(for scheme: ColorScheme) -> Color { rgb(scheme == .dark ? 0xF5F5F2 : 0x141415) }
+    static func onGlassAccent(for scheme: ColorScheme) -> Color { rgb(scheme == .dark ? 0x0B0B0C : 0xF4F3EF) }
 }
 
 enum Motion {
