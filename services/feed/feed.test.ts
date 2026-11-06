@@ -15,7 +15,7 @@ const filters: FeedFilters = { locale: "original", q: "" };
 function prompt(index: number): Prompt {
   return { id: `test-${index}`, kind: index % 2 ? "image" : "text", title: `Test ${index}`, summary: "Synthetic test content",
     prompt: `  Preserve whitespace ${index}\n`, example: "Example", tags: ["design"], model: "Test model", toolURL: null,
-    artwork: "test", previewLabel: "Preview", source: { name: "Synthetic", url: null, license: "CC0", method: "test" },
+    artwork: "test", previewLabel: "Preview", source: { name: "Synthetic", url: null, license: "CC0", method: "test" }, presentation: "general",
     media: null, creator: { id: `author-${index % 5}`, platform: "web", displayName: `Author ${index % 5}`, profileURL: "https://example.com/author" } };
 }
 function localized(item: Prompt): Prompt {

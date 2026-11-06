@@ -147,7 +147,8 @@ test("an approved discovered package survives database publication with its comp
   assert.equal(approved[0].media?.imageURL, candidate.media?.imageURL, "Editorial metadata cannot replace a licensed package cover");
   const { pg, writer, reader } = await createTestDatabase(); t.after(() => pg.close());
   const release = await stagePublication(writer, { schemaVersion: 1, version: "first-party-package-fixture",
-    prompts: approved.map(item => promptSchema.parse(item)) });
+    // Daily publication labels presentation through visual review; lists show only reviewed imagery.
+    prompts: approved.map(item => promptSchema.parse({ ...item, presentation: "general" })) });
   await assert.rejects(getDetail(reader, candidate.id, "original"), /not_found/);
   await activatePublication(writer, release, "0");
   const page = await getFeed(reader, { filters: { locale: "original", q: "", sort: "latest" }, limit: 30 },
