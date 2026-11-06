@@ -108,10 +108,13 @@ struct FeedInterleave<Item: Identifiable, Grid: View>: View {
 extension EnvironmentValues {
     /// Search results name each visual work in one line; the feed shows only the work.
     @Entry var cardShowsTitle = false
+    /// A fixed frame for every card, such as squares on a deck's contact sheet.
+    @Entry var cardAspectRatio: CGFloat? = nil
 }
 
 struct PromptCardFace: View {
     let preview: ContentPreview
+    @Environment(\.cardAspectRatio) private var fixedRatio
     @Environment(\.dynamicTypeSize) private var typeSize
     @Environment(\.cardShowsTitle) private var titled
     private var titleIsInArtwork: Bool { preview.usesTextArtwork }
@@ -124,8 +127,8 @@ struct PromptCardFace: View {
                 }.fixedSize(horizontal: false, vertical: true).frame(maxWidth: .infinity, alignment: .leading)
                     .padding(20).background(Palette.soft, in: RoundedRectangle(cornerRadius: PromptCardGeometry.cornerRadius, style: .continuous))
             } else {
-                Artwork(preview: preview, fillsFrame: true).aspectRatio(PromptCardGeometry.aspectRatio(for: preview), contentMode: .fit)
-                    .clipShape(RoundedRectangle(cornerRadius: PromptCardGeometry.cornerRadius, style: .continuous))
+                Artwork(preview: preview, compact: fixedRatio != nil, fillsFrame: true).aspectRatio(fixedRatio ?? PromptCardGeometry.aspectRatio(for: preview), contentMode: .fit)
+                    .clipShape(RoundedRectangle(cornerRadius: fixedRatio == nil ? PromptCardGeometry.cornerRadius : 4, style: .continuous))
             }
             if titled && !titleIsInArtwork && !typeSize.isAccessibilitySize {
                 Text(preview.displayTitle).font(.footnote).foregroundStyle(Palette.ink).lineLimit(1).padding(.horizontal, 2)

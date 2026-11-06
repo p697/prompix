@@ -773,7 +773,10 @@ private struct DeckDetail: View {
                     Text(String(localized: "\(items.count) 张")).font(Typography.meta(size: 11)).tracking(1.2).foregroundStyle(Palette.muted)
                     Text(deck?.name ?? String(localized: "全部收藏")).font(.largeTitle.bold()).accessibilityAddTraits(.isHeader)
                 }.padding(.horizontal, 20)
-                PromptGrid(items: items, origin: .favorite).padding(.horizontal, PromptGridLayout.inset)
+                // A deck reads as a contact sheet: three equal squares per row.
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 2), count: 3), spacing: 2) {
+                    ForEach(items) { item in PromptCard(item: item, origin: .favorite) }
+                }.environment(\.cardAspectRatio, 1).padding(.horizontal, PromptGridLayout.inset)
             }.padding(.bottom, 24)
         }
         .background(Palette.paper).foregroundStyle(Palette.ink)
