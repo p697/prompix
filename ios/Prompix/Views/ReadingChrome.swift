@@ -102,6 +102,7 @@ struct ReadingActionBar: View {
     var copied = false
     /// Skills with a verified installer copy that command instead of the text.
     var copyTitle: String? = nil
+    var canEdit = true
     var edit: () -> Void = {}
     var copy: () -> Void = {}
     @Namespace private var transition
@@ -127,10 +128,12 @@ struct ReadingActionBar: View {
     }
     private var buttons: some View {
         HStack(spacing: 10) {
+            if canEdit {
             Button(action: edit) {
                 PrompixIcon.edit.image.frame(width: 50, height: 50)
             }.buttonStyle(.plain).readingGlass().actionGlassIdentity("edit", in: transition)
                 .accessibilityLabel(String(localized: "写我的版本")).accessibilityIdentifier("editPromptAction")
+            }
             Button(action: copy) {
                 HStack(spacing: 8) {
                     (copied ? PrompixIcon.check : PrompixIcon.copy).image

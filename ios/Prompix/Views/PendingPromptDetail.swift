@@ -37,7 +37,7 @@ struct PendingPromptDetail: View {
         }.foregroundStyle(Palette.ink)
             .onChange(of: actionsCollapsed) { _, value in position.actionsCollapsed = value }
             .promptActionBar {
-                ReadingActionBar(isSkill: card.contentType == "skill", ready: false, collapsed: actionsCollapsed)
+                ReadingActionBar(isSkill: card.contentType == "skill", ready: false, collapsed: actionsCollapsed, canEdit: card.contentType != "skill")
             }
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -166,7 +166,7 @@ extension ContentPreview {
     /// The detail's line: model ▸ frame ▸ length. Words have no frame, and an
     /// unknown model is left out rather than replaced by the kind.
     var detailMeta: (lead: String, rest: String) {
-        let lead = Prompt.namesModel(model) ? Prompt.localizedModel(model).uppercased() : ""
+        let lead = isSkill ? "SKILL" : Prompt.namesModel(model) ? Prompt.localizedModel(model).uppercased() : ""
         let frame = kind == .text || kind == .web || isSkill ? "" : generation?.outputAspect ?? media?.aspectRatio.flatMap(Self.ratioLabel) ?? ""
         let rest = [frame, durationLabel ?? ""].filter { !$0.isEmpty }
         return (lead, rest.enumerated().map { ($0.offset == 0 && lead.isEmpty ? "" : " ▸ ") + $0.element }.joined())

@@ -48,7 +48,13 @@ struct Prompt: Codable, Identifiable, Hashable {
     var displaySymbol: String { isSkill ? "square.stack.3d.up" : kind.symbol }
     var displayModel: String { Self.localizedModel(model) }
     /// Sources that never named a model say "Unspecified"; the interface then names none.
-    static func namesModel(_ value: String) -> Bool { value.caseInsensitiveCompare("Unspecified") != .orderedSame }
+    /// A real model name. Placeholders such as "通用代码模型" or "Agent Skills" say nothing
+    /// a reader can act on, so the meta line leaves them out.
+    static func namesModel(_ value: String) -> Bool {
+        let placeholders = ["unspecified", "agent skills", "通用对话模型", "通用文本模型", "通用代码模型", "图像模型", "v0 / 网站生成工具"]
+        let trimmed = value.trimmingCharacters(in: .whitespaces)
+        return !trimmed.isEmpty && !placeholders.contains(trimmed.lowercased())
+    }
     static func localizedModel(_ value: String) -> String {
         switch value {
         case "通用对话模型": String(localized: "通用对话模型")

@@ -414,7 +414,7 @@ enum PromptCardGeometry {
     /// Estimated at a nominal 180 pt column: 14 pt insets, 16 pt text on 22 pt lines.
     static func textCardRatio(_ text: String, skill: Bool) -> CGFloat {
         let units = text.unicodeScalars.reduce(0.0) { sum, scalar in sum + (scalar.value > 0x2E80 ? 1 : 0.55) }
-        let lines = min(4, max(2, (units / 9.5).rounded(.up)))
+        let lines = min(4, max(1, (units / 9.5).rounded(.up)))
         return 180 / (28 + lines * 22 + (skill ? 18 : 0))
     }
     static func height(for item: ContentPreview, width: CGFloat, titled: Bool = false) -> CGFloat {
@@ -550,7 +550,7 @@ struct FavoritesView: View {
         let items = (kept + earlier).filter { seen.insert($0.id).inserted }
         if items.isEmpty {
             QuietEmpty(title: String(localized: "还没有自己的版本"), message: String(localized: "在详情页点铅笔，就能基于任意 Prompt 写自己的版本。"))
-        } else { PromptGrid(items: items, origin: .favorite).padding(.horizontal, PromptGridLayout.inset) }
+        } else { PromptGrid(items: items, origin: .favorite).padding(.horizontal, PromptGridLayout.inset).environment(\.cardShowsTitle, true) }
     }
 }
 
@@ -615,6 +615,10 @@ private struct DeckTile: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Color.clear.aspectRatio(Self.coverRatio, contentMode: .fit).overlay {
+                // Fewer than four works fill the cover with the first, never with blank cells.
+                if items.count < 4 {
+                    if let first = items.first { Artwork(item: first, compact: true, fillsFrame: true) } else { Palette.surface }
+                } else {
                 Grid(horizontalSpacing: 2, verticalSpacing: 2) {
                     ForEach(0..<2, id: \.self) { row in
                         GridRow {
@@ -627,6 +631,7 @@ private struct DeckTile: View {
                             }
                         }
                     }
+                }
                 }
             }.clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
             HStack(alignment: .firstTextBaseline) {
@@ -664,7 +669,7 @@ private struct DeckDetail: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text(String(localized: "卡组 ▸ \(items.count) 张")).font(Typography.meta(size: 11)).tracking(1.4).foregroundStyle(Palette.muted)
+                    Text(String(localized: "卡组 ▸ \(items.count) 张")).font(.footnote).monospacedDigit().foregroundStyle(Palette.muted)
                     Text(deck?.name ?? String(localized: "全部收藏")).font(.system(size: 30, weight: .bold)).accessibilityAddTraits(.isHeader)
                 }.padding(.horizontal, 20)
                 if kinds.count > 1 {

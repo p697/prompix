@@ -75,7 +75,7 @@ struct CollectionsDirectory: View {
                                     Text(collection.subtitle).font(.subheadline).foregroundStyle(Palette.muted)
                                         .fixedSize(horizontal: false, vertical: true)
                                 }
-                                Text(String(localized: "\(count) 条")).font(Typography.meta(size: 11)).foregroundStyle(Palette.muted)
+                                Text(String(localized: "\(count) 条")).font(.footnote).monospacedDigit().foregroundStyle(Palette.muted)
                             }.padding(.horizontal, 2)
                         }.foregroundStyle(Palette.ink).multilineTextAlignment(.leading)
                             .contentShape(Rectangle())
@@ -231,57 +231,47 @@ struct CollectionDetail: View {
         }.background(Palette.paper).navigationTitle(collection.title).navigationBarTitleDisplayMode(.large)
     }
 }
+/// Only rows you can act on; the policies behind them live on the linked pages.
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(Library.self) private var library
     @State private var cleared = false
     @State private var showOnboarding = false
+    private var version: String {
+        "\(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—") (\(Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "—"))"
+    }
     var body: some View {
         NavigationStack {
             List {
                 Section {
-                    HStack(spacing: 10) {
-                        SpectralPages(compact: true).frame(width: 40, height: 40)
-                        Text("Prompix").font(.largeTitle.weight(.medium)).tracking(-1)
-                    }.foregroundStyle(Palette.ink).padding(.top, 12).padding(.bottom, 20)
-                        .listRowSeparator(.hidden)
-                    LabeledContent(String(localized: "版本")) { Text("\(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—") (\(Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "—"))").foregroundStyle(Palette.muted) }
-                    Link(String(localized: "App 语言与系统设置"), destination: URL(string: UIApplication.openSettingsURLString)!)
+                    NavigationLink { RecommendationPreferences() } label: {
+                        Text(RecommendationCopy.text("interests.title"))
+                    }.accessibilityIdentifier("recommendationPreferences")
                     Button(String(localized: "onboarding.replay", table: "Onboarding")) { showOnboarding = true }
                         .accessibilityIdentifier("replayOnboarding")
-                    Text(String(localized: "内容优先显示 App 语言的译文，可在详情中切回原文。作者名、代码和模型参数保持不变。")).font(.footnote).foregroundStyle(Palette.muted).listRowSeparator(.hidden)
-                    if let updated = library.updatedAt { LabeledContent(String(localized: "最近更新")) { Text(updated, style: .date).foregroundStyle(Palette.muted) } }
-                    Button(library.isRefreshing ? String(localized: "正在更新…") : String(localized: "检查内容更新")) { Task { await library.refresh(force: true) } }.disabled(library.isRefreshing)
-                    if let message = library.syncMessage { Text(message).font(.footnote).foregroundStyle(Palette.muted) }
-                }.listRowBackground(Color.clear)
+                    Link(String(localized: "App 语言与系统设置"), destination: URL(string: UIApplication.openSettingsURLString)!)
+                }
                 Section {
-                    NavigationLink { RecommendationPreferences() } label: {
-                        Label(RecommendationCopy.text("interests.title"), systemImage: "slider.horizontal.3")
-                    }.accessibilityIdentifier("recommendationPreferences")
-                }.listRowBackground(Color.clear)
-                Section {
+                    Button { Task { await library.refresh(force: true) } } label: {
+                        LabeledContent(library.isRefreshing ? String(localized: "正在更新…") : String(localized: "检查内容更新")) {
+                            if let updated = library.updatedAt { Text(updated, style: .date).foregroundStyle(Palette.muted) }
+                        }
+                    }.disabled(library.isRefreshing)
                     Button(cleared ? String(localized: "图片缓存已清理") : String(localized: "清理图片缓存")) { ImageStore.shared.clear(); cleared = true }
-                    Text(String(localized: "清理浏览缓存，保留收藏缩略图、Prompt 文字和编辑草稿。")).font(.footnote).foregroundStyle(Palette.muted).listRowSeparator(.hidden)
-                    Text(String(localized: "收藏和草稿保存在本机，不上传编辑内容。搜索词会发送到内容服务以查询结果，不用于广告或用户画像。没有广告与分析 SDK。删除 App 会清除本地数据。"))
-                        .font(.footnote).foregroundStyle(Palette.muted).listRowSeparator(.hidden)
-                    Text(String(localized: "视频仅在你点开时播放，离开播放器或切到后台后暂停。内置内容可离线浏览；外部工具需要网络。"))
-                        .font(.footnote).foregroundStyle(Palette.muted).listRowSeparator(.hidden)
-                } header: { Text(String(localized: "本地数据")).font(.footnote.weight(.semibold)).foregroundStyle(Palette.muted) }.listRowBackground(Color.clear)
-                Section {
-                    Text(String(localized: "内容来自 Prompix 原创与开放社区，每条保留作者和原始来源。每天收集新内容，打开 App 时检查更新；也可以在发现页下拉刷新。不同模型的实际生成结果可能不同。"))
-                        .font(.footnote).foregroundStyle(Palette.muted).listRowSeparator(.hidden)
-                } header: { Text(String(localized: "内容与更新")).font(.footnote.weight(.semibold)).foregroundStyle(Palette.muted) }.listRowBackground(Color.clear)
+                } footer: {
+                    if let message = library.syncMessage { Text(message) }
+                }
                 Section {
                     Link(String(localized: "帮助与反馈"), destination: SupportLinks.url(.support)).accessibilityIdentifier("supportWebsite")
                     Link(String(localized: "隐私说明"), destination: SupportLinks.url(.privacy)).accessibilityIdentifier("privacyPolicy")
                     Link(String(localized: "内容来源与说明"), destination: SupportLinks.url(.content)).accessibilityIdentifier("contentPolicy")
-                    Link(String(localized: "Prompix 官网"), destination: SupportLinks.url(.home))
                     Link(String(localized: "开源项目"), destination: URL(string: "https://github.com/p697/prompix")!)
-                } header: { Text(String(localized: "帮助与信息")).font(.footnote.weight(.semibold)).foregroundStyle(Palette.muted) }.listRowBackground(Color.clear)
-            }.listStyle(.plain).contentMargins(.horizontal, 20)
-                .scrollContentBackground(.hidden).background(Palette.paper)
-                .tint(Palette.accent)
-                .navigationTitle(String(localized: "关于与设置")).navigationBarTitleDisplayMode(.inline)
+                } footer: {
+                    Text(verbatim: "Prompix \(version)").font(Typography.meta(size: 11)).frame(maxWidth: .infinity).padding(.top, 12)
+                }
+            }.scrollContentBackground(.hidden).background(Palette.paper)
+                .foregroundStyle(Palette.ink).tint(Palette.ink)
+                .navigationTitle(String(localized: "设置")).navigationBarTitleDisplayMode(.inline)
                 .toolbar { ToolbarItem(placement: .confirmationAction) { Button(String(localized: "完成")) { dismiss() } } }
         }.fullScreenCover(isPresented: $showOnboarding) { PrompixOnboarding { showOnboarding = false } }
     }

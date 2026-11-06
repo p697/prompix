@@ -12,7 +12,7 @@ struct SearchView: View {
     @State private var handledActivation: Int?
     @State private var kind: PromptKind?
     @State private var skillsOnly = false
-    @State private var recent = UserDefaults.standard.stringArray(forKey: "recentSearches") ?? []
+    @State private var recent = SearchView.collapsed(UserDefaults.standard.stringArray(forKey: "recentSearches") ?? [])
     @State private var completedSearch: LocalSearchRequest?
     @State private var matchedPrompts: [Prompt] = []
     @State private var matchedCreators: [CreatorEntry] = []
@@ -198,6 +198,18 @@ struct SearchView: View {
         }
     }
 
+    /// Keeps the newest of any terms where one extends the other: island, islands, islandsss.
+    static func collapsed(_ terms: [String]) -> [String] {
+        var kept: [String] = []
+        for term in terms {
+            let key = term.folding(options: [.caseInsensitive, .diacriticInsensitive, .widthInsensitive], locale: nil)
+            if !kept.contains(where: {
+                let other = $0.folding(options: [.caseInsensitive, .diacriticInsensitive, .widthInsensitive], locale: nil)
+                return other.hasPrefix(key) || key.hasPrefix(other)
+            }) { kept.append(term) }
+        }
+        return kept
+    }
     private func rememberQuery() {
         guard !normalizedQuery.isEmpty else { return }
         // A term that extends or shortens another replaces it: typing island, then islands, keeps one.
