@@ -81,12 +81,7 @@ extension View {
 private struct ReadingGlass: ViewModifier {
     let prominent: Bool
     @Environment(\.colorScheme) private var colorScheme
-    // Material snapshots can supply temporary UIKit traits during interactive zoom.
-    // Resolve the tint from the page appearance before handing it to Liquid Glass.
-    private var tint: Color {
-        colorScheme == .dark ? Color(red: 210 / 255, green: 224 / 255, blue: 218 / 255)
-            : Color(red: 47 / 255, green: 61 / 255, blue: 55 / 255)
-    }
+    private var tint: Color { Palette.glassAccent(for: colorScheme) }
     @ViewBuilder func body(content: Content) -> some View {
         if #available(iOS 26, *) {
             content.glassEffect(prominent ? .regular.tint(tint).interactive() : .regular.interactive(), in: Capsule())
@@ -142,7 +137,7 @@ struct ReadingActionBar: View {
                             .lineLimit(1).minimumScaleFactor(0.8)
                     }
                 }.font(.body.weight(.semibold)).frame(minWidth: 50, maxWidth: collapsed ? 50 : .infinity, minHeight: 50)
-                    .foregroundStyle(colorScheme == .dark ? Color(red: 0.10, green: 0.13, blue: 0.12) : .white)
+                    .foregroundStyle(Palette.onGlassAccent(for: colorScheme))
             }.buttonStyle(.plain).readingGlass(prominent: true).actionGlassIdentity("use", in: transition)
                 .accessibilityLabel(isSkill ? String(localized: "使用这个 Skill") : String(localized: "使用 Prompt"))
                 .accessibilityIdentifier("usePrompt")
