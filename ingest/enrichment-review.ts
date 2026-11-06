@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { promptSchema, type Prompt } from "../packages/schema/catalog.ts";
 import {
-  englishCardSchema, enrichedPromptIssues, enrichmentConsistencyIssues, facetDefinitions, facetGroups, facetIDs,
+  allowedModes, englishCardSchema, enrichedPromptIssues, enrichmentConsistencyIssues, facetDefinitions, facetGroups, facetIDs,
   facetLimits, facetsSchema, generationModes, generationSchema, inputKinds, inputsSchema, modelFamilies, presentationSchema,
   presentationValues, rightsSchema, shotsSchema, sourceAuthorRights, variablesSchema, type Palette,
 } from "../packages/schema/enrichment.ts";
@@ -37,12 +37,12 @@ Return one entry per candidate, in input order, with the same id.
 - presentation: ${presentationValues.join(", ")}. Apply this standard:
 ${presentationStandard}
   For text, Skill and website candidates without images, judge the prompt and the output it asks for by the same standard; use unknown only if you genuinely cannot tell. Explain the label in presentationReason with visible or textual evidence only.
-- inputs: what the person must supply before running the prompt. requirement none when nothing is needed; optional when the prompt works without it; required when it depends on an upload (a reference photo, a product shot, a source video). count is how many uploads when the prompt says so, else null. kinds from: ${inputKinds.join(", ")} (face is a person's photo used for identity; style is a style reference; scene is a location or background reference). ownLikenessOnly true when the prompt is meant to be used with the user's own face ("my photo", "keep my face"), false when it takes any person's face, null when no face input.
-- generation: modelFamily from ${modelFamilies.join(", ")} — the model the prompt was written for, from the model label, prompt or source post; other when none is named. modelVersion only when a version is stated (for example "2.5", "Pro", "v7"), else null. mode: t2i or i2i for images (i2i when an uploaded image is transformed or used as reference), t2v, i2v or v2v for videos, text for text prompts, web for websites, skill for Skills. outputAspect "W:H" only when the prompt states it, else null. durationSeconds and hasAudio only when the prompt states them, else null.
+- inputs: media the person must upload before running the prompt (photos, product shots, reference images, video or audio). Text the person types or pastes, documents and links are not inputs. requirement none when no upload is needed; optional when the prompt works without it; required when it depends on an upload (a reference photo, a product shot, a source video). count is how many uploads when the prompt says so, else null. kinds from: ${inputKinds.join(", ")} (face is a person's photo used for identity; style is a style reference; scene is a location or background reference). ownLikenessOnly true when the prompt is meant to be used with the user's own face ("my photo", "keep my face"), false when it takes any person's face, null when no face input.
+- generation: modelFamily from ${modelFamilies.join(", ")} — the model the prompt was written for, from the model label, prompt or source post; other when none is named. modelVersion only when a version is stated (for example "2.5", "Pro", "v7"), else null. mode must be one of the candidate's allowedModes: i2i when an uploaded image is transformed or used as reference, else t2i; i2v when a video starts from an uploaded image, v2v when it transforms an uploaded video, else t2v. outputAspect "W:H" only when the prompt states it, else null. durationSeconds and hasAudio only when the prompt states them, else null.
 - variables: placeholders the person is meant to replace, such as [a feeling], {product}, <name> or ALL-CAPS slots. token is copied character for character from the prompt, brackets included. name is a short label in Chinese (zh) and English (en). default is the example value the prompt already uses, if any. hint is a short bilingual explanation, or null. Return an empty list when the prompt has no such slots; never invent slots for ordinary words.
 - facets: choose only ids from the lists below. useCase up to ${facetLimits.useCase} (what people would use it for), style up to ${facetLimits.style} (the look or tone), subject up to ${facetLimits.subject} (what is depicted or discussed). Prefer fewer, accurate ids over many weak ones; an empty list is allowed when nothing fits. If an important aspect has no fitting id, name it in vocabularyGaps (English, a few words each) instead of forcing one.
 - sourceLanguage: the main language of the prompt text as a lowercase ISO 639-1 code (en, zh, ja, ko, …), or und when it has no natural-language text.
-- en: English card title (at most 80 characters) and summary (one or two sentences) describing what the prompt makes. Null only when the candidate already provides englishCard.
+- en: always required, even when the prompt is already English. English card title (at most 80 characters) and summary (one or two sentences) describing what the prompt makes. When the candidate provides englishCard, copy it.
 - shots: only when the prompt itself is written as two or more distinct shots or scenes in sequence (for example "Shot 1 … Shot 2 …" or timed segments). Number from 1; startSec and endSec only when stated; text is that shot's description from the prompt, in the prompt's language. Otherwise an empty list.
 Do not infer age, ethnicity, identity or other personal traits of anyone depicted.
 
@@ -70,7 +70,7 @@ export const enrichmentOutputJSONSchema: JsonSchema = object({
     variables: array(object({ token: string, name: object({ zh: string, en: string }), default: nullable(string),
       hint: nullable(object({ zh: string, en: string })) })),
     facets: object(Object.fromEntries(facetGroups.map(group => [group, array(enumOf(facetIDs[group]))]))),
-    en: nullable(object({ title: string, summary: string })),
+    en: object({ title: string, summary: string }),
     shots: array(object({ index: { type: "integer" }, startSec: nullable({ type: "number" }), endSec: nullable({ type: "number" }), text: string })),
     vocabularyGaps: array(string),
   })),
@@ -119,7 +119,7 @@ function existingEnglish(item: Prompt) {
 export function enrichmentInput(candidates: readonly EnrichmentCandidate[]): string {
   let position = 0;
   return JSON.stringify({ candidates: candidates.map(({ item, images, video }) => ({
-    id: item.id, kind: item.kind, contentType: item.contentType ?? "prompt", modelLabel: item.model,
+    id: item.id, kind: item.kind, contentType: item.contentType ?? "prompt", allowedModes: allowedModes(item), modelLabel: item.model,
     title: item.title, summary: item.summary, tags: item.tags, prompt: item.prompt,
     ...(item.source.post ? { sourcePost: item.source.post.text } : {}),
     ...(existingEnglish(item) ? { englishCard: existingEnglish(item) } : {}),
@@ -227,15 +227,19 @@ export function rightsFor(item: Prompt): z.infer<typeof rightsSchema> {
   return { license, basis: "license", imageExport: license === "CC0-1.0" && !!(item.media?.imageURL || item.media?.image) };
 }
 
-export type PresentationPolicy = "label" | "keep-unless-unknown";
+export type PresentationPolicy = "label" | "stricter-only";
+const restrictiveness = { general: 0, suggestive: 1, explicit: 2 } as const;
 
 /** Builds the enriched item. Text never changes; only new fields and, by policy, the scale label.
- * "keep-unless-unknown" is the backfill rule: existing labels stand, unknown is re-judged. */
+ * "stricter-only" is the backfill rule: unknown is re-judged, a settled label may only become
+ * more restrictive, never less. */
 export function applyEnrichment(item: Prompt, outcome: Extract<EnrichmentOutcome, { ok: true }>, context: {
   palette?: Palette; video?: EnrichmentCandidate["video"]; policy: PresentationPolicy;
 }): Prompt {
   const { fields, evidence } = outcome;
-  const presentation = context.policy === "label" || !item.presentation || item.presentation === "unknown" ? evidence.presentation : item.presentation;
+  const current = item.presentation;
+  const presentation = context.policy === "label" || !current || current === "unknown" ? evidence.presentation
+    : evidence.presentation !== "unknown" && restrictiveness[evidence.presentation] > restrictiveness[current] ? evidence.presentation : current;
   const generation = {
     ...fields.generation,
     outputAspect: fields.generation.outputAspect ?? aspectLabel(item.media?.aspectRatio),
