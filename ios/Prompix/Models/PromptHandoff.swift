@@ -33,6 +33,13 @@ struct PromptDestination: Identifiable, Equatable {
         return Transfer(url: target, text: text, includesPrompt: true)
     }
 
+    /// Display names of the tools Prompix knows, by destination id.
+    static let names: [String: String] = [
+        "chatgpt": "ChatGPT", "claude": "Claude", "gemini": "Gemini", "grok": "Grok", "dreamina": "Dreamina",
+        "flow": "Google Flow", "runway": "Runway", "midjourney": "Midjourney", "v0": "v0", "lovable": "Lovable",
+        "claude-code": "Claude Code",
+    ]
+
     static func requiresDesktop(for item: Prompt) -> Bool {
         item.kind == .video && item.model.localizedCaseInsensitiveContains("Remotion")
     }
@@ -41,34 +48,31 @@ struct PromptDestination: Identifiable, Equatable {
         guard !item.isSkill && !requiresDesktop(for: item) else { return [] }
         var choices: [Self] = []
         if let url = item.toolURL ?? modelDestination(for: item), isSafeURL(url) {
-            let known: [String: (String, String)] = [
-                "chatgpt.com": ("chatgpt", "ChatGPT"), "claude.ai": ("claude", "Claude"),
-                "gemini.google.com": ("gemini", "Gemini"), "grok.com": ("grok", "Grok"),
-                "dreamina.capcut.com": ("dreamina", "Dreamina"), "labs.google": ("flow", "Google Flow"),
-                "app.runwayml.com": ("runway", "Runway"),
-                "www.midjourney.com": ("midjourney", "Midjourney"), "v0.app": ("v0", "v0"),
-                "v0.dev": ("v0", "v0"), "lovable.dev": ("lovable", "Lovable"),
+            let known: [String: String] = [
+                "chatgpt.com": "chatgpt", "claude.ai": "claude", "gemini.google.com": "gemini", "grok.com": "grok",
+                "dreamina.capcut.com": "dreamina", "labs.google": "flow", "app.runwayml.com": "runway",
+                "www.midjourney.com": "midjourney", "v0.app": "v0", "v0.dev": "v0", "lovable.dev": "lovable",
             ]
             let identity = known[url.host ?? ""]
-            choices.append(.init(id: identity?.0 ?? "source:\(url.host ?? "")", name: identity?.1 ?? item.displayModel, url: url))
+            choices.append(.init(id: identity ?? "source:\(url.host ?? "")", name: identity.flatMap { names[$0] } ?? item.displayModel, url: url))
         }
         if item.kind == .web {
             if !choices.contains(where: { $0.id == Self.lovable.id }) { choices.append(Self.lovable) }
             choices.append(Self.claudeCode)
         }
         // Alternatives reflect supported tasks, not a promise of identical model output.
-        let common: [(String, String, String)]
+        let common: [(String, String)]
         switch item.kind {
         case .text, .web:
-            common = [("chatgpt", "ChatGPT", "https://chatgpt.com/"), ("claude", "Claude", "https://claude.ai/new"), ("gemini", "Gemini", "https://gemini.google.com/app")]
+            common = [("chatgpt", "https://chatgpt.com/"), ("claude", "https://claude.ai/new"), ("gemini", "https://gemini.google.com/app")]
         case .image:
-            common = [("chatgpt", "ChatGPT", "https://chatgpt.com/"), ("gemini", "Gemini", "https://gemini.google.com/app")]
+            common = [("chatgpt", "https://chatgpt.com/"), ("gemini", "https://gemini.google.com/app")]
         case .video:
             common = []
         }
-        for (id, name, address) in common {
+        for (id, address) in common {
             let url = URL(string: address)!
-            if !choices.contains(where: { $0.id == id }) { choices.append(.init(id: id, name: name, url: url)) }
+            if !choices.contains(where: { $0.id == id }) { choices.append(.init(id: id, name: names[id] ?? id, url: url)) }
         }
         return choices
     }

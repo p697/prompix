@@ -136,6 +136,9 @@ struct FeedPromptCard: View {
     @State private var savedFeedback = false
     @State private var copiedFeedback = false
     @Namespace private var transition
+    @Environment(\.openURL) private var openURL
+    @AppStorage("preferredPromptDestination") private var preferredDestination = ""
+    private enum Action { case copy, save, use }
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             Button { library.recommendations.record(.open, card: card); detailPresented = true } label: {
@@ -145,16 +148,24 @@ struct FeedPromptCard: View {
                     }
             }.buttonStyle(.cardPress).accessibilityLabel(card.title).accessibilityIdentifier("prompt-\(card.id)")
                 .contextMenu {
-                    Button { library.recommendations.record(.dismiss, card: card) } label: {
-                        Label(RecommendationCopy.text("feedback.less"), systemImage: "minus.circle")
-                    }
-                    Button { perform(save: false) } label: {
+                    Button { perform(.copy) } label: {
                         Label(card.contentType == "skill" ? String(localized: "复制 Skill") : String(localized: "复制 Prompt"), systemImage: "doc.on.doc")
                     }.disabled(actionID != nil)
-                    Button { perform(save: true) } label: {
+                    if card.contentType != "skill", let name = PromptDestination.names[preferredDestination] {
+                        Button { perform(.use) } label: {
+                            Label(String(format: String(localized: "action.copyOpen", table: "UsePrompt"), locale: .current, name), systemImage: "arrow.up.right")
+                        }.disabled(actionID != nil)
+                    }
+                    Button { perform(.save) } label: {
                         Label(library.savedIDs.contains(card.id) ? String(localized: "取消收藏") : String(localized: "收藏 Prompt"),
                               systemImage: library.savedIDs.contains(card.id) ? "bookmark.slash" : "bookmark")
                     }.disabled(actionID != nil)
+                    Button { library.recommendations.record(.dismiss, card: card) } label: {
+                        Label(RecommendationCopy.text("feedback.less"), systemImage: "minus.circle")
+                    }
+                } preview: {
+                    WorkPeek(preview: ContentPreview(card), title: card.title,
+                             text: library.feed?.cachedDetail(for: card)?.displayContent.prompt ?? card.summary)
                 }
                 .sensoryFeedback(.success, trigger: copiedFeedback).sensoryFeedback(.selection, trigger: savedFeedback)
             if typeSize.isAccessibilitySize || voiceOverEnabled, let creator = card.creator {
@@ -174,7 +185,8 @@ struct FeedPromptCard: View {
         }
         .onDisappear { action?.cancel(); action = nil; actionID = nil }
     }
-    private func perform(save: Bool) {
+    private func perform(_ kind: Action) {
+        let save = kind == .save
         guard actionID == nil, let feed = library.feed else { return }
         if save, let saved = library.favorites.first(where: { $0.id == card.id }) {
             if library.toggle(saved) { savedFeedback.toggle() }; return
@@ -187,10 +199,36 @@ struct FeedPromptCard: View {
                 try Task.checkCancellation()
                 guard actionID == owner, !library.isRemoved(item) else { throw FeedError.removed }
                 if save { if library.toggle(item) { savedFeedback.toggle() } }
-                else { UIPasteboard.general.string = item.displayContent.prompt; library.recommendations.record(.use, card: card); copiedFeedback.toggle() }
+                else {
+                    // Using from the peek opens the remembered tool when it suits this work; otherwise it copies.
+                    let destination = kind == .use ? PromptDestination.choices(for: item).first { $0.id == preferredDestination } : nil
+                    let transfer = destination?.transfer(item.displayContent.prompt)
+                    UIPasteboard.general.string = transfer?.text ?? item.displayContent.prompt
+                    library.recommendations.record(.use, card: card); copiedFeedback.toggle()
+                    if let transfer { openURL(transfer.url) }
+                }
             } catch is CancellationError { }
             catch { if !Task.isCancelled, actionID == owner { library.reportContentFailure(error) } }
         }
+    }
+}
+
+/// The long-press preview: the work large, its meta line, title and the first lines of text.
+struct WorkPeek: View {
+    let preview: ContentPreview
+    let title: String
+    let text: String
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            if !preview.usesTextArtwork {
+                Artwork(preview: preview, fillsFrame: true).aspectRatio(PromptCardGeometry.aspectRatio(for: preview), contentMode: .fit)
+            }
+            VStack(alignment: .leading, spacing: 6) {
+                Text(preview.metaLine).font(Typography.meta(size: 10)).tracking(1.2).foregroundStyle(Palette.muted)
+                Text(title).font(.headline).lineLimit(2)
+                Text(text.replacingOccurrences(of: "\n", with: " ")).font(Typography.prompt(size: 14)).foregroundStyle(Palette.muted).lineLimit(3)
+            }.padding(.horizontal, 16).padding(.bottom, 16).padding(.top, preview.usesTextArtwork ? 16 : 0)
+        }.frame(width: 320).background(Palette.surface).foregroundStyle(Palette.ink)
     }
 }
 

@@ -433,7 +433,7 @@ struct PromptCard: View {
                     Button {
                         if library.toggle(item) { savedFeedback.toggle() }
                     } label: { Label(library.isSaved(item) ? String(localized: "取消收藏") : String(localized: "收藏 Prompt"), systemImage: library.isSaved(item) ? "bookmark.slash" : "bookmark") }
-                }
+                } preview: { WorkPeek(preview: ContentPreview(item), title: item.displayTitle, text: item.displayContent.prompt) }
                 .sensoryFeedback(.success, trigger: copiedFeedback)
                 .sensoryFeedback(.selection, trigger: savedFeedback)
             if typeSize.isAccessibilitySize || voiceOverEnabled {

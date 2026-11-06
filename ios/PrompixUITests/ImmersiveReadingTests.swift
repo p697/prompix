@@ -177,6 +177,16 @@ import UIKit
         app.buttons["prompt-tiny-island"].press(forDuration: 0.8)
         app.buttons["取消收藏"].tap()
     }
+    func testPeekShowsTheWorkWithItsActions() {
+        let card = app.scrollViews["discoveryScroll"].buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'prompt-'")).firstMatch
+        XCTAssertTrue(card.waitForExistence(timeout: 10))
+        card.press(forDuration: 1.0)
+        XCTAssertTrue(app.buttons["复制 Prompt"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["收藏 Prompt"].exists)
+        capture("peek-01-preview")
+        app.buttons["复制 Prompt"].tap()
+        XCTAssertTrue(card.waitForExistence(timeout: 3))
+    }
     func testRefinedChromeAndInteractiveReturn() {
         XCTAssertTrue(app.buttons["discoveryFilters"].waitForExistence(timeout: 10))
         XCTAssertFalse(app.buttons["searchButton"].exists)
