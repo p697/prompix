@@ -1124,3 +1124,7 @@ The owner keeps the detail action bar, including its collapse into three circula
 ### 2026-11-06 — Keep the full detail preview on ordinary iPhones from iOS 27.1
 
 The iOS 27.1+ detail uses `ArrangementView`, which shows only the reading pane on an ordinary iPhone. The OS-version gate therefore replaced the full image with a 76pt thumbnail on every phone, while iOS 27.0 kept the full preview the owner approved. Layout now follows whether the media pane is actually laid out: when it is collapsed, the full preview sits above the reading content; only a visible split keeps the compact entry. Verified on an iPhone 18 Pro simulator with iOS 27.2; the expanded iPhone Duo split was not re-verified in this change.
+
+### 2026-11-06 — Let root headers yield through the system top bar
+
+The home header sat over a hand-drawn material veil that looked muddy and had a hard edge. Root headers now live in the scroll view's `safeAreaBar` with the system hard top edge effect; the soft style left the category row unreadable over artwork. The home header still collapses on scroll with the reading-bar spring, and the bar's height goes with it so the edge effect retreats to the status bar. Growing the top inset mid-scroll made SwiftUI jump the content by hundreds of points, so a matching top content margin replaces the bar height while collapsed and the total inset never changes. The tab bar minimizes on scroll from iOS 26. Cards scale to 0.97 when pressed; category switches add a selection haptic. Verified on an iPhone 18 Pro simulator with iOS 27.2 in light and dark.

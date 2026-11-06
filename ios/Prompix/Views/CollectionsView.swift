@@ -79,7 +79,7 @@ struct CollectionsDirectory: View {
                             }.padding(.horizontal, 2)
                         }.foregroundStyle(Palette.ink).multilineTextAlignment(.leading)
                             .contentShape(Rectangle())
-                    }.buttonStyle(.plain)
+                    }.buttonStyle(.cardPress)
                         .accessibilityLabel("\(collection.title) \(collection.subtitle) \(String(localized: "\(count) 个 Prompt"))")
                         .accessibilityIdentifier("collection-\(collection.id)")
                 }
@@ -171,7 +171,7 @@ struct CollectionRail: View {
                             Spacer(); Image(systemName: "chevron.right").font(.caption).foregroundStyle(Palette.muted)
                         }.multilineTextAlignment(.leading).frame(minHeight: 44)
                             .padding(16).background(Palette.soft, in: RoundedRectangle(cornerRadius: 14))
-                    }.buttonStyle(.plain)
+                    }.buttonStyle(.cardPress)
                 } }.padding(.horizontal, 20)
             } else {
                 ScrollView(.horizontal, showsIndicators: false) {
@@ -209,7 +209,7 @@ struct CollectionRail: View {
                                     }.frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 2)
                                 }.frame(width: 246)
                                     .foregroundStyle(Palette.ink).multilineTextAlignment(.leading).contentShape(Rectangle())
-                            }.buttonStyle(.plain).accessibilityIdentifier("home-collection-\(collection.id)")
+                            }.buttonStyle(.cardPress).accessibilityIdentifier("home-collection-\(collection.id)")
                         }
                     }.padding(.horizontal, 20)
                 }

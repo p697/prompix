@@ -49,6 +49,28 @@ enum Palette {
 
 }
 
+enum Motion {
+    /// Chrome that yields to scrolling: the reading actions and root headers.
+    static let chrome = Animation.spring(response: 0.38, dampingFraction: 0.86)
+    static let press = Animation.spring(response: 0.22, dampingFraction: 0.78)
+}
+
+/// Cards answer the finger at once and spring back on release. System glass,
+/// menus and pickers keep their own native feedback.
+struct CardPressStyle: ButtonStyle {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed && !reduceMotion ? 0.97 : 1)
+            .opacity(configuration.isPressed && reduceMotion ? 0.8 : 1)
+            .animation(reduceMotion ? nil : Motion.press, value: configuration.isPressed)
+    }
+}
+
+extension ButtonStyle where Self == CardPressStyle {
+    static var cardPress: CardPressStyle { CardPressStyle() }
+}
+
 enum Typography {
     static func editorial(_ style: Font.TextStyle) -> Font {
         .system(style, design: .default, weight: .regular)
@@ -70,6 +92,22 @@ extension View {
         if #available(iOS 26, *) { scrollEdgeEffectHidden(true, for: .top) }
         else { self }
     }
+
+    /// Root headers sit in the scroll view's top bar, so the system edge effect
+    /// rather than a drawn material separates them from the content beneath.
+    /// The hard style keeps header text legible over artwork.
+    @ViewBuilder func rootHeaderBar<Bar: View>(@ViewBuilder _ bar: () -> Bar) -> some View {
+        if #available(iOS 26, *) {
+            safeAreaBar(edge: .top, spacing: 0, content: bar).scrollEdgeEffectStyle(.hard, for: .top)
+        } else {
+            safeAreaInset(edge: .top, spacing: 0) { bar().background(Palette.paper.ignoresSafeArea(edges: .top)) }
+        }
+    }
+
+    @ViewBuilder func minimizesTabBarOnScroll() -> some View {
+        if #available(iOS 26, *) { tabBarMinimizeBehavior(.onScrollDown) }
+        else { self }
+    }
 }
 
 private struct PaperScreen: ViewModifier {
@@ -88,6 +126,7 @@ struct KindPicker: View {
     @Binding var skillsOnly: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Namespace private var selectionLine
+    @State private var picks = 0
     private var onSelect: ((PromptKind?, Bool) -> Void)?
     init(selection: Binding<PromptKind?>, skillsOnly: Binding<Bool> = .constant(false), onSelect: ((PromptKind?, Bool) -> Void)? = nil) {
         _selection = selection
@@ -106,11 +145,13 @@ struct KindPicker: View {
             }.padding(.horizontal, 16)
         }
         .accessibilityIdentifier("kindPicker")
+        .sensoryFeedback(.selection, trigger: picks)
         .animation(reduceMotion ? nil : .snappy(duration: 0.24), value: selection)
         .animation(reduceMotion ? nil : .snappy(duration: 0.24), value: skillsOnly)
     }
     private func select(_ kind: PromptKind?, skills: Bool) {
         guard selection != kind || skillsOnly != skills else { return }
+        picks &+= 1
         if let onSelect { onSelect(kind, skills) }
         else { selection = kind; skillsOnly = skills }
     }

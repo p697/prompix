@@ -1,34 +1,5 @@
 import SwiftUI
 
-/// Feathered reading protection, with no hard edge between chrome and artwork.
-/// The scroll view keeps its original safe-area layout but draws behind this veil.
-struct ReadingTopFade: View {
-    var collapsed = false
-    static let featherHeight: CGFloat = 24
-    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
-    var body: some View {
-        Group {
-            if reduceTransparency { Rectangle().fill(Palette.paper) }
-            else {
-                Rectangle().fill(.regularMaterial).overlay(Palette.paper.opacity(0.12))
-                    .opacity(collapsed ? 0.72 : 1)
-            }
-        }
-        .mask(alignment: .bottom) {
-            VStack(spacing: 0) {
-                Rectangle()
-                LinearGradient(stops: [
-                    .init(color: .black, location: 0),
-                    .init(color: .black.opacity(0.85), location: 0.25),
-                    .init(color: .black.opacity(0.35), location: 0.65),
-                    .init(color: .clear, location: 1)
-                ], startPoint: .top, endPoint: .bottom).frame(height: Self.featherHeight)
-            }
-        }
-        .allowsHitTesting(false).accessibilityHidden(true)
-    }
-}
-
 /// Accumulates deliberate travel, ignores bounce and programmatic layout changes.
 struct ReadingScrollState {
     private var previous: CGFloat?
@@ -148,7 +119,7 @@ struct ReadingActionBar: View {
         }
         .padding(.horizontal, 20).padding(.vertical, 8)
         .frame(maxWidth: 600).frame(maxWidth: .infinity)
-        .animation(reduceMotion ? nil : .spring(response: 0.38, dampingFraction: 0.86), value: collapsed)
+        .animation(reduceMotion ? nil : Motion.chrome, value: collapsed)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier(collapsed ? "readingActionsCompact" : "readingActionsExpanded")
     }

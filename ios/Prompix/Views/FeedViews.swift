@@ -124,7 +124,7 @@ struct FeedPromptCard: View {
                     .overlay(alignment: .bottomTrailing) {
                         if actionID != nil { ContentActivityLabel(size: 40).padding(8).background(.regularMaterial, in: Capsule()).padding(8) }
                     }
-            }.buttonStyle(.plain).accessibilityLabel(card.title).accessibilityIdentifier("prompt-\(card.id)")
+            }.buttonStyle(.cardPress).accessibilityLabel(card.title).accessibilityIdentifier("prompt-\(card.id)")
                 .contextMenu {
                     Button { library.recommendations.record(.dismiss, card: card) } label: {
                         Label(RecommendationCopy.text("feedback.less"), systemImage: "minus.circle")
