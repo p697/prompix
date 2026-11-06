@@ -177,6 +177,58 @@ import UIKit
         app.buttons["prompt-tiny-island"].press(forDuration: 0.8)
         app.buttons["取消收藏"].tap()
     }
+    func testPeekShowsTheWorkWithItsActions() {
+        let card = app.scrollViews["discoveryScroll"].buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'prompt-'")).firstMatch
+        XCTAssertTrue(card.waitForExistence(timeout: 10))
+        card.press(forDuration: 1.0)
+        XCTAssertTrue(app.buttons["复制 Prompt"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["收藏 Prompt"].exists)
+        capture("peek-01-preview")
+        app.buttons["复制 Prompt"].tap()
+        XCTAssertTrue(card.waitForExistence(timeout: 3))
+    }
+    /// Uses the live content service, since bundled works carry no creator identities.
+    func testCreatorPageLeadsWithSaving() throws {
+        guard ProcessInfo.processInfo.environment["PROMPIX_LIVE_UI"] == "1" else { throw XCTSkip("Explicit live service check only") }
+        app.terminate()
+        app.launchArguments = ["-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN"]
+        app.launchPrompix()
+        XCTAssertTrue(app.buttons["discoveryFilters"].waitForExistence(timeout: 15))
+        app.revealDiscoveryRails()
+        let creator = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'creator-'")).firstMatch
+        XCTAssertTrue(creator.waitForExistence(timeout: 5)); creator.tap()
+        let save = app.buttons["saveCreator"]
+        XCTAssertTrue(app.scrollViews["creatorProfileScroll"].waitForExistence(timeout: 8))
+        capture("creator-01-profile")
+        XCTAssertTrue(save.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.descendants(matching: .any)["creatorExternalProfile"].exists)
+        save.tap()
+        XCTAssertEqual(save.label, "取消收藏创作者")
+        save.tap()
+        XCTAssertEqual(save.label, "收藏创作者")
+    }
+    /// Live: an enriched image and video show their needs, glow and shots.
+    func testEnrichedDetailsShowNeedsAndShots() throws {
+        guard ProcessInfo.processInfo.environment["PROMPIX_LIVE_UI"] == "1" else { throw XCTSkip("Explicit live service check only") }
+        app.terminate()
+        app.launchArguments = ["-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN"]
+        app.launchPrompix()
+        for kind in ["kind-image", "kind-video"] {
+            XCTAssertTrue(app.buttons[kind].waitForExistence(timeout: 15)); app.buttons[kind].tap()
+            sleep(4) // Let the served page replace the cached one before choosing a card.
+            let card = app.scrollViews["discoveryScroll"].buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'prompt-'")).firstMatch
+            XCTAssertTrue(card.waitForExistence(timeout: 15)); card.tap()
+            XCTAssertTrue(app.buttons["usePrompt"].waitForExistence(timeout: 15))
+            sleep(2)
+            capture("enriched-\(kind)")
+            if kind == "kind-video" {
+                let shots = app.descendants(matching: .any)["promptShots"]
+                for _ in 0..<4 { if shots.exists { break }; app.swipeUp() }
+                capture("enriched-video-shots")
+            }
+            app.buttons["closePromptDetail"].tap()
+        }
+    }
     func testRefinedChromeAndInteractiveReturn() {
         XCTAssertTrue(app.buttons["discoveryFilters"].waitForExistence(timeout: 10))
         XCTAssertFalse(app.buttons["searchButton"].exists)

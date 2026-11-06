@@ -12,6 +12,8 @@ struct ContentPreview: Identifiable {
     let excerpt: String
     let creator: Prompt.Creator?
     let model: String
+    let generation: Prompt.Generation?
+    let palette: [Prompt.Swatch]?
     let attribution: String
     let media: Prompt.Media?
     let cover: Prompt.Cover?
@@ -19,12 +21,18 @@ struct ContentPreview: Identifiable {
     var usesTextArtwork: Bool { (isSkill || kind == .text) && !hasSourceImage }
     var displayKind: String { isSkill ? "Skill" : kind.title }
     var displaySymbol: String { isSkill ? "square.stack.3d.up" : kind.symbol }
+    /// "0:08" for a video whose real duration is known.
+    var durationLabel: String? {
+        guard let seconds = generation?.durationSeconds, seconds > 0 else { return nil }
+        let total = Int(seconds.rounded())
+        return "\(total / 60):" + String(format: "%02d", total % 60)
+    }
 
     init(_ item: Prompt) {
         id = item.id; kind = item.kind; isSkill = item.isSkill; artwork = item.artwork
         displayTitle = item.displayTitle; displaySummary = item.displaySummary
         excerpt = String((item.isSkill ? item.displaySummary : item.displayContent.prompt).prefix(800))
-        creator = item.creator; model = item.model; attribution = item.source.author ?? item.source.name; media = item.media
+        creator = item.creator; model = item.model; generation = item.generation; palette = item.palette; attribution = item.source.author ?? item.source.name; media = item.media
         cover = item.cover.map { value in
             Prompt.Cover(text: item.displayContent.cover?.text ?? value.text,
                          eyebrow: item.displayContent.cover?.eyebrow ?? value.eyebrow, tone: value.tone)
@@ -33,6 +41,6 @@ struct ContentPreview: Identifiable {
     init(_ card: FeedCard) {
         id = card.id; kind = card.kind; isSkill = card.contentType == "skill"; artwork = card.artwork
         displayTitle = card.title; displaySummary = card.summary; excerpt = String(card.summary.prefix(800))
-        creator = card.creator; model = card.model; attribution = card.creator?.displayName ?? card.model; media = card.media; cover = card.cover
+        creator = card.creator; model = card.model; generation = card.generation; palette = card.palette; attribution = card.creator?.displayName ?? card.model; media = card.media; cover = card.cover
     }
 }

@@ -427,11 +427,25 @@ struct CreatorDetail: View {
                             }
                         }
                     }
-                    Link(destination: creator.profileURL) {
-                        Label(String(localized: "查看 \(creator.platformName) 主页"), systemImage: "arrow.up.right")
-                            .font(.subheadline).frame(minHeight: 28)
-                    }.buttonStyle(.bordered).controlSize(.regular)
-                        .accessibilityIdentifier("creatorExternalProfile")
+                    // Saving is the one primary action; the profile link sits beside it.
+                    HStack(spacing: 10) {
+                        Button {
+                            if library.toggleCreator(creator) { savedFeedback.toggle() }
+                        } label: {
+                            PrimaryActionLabel(title: library.isCreatorSaved(creator) ? String(localized: "已收藏") : String(localized: "收藏创作者"),
+                                               compactTitle: library.isCreatorSaved(creator) ? String(localized: "已收藏") : String(localized: "收藏"),
+                                               symbol: library.isCreatorSaved(creator) ? "checkmark" : "bookmark")
+                        }.buttonStyle(.plain)
+                            .accessibilityLabel(library.isCreatorSaved(creator) ? String(localized: "取消收藏创作者") : String(localized: "收藏创作者"))
+                            .accessibilityIdentifier("saveCreator").sensoryFeedback(.selection, trigger: savedFeedback)
+                        Link(destination: creator.profileURL) {
+                            Label(String(localized: "查看 \(creator.platformName) 主页"), systemImage: "arrow.up.right")
+                                .font(.subheadline.weight(.semibold)).lineLimit(1).minimumScaleFactor(0.8)
+                                .frame(maxWidth: .infinity, minHeight: 24).padding(.vertical, 13)
+                                .background(Palette.soft, in: Capsule())
+                        }.buttonStyle(.plain).foregroundStyle(Palette.ink)
+                            .accessibilityIdentifier("creatorExternalProfile")
+                    }
                 }.padding(.horizontal, 20).padding(.vertical, 12)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 VStack(alignment: .leading, spacing: 14) {
@@ -455,15 +469,6 @@ struct CreatorDetail: View {
         .navigationTitle(creator.displayName).navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Button {
-                    if library.toggleCreator(creator) { savedFeedback.toggle() }
-                } label: {
-                    Label(library.isCreatorSaved(creator) ? String(localized: "取消收藏创作者") : String(localized: "收藏创作者"), systemImage: library.isCreatorSaved(creator) ? "bookmark.fill" : "bookmark")
-                        .frame(minWidth: 44, minHeight: 44)
-                }.accessibilityLabel(library.isCreatorSaved(creator) ? String(localized: "取消收藏创作者") : String(localized: "收藏创作者"))
-                    .accessibilityIdentifier("saveCreator").sensoryFeedback(.selection, trigger: savedFeedback)
-            }
-            ToolbarItem(placement: .topBarTrailing) {
                 ShareLink(item: creator.profileURL) {
                     Label(String(localized: "分享"), systemImage: "square.and.arrow.up")
                 }.accessibilityIdentifier("shareCreator")
@@ -476,14 +481,14 @@ struct CreatorDetail: View {
 
     private var identity: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(creator.displayName).font(Typography.editorial(.title)).fixedSize(horizontal: false, vertical: true)
-            Text(CreatorIdentity.subtitle(creator)).font(.subheadline).foregroundStyle(Palette.muted)
+            Text(creator.displayName).font(.title.bold()).fixedSize(horizontal: false, vertical: true)
+            Text(CreatorIdentity.subtitle(creator)).font(Typography.meta(size: 12)).foregroundStyle(Palette.muted)
                 .fixedSize(horizontal: false, vertical: true)
             if let feed = library.feed {
                 if let count = (feed.creatorDiscovery.items + feed.creators.items).first(where: { $0.id == creator.id })?.count {
-                    Text(String(localized: "\(count) 条内容")).font(.footnote).foregroundStyle(Palette.muted)
+                    Text(String(localized: "\(count) 条内容")).font(Typography.meta(size: 12)).foregroundStyle(Palette.muted)
                 }
-            } else { Text(String(localized: "\(allItems.count) 条内容")).font(.footnote).foregroundStyle(Palette.muted) }
+            } else { Text(String(localized: "\(allItems.count) 条内容")).font(Typography.meta(size: 12)).foregroundStyle(Palette.muted) }
         }
     }
 

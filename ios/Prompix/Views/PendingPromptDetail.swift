@@ -52,7 +52,7 @@ struct PendingPromptDetail: View {
     }
     @ViewBuilder private var media: some View {
         if preview.hasDetailMedia {
-            PromptDetailArtwork(preview: preview).padding(.horizontal, 12).padding(.top, 8).accessibilityIdentifier("detailPreviewArtwork")
+            PromptDetailArtwork(preview: preview).artworkGlow(preview.palette).padding(.horizontal, 12).padding(.top, 8).accessibilityIdentifier("detailPreviewArtwork")
         }
     }
     private var reading: some View {
@@ -99,14 +99,14 @@ struct PromptDetailArtwork: View {
     var body: some View {
         Artwork(preview: preview)
             .aspectRatio(preview.media?.aspectRatio.map { max(0.65, min(1.8, $0)) } ?? (preview.kind == .image ? 0.95 : 1.15), contentMode: .fit)
-            .clipShape(RoundedRectangle(cornerRadius: 6))
+            .clipShape(RoundedRectangle(cornerRadius: PromptCardGeometry.cornerRadius, style: .continuous))
     }
 }
 
 extension ContentPreview {
     /// Film-edge meta: kind, model and, for visual work, its frame ratio.
     var metaLine: String {
-        [displayKind, Prompt.localizedModel(model), media?.aspectRatio.flatMap(Self.ratioLabel) ?? ""]
+        [displayKind, Prompt.namesModel(model) ? Prompt.localizedModel(model) : "", generation?.outputAspect ?? media?.aspectRatio.flatMap(Self.ratioLabel) ?? "", durationLabel ?? ""]
             .filter { !$0.isEmpty }.joined(separator: " ▸ ").uppercased()
     }
     /// The nearest common frame ratio, or nothing for an unusual shape.

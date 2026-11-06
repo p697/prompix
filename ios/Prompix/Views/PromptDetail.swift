@@ -177,8 +177,10 @@ struct PromptDetail: View {
             PromptDetailHeading(meta: ContentPreview(item).metaLine, title: content.title, summary: content.summary, creator: item.creator)
             if #available(iOS 27.1, *), hasMediaPreview, mediaPaneVisible { compactPreview }
             languagePicker
+            PromptNeeds(item: item)
             PromptMarkdown(content.prompt)
                 .accessibilityIdentifier("promptBody")
+            if let shots = item.shots { PromptShots(shots: shots) }
             DisclosureGroup {
                 VStack(alignment: .leading, spacing: 20) {
                     Label("\(item.displayKind) · \(item.displayModel)", systemImage: item.displaySymbol)
@@ -369,6 +371,7 @@ struct PromptDetail: View {
     private var hero: some View {
         PromptDetailArtwork(preview: ContentPreview(item))
             .promptTransitionSource(id: "image-\(item.id)", in: imageTransition)
+            .artworkGlow(item.palette)
             .padding(.horizontal, 12).padding(.top, 8)
     }
 
@@ -907,5 +910,63 @@ struct ZoomImage: UIViewRepresentable {
                 scroll.zoom(to: CGRect(x: point.x - scroll.bounds.width / 4, y: point.y - scroll.bounds.height / 4, width: scroll.bounds.width / 2, height: scroll.bounds.height / 2), animated: !UIAccessibility.isReduceMotionEnabled)
             }
         }
+    }
+}
+
+/// What the work asks of you: a reference to upload, the model and the frame.
+private struct PromptNeeds: View {
+    let item: Prompt
+    private var input: String? {
+        guard let inputs = item.inputs, inputs.requirement != "none" else { return nil }
+        let names = inputs.kinds.map { kind in
+            switch kind {
+            case "face": inputs.ownLikenessOnly == true ? String(localized: "你自己的照片") : String(localized: "人像照片")
+            case "product": String(localized: "产品照")
+            case "style": String(localized: "风格参考图")
+            case "scene": String(localized: "场景照片")
+            case "video": String(localized: "参考视频")
+            case "audio": String(localized: "参考音频")
+            default: kind
+            }
+        }.joined(separator: " · ")
+        let count = inputs.count.map { $0 > 1 ? " ×\($0)" : "" } ?? ""
+        return inputs.requirement == "required" ? String(localized: "需要\(names)\(count)") : String(localized: "可选\(names)\(count)")
+    }
+    var body: some View {
+        let model = item.generation != nil && Prompt.namesModel(item.model) ? item.displayModel : nil
+        let values = [input, model, item.generation?.outputAspect].compactMap { $0 }
+        if !values.isEmpty {
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 6) { chips(values) }
+                VStack(alignment: .leading, spacing: 6) { chips(values) }
+            }.accessibilityElement(children: .combine).accessibilityIdentifier("promptNeeds")
+        }
+    }
+    private func chips(_ values: [String]) -> some View {
+        ForEach(values, id: \.self) { value in
+            Text(value).font(.footnote).lineLimit(1).padding(.horizontal, 12).padding(.vertical, 8)
+                .background(Palette.surface, in: Capsule()).overlay { Capsule().strokeBorder(Palette.line, lineWidth: 0.5) }
+        }
+    }
+}
+
+/// Multi-shot video prompts, one shot per row with its time range.
+private struct PromptShots: View {
+    let shots: [Prompt.Shot]
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(String(localized: "分镜")).font(.subheadline.weight(.semibold)).foregroundStyle(Palette.muted).accessibilityAddTraits(.isHeader)
+            ForEach(shots, id: \.index) { shot in
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(label(shot)).font(Typography.meta(size: 11)).tracking(1).foregroundStyle(Palette.muted)
+                    Text(shot.text).font(Typography.prompt(size: 16)).lineSpacing(4).textSelection(.enabled)
+                }
+            }
+        }.accessibilityIdentifier("promptShots")
+    }
+    private func label(_ shot: Prompt.Shot) -> String {
+        let number = String(format: "%02d", shot.index)
+        guard let start = shot.startSec, let end = shot.endSec else { return number }
+        return "\(number) ▸ \(start.formatted(.number.precision(.fractionLength(0...1))))–\(end.formatted(.number.precision(.fractionLength(0...1))))s"
     }
 }
