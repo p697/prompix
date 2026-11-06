@@ -100,9 +100,12 @@ struct ReadingActionBar: View {
     var ready = true
     var collapsed = false
     var copied = false
+    /// The one-step action names its tool, for example "复制并打开 ChatGPT".
+    var useTitle: String? = nil
     var edit: () -> Void = {}
     var copy: () -> Void = {}
     var use: () -> Void = {}
+    var chooseTool: (() -> Void)? = nil
     @Namespace private var transition
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var typeSize
@@ -133,13 +136,19 @@ struct ReadingActionBar: View {
                 HStack(spacing: 8) {
                     Image(systemName: "arrow.up.right")
                     if !collapsed {
-                        Text(typeSize.isAccessibilitySize ? String(localized: "使用") : isSkill ? String(localized: "使用这个 Skill") : String(localized: "使用 Prompt"))
+                        Text(typeSize.isAccessibilitySize ? String(localized: "使用") : useTitle ?? (isSkill ? String(localized: "使用这个 Skill") : String(localized: "使用 Prompt")))
                             .lineLimit(1).minimumScaleFactor(0.8)
                     }
                 }.font(.body.weight(.semibold)).frame(minWidth: 50, maxWidth: collapsed ? 50 : .infinity, minHeight: 50)
                     .foregroundStyle(Palette.onGlassAccent(for: colorScheme))
-            }.buttonStyle(.plain).readingGlass(prominent: true).actionGlassIdentity("use", in: transition)
-                .accessibilityLabel(isSkill ? String(localized: "使用这个 Skill") : String(localized: "使用 Prompt"))
+            }.buttonStyle(.plain)
+                .contextMenu {
+                    if let chooseTool {
+                        Button(action: chooseTool) { Label(String(localized: "选择其他工具"), systemImage: "square.grid.2x2") }
+                    }
+                }
+                .readingGlass(prominent: true).actionGlassIdentity("use", in: transition)
+                .accessibilityLabel(useTitle ?? (isSkill ? String(localized: "使用这个 Skill") : String(localized: "使用 Prompt")))
                 .accessibilityIdentifier("usePrompt")
         }
         .disabled(!ready)

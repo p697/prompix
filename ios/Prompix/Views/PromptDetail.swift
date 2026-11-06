@@ -26,6 +26,9 @@ struct PromptDetail: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var typeSize
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.openURL) private var openURL
+    // Written by the use tray each time a tool is chosen; absent until the first use.
+    @AppStorage("preferredPromptDestination") private var preferredDestination = ""
     private struct UseContext: Identifiable {
         let id = UUID()
         let item: Prompt
@@ -237,9 +240,32 @@ struct PromptDetail: View {
             }
     }
     private var readingActions: some View {
-        ReadingActionBar(isSkill: item.isSkill, collapsed: actionsCollapsed, copied: copied,
-                         edit: openEditor, copy: { UIPasteboard.general.string = content.prompt; library.recommendations.record(.use, prompt: item); copied = true },
-                         use: openUseSheet)
+        let quick = quickDestination
+        return ReadingActionBar(isSkill: item.isSkill, collapsed: actionsCollapsed, copied: copied,
+                                useTitle: quick.map(Self.useTitle),
+                                edit: openEditor, copy: { UIPasteboard.general.string = content.prompt; library.recommendations.record(.use, prompt: item); copied = true },
+                                use: { if let quick { useQuickly(quick) } else { openUseSheet() } },
+                                chooseTool: quick.map { _ in { openUseSheet() } })
+    }
+    private static func useTitle(_ destination: PromptDestination) -> String {
+        let format = String(localized: destination.supportsPrefill ? "action.prefill" : "action.copyOpen", table: "UsePrompt")
+        return String(format: format, locale: .current, destination.name)
+    }
+    /// After the first use, the main action goes straight to the last tool when it suits this item.
+    private var quickDestination: PromptDestination? {
+        guard !preferredDestination.isEmpty, !item.isSkill else { return nil }
+        return PromptDestination.choices(for: item).first { $0.id == preferredDestination }
+    }
+    /// One step: copy (or prefill) and open. Blanks still go through the tray, and
+    /// a tool that will not open falls back to it with the text already copied.
+    private func useQuickly(_ destination: PromptDestination) {
+        let text = library.draft(for: item, language: effectiveLanguage)
+        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, PromptTemplate(text).fields.isEmpty else { openUseSheet(); return }
+        let transfer = destination.transfer(text)
+        UIPasteboard.general.string = transfer.text
+        library.recommendations.record(.use, prompt: item)
+        copied = true
+        openURL(transfer.url) { accepted in if !accepted { openUseSheet() } }
     }
     private func openUseSheet() {
         let prepared = library.draft(for: item, language: effectiveLanguage)

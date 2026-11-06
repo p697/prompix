@@ -1168,3 +1168,7 @@ Following the 2.0 discover board, feed cards drop their titles and badges: a car
 ### 2026-11-06 — Place the creator and use rails inside the discover feed
 
 The first screen of discovery is now all work. The creator rail and the use rail sit together after the first twelve feed items (`FeedInterleave`), so later pages never move them; they are hidden while filtering, as before, and appear only once the feed has more than twelve items. Creator discovery therefore loads when its rail first scrolls into view rather than at launch. UI tests reach the rails through `revealDiscoveryRails()`.
+
+### 2026-11-06 — Make the detail action one step after the first use
+
+The 2.0 boards ask for "one-step use": once a tool has been chosen in the use tray, the detail's main action names that tool and copies (or prefills) the Prompt and opens it in one tap. A long press offers "choose another tool". The tray still opens the first time, when the remembered tool is not among this item's choices, when the Prompt has blanks to fill, and as the fallback when the tool cannot be opened. UI tests launch with `-preferredPromptDestination none` so the tray path stays deterministic.
