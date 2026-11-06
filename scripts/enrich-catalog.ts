@@ -54,8 +54,9 @@ async function pool<T>(values: readonly T[], concurrency: number, work: (value: 
   }));
 }
 const json = async (path: string) => JSON.parse(await readFile(path, "utf8"));
-/** The reviewed revision; an item edited since then is left for the next pass. */
-const itemHash = (item: Prompt) => createHash("sha256").update(JSON.stringify(item)).digest("hex");
+/** The reviewed revision, in schema key order so a raw and a parsed copy agree; an item
+ * edited since review is left for the next pass. */
+const itemHash = (item: Prompt) => createHash("sha256").update(JSON.stringify(catalogSchema.shape.prompts.element.parse(item))).digest("hex");
 const exists = (path: string) => readFile(path).then(() => true, () => false);
 
 /** A fixed spread of kinds and scale labels. */
@@ -88,9 +89,10 @@ async function prepare(item: Prompt): Promise<Prepared> {
   await rm(directory, { recursive: true, force: true });
   await mkdir(directory, { recursive: true });
   let prepared: Prepared;
-  if (item.kind === "text" || !item.media?.imageURL) prepared = { images: [] };
+  if (!item.media?.imageURL) prepared = { images: [] };
   else try {
-    const media = await prepareVisualMedia(item.kind === "web" ? { ...item, kind: "image" } : item, directory);
+    // Text and web items can carry a preview image; they are prepared like a still image.
+    const media = await prepareVisualMedia(item.kind === "video" ? item : { ...item, kind: "image" }, directory);
     const full = item.presentation === "unknown" || !item.presentation;
     const posters = media.attachments.filter(attachment => attachment.role !== "video-frame");
     const frames = media.attachments.filter(attachment => attachment.role === "video-frame");
