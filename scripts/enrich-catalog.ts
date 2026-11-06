@@ -22,6 +22,7 @@ import { prepareDailyStaging, publishDailyCatalog, readPublicationHold } from ".
 import { atomic, contentRoot, json as readJSON, moderationSchema } from "../ingest/publication.ts";
 import { languagePackEditionVersion } from "../ingest/release-publication.ts";
 import { preservePublicationInput } from "../services/feed/publication.ts";
+import { filterXAvailability, readXAvailability } from "../ingest/x-availability.ts";
 
 process.umask(0o077);
 const { values, positionals } = parseArgs({ allowPositionals: true, options: {
@@ -224,12 +225,13 @@ async function report(items: Prompt[]) {
 
 /** Enriches the current authoritative edition under the publisher lock. Only fields are
  * added; unknown labels take the re-judged label, settled labels only tighten, and explicit findings must already be
- * staged for removal (npm run remove) so they leave in this same edition. */
+ * staged for removal (npm run remove) so they leave in this same edition. X sources must have
+ * a current recheck; withheld ones sit out the edition. */
 async function publish(dryRun: boolean) {
   const run = values.run;
   if (!run) throw new Error("--run <name> is required");
   const outcomes = join(work!, "runs", run, "outcomes");
-  const report = { startedAt: new Date().toISOString(), published: false, enriched: 0, unchanged: 0, stale: 0, failed: 0, relabelled: {} as Record<string, number>, removed: [] as string[], total: 0, version: "" };
+  const report = { startedAt: new Date().toISOString(), published: false, enriched: 0, unchanged: 0, stale: 0, failed: 0, relabelled: {} as Record<string, number>, removed: [] as string[], withheld: [] as string[], total: 0, version: "" };
   await withDailyStatus(contentRoot, report, async () => {
     if (await readPublicationHold(contentRoot)) throw new Error("Publication is held");
     const prepared = await prepareDailyStaging(contentRoot);
@@ -252,12 +254,17 @@ async function publish(dryRun: boolean) {
       report.enriched++;
       prompts.push(enriched);
     }
+    // Like the daily publisher: an X source that is gone or changed sits out this edition
+    // without entering the removal list, and returns once a recheck finds it again.
+    const available = filterXAvailability(prompts, await readXAvailability(contentRoot));
+    report.withheld = available.withheldIDs;
+    prompts.splice(0, prompts.length, ...available.prompts);
     report.total = prompts.length;
     const removedIDs = [...removed].sort();
     const catalog = preservePublicationInput({ ...previous, prompts, removedIDs, publishedAt: new Date().toISOString(),
       version: languagePackEditionVersion(prompts, removedIDs) });
     await atomic(join(work!, "runs", run, `publication-${dryRun ? "dry-run" : "input"}.json`), catalog);
-    if (!dryRun && (report.enriched || report.removed.length)) {
+    if (!dryRun && (report.enriched || report.removed.length || report.withheld.length)) {
       const result = await publishDailyCatalog(contentRoot, catalog, prepared);
       report.published = true; report.version = result.authoritative.version;
     }

@@ -50,7 +50,7 @@ node --env-file=$HOME/.config/prompix/database.env --env-file=$HOME/.config/prom
 ```
 
 - `review`：下载并校验镜像媒体（与图片审核同一套校验），算 palette，按批调用。媒体准备最多 4 个并发；模型调用从 `--concurrency` 起步，一分钟内没遇到限流就翻倍到 `--max-concurrency`，遇到 429 减半并暂停 30 秒。可中断后重跑，已有结果的条目跳过。拒答的条目写入 `human-queue.jsonl`，不重试、不换模型；超时和临时失败最多重试 4 次；整包格式错误时用同一模型逐条重试一次。按实测 token 和标价估算累计花费，到 `--budget` 停止派发。
-- `publish`：在发布锁下读取线上当前版本，只给审核时内容未变的条目补字段，正文一律不动。unknown 用新判定；已有尺度只许变严。判成 explicit 的必须先用 `npm run remove` 登记下架，否则整次发布中止。`dry-run` 只写出发布输入和报告。
+- `publish`：在发布锁下读取线上当前版本，只给审核时内容未变的条目补字段，正文一律不动。unknown 用新判定；已有尺度只许变严。判成 explicit 的必须先用 `npm run remove` 登记下架，否则整次发布中止。X 来源要有 24 小时内的复查，已失效的和日常发布一样暂不进入本版（不进下架名单）；ClawHub 来源同样要 24 小时内核验。日常复查停了的话，先跑一次维护复查（`prepareXAvailability`，带已发布 ID）和 `npm run collect:community-skills`。`dry-run` 只写出发布输入和报告。
 
 ## 存量补字段进度
 
