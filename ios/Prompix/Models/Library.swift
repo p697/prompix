@@ -12,6 +12,13 @@ enum CatalogSyncState: Equatable, Sendable {
     }
 }
 
+/// One of the reader's own versions of a work's prompt.
+struct PromptVersion: Identifiable, Hashable {
+    let id: String
+    let text: String
+    let created: Date?
+}
+
 @MainActor @Observable final class Library {
     private(set) var prompts: [Prompt] = []
     private(set) var favorites: [Prompt] = []
@@ -47,6 +54,14 @@ enum CatalogSyncState: Equatable, Sendable {
     var savedIDs: Set<String> { Set(favorites.map(\.id)) }
     /// Works with a saved draft in any language.
     var draftedIDs: Set<String> { Set(drafts.keys.map { String($0.components(separatedBy: "::")[0]) }) }
+    private static let snapshotKey = "work"
+    /// The works the reader has written versions of, from the copy kept beside them.
+    var versionedWorks: [Prompt] {
+        drafts.compactMap { key, value -> Prompt? in
+            guard key.hasSuffix("::" + Self.snapshotKey) else { return nil }
+            return try? JSONDecoder().decode(Prompt.self, from: Data(value.utf8))
+        }
+    }
     var savedImageURLs: Set<URL>? {
         guard favoritesReadable, savedCreatorsReadable, !storageRecoveryPending else { return nil }
         return Set(favorites.compactMap { $0.media?.imageURL } + favorites.compactMap { $0.creator?.avatarURL } + savedCreators.compactMap(\.avatarURL))
@@ -249,6 +264,60 @@ enum CatalogSyncState: Equatable, Sendable {
     }
     private func draftID(for item: Prompt, language: String?) -> String {
         language.map { item.id + "::" + ContentLanguage.canonical($0) } ?? item.id
+    }
+    /// The reader's own versions of a work, newest first. Each lives in the drafts
+    /// file under `<item id>::v<milliseconds>`, so removals reconcile them as before;
+    /// a draft saved before versions existed appears as the oldest one.
+    func versions(of item: Prompt) -> [PromptVersion] {
+        drafts.compactMap { key, text -> PromptVersion? in
+            let parts = key.components(separatedBy: "::")
+            guard parts[0] == item.id, parts.count < 2 || parts[1] != Self.snapshotKey else { return nil }
+            let stamp = parts.count > 1 && parts[1].hasPrefix("v") ? Double(parts[1].dropFirst()) : nil
+            return PromptVersion(id: key, text: text, created: stamp.map { Date(timeIntervalSince1970: $0 / 1000) })
+        }.sorted { ($0.created ?? .distantPast) > ($1.created ?? .distantPast) }
+    }
+    /// Saves into an existing version, or starts a new one when `id` is nil.
+    /// Returns the version's id, or nil when nothing could be saved.
+    @discardableResult func saveVersion(_ text: String, id: String?, for item: Prompt, now: Date = Date()) -> String? {
+        guard !isRemoved(item) else {
+            error = String(localized: "这条内容已被移除，无法再保存。你仍可复制当前文字。")
+            return nil
+        }
+        guard draftsReadable, !storageRecoveryPending else {
+            error = String(localized: "已有草稿暂时无法读取，修改未保存。你可以先复制内容。")
+            return nil
+        }
+        let key = id ?? item.id + "::v" + String(Int64(now.timeIntervalSince1970 * 1000))
+        guard key.components(separatedBy: "::")[0] == item.id else { return nil }
+        var updated = drafts
+        updated[key] = text
+        // Keep the work beside its versions, so 我的版本 can list it without a catalog or saved copy.
+        let snapshot = item.id + "::" + Self.snapshotKey
+        if updated[snapshot] == nil, let data = try? JSONEncoder().encode(item) { updated[snapshot] = String(decoding: data, as: UTF8.self) }
+        guard updated != drafts else { return key }
+        do {
+            try JSONEncoder().encode(updated).write(to: draftFile, options: .atomic)
+            drafts = updated
+            return key
+        } catch {
+            self.error = String(localized: "草稿未能保存，请检查设备存储空间。你仍可以复制本次修改。")
+            return nil
+        }
+    }
+    @discardableResult func deleteVersion(_ id: String) -> Bool {
+        guard draftsReadable, !storageRecoveryPending, drafts[id] != nil else { return false }
+        var updated = drafts
+        updated[id] = nil
+        let itemID = id.components(separatedBy: "::")[0], snapshot = itemID + "::" + Self.snapshotKey
+        if !updated.keys.contains(where: { $0 != snapshot && $0.components(separatedBy: "::")[0] == itemID }) { updated[snapshot] = nil }
+        do {
+            try JSONEncoder().encode(updated).write(to: draftFile, options: .atomic)
+            drafts = updated
+            return true
+        } catch {
+            self.error = String(localized: "草稿未能保存，请检查设备存储空间。你仍可以复制本次修改。")
+            return false
+        }
     }
     func draft(for item: Prompt, language: String? = nil) -> String {
         drafts[draftID(for: item, language: language)] ?? item.content(in: language).prompt

@@ -11,7 +11,7 @@ struct SkillInformation: View {
                 HStack {
                     Text(String(localized: "查看源文件与安装说明")).font(.subheadline.weight(.medium))
                     Spacer(minLength: 8)
-                    Image(systemName: "arrow.up.right")
+                    PrompixIcon.arrowUpRight.image(size: 18)
                 }.frame(minHeight: 44)
             }.accessibilityIdentifier("skillSource")
             if let files = skill.files, !files.isEmpty {

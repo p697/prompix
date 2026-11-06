@@ -168,7 +168,7 @@ struct CollectionRail: View {
                                 Text(collection.title).font(Typography.editorial(.title3))
                                 Text(collection.subtitle).font(.subheadline).foregroundStyle(Palette.muted)
                             }
-                            Spacer(); Image(systemName: "chevron.right").font(.caption).foregroundStyle(Palette.muted)
+                            Spacer(); PrompixIcon.chevronRight.image(size: 14).foregroundStyle(Palette.muted)
                         }.multilineTextAlignment(.leading).frame(minHeight: 44)
                             .padding(16).background(Palette.soft, in: RoundedRectangle(cornerRadius: 14))
                     }.buttonStyle(.cardPress)

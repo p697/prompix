@@ -357,7 +357,7 @@ struct CreatorRow: View {
                 CreatorWorkPreview(card: preview)
                     .frame(width: 82, height: 70).clipShape(RoundedRectangle(cornerRadius: 10))
             } else {
-                Image(systemName: "chevron.right").font(.caption).foregroundStyle(Palette.muted).accessibilityHidden(true)
+                PrompixIcon.chevronRight.image(size: 14).foregroundStyle(Palette.muted).accessibilityHidden(true)
             }
         }
     }
@@ -375,7 +375,7 @@ struct CreatorByline: View {
                     Text(CreatorIdentity.subtitle(creator)).font(.caption).foregroundStyle(Palette.muted)
                 }
                 Spacer(minLength: 0)
-                Image(systemName: "chevron.right").font(.caption).foregroundStyle(Palette.muted)
+                PrompixIcon.chevronRight.image(size: 14).foregroundStyle(Palette.muted)
                     .accessibilityHidden(true)
             }.frame(minHeight: 44).contentShape(Rectangle())
         }.buttonStyle(.plain).accessibilityIdentifier("creatorByline")
@@ -439,7 +439,7 @@ struct CreatorDetail: View {
                             .accessibilityLabel(library.isCreatorSaved(creator) ? String(localized: "取消收藏创作者") : String(localized: "收藏创作者"))
                             .accessibilityIdentifier("saveCreator").sensoryFeedback(.selection, trigger: savedFeedback)
                         Link(destination: creator.profileURL) {
-                            Label(String(localized: "查看 \(creator.platformName) 主页"), systemImage: "arrow.up.right")
+                            Label { Text(String(localized: "查看 \(creator.platformName) 主页")) } icon: { PrompixIcon.arrowUpRight.image(size: 18) }
                                 .font(.subheadline.weight(.semibold)).lineLimit(1).minimumScaleFactor(0.8)
                                 .frame(maxWidth: .infinity, minHeight: 24).padding(.vertical, 13)
                                 .background(Palette.soft, in: Capsule())
@@ -470,7 +470,7 @@ struct CreatorDetail: View {
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 ShareLink(item: creator.profileURL) {
-                    Label(String(localized: "分享"), systemImage: "square.and.arrow.up")
+                    Label { Text(String(localized: "分享")) } icon: { PrompixIcon.share.image }
                 }.accessibilityIdentifier("shareCreator")
             }
         }

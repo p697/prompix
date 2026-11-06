@@ -19,7 +19,7 @@ struct PrompixOnboarding: View {
         VStack(spacing: 0) {
             HStack {
                 Button { move(to: page - 1) } label: {
-                    Image(systemName: "chevron.left").font(.system(size: 18, weight: .medium))
+                    PrompixIcon.back.image
                         .frame(width: 44, height: 44).contentShape(Circle())
                 }
                 .accessibilityLabel(copy("onboarding.back"))
@@ -109,7 +109,7 @@ struct PrompixOnboarding: View {
                 HStack(spacing: 14) {
                     Text(copy(page == interestPage ? "onboarding.complete" : "onboarding.begin"))
                         .fixedSize(horizontal: false, vertical: true)
-                    if !typeSize.isAccessibilitySize { Image(systemName: "arrow.right").accessibilityHidden(true) }
+                    if !typeSize.isAccessibilitySize { PrompixIcon.arrowRight.image(size: 20).accessibilityHidden(true) }
                 }
                 .font(.body.weight(.semibold)).multilineTextAlignment(.center)
                 .frame(maxWidth: .infinity, minHeight: 28).padding(.vertical, 16).padding(.horizontal, typeSize.isAccessibilitySize ? 16 : 24)

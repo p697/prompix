@@ -9,7 +9,8 @@ struct PromptDetail: View {
     private let origin: PromptDetailOrigin
     @Environment(Library.self) private var library
     @State private var editorContext: EditorContext?
-    @State private var useContext: UseContext?
+    /// The reader's own version on show; nil shows the work's prompt.
+    @State private var selectedVersion: String?
     @State private var imagePresented = false
     @State private var imagePage = 0
     @State private var deckPickerPresented = false
@@ -29,24 +30,20 @@ struct PromptDetail: View {
     @Environment(\.dynamicTypeSize) private var typeSize
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.openURL) private var openURL
-    // Written by the use tray each time a tool is chosen; absent until the first use.
-    @AppStorage("preferredPromptDestination") private var preferredDestination = ""
-    private struct UseContext: Identifiable {
-        let id = UUID()
-        let item: Prompt
-        let text: String
-        let title: String
-        let language: String?
-    }
     private struct EditorContext: Identifiable {
         let id = UUID()
         let item: Prompt
-        let language: String?
+        /// The version being edited; nil starts a new one from `text`.
+        let version: String?
+        let text: String
     }
     private var item: Prompt { library.resolvedDetail(snapshot, origin: origin) }
     private var effectiveLanguage: String? { language.flatMap { item.availableLanguages.contains($0) ? $0 : nil } }
     private var content: Prompt.TranslatedContent { item.content(in: effectiveLanguage) }
     private var displaysOriginalContent: Bool { content == item.content(in: nil) }
+    private var versions: [PromptVersion] { library.versions(of: item) }
+    /// What the copy button copies and the editor starts from.
+    private var shownText: String { versions.first { $0.id == selectedVersion }?.text ?? content.prompt }
     private var spokenLicense: String {
         // Give the common abbreviation a pronounceable name for VoiceOver.
         item.source.license == "CC0-1.0" ? "Creative Commons Zero" : item.source.license
@@ -69,7 +66,7 @@ struct PromptDetail: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                ShareLink(item: "\(content.title)\n\n\(content.prompt)\n\n\(String(localized: "来自")) \(item.source.author ?? item.source.name) · \(item.source.license)\n\(item.source.url?.absoluteString ?? "https://prompix.dev")") { Label(String(localized: "分享"), systemImage: "square.and.arrow.up").frame(minWidth: 44, minHeight: 44) }
+                ShareLink(item: "\(content.title)\n\n\(content.prompt)\n\n\(String(localized: "来自")) \(item.source.author ?? item.source.name) · \(item.source.license)\n\(item.source.url?.absoluteString ?? "https://prompix.dev")") { Label { Text(String(localized: "分享")) } icon: { PrompixIcon.share.image }.frame(minWidth: 44, minHeight: 44) }
                     .accessibilityIdentifier("sharePrompt")
             }
             ToolbarItem(placement: .topBarTrailing) {
@@ -78,7 +75,7 @@ struct PromptDetail: View {
                     if library.decks.decks.isEmpty { library.toggle(item) }
                     else if library.isSaved(item) || library.toggle(item) { deckPickerPresented = true }
                 } label: {
-                    Label(library.isSaved(item) ? String(localized: "取消收藏") : String(localized: "收藏 Prompt"), systemImage: library.isSaved(item) ? "bookmark.fill" : "bookmark")
+                    Label { Text(library.isSaved(item) ? String(localized: "取消收藏") : String(localized: "收藏 Prompt")) } icon: { (library.isSaved(item) ? PrompixIcon.savedFill : PrompixIcon.saved).image }
                         .frame(minWidth: 44, minHeight: 44)
                 }
                     .accessibilityLabel(library.isSaved(item) ? String(localized: "取消收藏") : String(localized: "收藏 Prompt")).accessibilityIdentifier("detailFavorite")
@@ -87,21 +84,20 @@ struct PromptDetail: View {
         }
         .promptActionBar { readingActions }
         .onChange(of: content) { _, _ in copied = false }
+        .onChange(of: selectedVersion) { _, _ in copied = false }
         .onChange(of: item.preferredTranslation, initial: true) { _, preferred in
             if !hasChosenLanguage { language = preferred }
+        }
+        .onChange(of: versions.map(\.id)) { _, ids in
+            if let selectedVersion, !ids.contains(selectedVersion) { self.selectedVersion = nil }
         }
         .onChange(of: library.isRemoved(item)) { _, removed in
             if removed { cancelLanguageSelection(); failedLanguage = nil }
         }
         .onDisappear { if languageRequestID != nil { cancelLanguageSelection() } }
-        .sheet(item: $useContext) { context in
-            PromptUseSheet(item: context.item, text: context.text, sourceText: context.item.content(in: context.language).prompt, title: context.title, language: context.language, onPrepared: { prepared in
-                let saved = library.saveDraft(prepared, for: context.item, language: context.language)
-                if !saved { library.dismissError() }
-                return saved
-            })
+        .sheet(item: $editorContext) { context in
+            PromptEditor(item: context.item, version: context.version, text: context.text) { selectedVersion = $0 }
         }
-        .sheet(item: $editorContext) { context in PromptEditor(item: context.item, language: context.language) }
         .sheet(isPresented: $deckPickerPresented) { DeckPicker(item: item) }
         .fullScreenCover(isPresented: $imagePresented) {
             ImageViewer(name: item.media?.image ?? item.artwork, urls: item.media?.galleryURLs ?? [], selection: imagePage)
@@ -172,7 +168,7 @@ struct PromptDetail: View {
                             .padding(.horizontal, 16).padding(.vertical, 12).background(.regularMaterial, in: Capsule()).padding(16)
                             .allowsHitTesting(false).accessibilityHidden(true)
                     } else if item.kind == .video {
-                        Image(systemName: "play.fill").font(.body).padding(14).background(.regularMaterial, in: Circle()).padding(16)
+                        PrompixIcon.play.image(size: 20).padding(14).background(.regularMaterial, in: Circle()).padding(16)
                             .allowsHitTesting(false).accessibilityHidden(true)
                     }
                 }
@@ -184,7 +180,8 @@ struct PromptDetail: View {
             if #available(iOS 27.1, *), hasMediaPreview, mediaPaneVisible { compactPreview }
             VStack(alignment: .leading, spacing: 10) {
                 languagePicker
-                FoldedPrompt(text: content.prompt).accessibilityIdentifier("promptBody")
+                if !versions.isEmpty { versionPicker }
+                FoldedPrompt(text: shownText).accessibilityIdentifier("promptBody")
             }
             if let shots = item.shots { PromptShots(shots: shots) }
             DisclosureGroup {
@@ -273,37 +270,36 @@ struct PromptDetail: View {
             }
     }
     private var readingActions: some View {
-        let quick = quickDestination
-        return ReadingActionBar(isSkill: item.isSkill, collapsed: actionsCollapsed, copied: copied,
-                                useTitle: quick.map(Self.useTitle),
-                                edit: openEditor, copy: { UIPasteboard.general.string = content.prompt; library.recommendations.record(.use, prompt: item); copied = true },
-                                use: { if let quick { useQuickly(quick) } else { openUseSheet() } },
-                                chooseTool: quick.map { _ in { openUseSheet() } })
+        ReadingActionBar(isSkill: item.isSkill, collapsed: actionsCollapsed, copied: copied,
+                         copyTitle: item.isSkill && SkillInstall.command(for: item) != nil ? String(localized: "复制安装命令") : nil,
+                         edit: openEditor, copy: copyShown)
     }
-    private static func useTitle(_ destination: PromptDestination) -> String {
-        let format = String(localized: destination.supportsPrefill ? "action.prefill" : "action.copyOpen", table: "UsePrompt")
-        return String(format: format, locale: .current, destination.name)
-    }
-    /// After the first use, the main action goes straight to the last tool when it suits this item.
-    private var quickDestination: PromptDestination? {
-        guard !preferredDestination.isEmpty, !item.isSkill else { return nil }
-        return PromptDestination.choices(for: item).first { $0.id == preferredDestination }
-    }
-    /// One step: copy (or prefill) and open. Blanks still go through the tray, and
-    /// a tool that will not open falls back to it with the text already copied.
-    private func useQuickly(_ destination: PromptDestination) {
-        let text = library.draft(for: item, language: effectiveLanguage)
-        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, PromptTemplate(text).fields.isEmpty else { openUseSheet(); return }
-        let transfer = destination.transfer(text)
-        UIPasteboard.general.string = transfer.text
+    private func copyShown() {
+        UIPasteboard.general.string = item.isSkill && selectedVersion == nil ? SkillInstall.command(for: item) ?? shownText : shownText
         library.recommendations.record(.use, prompt: item)
         copied = true
-        openURL(transfer.url) { accepted in if !accepted { openUseSheet() } }
     }
-    private func openUseSheet() {
-        let prepared = library.draft(for: item, language: effectiveLanguage)
-        guard !prepared.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { openEditor(); return }
-        useContext = UseContext(item: item, text: prepared, title: content.title, language: effectiveLanguage)
+    /// 原版 first, then the reader's own versions, newest first.
+    private var versionPicker: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 2) {
+                versionChip(String(localized: "原版"), id: nil)
+                ForEach(Array(versions.enumerated()), id: \.element.id) { index, version in
+                    versionChip(String(localized: "我的 \(versions.count - index)"), id: version.id)
+                }
+            }
+        }.scrollClipDisabled().accessibilityIdentifier("promptVersions")
+    }
+    private func versionChip(_ title: String, id: String?) -> some View {
+        let selected = selectedVersion == id
+        return Button { selectedVersion = id } label: {
+            Text(title).font(.subheadline.weight(selected ? .semibold : .regular))
+                .foregroundStyle(selected ? Palette.paper : Palette.muted)
+                .padding(.horizontal, 12).frame(height: 30)
+                .background(selected ? Palette.ink : .clear, in: Capsule())
+                .frame(minHeight: 44).contentShape(Rectangle())
+        }.buttonStyle(.plain).accessibilityAddTraits(selected ? .isSelected : [])
+            .accessibilityIdentifier(id.map { "version-\($0)" } ?? "version-original")
     }
     private var sourceAuthor: some View {
         Text(item.source.author ?? item.source.name).font(.footnote.weight(.medium))
@@ -318,7 +314,7 @@ struct PromptDetail: View {
                 Text(verbatim: "PROMPT").font(Typography.meta(size: 11)).tracking(1.4).foregroundStyle(Palette.muted)
                     .accessibilityAddTraits(.isHeader)
                 Spacer(minLength: 4)
-                languageMenu
+                if selectedVersion == nil { languageMenu }
             }
             if library.isRemoved(item) {
                 Text(String(localized: "这条内容已被移除，无法再保存。你仍可复制当前文字。"))
@@ -361,7 +357,7 @@ struct PromptDetail: View {
                 } label: {
                     HStack(spacing: 4) {
                         Text(effectiveLanguage.map(ContentLanguage.name) ?? String(localized: "原文"))
-                        Image(systemName: "chevron.down").font(.system(size: 9, weight: .semibold))
+                        PrompixIcon.chevronDown.image(size: 12)
                     }.font(Typography.meta(size: 11)).tracking(1.2).foregroundStyle(Palette.muted)
                         .frame(minWidth: 44, minHeight: 44).contentShape(Rectangle())
                 }.accessibilityLabel(String(localized: "语言")).accessibilityValue(effectiveLanguage.map(ContentLanguage.name) ?? String(localized: "原文"))
@@ -369,8 +365,8 @@ struct PromptDetail: View {
             }
     }
     private func openEditor() {
-        // Capture both together: a catalog or locale install must not change an open editor's baseline.
-        editorContext = EditorContext(item: item, language: effectiveLanguage)
+        // Capture the starting text now: a catalog or locale install must not change an open editor's baseline.
+        editorContext = EditorContext(item: item, version: selectedVersion, text: shownText)
     }
     private func cancelLanguageSelection() {
         languageRequestID = nil
@@ -408,195 +404,109 @@ private struct StablePromptEditor: View {
     }
 }
 
+/// The reader's own version of a prompt. Edits save as they are typed; starting
+/// from the original or another version makes a new version on the first change.
 struct PromptEditor: View {
     let item: Prompt
-    let language: String?
-    private let initialText: String?
-    private let readingPreview: Bool
-    private var isUnchangedReadingPreview: Bool { readingPreview && text == initialText }
-    private let onSave: ((String) -> Bool)?
+    private let onSaved: (String?) -> Void
+    private let baseline: String
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
-    @Environment(\.dynamicTypeSize) private var typeSize
     @Environment(Library.self) private var library
+    @State private var version: String?
     @State private var text: String
     @State private var copied = false
-    @State private var initialized = false
-    @State private var saved = true
     @State private var saveError: String?
-    @State private var restorePresented = false
-    @State private var usePresented = false
+    @State private var deletePresented = false
     @State private var leavePresented = false
-    @State private var leavingWithoutSaving = false
-    @State private var variablesPresented = false
-    @State private var headerHeight: CGFloat?
+    @State private var discarded = false
     @FocusState private var editorFocused: Bool
-    init(item: Prompt, language: String? = nil, initialText: String? = nil, readingPreview: Bool = false, onSave: ((String) -> Bool)? = nil) {
-        self.item = item; self.language = language; self.initialText = initialText; self.readingPreview = readingPreview; self.onSave = onSave
-        _text = State(initialValue: initialText ?? item.content(in: language).prompt)
+    init(item: Prompt, version: String?, text: String, onSaved: @escaping (String?) -> Void = { _ in }) {
+        self.item = item; self.onSaved = onSaved; baseline = text
+        _version = State(initialValue: version); _text = State(initialValue: text)
+    }
+    private var isEmpty: Bool { text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    private var unsaved: Bool {
+        guard let version else { return text != baseline }
+        return library.versions(of: item).first { $0.id == version }?.text != text
     }
     var body: some View {
         NavigationStack {
-            GeometryReader { geometry in
-                VStack(alignment: .leading, spacing: 12) {
-                    ScrollView {
-                        editorHeader.onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
-                            if height > 0 { headerHeight = height }
-                        }
-                    }
-                    .frame(height: min(headerHeight ?? geometry.size.height * 0.45, max(0, geometry.size.height * 0.45)))
-                    .accessibilityIdentifier("draftStatusScroll")
-                    StablePromptEditor(text: $text, focused: $editorFocused)
-                        .font(.body).scrollContentBackground(.hidden).padding(.horizontal, 16)
-                        .frame(maxHeight: .infinity).accessibilityIdentifier("promptEditor")
+            VStack(alignment: .leading, spacing: 8) {
+                if let saveError {
+                    Text(saveError).font(.footnote).foregroundStyle(Palette.muted)
+                        .fixedSize(horizontal: false, vertical: true).padding(.horizontal, 20)
+                        .accessibilityIdentifier("draftSaveError")
                 }
-            }.paperScreen().navigationTitle(String(localized: "编辑 Prompt")).navigationBarTitleDisplayMode(.inline)
+                StablePromptEditor(text: $text, focused: $editorFocused)
+                    .font(Typography.prompt(size: 17)).lineSpacing(5)
+                    .scrollContentBackground(.hidden).padding(.horizontal, 16)
+                    .frame(maxHeight: .infinity).accessibilityIdentifier("promptEditor")
+            }.paperScreen()
+                .navigationTitle(version == nil ? String(localized: "新版本") : String(localized: "我的版本"))
+                .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
-                    if #available(iOS 27.1, *) {
-                        ToolbarItem(placement: .primaryAction) {
-                            Button(action: copyEdits) {
-                                Label(copied ? String(localized: "已复制修改后的 Prompt") : String(localized: "复制修改后的 Prompt"),
-                                      systemImage: copied ? "checkmark" : "doc.on.doc")
-                            }.accessibilityIdentifier("copyEditedPrompt")
-                                .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                                .sensoryFeedback(.success, trigger: copied)
-                        }
-                    }
                     ToolbarItem(placement: .cancellationAction) {
-                        Button(String(localized: "完成")) { if save() { dismiss() } }.accessibilityIdentifier("finishPromptEditing")
+                        Button(String(localized: "完成")) { if save() { dismiss() } else { leavePresented = true } }
+                            .accessibilityIdentifier("finishPromptEditing")
                     }
                     ToolbarItem(placement: .primaryAction) {
-                        Menu {
-                            ShareLink(item: text) { Label(String(localized: "分享"), systemImage: "square.and.arrow.up") }
-                                .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                            Button(language == nil ? String(localized: "恢复原始 Prompt") : String(localized: "恢复当前语言的内容"), systemImage: "arrow.counterclockwise", role: .destructive) { restorePresented = true }
-                                .disabled(text == item.content(in: language).prompt)
-                        } label: { Label(String(localized: "编辑选项"), systemImage: "ellipsis.circle") }
+                        Button(action: copy) {
+                            Label(copied ? String(localized: "已复制") : String(localized: "复制"), systemImage: copied ? "checkmark" : "doc.on.doc")
+                        }.disabled(isEmpty).accessibilityIdentifier("copyEditedPrompt").sensoryFeedback(.success, trigger: copied)
                     }
-                }
-                .toolbar {
-                    ToolbarItem(placement: .primaryAction) {
-                        if onSave == nil {
-                            Button { usePresented = true } label: { Label(String(localized: "使用"), systemImage: "arrow.up.right") }
-                                .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty).accessibilityIdentifier("useEditedPrompt")
+                    if version != nil {
+                        ToolbarItem(placement: .primaryAction) {
+                            Menu {
+                                Button(String(localized: "删除这个版本"), systemImage: "trash", role: .destructive) { deletePresented = true }
+                            } label: { Label { Text(String(localized: "更多")) } icon: { PrompixIcon.more.image } }
+                                .accessibilityIdentifier("versionActions")
                         }
                     }
                 }
-                .sheet(isPresented: $usePresented) {
-                    PromptUseSheet(item: item, text: text, sourceText: item.content(in: language).prompt, title: item.content(in: language).title, language: language, onEdit: { prepared in
-                        // An explicit return to editing carries unsaved variable input too.
-                        text = prepared; saved = prepared == library.draft(for: item, language: language)
-                        usePresented = false
-                    }, onPrepared: { prepared in
-                        // Keep failed child edits out of this editor's autosave buffer.
-                        let committed = library.saveDraft(prepared, for: item, language: language)
-                        if committed { text = prepared; saved = true; saveError = nil }
-                        else { library.dismissError() }
-                        return committed
-                    })
-                }
-                .sheet(isPresented: $variablesPresented) {
-                    PromptVariablesSheet(template: PromptTemplate(text, enabled: !item.isSkill)) { prepared in
-                        text = prepared; save()
-                    }
-                }
-                .promptActionBar {
-                    if #unavailable(iOS 27.1) {
-                        Button(action: copyEdits) {
-                            PrimaryActionLabel(title: copied ? String(localized: "已复制修改后的 Prompt") : String(localized: "复制修改后的 Prompt"),
-                                compactTitle: copied ? String(localized: "已复制") : String(localized: "复制"), symbol: copied ? "checkmark" : "doc.on.doc")
-                        }.buttonStyle(.plain).accessibilityIdentifier("copyEditedPrompt")
-                            .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                            .padding().background(Palette.paper).sensoryFeedback(.success, trigger: copied)
-                    }
-                }
-                .onAppear {
-                    guard !initialized else { return }
-                    text = initialText ?? library.draft(for: item, language: language)
-                    saved = text == library.draft(for: item, language: language); initialized = true
-                }
-                .onChange(of: text) { _, _ in copied = false; saved = text == library.draft(for: item, language: language); saveError = nil }
+                .onAppear { editorFocused = true }
+                .onChange(of: text) { _, _ in copied = false; saveError = nil }
                 .task(id: text) {
-                    guard initialized else { return }
                     do { try await Task.sleep(for: .milliseconds(400)) } catch { return }
                     save()
                 }
-                .onDisappear { if initialized { save() } }
-                .onChange(of: scenePhase) { _, phase in
-                    if phase != .active, initialized { save() }
-                }
-                .confirmationDialog(language == nil ? String(localized: "恢复原始 Prompt？") : String(localized: "恢复当前语言的内容？"), isPresented: $restorePresented, titleVisibility: .visible) {
-                    Button(language == nil ? String(localized: "恢复原文") : String(localized: "恢复译文"), role: .destructive) { text = item.content(in: language).prompt; save() }
+                .onDisappear { if !discarded { save() } }
+                .onChange(of: scenePhase) { _, phase in if phase != .active { save() } }
+                .confirmationDialog(String(localized: "删除这个版本？"), isPresented: $deletePresented, titleVisibility: .visible) {
+                    Button(String(localized: "删除"), role: .destructive) {
+                        if let version, library.deleteVersion(version) { discarded = true; onSaved(nil); dismiss() }
+                    }
                     Button(String(localized: "取消"), role: .cancel) {}
-                } message: { Text(String(localized: "这会替换你在此设备上保存的修改。")) }
+                } message: { Text(String(localized: "原版和其他版本不受影响。")) }
                 .alert(String(localized: "本次修改尚未保存"), isPresented: $leavePresented) {
-                    Button(String(localized: "复制并退出")) {
-                        UIPasteboard.general.string = text
-                        leaveWithoutSaving()
-                    }.accessibilityIdentifier("copyDraftAndLeave")
-                    Button(String(localized: "放弃本次修改并退出"), role: .destructive) { leaveWithoutSaving() }
+                    Button(String(localized: "复制并退出")) { UIPasteboard.general.string = text; discarded = true; dismiss() }
+                        .accessibilityIdentifier("copyDraftAndLeave")
+                    Button(String(localized: "放弃本次修改并退出"), role: .destructive) { discarded = true; dismiss() }
                         .accessibilityIdentifier("discardDraftAndLeave")
                     Button(String(localized: "继续编辑"), role: .cancel) {}
                 }
         }
         .promptSheet()
-        .interactiveDismissDisabled(!isUnchangedReadingPreview && (!saved || text != library.draft(for: item, language: language)))
+        .interactiveDismissDisabled(unsaved)
     }
-    private var editorHeader: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            if let saveError {
-                ViewThatFits(in: .horizontal) {
-                    HStack { saveRecoveryActions }
-                    VStack(alignment: .leading) { saveRecoveryActions }
-                }
-                Text(saveError).font(.footnote).foregroundStyle(Palette.muted)
-                    .fixedSize(horizontal: false, vertical: true).accessibilityIdentifier("draftSaveError")
-            }
-            if let language { Text(ContentLanguage.name(language)).font(.footnote.weight(.medium)).foregroundStyle(Palette.accent) }
-            Text(typeSize.isAccessibilitySize ? String(localized: "原文会保留。") : String(localized: "修改会保存到此设备，原始 Prompt 会保留。"))
-                .font(.footnote).foregroundStyle(Palette.muted).fixedSize(horizontal: false, vertical: true)
-            HStack {
-                Label(isUnchangedReadingPreview ? String(localized: "version.reading", table: "UsePrompt") : saved ? String(localized: "已保存到此设备") : saveError != nil ? String(localized: "尚未保存，可先复制保留") : String(localized: "正在保存…"), systemImage: saved ? "checkmark.circle" : "circle.dotted")
-                    .font(.footnote).foregroundStyle(Palette.muted).fixedSize(horizontal: false, vertical: true).accessibilityIdentifier("draftStatus")
-                if !typeSize.isAccessibilitySize {
-                    Spacer()
-                    Text(String(localized: "\(text.count) 字符")).font(.footnote.monospacedDigit()).foregroundStyle(Palette.muted)
-                }
-            }
-            if !PromptTemplate(text, enabled: !item.isSkill).fields.isEmpty {
-                Button(String(localized: "填写变量"), systemImage: "square.and.pencil") { variablesPresented = true }
-                    .frame(minHeight: 44).accessibilityIdentifier("editPromptVariables")
-            }
-        }.padding(.horizontal, 20).padding(.top, 14)
-            .frame(maxWidth: .infinity, alignment: .leading).fixedSize(horizontal: false, vertical: true)
-    }
-    private var saveRecoveryActions: some View {
-        Group {
-            Button(String(localized: "重试保存")) { save() }.accessibilityIdentifier("retryDraftSave")
-            Button(String(localized: "退出编辑")) {
-                editorFocused = false
-                leavePresented = true
-            }.accessibilityIdentifier("leaveUnsavedDraft")
-        }.buttonStyle(.bordered).controlSize(.large)
-    }
-    private func copyEdits() {
+    private func copy() {
         UIPasteboard.general.string = text
         library.recommendations.record(.use, prompt: item)
         copied = true
         save()
     }
+    /// Nothing is stored until the text differs from where it started, or is empty.
     @discardableResult private func save() -> Bool {
-        guard !leavingWithoutSaving else { return false }
-        saved = onSave?(text) ?? library.saveDraft(text, for: item, language: language)
-        saveError = saved ? nil : library.error ?? String(localized: "尚未保存，可先复制保留")
-        // Present draft failures here: a root alert can dismiss this editor sheet.
-        if !saved { library.dismissError() }
-        return saved
-    }
-    private func leaveWithoutSaving() {
-        // Explicitly abandoning edits must also stop pending lifecycle saves.
-        leavingWithoutSaving = true
-        dismiss()
+        guard !discarded, unsaved else { return true }
+        guard !isEmpty else { return version == nil }
+        guard let saved = library.saveVersion(text, id: version, for: item) else {
+            saveError = library.error ?? String(localized: "尚未保存，可先复制保留")
+            library.dismissError()
+            return false
+        }
+        if version == nil { version = saved }
+        onSaved(saved)
+        return true
     }
 }
 
@@ -741,7 +651,7 @@ struct ImageViewer: View {
                     }
                     Spacer()
                     Button { dismiss() } label: {
-                        Image(systemName: "xmark").font(.body.weight(.semibold))
+                        PrompixIcon.close.image(size: 20)
                             .foregroundStyle(.white).frame(width: 44, height: 44)
                             .background(.ultraThinMaterial, in: Circle())
                     }.buttonStyle(.plain).accessibilityLabel(String(localized: "完成"))
@@ -751,11 +661,11 @@ struct ImageViewer: View {
                 if count > 1 {
                     HStack(spacing: 28) {
                         Button { selection -= 1 } label: {
-                            Image(systemName: "chevron.left").frame(width: 44, height: 44)
+                            PrompixIcon.back.image.frame(width: 44, height: 44)
                         }.disabled(selection == 0)
                             .accessibilityLabel(String(localized: "上一张")).accessibilityIdentifier("previousImage")
                         Button { selection += 1 } label: {
-                            Image(systemName: "chevron.right").frame(width: 44, height: 44)
+                            PrompixIcon.chevronRight.image.frame(width: 44, height: 44)
                         }.disabled(selection == count - 1)
                             .accessibilityLabel(String(localized: "下一张")).accessibilityIdentifier("nextImage")
                     }.font(.body.weight(.medium)).buttonStyle(.plain)
