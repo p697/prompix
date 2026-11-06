@@ -49,8 +49,8 @@ struct FeedResults: View {
             } else if matches && store.failure != nil {
                 if !showsFallback { recovery(message: String(localized: "暂时无法连接")) }
             } else if items.isEmpty && !store.isLoading {
-                ContentUnavailableView(String(localized: "暂无匹配内容"), systemImage: "sparkle",
-                                       description: Text(String(localized: "试试其他分类，或清除筛选条件。")))
+                if query.q.isEmpty { QuietEmpty(title: String(localized: "这里还没有作品")) }
+                else { QuietEmpty(title: String(localized: "没有找到「\(query.q)」"), message: String(localized: "换个说法，或者少用几个词。")) }
             }
             if matches && store.nextCursor != nil && store.failure == nil {
                 FeedNextPageButton(isLoading: store.isLoading, enabled: true) {

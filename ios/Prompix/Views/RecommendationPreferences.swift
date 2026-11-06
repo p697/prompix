@@ -35,6 +35,7 @@ struct InterestSelection: View {
                                 .font(.system(size: typeSize.isAccessibilitySize ? 28 : 20))
                                 .frame(width: typeSize.isAccessibilitySize ? 34 : 22).foregroundStyle(Palette.accent)
                             Text(topic.title).font(.subheadline.weight(selected ? .semibold : .regular))
+                                .lineLimit(typeSize.isAccessibilitySize ? nil : 1).minimumScaleFactor(0.8)
                                 .fixedSize(horizontal: false, vertical: true)
                             Spacer(minLength: 0)
                             Image(systemName: selected ? "checkmark.circle.fill" : "circle")

@@ -30,6 +30,19 @@ enum Palette {
     static func onGlassAccent(for scheme: ColorScheme) -> Color { rgb(scheme == .dark ? 0x0B0B0C : 0xF4F3EF) }
 }
 
+/// An empty place says one plain sentence and, at most, one more; no illustration.
+struct QuietEmpty: View {
+    let title: String
+    var message: String? = nil
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title).font(.title3.weight(.semibold)).foregroundStyle(Palette.ink)
+            if let message { Text(message).font(.subheadline).foregroundStyle(Palette.muted).fixedSize(horizontal: false, vertical: true) }
+        }.frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 20).padding(.vertical, 28)
+            .accessibilityElement(children: .combine)
+    }
+}
+
 enum Motion {
     /// Chrome that yields to scrolling: the reading actions and root headers.
     static let chrome = Animation.spring(response: 0.38, dampingFraction: 0.86)

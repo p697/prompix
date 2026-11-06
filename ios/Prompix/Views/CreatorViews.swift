@@ -526,9 +526,8 @@ struct SavedCreators: View {
             actions: { Button(String(localized: "重新读取收藏")) { library.reloadSavedCreators() }.buttonStyle(.bordered) }
         } else if creators.isEmpty {
             if query.isEmpty {
-                ContentUnavailableView(String(localized: "暂无收藏的创作者"), systemImage: "person.crop.circle",
-                    description: Text(String(localized: "在创作者主页轻点书签，方便下次找到。收藏保存在本机。")))
-            } else { ContentUnavailableView.search(text: query) }
+                QuietEmpty(title: String(localized: "还没有收藏创作者"), message: String(localized: "在创作者主页点「收藏创作者」，下次就能在这里找到。"))
+            } else { QuietEmpty(title: String(localized: "没有找到「\(query)」")) }
         } else {
             LazyVStack(spacing: 20) {
                 ForEach(creators) { creator in

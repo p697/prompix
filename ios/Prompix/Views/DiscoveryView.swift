@@ -548,9 +548,7 @@ struct FavoritesView: View {
         var seen = Set<String>()
         let items = (kept + earlier).filter { seen.insert($0.id).inserted }
         if items.isEmpty {
-            ContentUnavailableView {
-                Label { Text(String(localized: "还没有自己的版本")) } icon: { PrompixIcon.edit.image(size: 40) }
-            } description: { Text(String(localized: "在详情页点铅笔，就能基于任意 Prompt 写自己的版本。")) }
+            QuietEmpty(title: String(localized: "还没有自己的版本"), message: String(localized: "在详情页点铅笔，就能基于任意 Prompt 写自己的版本。"))
         } else { PromptGrid(items: items, origin: .favorite).padding(.horizontal, PromptGridLayout.inset) }
     }
 }
@@ -683,6 +681,9 @@ private struct DeckDetail: View {
                         Label(String(localized: "部分收藏预览尚未下载，轻点重试"), systemImage: "arrow.down.circle")
                             .font(.footnote).foregroundStyle(Palette.muted)
                     }.padding(.horizontal, 20)
+                }
+                if items.isEmpty {
+                    QuietEmpty(title: String(localized: "卡组里还没有作品"), message: String(localized: "在详情页点书签，选这个卡组即可加入。"))
                 }
                 // A deck reads as a contact sheet: three equal squares per row.
                 LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 4), count: 3), spacing: 4) {
