@@ -70,6 +70,9 @@ struct DiscoverView: View {
     @Environment(\.recommendationSurfaceVisible) private var recommendationSurfaceVisible
     @State private var appliedPreferenceRevision = 0
     @State private var model: String?
+    @State private var facet: String?
+    @State private var modelFamily: String?
+    @State private var inputs: String?
     @State private var chromeCollapsed = false
     @State private var headerHeight: CGFloat = 112
     @State private var viewportHeight: CGFloat = 0
@@ -82,12 +85,15 @@ struct DiscoverView: View {
                 (feedSort != "recommended" || library.recommendations.allowsRecommended($0))
         }
     }
-    private var feedQuery: FeedQuery { FeedQuery(kind: skillsOnly ? "skill" : kind?.rawValue, tag: topic, model: model, sort: feedSort) }
+    private var feedQuery: FeedQuery {
+        FeedQuery(kind: skillsOnly ? "skill" : kind?.rawValue, tag: topic, model: model, sort: feedSort, facet: facet, inputs: inputs, modelFamily: modelFamily)
+    }
     private var models: [String] {
         if let feed = library.feed { return feed.browse.value?.models.map(\.name) ?? [] }
         return Array(Set(library.prompts.filter { PromptQuery(kind: kind, skillsOnly: skillsOnly).matches($0) }.map(\.model))).sorted()
     }
-    private var isFiltered: Bool { kind != nil || skillsOnly || topic != nil || model != nil }
+    private var isFiltered: Bool { kind != nil || skillsOnly || refined }
+    private var refined: Bool { topic != nil || model != nil || facet != nil || modelFamily != nil || inputs != nil }
     private var needsFirstVideoUpdate: Bool {
         kind == .video && library.version.hasPrefix("studio-") && !library.prompts.contains { $0.kind == .video }
     }
@@ -183,7 +189,7 @@ struct DiscoverView: View {
         })
     }
     private func selectKind(_ next: PromptKind?, _ skills: Bool) {
-        kind = next; skillsOnly = skills; topic = nil; model = nil
+        kind = next; skillsOnly = skills; topic = nil; model = nil; facet = nil; modelFamily = nil; inputs = nil
         library.feed?.discovery.select(feedQuery)
     }
     // The bar itself shrinks, so the edge effect retreats to the status bar
@@ -232,6 +238,43 @@ struct DiscoverView: View {
     }
     private var filterMenu: some View {
         Menu {
+            if let browse = library.feed?.browse.value, let uses = browse.facets?.useCase, !uses.isEmpty {
+                servedFilters(uses: uses, families: browse.modelFamilies ?? [])
+            } else { catalogFilters }
+        } label: {
+            Image(systemName: "line.3.horizontal.decrease").frame(width: 44, height: 44)
+                .overlay(alignment: .topTrailing) {
+                    if refined { Circle().fill(Palette.accent).frame(width: 7, height: 7).padding(9) }
+                }
+        }.accessibilityLabel(String(localized: "筛选")).accessibilityValue(refined ? String(localized: "已筛选") : "")
+            .accessibilityIdentifier("discoveryFilters")
+    }
+    /// 2.0 filters from the service's own counts: use, model family and reference needs.
+    @ViewBuilder private func servedFilters(uses: [FeedBrowse.Count], families: [FeedBrowse.Count]) -> some View {
+        Menu(facet.flatMap(FacetCatalog.name) ?? String(localized: "全部用途")) {
+            choice(String(localized: "全部用途"), selected: facet == nil) { facet = nil }
+            ForEach(uses.filter { $0.count > 0 }.sorted { $0.count > $1.count }) { use in
+                if let name = FacetCatalog.name(use.id) { choice(name, selected: facet == use.id) { facet = use.id } }
+            }
+        }.accessibilityIdentifier("filterUse")
+        Menu(modelFamily.flatMap { FacetCatalog.modelFamilies[$0] } ?? String(localized: "模型")) {
+            choice(String(localized: "全部模型"), selected: modelFamily == nil) { modelFamily = nil }
+            ForEach(families.filter { $0.count > 0 && FacetCatalog.modelFamilies[$0.id] != nil }.sorted { $0.count > $1.count }) { family in
+                choice(FacetCatalog.modelFamilies[family.id]!, selected: modelFamily == family.id) { modelFamily = family.id }
+            }
+        }.accessibilityIdentifier("filterModelFamily")
+        Menu(String(localized: "参考图")) {
+            choice(String(localized: "不限"), selected: inputs == nil) { inputs = nil }
+            choice(String(localized: "不需要上传"), selected: inputs == "none") { inputs = "none" }
+            choice(String(localized: "可以用我的照片"), selected: inputs == "optional") { inputs = "optional" }
+            choice(String(localized: "需要上传"), selected: inputs == "required") { inputs = "required" }
+        }.accessibilityIdentifier("filterInputs")
+    }
+    private func choice(_ title: String, selected: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) { if selected { Label(title, systemImage: "checkmark") } else { Text(title) } }
+    }
+    /// The bundled catalog's simpler use and model filters, offline or on an older service.
+    @ViewBuilder private var catalogFilters: some View {
             Menu(String(localized: "全部用途")) {
                 Button(String(localized: "全部用途")) { topic = nil }
                 ForEach(topics, id: \.self) { value in
@@ -249,13 +292,6 @@ struct DiscoverView: View {
                     }
                 }
             }
-        } label: {
-            Image(systemName: "line.3.horizontal.decrease").frame(width: 44, height: 44)
-                .overlay(alignment: .topTrailing) {
-                    if topic != nil || model != nil { Circle().fill(Palette.accent).frame(width: 7, height: 7).padding(9) }
-                }
-        }.accessibilityLabel(String(localized: "筛选")).accessibilityValue(topic != nil || model != nil ? String(localized: "已筛选") : "")
-            .accessibilityIdentifier("discoveryFilters")
     }
 
 }

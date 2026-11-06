@@ -229,6 +229,44 @@ import UIKit
             app.buttons["closePromptDetail"].tap()
         }
     }
+    /// Live: a detail opened while a served page replaces the cached one stays open.
+    func testDetailSurvivesThePageThatReplacesItsCard() throws {
+        guard ProcessInfo.processInfo.environment["PROMPIX_LIVE_UI"] == "1" else { throw XCTSkip("Explicit live service check only") }
+        app.terminate()
+        app.launchArguments = ["-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN"]
+        app.launchPrompix()
+        for kind in ["kind-image", "kind-video", "kind-all"] {
+            XCTAssertTrue(app.buttons[kind].waitForExistence(timeout: 15)); app.buttons[kind].tap()
+            let card = app.scrollViews["discoveryScroll"].buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'prompt-'")).firstMatch
+            XCTAssertTrue(card.waitForExistence(timeout: 15)); card.tap()
+            XCTAssertTrue(app.buttons["usePrompt"].waitForExistence(timeout: 15))
+            sleep(4)
+            XCTAssertTrue(app.buttons["usePrompt"].exists, "The detail must stay open after \(kind) settles")
+            app.buttons["closePromptDetail"].tap()
+        }
+    }
+    /// Live: the served use, model-family and reference filters narrow the feed.
+    func testServedFiltersNarrowTheFeed() throws {
+        guard ProcessInfo.processInfo.environment["PROMPIX_LIVE_UI"] == "1" else { throw XCTSkip("Explicit live service check only") }
+        app.terminate()
+        app.launchArguments = ["-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN"]
+        app.launchPrompix()
+        let filters = app.buttons["discoveryFilters"]
+        XCTAssertTrue(filters.waitForExistence(timeout: 15)); sleep(3)
+        filters.tap()
+        XCTAssertTrue(app.buttons["filterUse"].waitForExistence(timeout: 5))
+        capture("filters-01-menu")
+        app.buttons["filterUse"].tap()
+        XCTAssertTrue(app.buttons["人像写真"].waitForExistence(timeout: 5)); app.buttons["人像写真"].tap()
+        XCTAssertTrue(app.staticTexts["筛选结果"].waitForExistence(timeout: 5))
+        let card = app.scrollViews["discoveryScroll"].buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'prompt-'")).firstMatch
+        XCTAssertTrue(card.waitForExistence(timeout: 15))
+        filters.tap(); app.buttons["filterInputs"].tap(); app.buttons["可以用我的照片"].tap()
+        XCTAssertTrue(card.waitForExistence(timeout: 15))
+        capture("filters-02-portraits-with-my-photo")
+        app.buttons["清除筛选"].tap()
+        XCTAssertTrue(app.staticTexts["为你挑的"].waitForExistence(timeout: 5))
+    }
     func testRefinedChromeAndInteractiveReturn() {
         XCTAssertTrue(app.buttons["discoveryFilters"].waitForExistence(timeout: 10))
         XCTAssertFalse(app.buttons["searchButton"].exists)
