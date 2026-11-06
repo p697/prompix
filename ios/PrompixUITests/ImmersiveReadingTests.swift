@@ -49,14 +49,14 @@ import UIKit
     }
 
     func testDiscoverChromeAndCollectionsNavigation() {
-        XCTAssertTrue(app.buttons["discoverySettings"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["discoveryFilters"].waitForExistence(timeout: 10))
         XCTAssertFalse(app.tabBars.buttons["专题"].exists)
         capture("immersive-01-home")
         drag(from: 0.78, to: 0.30)
-        XCTAssertTrue(NSPredicate(format: "hittable == false").evaluate(with: app.buttons["discoverySettings"]))
+        XCTAssertTrue(NSPredicate(format: "hittable == false").evaluate(with: app.buttons["discoveryFilters"]))
         capture("immersive-02-header-hidden")
         drag(from: 0.42, to: 0.60)
-        XCTAssertTrue(app.buttons["discoverySettings"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["discoveryFilters"].waitForExistence(timeout: 3))
         capture("immersive-03-header-return")
         app.swipeDown(); app.swipeDown()
         let all = app.buttons["allCollections"]
@@ -126,11 +126,11 @@ import UIKit
         capture("immersive-11-use-sheet")
     }
     func testRefinedChromeAndInteractiveReturn() {
-        XCTAssertTrue(app.buttons["discoverySettings"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["discoveryFilters"].waitForExistence(timeout: 10))
         XCTAssertFalse(app.buttons["searchButton"].exists)
         XCTAssertEqual(app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "收藏：")).count, 0)
         capture("refinement-home")
-        app.buttons["discoverySettings"].tap()
+        app.openPrompixSettings()
         XCTAssertTrue(app.buttons["replayOnboarding"].waitForExistence(timeout: 3))
         capture("refinement-settings")
         app.buttons["完成"].tap()
@@ -156,7 +156,7 @@ import UIKit
         app.selectPrompixTab("收藏")
         XCTAssertTrue(app.buttons["savedSettings"].waitForExistence(timeout: 3))
         app.selectPrompixTab("发现")
-        XCTAssertTrue(app.buttons["discoverySettings"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["discoveryFilters"].waitForExistence(timeout: 3))
     }
 
     func testAccessibleReadingActions() throws {

@@ -70,7 +70,6 @@ struct DiscoverView: View {
     @Environment(\.recommendationSurfaceVisible) private var recommendationSurfaceVisible
     @State private var appliedPreferenceRevision = 0
     @State private var model: String?
-    @State private var settingsPresented = false
     @State private var chromeCollapsed = false
     @State private var headerHeight: CGFloat = 112
     @State private var viewportHeight: CGFloat = 0
@@ -126,7 +125,7 @@ struct DiscoverView: View {
                                     ContentUnavailableView(String(localized: "暂无匹配内容"), systemImage: "sparkle", description: Text(String(localized: "试试其他分类，或清除筛选条件。")))
                                 }
                             } else {
-                                PromptGrid(items: items).padding(.horizontal, 12)
+                                PromptGrid(items: items).padding(.horizontal, PromptGridLayout.inset)
                             }
                         }
                     }.id("discovery-top").padding(.bottom, 24)
@@ -139,7 +138,7 @@ struct DiscoverView: View {
                 .contentMargins(.top, chromeCollapsed ? headerHeight : 0, for: .scrollContent)
                 .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { viewportHeight = $0 }
                 .onGeometryChange(for: PromptGridLayout.self) { proxy in
-                    PromptGridLayout.measured(in: proxy, inset: 12)
+                    PromptGridLayout.measured(in: proxy, inset: PromptGridLayout.inset)
                 } action: { if !$0.widths.isEmpty { feedLayout = $0 } }
                 .scrollClipDisabled()
                 .background(Palette.paper).foregroundStyle(Palette.ink)
@@ -169,11 +168,10 @@ struct DiscoverView: View {
                 }
             }
             .toolbar(.hidden, for: .navigationBar)
-            .sheet(isPresented: $settingsPresented) { SettingsView().promptSheet() }
             .task(id: feedQuery) { await library.feed?.discovery.load(feedQuery) }
-            .task(id: "\(library.recommendations.preferenceRevision)-\(settingsPresented)-\(recommendationSurfaceVisible)") {
+            .task(id: "\(library.recommendations.preferenceRevision)-\(recommendationSurfaceVisible)") {
                 let revision = library.recommendations.preferenceRevision
-                guard recommendationSurfaceVisible, !settingsPresented, revision != appliedPreferenceRevision else { return }
+                guard recommendationSurfaceVisible, revision != appliedPreferenceRevision else { return }
                 appliedPreferenceRevision = revision
                 library.feed?.discovery.invalidateCachedPages()
                 if feedSort == "recommended" { await library.feed?.discovery.load(feedQuery, force: true) }
@@ -197,42 +195,39 @@ struct DiscoverView: View {
     }
     private var discoveryHeader: some View {
         VStack(spacing: 4) {
-            RootPageHeader(settingsID: "discoverySettings") { settingsPresented = true }
+            RootPageHeader(title: String(localized: "发现"), titleID: "discoveryHeading") { filterMenu }
             KindPicker(selection: $kind, skillsOnly: $skillsOnly, onSelect: selectKind)
         }.foregroundStyle(Palette.ink).padding(.bottom, 4)
             .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { headerHeight = $0 }
             .accessibilityElement(children: .contain).accessibilityIdentifier("discoveryHeader")
     }
     private var discoveryContext: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(alignment: .firstTextBaseline) { resultHeading; Spacer(); resultActions }
-            VStack(alignment: .leading, spacing: 4) { resultHeading; resultActions }
-        }.padding(.horizontal, 16)
-    }
-    private var resultHeading: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Text(skillsOnly ? String(localized: "Agent Skills") : isFiltered ? String(localized: "筛选结果") : String(localized: "全部内容"))
-                .font(.subheadline.weight(.medium))
-
-        }
-    }
-    private var resultActions: some View {
-        HStack(spacing: 16) {
+        HStack(alignment: .center) {
+            Text(skillsOnly ? String(localized: "Agent Skills") : isFiltered ? String(localized: "筛选结果") : feedSort == "latest" ? String(localized: "最新收录") : String(localized: "为你挑的"))
+                .font(.subheadline.weight(.semibold))
+            Spacer()
             if isFiltered {
                 Button(String(localized: "清除筛选")) { selectKind(nil, false) }
-                    .font(.footnote).frame(minHeight: 44)
+                    .font(.footnote).foregroundStyle(Palette.muted).frame(minHeight: 44)
             }
-            filterPicker
-        }
+            sortMenu
+        }.padding(.leading, 20).padding(.trailing, 16)
     }
-    private var filterPicker: some View {
+    private var sortMenu: some View {
         Menu {
-            Group {
-                Picker(String(localized: "排序"), selection: $feedSort) {
-                    Text(String(localized: "推荐")).tag("recommended")
-                    Text(String(localized: "最新收录")).tag("latest")
-                }
+            Picker(String(localized: "排序"), selection: $feedSort) {
+                Text(String(localized: "推荐")).tag("recommended")
+                Text(String(localized: "最新收录")).tag("latest")
             }
+        } label: {
+            HStack(spacing: 4) {
+                Text(feedSort == "latest" ? String(localized: "最新") : String(localized: "推荐")).font(Typography.meta(size: 12)).tracking(1.2)
+                Image(systemName: "chevron.down").font(.system(size: 9, weight: .semibold))
+            }.foregroundStyle(Palette.muted).frame(minWidth: 44, minHeight: 44).contentShape(Rectangle())
+        }.accessibilityLabel(String(localized: "排序")).accessibilityIdentifier("discoverySort")
+    }
+    private var filterMenu: some View {
+        Menu {
             Menu(String(localized: "全部用途")) {
                 Button(String(localized: "全部用途")) { topic = nil }
                 ForEach(topics, id: \.self) { value in
@@ -251,10 +246,12 @@ struct DiscoverView: View {
                 }
             }
         } label: {
-            Label(String(localized: "筛选"), systemImage: "line.3.horizontal.decrease")
-                .font(.footnote).foregroundStyle(topic == nil && model == nil ? Palette.muted : Palette.accent)
-                .frame(minHeight: 44)
-        }.accessibilityIdentifier("discoveryFilters")
+            Image(systemName: "line.3.horizontal.decrease").frame(width: 44, height: 44)
+                .overlay(alignment: .topTrailing) {
+                    if topic != nil || model != nil { Circle().fill(Palette.accent).frame(width: 7, height: 7).padding(9) }
+                }
+        }.accessibilityLabel(String(localized: "筛选")).accessibilityValue(topic != nil || model != nil ? String(localized: "已筛选") : "")
+            .accessibilityIdentifier("discoveryFilters")
     }
 
 }
@@ -279,7 +276,6 @@ struct PreviewMasonryGrid<Item: Identifiable, Cell: View>: View {
     @State private var viewport = GridViewport()
     @State private var prefetchOwner = UUID()
     @Environment(\.scenePhase) private var scenePhase
-    @ScaledMetric(relativeTo: .footnote) private var titleSize = 13
     var body: some View {
         // Separate masonry columns read column-first. A linear native stack
         // preserves the editorial sequence when navigating with VoiceOver.
@@ -312,13 +308,12 @@ struct PreviewMasonryGrid<Item: Identifiable, Cell: View>: View {
         let widths = linear ? [max(1, viewport.width)] : (layout.widths.isEmpty ? [180, 180] : layout.widths)
         var bottoms = Array(repeating: CGFloat.zero, count: widths.count)
         var candidates: [(CGFloat, URL)] = []
-        let font = UIFont.systemFont(ofSize: titleSize)
         for item in items {
             let column = bottoms.indices.min { bottoms[$0] < bottoms[$1] }!
             let value = preview(item)
             let top = bottoms[column]
-            let height = PromptCardGeometry.height(for: value, width: widths[column], titleFont: font)
-            bottoms[column] += height + (linear ? 24 : 14)
+            let height = PromptCardGeometry.height(for: value, width: widths[column])
+            bottoms[column] += height + (linear ? 24 : PromptGridLayout.gap)
             if !value.usesTextArtwork, viewport.includes(top: top, height: height), let url = value.media?.imageURL { candidates.append((top, url)) }
             if bottoms.allSatisfy({ $0 > viewport.end }) { break }
         }
@@ -327,13 +322,12 @@ struct PreviewMasonryGrid<Item: Identifiable, Cell: View>: View {
     }
     private var balancedColumns: [[Int]] {
         let widths = layout.widths.isEmpty ? Array(repeating: CGFloat(180), count: layout.columns) : layout.widths
-        let font = UIFont.systemFont(ofSize: titleSize)
-        return PromptMasonry.columns(itemCount: items.count, widths: widths, spacing: 14) { index, width in
-            PromptCardGeometry.height(for: preview(items[index]), width: width, titleFont: font)
+        return PromptMasonry.columns(itemCount: items.count, widths: widths, spacing: PromptGridLayout.gap) { index, width in
+            PromptCardGeometry.height(for: preview(items[index]), width: width)
         }
     }
     private func column(_ indices: [Int]) -> some View {
-        LazyVStack(spacing: 14) {
+        LazyVStack(spacing: PromptGridLayout.gap) {
             ForEach(indices.map { items[$0] }) { item in
                 cell(item)
             }
@@ -342,6 +336,9 @@ struct PreviewMasonryGrid<Item: Identifiable, Cell: View>: View {
 }
 
 struct PromptGridLayout: Equatable {
+    /// The feed reads as one contact sheet: narrow gutters, works edge to edge.
+    static let gap: CGFloat = 6
+    static let inset: CGFloat = 16
     let columns: Int
     let widths: [CGFloat]
     let gaps: [CGFloat]
@@ -363,16 +360,16 @@ struct PromptGridLayout: Equatable {
         let roomForFour = usableDivision.map { min($0.minX, width - $0.maxX) >= 302 } ?? true
         let count = width >= 760 && roomForFour ? 4 : 2
         columns = count
-        guard width > 0 else { widths = []; gaps = [14]; return }
+        guard width > 0 else { widths = []; gaps = [Self.gap]; return }
         let half = count / 2
         if let division = usableDivision {
-            let leading = max(0, (division.minX - 8 - CGFloat(half - 1) * 14) / CGFloat(half))
-            let trailing = max(0, (width - division.maxX - 8 - CGFloat(half - 1) * 14) / CGFloat(half))
+            let leading = max(0, (division.minX - 8 - CGFloat(half - 1) * Self.gap) / CGFloat(half))
+            let trailing = max(0, (width - division.maxX - 8 - CGFloat(half - 1) * Self.gap) / CGFloat(half))
             widths = Array(repeating: leading, count: half) + Array(repeating: trailing, count: half)
-            gaps = (0..<(count - 1)).map { $0 == half - 1 ? division.width + 16 : 14 }
+            gaps = (0..<(count - 1)).map { $0 == half - 1 ? division.width + 16 : Self.gap }
         } else {
-            widths = Array(repeating: max(0, (width - CGFloat(count - 1) * 14) / CGFloat(count)), count: count)
-            gaps = Array(repeating: 14, count: count - 1)
+            widths = Array(repeating: max(0, (width - CGFloat(count - 1) * Self.gap) / CGFloat(count)), count: count)
+            gaps = Array(repeating: Self.gap, count: count - 1)
         }
     }
 }
@@ -395,26 +392,17 @@ enum PromptMasonry {
 }
 
 enum PromptCardGeometry {
-    static let titleSpacing: CGFloat = 6
+    static let cornerRadius: CGFloat = 12
     static func aspectRatio(for item: Prompt) -> CGFloat { aspectRatio(for: ContentPreview(item)) }
     static func aspectRatio(for item: ContentPreview) -> CGFloat {
-        if item.usesTextArtwork { return 0.95 }
+        // Text cards are a short quote, a little wider than tall.
+        if item.usesTextArtwork { return 1.2 }
         // Retain common portrait and widescreen shapes. Only extreme ratios crop.
         if let ratio = item.media?.aspectRatio { return max(0.65, min(1.8, ratio)) }
         return switch item.kind { case .text: 0.95; case .image: item.artwork == "lake" ? 1.02 : 0.76; case .video: 0.94; case .web: WebsiteExamples.files[item.id] != nil ? 0.62 : 0.87 }
     }
-    static func height(for item: Prompt, width: CGFloat, titleFont: UIFont) -> CGFloat {
-        height(for: ContentPreview(item), width: width, titleFont: titleFont)
-    }
-    static func height(for item: ContentPreview, width: CGFloat, titleFont: UIFont) -> CGFloat {
-        let preview = width / aspectRatio(for: item)
-        guard !item.usesTextArtwork else { return preview }
-        let bounds = (item.displayTitle as NSString).boundingRect(
-            with: CGSize(width: max(1, width - 4), height: .greatestFiniteMagnitude),
-            options: [.usesLineFragmentOrigin, .usesFontLeading],
-            attributes: [.font: titleFont], context: nil)
-        return preview + titleSpacing + ceil(min(bounds.height, titleFont.lineHeight * 2))
-    }
+    /// Cards carry only the work, so a card is exactly its preview.
+    static func height(for item: ContentPreview, width: CGFloat) -> CGFloat { width / aspectRatio(for: item) }
 }
 
 struct PromptCard: View {
@@ -531,7 +519,10 @@ struct FavoritesView: View {
             .scrollDismissesKeyboard(.interactively)
             .background(Palette.paper).foregroundStyle(Palette.ink)
             .rootHeaderBar {
-                RootPageHeader(title: String(localized: "收藏"), settingsID: "savedSettings") { settingsPresented = true }
+                RootPageHeader(title: String(localized: "收藏")) {
+                    Button { settingsPresented = true } label: { Image(systemName: "gearshape").frame(width: 44, height: 44) }
+                        .accessibilityLabel(String(localized: "设置")).accessibilityIdentifier("savedSettings")
+                }
             }
             .toolbar(.hidden, for: .navigationBar)
             .sheet(isPresented: $settingsPresented) { SettingsView().promptSheet() }
@@ -598,24 +589,21 @@ struct FavoritesView: View {
                         .font(.subheadline).foregroundStyle(Palette.muted).multilineTextAlignment(.center).lineSpacing(4)
                 }.padding(.horizontal, 48).padding(.vertical, 50).frame(maxWidth: .infinity)
             }
-        } else { PromptGrid(items: items, origin: .favorite).padding(.horizontal, 12) }
+        } else { PromptGrid(items: items, origin: .favorite).padding(.horizontal, PromptGridLayout.inset) }
     }
 }
 
 /// Identical placement, material, tint and hit area across the two root pages.
-struct RootPageHeader: View {
-    var title: String?
-    let settingsID: String
-    let settings: () -> Void
+struct RootPageHeader<Trailing: View>: View {
+    let title: String
+    var titleID = ""
+    @ViewBuilder let trailing: Trailing
     var body: some View {
         HStack {
-            if let title { Text(title).font(.title2.weight(.semibold)).tracking(-0.5).accessibilityAddTraits(.isHeader) }
-            else { PrompixWordmark().accessibilityIdentifier("discoveryHeading") }
+            Text(title).font(.largeTitle.bold()).accessibilityAddTraits(.isHeader).accessibilityIdentifier(titleID)
             Spacer()
-            Button(action: settings) { Image(systemName: "gearshape").frame(width: 44, height: 44) }
-                .buttonStyle(.plain).readingGlass().accessibilityLabel(String(localized: "设置"))
-                .accessibilityIdentifier(settingsID)
-        }.font(.title3).foregroundStyle(Palette.ink).padding(.horizontal, 20).padding(.vertical, 6)
+            trailing.font(.title3).buttonStyle(.plain).readingGlass()
+        }.foregroundStyle(Palette.ink).padding(.leading, 20).padding(.trailing, 16).padding(.vertical, 6)
     }
 }
 

@@ -61,14 +61,14 @@ extension XCUIApplication {
         capture("journey-04-interests")
         app.buttons["onboardingComplete"].tap()
         XCTAssertTrue(app.buttons["onboardingComplete"].waitForNonExistence(timeout: 5))
-        XCTAssertTrue(app.buttons["discoverySettings"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["discoveryFilters"].waitForExistence(timeout: 5))
         capture("journey-04-discover")
 
         // Remove the first-run reset to verify this run's persisted completion.
         app.terminate()
         app.launchArguments.removeAll { $0 == "--reset-onboarding" }
         app.launch()
-        XCTAssertTrue(app.buttons["discoverySettings"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["discoveryFilters"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.buttons["onboardingNext"].exists)
         app.buttons["设置"].tap()
         app.buttons["replayOnboarding"].tap()
@@ -83,7 +83,7 @@ extension XCUIApplication {
         app.launch()
         XCTAssertTrue(app.buttons["onboardingNext"].waitForExistence(timeout: 10))
         XCTAssertFalse(app.buttons["onboardingSkip"].exists)
-        XCTAssertFalse(app.buttons["discoverySettings"].exists, "Discovery is not mounted underneath the first-run journey.")
+        XCTAssertFalse(app.buttons["discoveryFilters"].exists, "Discovery is not mounted underneath the first-run journey.")
         for _ in 0..<3 { app.buttons["onboardingNext"].tap() }
         let complete = app.buttons["onboardingComplete"]
         XCTAssertTrue(complete.waitForExistence(timeout: 3))
@@ -102,7 +102,7 @@ extension XCUIApplication {
         XCTAssertFalse(complete.isEnabled)
         app.buttons["interest-portrait"].tap()
         complete.tap()
-        XCTAssertTrue(app.buttons["discoverySettings"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["discoveryFilters"].waitForExistence(timeout: 5))
     }
 
     func testDirectHandoffReturnsWithoutCompletingOnboarding() {
@@ -193,7 +193,7 @@ extension XCUIApplication {
         XCTAssertTrue(app.buttons["onboardingComplete"].isHittable)
         capture("interests-accessibility-controls")
         app.buttons["onboardingComplete"].tap()
-        XCTAssertTrue(app.buttons["discoverySettings"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["discoveryFilters"].waitForExistence(timeout: 10))
     }
 
     func testCorruptPreferencesCannotCompleteUntilExplicitRecovery() throws {
@@ -238,7 +238,7 @@ extension XCUIApplication {
         selectThree()
         XCTAssertTrue(complete.isEnabled)
         complete.tap()
-        XCTAssertTrue(app.buttons["discoverySettings"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["discoveryFilters"].waitForExistence(timeout: 5))
         #else
         throw XCTSkip("Corrupt-file fixture is limited to the simulator.")
         #endif
@@ -264,7 +264,7 @@ extension XCUIApplication {
                 action.tap()
             }
             XCTAssertTrue(app.buttons["onboardingComplete"].waitForNonExistence(timeout: 5))
-            XCTAssertTrue(app.buttons["discoverySettings"].exists)
+            XCTAssertTrue(app.buttons["discoveryFilters"].exists)
             app.terminate()
         }
     }
