@@ -112,6 +112,7 @@ npm run pipeline -- note "Lucy 说周末前别动安全复核" --by claude-code
   - 发布前多一道 2.0 审核闸（`ingest/enrichment-daily.ts`，走 `review` 路由）。新条目必须有针对当前内容的有效审核，尺度也必须定得下来：涉及未成年人不安全或不确定的、explicit、unknown 一律不发布；拒答的永不再送审；还没审到的顺延到下一个时段。每次排除写一行到内容目录的 `enrichment/exclusions.jsonl`。
   - 已上线条目内容没变的，保留它 2.0 审核的结果。从来源重建时丢掉的字段补回来；尺度取两者中更严的，但 unknown 不会覆盖已经判定过的尺度。内容有改动的重新审核，审核通过前继续用线上原版。
 - 密钥从 `~/.config/prompix/*.env` 读取，和旧定时任务用同一组文件。
+- 子进程（每日流程和它调用的 wrangler）不认后台进程自己加载的系统证书，所以后台进程启动时把系统钥匙串里的根证书导出到控制目录的 `system-roots.pem`，再通过 `NODE_EXTRA_CA_CERTS` 传给子进程。
 - 和旧任务共用内容目录的 `daily.lock`，两边不会同时运行。
 - 更新代码后执行 `npm run pipeline -- worker restart`。
 
