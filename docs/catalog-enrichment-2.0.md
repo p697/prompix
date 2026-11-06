@@ -9,7 +9,7 @@
 | 字段 | 内容 | 来源 |
 |---|---|---|
 | `presentation` | general / suggestive / unknown / explicit。图片、视频、网页必填 | 模型看真实画面，标准与 `visual-review.ts` 共用（`presentationStandard`） |
-| `inputs` | `requirement`、`count`、`kinds`、`ownLikenessOnly` | 模型 |
+| `inputs` | `requirement`、`count`、`kinds`、`ownLikenessOnly` | 模型；需要上传人脸而模型没判定时，`ownLikenessOnly` 默认为 true（App 提示只用本人照片） |
 | `generation` | `modelFamily`、`modelVersion`、`mode`、`outputAspect`、`durationSeconds`、`hasAudio` | 模型；`model` 标签能认出型号时以标签为准；视频的时长和有无音轨按实际文件测量；画幅没写明时取示例的实际比例（与常见比例相差 3% 以内） |
 | `variables` | `token`（Prompt 里占位符原文）、`name`、`default`、`hint`（name、hint 中英两份） | 模型；token 必须在 Prompt 原文里出现 |
 | `facets` | `useCase` ≤2、`style` ≤3、`subject` ≤3 | 模型，只能用 `packages/schema/facets.json` 里的 id，否则整条失败 |

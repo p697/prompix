@@ -4,7 +4,7 @@ import { promptSchema, type Prompt } from "../packages/schema/catalog.ts";
 import { enrichedPromptIssues, facetIDs, paletteSchema } from "../packages/schema/enrichment.ts";
 import {
   applyEnrichment, aspectLabel, enrichmentOutputJSONSchema, enrichmentRequest, labelledModel, packEnrichmentBatches,
-  publicationBlocker, reviewEnrichmentBatch, rightsFor, validateEnrichmentItem, type EnrichmentCandidate,
+  publicationBlocker, reviewEnrichmentBatch, withLikenessDefault, rightsFor, validateEnrichmentItem, type EnrichmentCandidate,
 } from "./enrichment-review.ts";
 import type { ModelCallSummary } from "./models/call.ts";
 import { ModelProviderError, type ModelProvider, type ModelRequest } from "./models/types.ts";
@@ -197,4 +197,14 @@ test("palettes are deterministic, ordered and well-formed", () => {
   assert.deepEqual(palette.map(color => color.weight), [0.6, 0.3, 0.1]);
   assert.ok(paletteSchema.safeParse(paletteFromPixels(new Uint8Array(300).fill(7))).success, "a flat image still yields three entries");
   assert.throws(() => paletteFromPixels(new Uint8Array(4)));
+});
+
+test("a face upload always carries the own-likeness hint", () => {
+  assert.deepEqual(withLikenessDefault({ requirement: "required", kinds: ["face"] }), { requirement: "required", kinds: ["face"], ownLikenessOnly: true });
+  assert.deepEqual(withLikenessDefault({ requirement: "required", kinds: ["face"], ownLikenessOnly: false }).ownLikenessOnly, false, "an explicit judgment stands");
+  const product = { requirement: "required", kinds: ["product"] };
+  assert.equal(withLikenessDefault(product), product);
+  const outcome = validateEnrichmentItem(candidate(), output("x-post-1", { inputs: { requirement: "required", count: 1, kinds: ["face"], ownLikenessOnly: null } }));
+  assert.ok(outcome.ok);
+  assert.equal(applyEnrichment(item(), outcome, { palette: paletteFromPixels(new Uint8Array([1, 2, 3])), policy: "label" }).inputs?.ownLikenessOnly, true);
 });

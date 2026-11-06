@@ -262,6 +262,12 @@ export function rightsFor(item: Prompt): z.infer<typeof rightsSchema> {
   return { license, basis: "license", imageExport: license === "CC0-1.0" && !!(item.media?.imageURL || item.media?.image) };
 }
 
+/** A face upload always carries the own-likeness hint; when the review cannot tell, the app
+ * asks for the user's own photo. */
+export function withLikenessDefault<T extends { kinds: readonly string[]; ownLikenessOnly?: boolean }>(inputs: T): T {
+  return inputs.kinds.includes("face") && inputs.ownLikenessOnly === undefined ? { ...inputs, ownLikenessOnly: true } : inputs;
+}
+
 export type PresentationPolicy = "label" | "stricter-only";
 const restrictiveness = { general: 0, suggestive: 1, explicit: 2 } as const;
 
@@ -288,7 +294,7 @@ export function applyEnrichment(item: Prompt, outcome: Extract<EnrichmentOutcome
   const enriched = {
     ...item,
     presentation,
-    inputs: fields.inputs, generation: generationSchema.parse(generation),
+    inputs: withLikenessDefault(fields.inputs), generation: generationSchema.parse(generation),
     variables: fields.variables, facets: fields.facets,
     ...(context.palette ? { palette: context.palette } : {}),
     ...(fields.shots ? { shots: fields.shots } : {}),
