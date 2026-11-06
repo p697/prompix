@@ -26,7 +26,7 @@ struct FeedCheckpoint: Codable {
     private(set) var details: [String: FeedDetail] = [:]
     private var detailOrder: [String] = []
     private var detailSizes: [String: Int] = [:]
-    private var checkpoint: FeedCheckpoint
+    private(set) var checkpoint: FeedCheckpoint
     private let commitRemovals: (FeedCheckpoint) throws -> Void
     init(service: any FeedServing, cache: FeedCache, checkpoint: FeedCheckpoint, recommendations: LocalRecommendations? = nil,
          commitRemovals: @escaping (FeedCheckpoint) throws -> Void) {

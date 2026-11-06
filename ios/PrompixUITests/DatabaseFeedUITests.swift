@@ -256,7 +256,7 @@ import UIKit
         launch(["--feed-home-loading-test"])
         let root = try directory()
         app.terminate()
-        let preferences: [String: Any] = ["version": 1, "interests": [], "learningEnabled": true, "reduceSuggestive": true,
+        let preferences: [String: Any] = ["version": 1, "interests": [], "learningEnabled": true, "showsSuggestive": false,
             "entries": ["gentle-tarot": ["topics": ["lifestyle"], "kind": "text", "updatedAt": Date().timeIntervalSinceReferenceDate,
                                         "saved": false, "used": false, "dismissed": true]]]
         try JSONSerialization.data(withJSONObject: preferences).write(to: root.appending(path: "recommendation-preferences.json"), options: .atomic)

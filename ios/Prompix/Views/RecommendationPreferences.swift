@@ -50,13 +50,6 @@ struct InterestSelection: View {
                         .accessibilityIdentifier("interest-\(topic.id)")
                 }
             }
-            VStack(alignment: .leading, spacing: 8) {
-                Toggle(RecommendationCopy.text("comfort.title"), isOn: Binding(get: { library.recommendations.reduceSuggestive }, set: { library.recommendations.setReduceSuggestive($0) }))
-                    .accessibilityIdentifier("reduceSuggestiveRecommendations").tint(Palette.muted)
-                if requiredCount == nil {
-                    Text(RecommendationCopy.text("comfort.description")).font(.footnote).foregroundStyle(Palette.muted)
-                }
-            }
             if requiredCount == nil {
                 Text(RecommendationCopy.text("interests.private"))
                     .font(.footnote).foregroundStyle(Palette.muted).fixedSize(horizontal: false, vertical: true)
@@ -84,6 +77,11 @@ struct RecommendationPreferences: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 28) {
                 InterestSelection()
+                VStack(alignment: .leading, spacing: 8) {
+                    Toggle(RecommendationCopy.text("suggestive.title"), isOn: Binding(get: { library.recommendations.showsSuggestive }, set: { value in Task { await library.setShowsSuggestive(value) } }))
+                        .accessibilityIdentifier("showsSuggestiveContent").tint(Palette.muted)
+                    Text(RecommendationCopy.text("suggestive.description")).font(.footnote).foregroundStyle(Palette.muted)
+                }
                 VStack(alignment: .leading, spacing: 8) {
                     Toggle(RecommendationCopy.text("learning.title"), isOn: Binding(get: { library.recommendations.learningEnabled }, set: { library.recommendations.setLearning($0) }))
                         .accessibilityIdentifier("recommendationLearning").tint(Palette.muted)
