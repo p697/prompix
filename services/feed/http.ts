@@ -1,7 +1,7 @@
 import { getCreatorDiscovery } from "./creator-discovery.ts";
 import { parseCreatorDiscovery } from "./creator-filters.ts";
 import { ZodError } from "zod";
-import { detailResponseByteLimit, feedLocale, feedResponseByteLimit, parseFeedQuery } from "../../packages/schema/feed.ts";
+import { detailResponseByteLimit, feedLocale, feedResponseByteLimit, listPresentation, parseFeedQuery } from "../../packages/schema/feed.ts";
 import { FeedError, type Database } from "./database.ts";
 import { getBrowse, getCreators, getDetail, getFeed, getRemovals, getState } from "./queries.ts";
 
@@ -26,8 +26,9 @@ export async function serveFeed(request: Request, db: Database, secret: string):
     }
     if (url.pathname === "/v3/browse") {
       const keys = [...url.searchParams.keys()];
-      if (keys.length > 1 || keys.some(key => key !== "locale")) throw new FeedError("invalid_request", 400);
-      return respond(await getBrowse(db, feedLocale.parse(url.searchParams.get("locale") ?? "original")));
+      if (new Set(keys).size !== keys.length || keys.some(key => !["locale", "presentation"].includes(key))) throw new FeedError("invalid_request", 400);
+      return respond(await getBrowse(db, feedLocale.parse(url.searchParams.get("locale") ?? "original"),
+        listPresentation.optional().parse(url.searchParams.get("presentation") ?? undefined)));
     }
     if (url.pathname === "/v3/feed") {
       let query: ReturnType<typeof parseFeedQuery>;
@@ -36,11 +37,11 @@ export async function serveFeed(request: Request, db: Database, secret: string):
     }
     if (url.pathname === "/v3/creators") {
       if (url.searchParams.has("sort")) return respond(await getCreatorDiscovery(db, parseCreatorDiscovery(url), secret));
-      if ([...url.searchParams.keys()].some(key => !["q", "limit", "cursor"].includes(key)))
+      if ([...url.searchParams.keys()].some(key => !["q", "presentation", "limit", "cursor"].includes(key)))
         throw new FeedError("invalid_request", 400);
       let query: ReturnType<typeof parseFeedQuery>;
       try { query = parseFeedQuery(url); } catch { throw new FeedError("invalid_request", 400); }
-      return respond(await getCreators(db, { q: query.filters.q, limit: query.limit, cursor: query.cursor }, secret));
+      return respond(await getCreators(db, { q: query.filters.q, limit: query.limit, cursor: query.cursor, presentation: query.filters.presentation }, secret));
     }
     if (url.pathname === "/v3/removals") {
       const keys = [...url.searchParams.keys()];

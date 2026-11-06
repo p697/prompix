@@ -8,7 +8,7 @@ import { limitNewPublications } from "../../ingest/publication-quota.ts";
 import { runVisualReview, visualReviewVersion } from "../../ingest/visual-review.ts";
 const secret = "freshness-test-secret-0000000000000000000000000000";
 const prompt = (id: string): Prompt => ({ id, kind: "text", title: id, summary: "First-party fixture", prompt: "Write an original short story.", example: "A garden.",
-  tags: ["fixture"], model: "test", toolURL: null, artwork: "test", previewLabel: "Preview", source: { name: "Prompix", url: null, license: "Original", method: "Test fixture" }, media: null });
+  tags: ["fixture"], model: "test", toolURL: null, artwork: "test", previewLabel: "Preview", source: { name: "Prompix", url: null, license: "Original", method: "Test fixture" }, media: null, presentation: "general" });
 const input = (prompts: Prompt[]) => ({ schemaVersion: 1 as const, version: "fixture", prompts });
 test("unusable media and a ready text backlog cannot bypass the visual-publication policy", async t => {
   const { pg, writer } = await createTestDatabase(); t.after(() => pg.close());

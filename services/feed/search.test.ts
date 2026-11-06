@@ -11,7 +11,7 @@ const secret = "search-test-secret-000000000000000000000000000000000000";
 function prompt(id: string, changes: Partial<Prompt> = {}): Prompt {
   return { id, kind: "text", title: "An original fixture", summary: "First-party test content", prompt: "Write a tea story.",
     example: "A moonstone example", tags: ["fixture"], model: "Test model", toolURL: null, artwork: "test", previewLabel: "Preview",
-    source: { name: "Prompix", url: null, license: "Original", method: "Written for tests" }, media: null, ...changes };
+    source: { name: "Prompix", url: null, license: "Original", method: "Written for tests" }, media: null, presentation: "general", ...changes };
 }
 
 test("server search preserves title relevance, complete translated fields, identities and native filters", async t => {
