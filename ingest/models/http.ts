@@ -1,3 +1,4 @@
+import tls from "node:tls";
 import { ModelProviderError } from "./types.ts";
 
 export type Fetch = typeof fetch;
@@ -24,4 +25,12 @@ export function httpFailure(label: string, status: number): ModelProviderError {
   if (status === 404) return new ModelProviderError(`${label} does not offer the requested model`, "unavailable", false);
   if (status >= 500) return new ModelProviderError(`${label} server error ${status}`, "failed");
   return new ModelProviderError(`${label} rejected the request (${status})`, "failed", false);
+}
+
+/** Trust the operating system's certificate store as curl and browsers do. On this Mac the
+ * network inspects HTTPS with a certificate only the system store knows, so Node's bundled
+ * store alone cannot reach any vendor API. */
+export function trustSystemCertificates() {
+  if (typeof tls.getCACertificates !== "function" || typeof tls.setDefaultCACertificates !== "function") return;
+  tls.setDefaultCACertificates([...new Set([...tls.getCACertificates("default"), ...tls.getCACertificates("system")])]);
 }

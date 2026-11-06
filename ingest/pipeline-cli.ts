@@ -3,6 +3,7 @@ import { extname, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { z } from "zod";
 import { completeValidated } from "./models/call.ts";
+import { trustSystemCertificates } from "./models/http.ts";
 import { createProvider, isProviderId, modelEnvironment, providerAvailability, providerDefinitions } from "./models/registry.ts";
 import { ModelProviderError, providerIds, type ModelImage } from "./models/types.ts";
 import { appendEvent, pipelineRoot, pipelineStages, readEvents, snapshot, stageLabels, updateConfig, type PipelineEvent, type PipelineSnapshot } from "./pipeline-control.ts";
@@ -176,5 +177,6 @@ export async function main(argv = process.argv.slice(2)) {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  trustSystemCertificates();
   main().catch(error => { console.error(error instanceof Error ? error.message : String(error)); process.exitCode = 1; });
 }

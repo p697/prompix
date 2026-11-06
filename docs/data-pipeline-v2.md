@@ -113,4 +113,14 @@ npm run pipeline -- note "Lucy 说周末前别动安全复核" --by claude-code
 
 - Claude Code 订阅：本机登录已过期，需要在终端运行 `claude` 并 `/login` 后再测。另有第三方资料称 2026 年 6 月起 `claude -p` 使用单独的月度额度，官方文档未写明，正式使用前用 `/usage` 确认。
 - Kimi 会员 Key：官方说明面向编程工具，批量调用是否算滥用没有明确说法；请先确认会员条款，再小规模试用。
-- Kimi、DeepSeek、OpenAI、Anthropic 四个 HTTP 接口目前只有模拟测试，拿到密钥后用 `test-provider` 实测。
+- Kimi、DeepSeek、OpenAI 三个 HTTP 接口目前只有模拟测试，拿到密钥后用 `test-provider` 实测。
+
+## 已实测（2026-11-06，本机）
+
+| 提供方 | 文字 | 看图 | 每次输入 token |
+|---|---|---|---|
+| `codex-cli` gpt-5.6-luna | 9.7 秒 | 8.2 秒 | 约 1 万（系统提示开销） |
+| `anthropic-api` claude-opus-5-5 | 3.0 秒 | 2.6 秒 | 约 300（看图约 1,000） |
+| `claude-cli` | 未测：本机登录过期 | | |
+
+这台 Mac 的网络会检查 HTTPS 流量，所用证书只在系统钥匙串里。Node 自带的证书库不认，所以管线命令启动时会把系统证书加入信任列表（`trustSystemCertificates`），效果和 curl、浏览器一致。

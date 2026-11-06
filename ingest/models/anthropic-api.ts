@@ -41,8 +41,10 @@ function anthropicFailure(error: unknown): ModelProviderError {
   if (error instanceof Anthropic.RateLimitError) return new ModelProviderError("Anthropic API is rate limited", "rate_limited");
   if (error instanceof Anthropic.AuthenticationError || error instanceof Anthropic.PermissionDeniedError) return new ModelProviderError("Anthropic API rejected the credentials", "unavailable", false);
   if (error instanceof Anthropic.NotFoundError) return new ModelProviderError("Anthropic API does not offer the requested model", "unavailable", false);
-  if (error instanceof Anthropic.BadRequestError) return new ModelProviderError("Anthropic API rejected the request", "failed", false);
+  // The API's own 400 text names the invalid parameter; it carries no credentials.
+  if (error instanceof Anthropic.BadRequestError) return new ModelProviderError(`Anthropic API rejected the request: ${error.message.slice(0, 200)}`, "failed", false);
   if (error instanceof Anthropic.APIConnectionTimeoutError) return new ModelProviderError("Anthropic API timed out", "timeout");
-  if (error instanceof Anthropic.APIError) return new ModelProviderError("Anthropic API request failed", "failed");
+  if (error instanceof Anthropic.APIConnectionError) return new ModelProviderError("Could not reach the Anthropic API (network or certificate)", "failed");
+  if (error instanceof Anthropic.APIError) return new ModelProviderError(`Anthropic API request failed${error.status ? ` (${error.status})` : ""}`, "failed", error.status === undefined || error.status >= 500);
   return new ModelProviderError("Anthropic API request failed", "failed");
 }
