@@ -135,7 +135,7 @@ struct DiscoverView: View {
                 } action: { if !$0.widths.isEmpty { feedLayout = $0 } }
                 .scrollClipDisabled()
                 .background(Palette.paper).foregroundStyle(Palette.ink)
-                .rootHeader(title: String(localized: "发现")) { filterMenu } bar: {
+                .rootHeader(title: String(localized: "发现"), titleID: "discoveryHeading") { filterMenu } bar: {
                     KindPicker(selection: $kind, skillsOnly: $skillsOnly, onSelect: selectKind).padding(.bottom, 6)
                 }
                 .pageRefreshable {
