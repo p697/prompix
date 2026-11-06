@@ -5,8 +5,39 @@ on:
     branches: [main]
 permissions:
   contents: read
+# A newer push to the same pull request supersedes the running checks.
+concurrency:
+  group: checks-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      content: ${{ steps.filter.outputs.content }}
+      ios: ${{ steps.filter.outputs.ios }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      # Pull requests run only the checks their files can affect. Pushes to main,
+      # and any doubt about the diff, run everything.
+      - id: filter
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if [[ "$GITHUB_EVENT_NAME" != "pull_request" ]] || ! files=$(git diff --name-only "$BASE...$HEAD") || [[ -z "$files" ]]; then
+            printf 'content=true\nios=true\n' >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          echo "$files"
+          content=false; ios=false
+          grep -qvE '^(docs|design)/|\.md$' <<<"$files" && content=true
+          grep -qE '^(ios|packages/schema|\.github/workflows)/' <<<"$files" && ios=true
+          printf 'content=%s\nios=%s\n' "$content" "$ios" >> "$GITHUB_OUTPUT"
   content:
+    needs: changes
+    # A skipped job satisfies the required check, so run whenever the filter did not succeed.
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.content == 'true') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -37,6 +68,8 @@ jobs:
           python3 services/site/build.py
           node --check services/site/site.js
   ios:
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.ios == 'true') }}
     runs-on: xcode-27
     env:
       DEVELOPER_DIR: /Applications/Xcode_27.1.app/Contents/Developer
