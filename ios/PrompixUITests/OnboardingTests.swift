@@ -30,7 +30,7 @@ extension XCUIApplication {
     }
 
     private func selectThree() {
-        let scroll = app.scrollViews["onboarding-page-3"]
+        let scroll = app.scrollViews["onboarding-page-1"]
         for id in ["portrait", "illustration", "product"] {
             let button = app.buttons["interest-\(id)"]
             for _ in 0..<16 {
@@ -53,11 +53,8 @@ extension XCUIApplication {
         capture("journey-01-welcome")
         app.buttons["onboardingNext"].tap()
         XCTAssertTrue(app.staticTexts["onboarding-title-1"].waitForExistence(timeout: 3))
-        capture("journey-02-collect")
         app.buttons["onboardingBack"].tap()
         XCTAssertTrue(app.staticTexts["onboarding-title-0"].exists)
-        app.buttons["onboardingNext"].tap()
-        app.buttons["onboardingNext"].tap()
         app.buttons["onboardingNext"].tap()
         XCTAssertTrue(app.buttons["interest-portrait"].waitForExistence(timeout: 3))
         selectThree()
@@ -74,10 +71,10 @@ extension XCUIApplication {
         app.launch()
         XCTAssertTrue(app.buttons["discoveryFilters"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.buttons["onboardingNext"].exists)
-        app.buttons["设置"].tap()
+        app.openPrompixSettings()
         app.buttons["replayOnboarding"].tap()
         XCTAssertTrue(app.buttons["onboardingNext"].waitForExistence(timeout: 3))
-        for _ in 0..<3 { app.buttons["onboardingNext"].tap() }
+        app.buttons["onboardingNext"].tap()
         XCTAssertTrue(app.buttons["onboardingComplete"].isEnabled, "Replay preserves the three saved interests.")
         app.buttons["onboardingComplete"].tap()
         XCTAssertTrue(app.buttons["replayOnboarding"].waitForExistence(timeout: 3))
@@ -88,11 +85,11 @@ extension XCUIApplication {
         XCTAssertTrue(app.buttons["onboardingNext"].waitForExistence(timeout: 10))
         XCTAssertFalse(app.buttons["onboardingSkip"].exists)
         XCTAssertFalse(app.buttons["discoveryFilters"].exists, "Discovery is not mounted underneath the first-run journey.")
-        for _ in 0..<3 { app.buttons["onboardingNext"].tap() }
+        app.buttons["onboardingNext"].tap()
         let complete = app.buttons["onboardingComplete"]
         XCTAssertTrue(complete.waitForExistence(timeout: 3))
         XCTAssertFalse(complete.isEnabled)
-        let scroll = app.scrollViews["onboarding-page-3"]
+        let scroll = app.scrollViews["onboarding-page-1"]
         scroll.swipeDown()
         XCTAssertTrue(complete.exists, "Swiping down cannot dismiss mandatory onboarding.")
         app.buttons["interest-portrait"].tap()
@@ -109,27 +106,6 @@ extension XCUIApplication {
         XCTAssertTrue(app.buttons["discoveryFilters"].waitForExistence(timeout: 5))
     }
 
-    func testDirectHandoffReturnsWithoutCompletingOnboarding() {
-        app.launch()
-        XCTAssertTrue(app.buttons["onboardingNext"].waitForExistence(timeout: 10))
-        for _ in 0..<2 { app.buttons["onboardingNext"].tap() }
-        let trial = app.buttons["onboardingTryPrompt"]
-        XCTAssertTrue(trial.waitForExistence(timeout: 3))
-        for _ in 0..<5 where !trial.isHittable { app.scrollViews["onboarding-page-2"].swipeUp() }
-        capture("journey-03-direct-handoff")
-        trial.tap()
-        // The real official URL opens outside Prompix; no generated result is faked.
-        XCTAssertTrue(app.wait(for: .runningBackground, timeout: 10))
-        app.activate()
-        XCTAssertTrue(trial.waitForExistence(timeout: 5))
-        XCTAssertTrue(app.staticTexts["onboarding-title-2"].exists)
-        app.terminate()
-        app.launchArguments.removeAll { $0 == "--reset-onboarding" }
-        app.launch()
-        XCTAssertTrue(app.buttons["onboardingNext"].waitForExistence(timeout: 10), "Opening ChatGPT must not complete onboarding.")
-    }
-
-    // This regression now starts in detail: the welcome journey no longer has an editing sheet.
     func testDetailTrialKeepsEditsWhenSwitchingOutgoingVersion() {
         app.launchArguments.removeAll { $0 == "--reset-onboarding" }
         app.launchPrompix()
@@ -182,8 +158,8 @@ extension XCUIApplication {
 
     func testInterestControlsRemainReachableAtAccessibilitySize() {
         app.launch()
-        for _ in 0..<3 { app.buttons["onboardingNext"].tap() }
-        let scroll = app.scrollViews["onboarding-page-3"]
+        app.buttons["onboardingNext"].tap()
+        let scroll = app.scrollViews["onboarding-page-1"]
         let portrait = app.buttons["interest-portrait"]
         XCTAssertTrue(portrait.waitForExistence(timeout: 5))
         selectThree()
@@ -220,13 +196,13 @@ extension XCUIApplication {
         let damaged = Data("invalid fixture".utf8)
         try damaged.write(to: file)
         app.launch()
-        for _ in 0..<3 { app.buttons["onboardingNext"].tap() }
+        app.buttons["onboardingNext"].tap()
         let complete = app.buttons["onboardingComplete"]
         XCTAssertFalse(complete.isEnabled)
         let recovery = app.buttons["onboardingRecoverPreferences"]
         for _ in 0..<10 {
             if recovery.exists && recovery.isHittable && recovery.frame.maxY < complete.frame.minY - 50 { break }
-            app.scrollViews["onboarding-page-3"].swipeUp()
+            app.scrollViews["onboarding-page-1"].swipeUp()
         }
         XCTAssertTrue(recovery.isHittable)
         XCTAssertEqual(try Data(contentsOf: file), damaged, "Do not silently replace corrupt preferences.")
@@ -238,7 +214,7 @@ extension XCUIApplication {
         recovery.tap()
         app.buttons["重置"].tap()
         XCTAssertTrue(recovery.waitForNonExistence(timeout: 5))
-        for _ in 0..<8 where !app.buttons["interest-portrait"].isHittable { app.scrollViews["onboarding-page-3"].swipeDown() }
+        for _ in 0..<8 where !app.buttons["interest-portrait"].isHittable { app.scrollViews["onboarding-page-1"].swipeDown() }
         selectThree()
         XCTAssertTrue(complete.isEnabled)
         complete.tap()
@@ -253,18 +229,18 @@ extension XCUIApplication {
             app.launchArguments = ["--offline", "-AppleLanguages", "(\(language))", "-AppleLocale", language, "--reset-onboarding", "--feed-legacy-test", UUID().uuidString]
             app.launch()
             XCTAssertTrue(app.buttons["onboardingNext"].waitForExistence(timeout: 10))
-            for page in 0..<4 {
-                let action = app.buttons[page == 3 ? "onboardingComplete" : "onboardingNext"]
+            for page in 0..<2 {
+                let action = app.buttons[page == 1 ? "onboardingComplete" : "onboardingNext"]
                 XCTAssertTrue(action.isHittable)
                 XCTAssertFalse(app.buttons["onboardingSkip"].exists)
-                let body = page == 3 ? app.buttons["interest-portrait"] : app.staticTexts["onboarding-body-\(page)"]
+                let body = page == 1 ? app.buttons["interest-portrait"] : app.staticTexts["onboarding-body-\(page)"]
                 for _ in 0..<5 {
                     if body.isHittable { break }
                     app.scrollViews["onboarding-page-\(page)"].swipeUp()
                 }
                 XCTAssertTrue(body.isHittable)
                 capture("journey-\(language)-welcome-\(page)")
-                if page == 3 { selectThree() }
+                if page == 1 { selectThree() }
                 action.tap()
             }
             XCTAssertTrue(app.buttons["onboardingComplete"].waitForNonExistence(timeout: 5))

@@ -1130,6 +1130,10 @@ The iOS 27.1+ detail uses `ArrangementView`, which shows only the reading pane o
 
 The home header sat over a hand-drawn material veil that looked muddy and had a hard edge. Root headers now live in the scroll view's `safeAreaBar` with the system hard top edge effect; the soft style left the category row unreadable over artwork. The home header still collapses on scroll with the reading-bar spring, and the bar's height goes with it so the edge effect retreats to the status bar. Growing the top inset mid-scroll made SwiftUI jump the content by hundreds of points, so a matching top content margin replaces the bar height while collapsed and the total inset never changes. The tab bar minimizes on scroll from iOS 26. Cards scale to 0.97 when pressed; category switches add a selection haptic. Verified on an iPhone 18 Pro simulator with iOS 27.2 in light and dark.
 
+### 2026-11-06 — Cut onboarding to two steps
+
+Following the 2.0 boards, onboarding is a one-line welcome and the three-interest choice. The collage and ChatGPT-handoff pages from 0.14.0 are removed with their strings, since one-step use now lives in the detail. Exactly three interests are still required with no skip, as the owner set in 0.14.0, even though the board shows "跳过". The board's third step (notifications or a widget) waits until either feature exists.
+
 ### 2026-11-06 — Open feed details from the list, not the card
 
 A detail opened from a feed card used to be owned by that card, so when a served page replaced the cached one the card left the hierarchy and its full-screen detail closed a moment after opening. Feed lists (`FeedResults` and the related grid) now own the presentation through `feedDetailHost()`, and cards only ask it to open; the zoom transition shares the list's namespace. Cards outside a host keep presenting themselves. A gated live UI test opens a card right after switching kinds and checks the detail is still open four seconds later; it failed before the change.

@@ -309,6 +309,7 @@ struct PreviewMasonryGrid<Item: Identifiable, Cell: View>: View {
     let preview: (Item) -> ContentPreview
     @ViewBuilder let cell: (Item) -> Cell
     var suppliedLayout: PromptGridLayout? = nil
+    @Environment(\.cardShowsTitle) private var titled
     @Environment(\.dynamicTypeSize) private var typeSize
     @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
     @State private var measuredLayout = PromptGridLayout(width: 0)
@@ -352,7 +353,7 @@ struct PreviewMasonryGrid<Item: Identifiable, Cell: View>: View {
             let column = bottoms.indices.min { bottoms[$0] < bottoms[$1] }!
             let value = preview(item)
             let top = bottoms[column]
-            let height = PromptCardGeometry.height(for: value, width: widths[column])
+            let height = PromptCardGeometry.height(for: value, width: widths[column], titled: titled)
             bottoms[column] += height + (linear ? 24 : PromptGridLayout.gap)
             if !value.usesTextArtwork, viewport.includes(top: top, height: height), let url = value.media?.imageURL { candidates.append((top, url)) }
             if bottoms.allSatisfy({ $0 > viewport.end }) { break }
@@ -363,7 +364,7 @@ struct PreviewMasonryGrid<Item: Identifiable, Cell: View>: View {
     private var balancedColumns: [[Int]] {
         let widths = layout.widths.isEmpty ? Array(repeating: CGFloat(180), count: layout.columns) : layout.widths
         return PromptMasonry.columns(itemCount: items.count, widths: widths, spacing: PromptGridLayout.gap) { index, width in
-            PromptCardGeometry.height(for: preview(items[index]), width: width)
+            PromptCardGeometry.height(for: preview(items[index]), width: width, titled: titled)
         }
     }
     private func column(_ indices: [Int]) -> some View {
@@ -441,8 +442,12 @@ enum PromptCardGeometry {
         if let ratio = item.media?.aspectRatio { return max(0.65, min(1.8, ratio)) }
         return switch item.kind { case .text: 0.95; case .image: item.artwork == "lake" ? 1.02 : 0.76; case .video: 0.94; case .web: WebsiteExamples.files[item.id] != nil ? 0.62 : 0.87 }
     }
-    /// Cards carry only the work, so a card is exactly its preview.
-    static func height(for item: ContentPreview, width: CGFloat) -> CGFloat { width / aspectRatio(for: item) }
+    /// Cards carry only the work, so a card is exactly its preview; search results
+    /// add one line of title beneath visual works.
+    static let titleSpacing: CGFloat = 6
+    static func height(for item: ContentPreview, width: CGFloat, titled: Bool = false) -> CGFloat {
+        width / aspectRatio(for: item) + (titled && !item.usesTextArtwork ? titleSpacing + ceil(UIFont.preferredFont(forTextStyle: .footnote).lineHeight) : 0)
+    }
 }
 
 struct PromptCard: View {

@@ -138,6 +138,7 @@ struct SearchView: View {
         if let feed = library.feed {
             if kind == nil && !skillsOnly && !normalizedQuery.isEmpty { FeedCreatorSearch(repository: feed, query: normalizedQuery) }
             FeedResults(store: feed.search, query: FeedQuery(kind: skillsOnly ? "skill" : kind?.rawValue, q: query), debounce: true, fallback: results)
+                .environment(\.cardShowsTitle, true)
         } else { legacyResults }
     }
     @ViewBuilder private var legacyResults: some View {
@@ -185,7 +186,7 @@ struct SearchView: View {
             Text(String(localized: "\(matchedPrompts.count) 条内容")).font(.footnote)
                 .foregroundStyle(Palette.muted).padding(.horizontal, 20)
                 .accessibilityIdentifier("searchResultCount")
-            PromptGrid(items: matchedPrompts).padding(.horizontal, 16)
+            PromptGrid(items: matchedPrompts).padding(.horizontal, 16).environment(\.cardShowsTitle, true)
         }
     }
 

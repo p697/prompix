@@ -105,12 +105,18 @@ struct FeedInterleave<Item: Identifiable, Grid: View>: View {
     }
 }
 
+extension EnvironmentValues {
+    /// Search results name each visual work in one line; the feed shows only the work.
+    @Entry var cardShowsTitle = false
+}
+
 struct PromptCardFace: View {
     let preview: ContentPreview
     @Environment(\.dynamicTypeSize) private var typeSize
+    @Environment(\.cardShowsTitle) private var titled
     private var titleIsInArtwork: Bool { preview.usesTextArtwork }
     var body: some View {
-        Group {
+        VStack(alignment: .leading, spacing: PromptCardGeometry.titleSpacing) {
             if typeSize.isAccessibilitySize && titleIsInArtwork {
                 VStack(alignment: .leading, spacing: 12) {
                     Text(preview.displayTitle).font(.headline).foregroundStyle(.primary)
@@ -120,6 +126,9 @@ struct PromptCardFace: View {
             } else {
                 Artwork(preview: preview, fillsFrame: true).aspectRatio(PromptCardGeometry.aspectRatio(for: preview), contentMode: .fit)
                     .clipShape(RoundedRectangle(cornerRadius: PromptCardGeometry.cornerRadius, style: .continuous))
+            }
+            if titled && !titleIsInArtwork && !typeSize.isAccessibilitySize {
+                Text(preview.displayTitle).font(.footnote).foregroundStyle(Palette.ink).lineLimit(1).padding(.horizontal, 2)
             }
         }.contentShape(Rectangle())
     }
