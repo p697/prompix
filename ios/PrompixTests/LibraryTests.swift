@@ -48,6 +48,37 @@ import AVKit
         XCTAssertThrowsError(try Catalog(schemaVersion: 1, version: "test", prompts: [tooMany]).validated())
     }
 
+    func testDecksPersistApartFromFavoritesAndFollowUnsaving() throws {
+        let library = Library(directory: directory)
+        let item = try XCTUnwrap(library.prompts.first { $0.id == "tiny-island" })
+        XCTAssertTrue(library.toggle(item))
+        let deck = try XCTUnwrap(library.decks.create(named: "  产品图灵感\n  "))
+        XCTAssertEqual(deck.name, "产品图灵感")
+        XCTAssertNil(library.decks.create(named: " \n "), "A blank name never makes a deck")
+        XCTAssertTrue(library.decks.set(item.id, in: deck.id, member: true))
+        XCTAssertTrue(library.decks.rename(deck.id, to: String(repeating: "海", count: 60)))
+        let reopened = Library(directory: directory)
+        XCTAssertEqual(reopened.decks.decks.map(\.itemIDs), [[item.id]])
+        XCTAssertEqual(reopened.decks.decks.first?.name.count, DeckStore.maximumNameLength)
+        XCTAssertEqual(reopened.decks.decks(containing: item.id).map(\.id), [deck.id])
+        XCTAssertTrue(reopened.toggle(item), "Unsaving takes the work out of every deck")
+        XCTAssertTrue(reopened.decks.decks.first?.itemIDs.isEmpty == true)
+        XCTAssertTrue(reopened.decks.delete(deck.id))
+        XCTAssertTrue(Library(directory: directory).decks.decks.isEmpty)
+    }
+
+    func testUnreadableDeckFileIsKeptAndNeverOverwritten() throws {
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let file = directory.appending(path: DeckStore.fileName)
+        try Data("{not json".utf8).write(to: file)
+        let library = Library(directory: directory)
+        XCTAssertFalse(library.decks.readable)
+        XCTAssertNil(library.decks.create(named: "新卡组"))
+        XCTAssertEqual(try Data(contentsOf: file), Data("{not json".utf8))
+        let item = try XCTUnwrap(library.prompts.first)
+        XCTAssertTrue(library.toggle(item), "A damaged deck file never blocks saving a work")
+    }
+
     func testFavoritesSurviveRelaunchAndStorePromptSnapshot() throws {
         let first = Library(directory: directory)
         let item = try XCTUnwrap(first.prompts.first)

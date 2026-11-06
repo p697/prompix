@@ -11,6 +11,7 @@ struct PromptDetail: View {
     @State private var editorContext: EditorContext?
     @State private var useContext: UseContext?
     @State private var imagePresented = false
+    @State private var deckPickerPresented = false
     @Namespace private var imageTransition
     @State private var playerPresented = false
     @State private var copied = false
@@ -71,7 +72,11 @@ struct PromptDetail: View {
                     .accessibilityIdentifier("sharePrompt")
             }
             ToolbarItem(placement: .topBarTrailing) {
-                Button { library.toggle(item) } label: {
+                // With decks of your own, saving asks where; otherwise it stays one tap.
+                Button {
+                    if library.decks.decks.isEmpty { library.toggle(item) }
+                    else if library.isSaved(item) || library.toggle(item) { deckPickerPresented = true }
+                } label: {
                     Label(library.isSaved(item) ? String(localized: "取消收藏") : String(localized: "收藏 Prompt"), systemImage: library.isSaved(item) ? "bookmark.fill" : "bookmark")
                         .frame(minWidth: 44, minHeight: 44)
                 }
@@ -96,6 +101,7 @@ struct PromptDetail: View {
             })
         }
         .sheet(item: $editorContext) { context in PromptEditor(item: context.item, language: context.language) }
+        .sheet(isPresented: $deckPickerPresented) { DeckPicker(item: item) }
         .fullScreenCover(isPresented: $imagePresented) {
             ImageViewer(name: item.media?.image ?? item.artwork, urls: item.media?.galleryURLs ?? [])
                 .promptTransitionDestination(id: "image-\(item.id)", in: imageTransition)

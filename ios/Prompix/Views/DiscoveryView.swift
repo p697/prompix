@@ -497,27 +497,31 @@ struct FavoritesView: View {
     @State private var skillsOnly = false
     @State private var query = ""
     @State private var images = ImageStore.shared
-    @State private var showCreators = false
+    @State private var scope = SavedScope.decks
     @State private var settingsPresented = false
+    @State private var namingDeck = false
     @Namespace private var scopeLine
     @ScaledMetric(relativeTo: .body) private var searchHeight = 48
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
-                    SavedSearchField(text: $query).frame(height: searchHeight).padding(.horizontal, 12)
+                    if !showsDeckGrid { SavedSearchField(text: $query).frame(height: searchHeight).padding(.horizontal, 12) }
                     Group {
                         if typeSize.isAccessibilitySize {
                             VStack(alignment: .leading, spacing: 8) {
                                 savedScopes
-                                if !showCreators { kindMenu }
+                                scopeActions
                             }
                         } else {
-                            HStack(spacing: 16) { savedScopes; if !showCreators { kindMenu } }
+                            HStack(spacing: 16) { savedScopes; scopeActions }
                         }
                     }.padding(.horizontal, 20)
-                    if showCreators { SavedCreators(query: query) }
-                    else { savedContent }
+                    switch scope {
+                    case .creators: SavedCreators(query: query)
+                    case .drafts: draftedContent
+                    case .decks: if showsDeckGrid { DeckGrid() } else { savedContent }
+                    }
                 }.padding(.top, 2).padding(.bottom, 24)
             }
             .scrollDismissesKeyboard(.interactively)
@@ -530,29 +534,50 @@ struct FavoritesView: View {
             }
             .toolbar(.hidden, for: .navigationBar)
             .sheet(isPresented: $settingsPresented) { SettingsView().promptSheet() }
+            .deckNamePrompt(isPresented: $namingDeck) { library.decks.create(named: $0) }
         }
+    }
+    /// Without decks of your own, the deck scope opens straight onto every saved work.
+    private var showsDeckGrid: Bool { scope == .decks && !library.decks.decks.isEmpty }
+    @ViewBuilder private var scopeActions: some View {
+        if scope == .decks {
+            if !showsDeckGrid { kindMenu }
+            Spacer(minLength: 0)
+            Button { namingDeck = true } label: { Image(systemName: "plus").frame(width: 44, height: 44) }
+                .disabled(!library.decks.readable).accessibilityLabel(String(localized: "新建卡组")).accessibilityIdentifier("newDeck")
+        } else if scope == .drafts { kindMenu }
     }
     private var savedScopes: some View {
-        HStack(spacing: 24) {
-            savedScope(false, title: String(localized: "内容"), count: library.favorites.count)
-            savedScope(true, title: String(localized: "创作者"), count: library.savedCreators.count)
-            Spacer(minLength: 0)
+        HStack(spacing: 20) {
+            savedScope(.decks, title: String(localized: "卡组"), count: library.favorites.count, id: "savedPromptsScope")
+            savedScope(.creators, title: String(localized: "创作者"), count: library.savedCreators.count, id: "savedCreatorsScope")
+            savedScope(.drafts, title: String(localized: "我的改写"), count: nil, id: "savedDraftsScope")
         }
     }
-    private func savedScope(_ creators: Bool, title: String, count: Int) -> some View {
-        Button { withAnimation(reduceMotion ? nil : .snappy(duration: 0.25)) { showCreators = creators } } label: {
+    private func savedScope(_ value: SavedScope, title: String, count: Int?, id: String) -> some View {
+        let selected = scope == value
+        return Button { withAnimation(reduceMotion ? nil : .snappy(duration: 0.25)) { scope = value } } label: {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
                 Text(title).font(.headline)
-                Text(count.formatted()).font(.caption.monospacedDigit()).fixedSize().foregroundStyle(Palette.muted)
-            }.foregroundStyle(showCreators == creators ? Palette.ink : Palette.muted)
+                if let count { Text(count.formatted()).font(.caption.monospacedDigit()).fixedSize().foregroundStyle(Palette.muted) }
+            }.foregroundStyle(selected ? Palette.ink : Palette.muted)
                 .frame(minHeight: 48).contentShape(Rectangle())
                 .overlay(alignment: .bottom) {
-                    if showCreators == creators {
+                    if selected {
                         Capsule().fill(Palette.accent).frame(height: 2).matchedGeometryEffect(id: "saved-scope", in: scopeLine)
                     }
                 }
-        }.buttonStyle(.plain).accessibilityAddTraits(showCreators == creators ? .isSelected : [])
-            .accessibilityIdentifier(creators ? "savedCreatorsScope" : "savedPromptsScope")
+        }.buttonStyle(.plain).accessibilityAddTraits(selected ? .isSelected : [])
+            .accessibilityIdentifier(id)
+    }
+    @ViewBuilder private var draftedContent: some View {
+        let drafted = library.draftedIDs
+        let candidates = library.favorites + library.prompts.filter { !library.savedIDs.contains($0.id) }
+        let items = candidates.filter { drafted.contains($0.id) && PromptQuery(text: query, kind: kind, skillsOnly: skillsOnly).matches($0) }
+        if items.isEmpty {
+            ContentUnavailableView(String(localized: "还没有改写过的 Prompt"), systemImage: "square.and.pencil",
+                                   description: Text(String(localized: "在详情页改写并保存后，会集中出现在这里。")))
+        } else { PromptGrid(items: items, origin: .favorite).padding(.horizontal, PromptGridLayout.inset) }
     }
     private var kindMenu: some View {
         Menu {
@@ -637,5 +662,163 @@ private struct SavedSearchField: UIViewRepresentable {
         init(_ parent: SavedSearchField) { self.parent = parent }
         func searchBar(_ searchBar: UISearchBar, textDidChange searchText: String) { parent.text = searchText }
         func searchBarSearchButtonClicked(_ searchBar: UISearchBar) { searchBar.resignFirstResponder() }
+    }
+}
+
+private enum SavedScope { case decks, creators, drafts }
+
+/// Every saved work first, then the decks you made. Covers are a 2×2 contact sheet.
+private struct DeckGrid: View {
+    @Environment(Library.self) private var library
+    var body: some View {
+        LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 18) {
+            NavigationLink { DeckDetail(deckID: nil) } label: {
+                DeckTile(name: String(localized: "全部收藏"), items: library.favorites)
+            }.buttonStyle(.cardPress).accessibilityIdentifier("deck-all")
+            ForEach(library.decks.decks) { deck in
+                NavigationLink { DeckDetail(deckID: deck.id) } label: {
+                    DeckTile(name: deck.name, items: DeckDetail.items(deck.itemIDs, in: library))
+                }.buttonStyle(.cardPress).accessibilityIdentifier("deck-\(deck.id)")
+            }
+        }.padding(.horizontal, PromptGridLayout.inset)
+    }
+}
+
+private struct DeckTile: View {
+    let name: String
+    let items: [Prompt]
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Grid(horizontalSpacing: 2, verticalSpacing: 2) {
+                ForEach(0..<2, id: \.self) { row in
+                    GridRow {
+                        ForEach(0..<2, id: \.self) { column in
+                            let index = row * 2 + column
+                            Group {
+                                if index < items.count { Artwork(item: items[index], compact: true, fillsFrame: true) }
+                                else { Palette.soft }
+                            }.aspectRatio(1, contentMode: .fill).clipped()
+                        }
+                    }
+                }
+            }.clipShape(RoundedRectangle(cornerRadius: PromptCardGeometry.cornerRadius, style: .continuous))
+            HStack(alignment: .firstTextBaseline) {
+                Text(name).font(.subheadline.weight(.semibold)).lineLimit(1)
+                Spacer(minLength: 4)
+                Text(items.count.formatted()).font(Typography.meta(size: 11)).foregroundStyle(Palette.muted)
+            }
+        }.foregroundStyle(Palette.ink).contentShape(Rectangle())
+            .accessibilityElement(children: .ignore).accessibilityLabel(name).accessibilityValue(String(localized: "\(items.count) 张"))
+    }
+}
+
+/// One deck as a contact sheet. `nil` shows every saved work.
+private struct DeckDetail: View {
+    let deckID: String?
+    @Environment(Library.self) private var library
+    @Environment(\.dismiss) private var dismiss
+    @State private var renaming = false
+    @State private var confirmsDelete = false
+    static func items(_ ids: [String], in library: Library) -> [Prompt] {
+        let saved = Dictionary(library.favorites.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        return ids.compactMap { saved[$0] }
+    }
+    private var deck: Deck? { deckID.flatMap { id in library.decks.decks.first { $0.id == id } } }
+    private var items: [Prompt] { deck.map { Self.items($0.itemIDs, in: library) } ?? library.favorites }
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(String(localized: "\(items.count) 张")).font(Typography.meta(size: 11)).tracking(1.2).foregroundStyle(Palette.muted)
+                    Text(deck?.name ?? String(localized: "全部收藏")).font(.largeTitle.bold()).accessibilityAddTraits(.isHeader)
+                }.padding(.horizontal, 20)
+                PromptGrid(items: items, origin: .favorite).padding(.horizontal, PromptGridLayout.inset)
+            }.padding(.bottom, 24)
+        }
+        .background(Palette.paper).foregroundStyle(Palette.ink)
+        .toolbar {
+            if let deck {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Menu {
+                        Button { renaming = true } label: { Label(String(localized: "重命名"), systemImage: "pencil") }
+                        Button(role: .destructive) { confirmsDelete = true } label: { Label(String(localized: "删除卡组"), systemImage: "trash") }
+                    } label: { Image(systemName: "ellipsis").frame(minWidth: 44, minHeight: 44) }
+                        .accessibilityLabel(deck.name).accessibilityIdentifier("deckActions")
+                }
+            }
+        }
+        .deckNamePrompt(isPresented: $renaming, initial: deck?.name ?? "") { name in
+            guard let deckID else { return nil }
+            return library.decks.rename(deckID, to: name) ? deck : nil
+        }
+        .confirmationDialog(String(localized: "删除卡组"), isPresented: $confirmsDelete) {
+            Button(String(localized: "删除卡组"), role: .destructive) {
+                if let deckID, library.decks.delete(deckID) { dismiss() }
+            }
+        } message: { Text(String(localized: "卡组里的作品仍会留在全部收藏。")) }
+    }
+}
+
+/// "收藏到": every saved work is always in 全部收藏; decks are optional extras.
+struct DeckPicker: View {
+    let item: Prompt
+    @Environment(Library.self) private var library
+    @Environment(\.dismiss) private var dismiss
+    @State private var naming = false
+    var body: some View {
+        NavigationStack {
+            List {
+                Label(String(localized: "全部收藏"), systemImage: "checkmark.circle.fill")
+                    .foregroundStyle(Palette.muted).accessibilityAddTraits(.isSelected)
+                ForEach(library.decks.decks) { deck in
+                    let member = deck.itemIDs.contains(item.id)
+                    Button { library.decks.set(item.id, in: deck.id, member: !member) } label: {
+                        HStack {
+                            Image(systemName: member ? "checkmark.circle.fill" : "circle").foregroundStyle(member ? Palette.accent : Palette.muted)
+                            Text(deck.name).foregroundStyle(Palette.ink)
+                            Spacer()
+                            Text(deck.itemIDs.count.formatted()).font(Typography.meta(size: 12)).foregroundStyle(Palette.muted)
+                        }.frame(minHeight: 44).contentShape(Rectangle())
+                    }.buttonStyle(.plain).accessibilityAddTraits(member ? .isSelected : []).accessibilityIdentifier("pickDeck-\(deck.id)")
+                }
+                Button { naming = true } label: { Label(String(localized: "新建卡组"), systemImage: "plus") }
+                    .disabled(!library.decks.readable).accessibilityIdentifier("pickerNewDeck")
+                Section {
+                    Button(String(localized: "取消收藏"), role: .destructive) { if library.toggle(item) { dismiss() } }
+                        .accessibilityIdentifier("pickerUnsave")
+                }
+            }
+            .scrollContentBackground(.hidden).background(Palette.paper)
+            .navigationTitle(String(localized: "收藏到")).navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button(String(localized: "完成")) { dismiss() }.accessibilityIdentifier("pickerDone") } }
+            .deckNamePrompt(isPresented: $naming) { name in
+                guard let deck = library.decks.create(named: name) else { return nil }
+                library.decks.set(item.id, in: deck.id, member: true)
+                return deck
+            }
+        }
+        .presentationDetents([.medium, .large]).tint(Palette.accent)
+    }
+}
+
+private struct DeckNamePrompt: ViewModifier {
+    @Binding var isPresented: Bool
+    let initial: String
+    let commit: (String) -> Deck?
+    @State private var name = ""
+    func body(content: Content) -> some View {
+        content.alert(initial.isEmpty ? String(localized: "新建卡组") : String(localized: "重命名"), isPresented: $isPresented) {
+            TextField(String(localized: "卡组名称"), text: $name).accessibilityIdentifier("deckName")
+            Button(String(localized: "取消"), role: .cancel) { }
+            Button(initial.isEmpty ? String(localized: "创建") : String(localized: "完成")) { _ = commit(name) }
+                .disabled(DeckStore.cleanName(name) == nil)
+        }
+        .onChange(of: isPresented) { _, shown in if shown { name = initial } }
+    }
+}
+
+extension View {
+    func deckNamePrompt(isPresented: Binding<Bool>, initial: String = "", commit: @escaping (String) -> Deck?) -> some View {
+        modifier(DeckNamePrompt(isPresented: isPresented, initial: initial, commit: commit))
     }
 }

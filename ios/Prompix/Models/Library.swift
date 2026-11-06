@@ -39,11 +39,14 @@ enum CatalogSyncState: Equatable, Sendable {
     private var databaseFeedRequested = false
     private let feedService: (any FeedServing)?
     let recommendations: LocalRecommendations
+    let decks: DeckStore
     private let directory: URL
     private let installFileWriter: (Data, URL) throws -> Void
     private var storageRecoveryPending = false
     private var languageCache: LanguagePackCache { LanguagePackCache(directory: directory) }
     var savedIDs: Set<String> { Set(favorites.map(\.id)) }
+    /// Works with a saved draft in any language.
+    var draftedIDs: Set<String> { Set(drafts.keys.map { String($0.components(separatedBy: "::")[0]) }) }
     var savedImageURLs: Set<URL>? {
         guard favoritesReadable, savedCreatorsReadable, !storageRecoveryPending else { return nil }
         return Set(favorites.compactMap { $0.media?.imageURL } + favorites.compactMap { $0.creator?.avatarURL } + savedCreators.compactMap(\.avatarURL))
@@ -54,6 +57,7 @@ enum CatalogSyncState: Equatable, Sendable {
          installFileWriter: @escaping (Data, URL) throws -> Void = { try $0.write(to: $1, options: .atomic) }) {
         self.directory = directory ?? URL.applicationSupportDirectory.appending(path: "Prompix", directoryHint: .isDirectory)
         self.recommendations = LocalRecommendations(directory: self.directory)
+        self.decks = DeckStore(directory: self.directory)
         self.installFileWriter = installFileWriter
         databaseFeedRequested = feedService != nil
         self.feedService = feedService
@@ -665,7 +669,9 @@ enum CatalogSyncState: Equatable, Sendable {
             let data = try JSONEncoder().encode(updated)
             try data.write(to: directory.appending(path: "favorites.json"), options: .atomic)
             favorites = updated
-            recommendations.record(updated.contains { $0.id == item.id } ? .save : .unsave, prompt: item)
+            let saved = updated.contains { $0.id == item.id }
+            if !saved { decks.removeEverywhere([item.id]) }
+            recommendations.record(saved ? .save : .unsave, prompt: item)
             return true
         } catch { self.error = String(localized: "未能保存收藏，请检查设备存储空间后重试。"); return false }
     }
@@ -673,5 +679,95 @@ enum CatalogSyncState: Equatable, Sendable {
     func reportContentFailure(_ failure: any Error) {
         if failure as? FeedError == .removed { error = String(localized: "这条内容已被移除，无法再保存。你仍可复制当前文字。") }
         else { error = String(localized: "内容暂时无法加载，请稍后重试。") }
+    }
+}
+
+
+/// A user-made deck of saved works, newest first. "全部收藏" is every favorite
+/// and is never stored as a deck.
+struct Deck: Codable, Identifiable, Equatable {
+    let id: String
+    var name: String
+    var itemIDs: [String]
+    var updatedAt: Date
+}
+
+/// Decks live in their own file beside favorites.json, so a damaged deck file
+/// never puts saved works at risk. An unreadable file is kept and not overwritten.
+@MainActor @Observable final class DeckStore {
+    static let fileName = "decks.json"
+    static let maximumDecks = 100
+    static let maximumItems = 5000
+    static let maximumNameLength = 40
+    private(set) var decks: [Deck] = []
+    private(set) var readable = true
+    private let file: URL?
+
+    init(directory: URL? = nil) {
+        file = directory?.appending(path: Self.fileName)
+        guard let file, FileManager.default.fileExists(atPath: file.path) else { return }
+        do {
+            let attributes = try file.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey])
+            guard attributes.isRegularFile == true, attributes.isSymbolicLink != true, (attributes.fileSize ?? .max) <= 4_000_000 else { throw FeedError.invalidResponse }
+            let value = try JSONDecoder().decode([Deck].self, from: Data(contentsOf: file))
+            guard Self.valid(value) else { throw FeedError.invalidResponse }
+            decks = value
+        } catch { readable = false }
+    }
+
+    static func valid(_ decks: [Deck]) -> Bool {
+        decks.count <= maximumDecks && Set(decks.map(\.id)).count == decks.count && decks.allSatisfy { deck in
+            !deck.id.isEmpty && deck.id.utf8.count <= 64 && cleanName(deck.name) == deck.name
+                && deck.itemIDs.count <= maximumItems && Set(deck.itemIDs).count == deck.itemIDs.count
+                && deck.itemIDs.allSatisfy(FeedValidation.id) && deck.updatedAt.timeIntervalSince1970.isFinite
+        }
+    }
+    /// Trimmed, single-line and bounded; nil when nothing usable remains.
+    static func cleanName(_ name: String) -> String? {
+        let value = name.split(whereSeparator: \.isNewline).joined(separator: " ").trimmingCharacters(in: .whitespaces)
+        guard !value.isEmpty else { return nil }
+        return String(value.prefix(maximumNameLength))
+    }
+
+    func decks(containing itemID: String) -> [Deck] { decks.filter { $0.itemIDs.contains(itemID) } }
+
+    @discardableResult func create(named name: String, now: Date = Date()) -> Deck? {
+        guard let name = Self.cleanName(name), decks.count < Self.maximumDecks else { return nil }
+        let deck = Deck(id: UUID().uuidString.lowercased(), name: name, itemIDs: [], updatedAt: now)
+        return commit([deck] + decks) ? deck : nil
+    }
+    @discardableResult func rename(_ id: String, to name: String, now: Date = Date()) -> Bool {
+        guard let name = Self.cleanName(name), let index = decks.firstIndex(where: { $0.id == id }) else { return false }
+        var next = decks; next[index].name = name; next[index].updatedAt = now
+        return commit(next)
+    }
+    @discardableResult func delete(_ id: String) -> Bool {
+        guard decks.contains(where: { $0.id == id }) else { return false }
+        return commit(decks.filter { $0.id != id })
+    }
+    @discardableResult func set(_ itemID: String, in deckID: String, member: Bool, now: Date = Date()) -> Bool {
+        guard FeedValidation.id(itemID), let index = decks.firstIndex(where: { $0.id == deckID }) else { return false }
+        guard decks[index].itemIDs.contains(itemID) != member else { return true }
+        var next = decks
+        if member {
+            guard next[index].itemIDs.count < Self.maximumItems else { return false }
+            next[index].itemIDs.insert(itemID, at: 0)
+        } else { next[index].itemIDs.removeAll { $0 == itemID } }
+        next[index].updatedAt = now
+        return commit(next)
+    }
+    /// Unsaving a work takes it out of every deck as well.
+    @discardableResult func removeEverywhere(_ itemIDs: Set<String>) -> Bool {
+        guard decks.contains(where: { !$0.itemIDs.allSatisfy { !itemIDs.contains($0) } }) else { return true }
+        return commit(decks.map { deck in var deck = deck; deck.itemIDs.removeAll { itemIDs.contains($0) }; return deck })
+    }
+
+    private func commit(_ next: [Deck]) -> Bool {
+        guard readable, Self.valid(next) else { return false }
+        if let file {
+            do { try JSONEncoder().encode(next).write(to: file, options: .atomic) } catch { return false }
+        }
+        decks = next
+        return true
     }
 }
