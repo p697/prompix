@@ -194,7 +194,7 @@ struct CreatorRail: View {
                         ForEach(entries) { entry in
                             NavigationLink { CreatorDetail(creator: entry.creator, initialPreview: entry.preview) } label: {
                                 CreatorRailCard(entry: entry)
-                            }.buttonStyle(.plain).foregroundStyle(Palette.ink)
+                            }.buttonStyle(.cardPress).foregroundStyle(Palette.ink)
                                 .accessibilityLabel(entry.creator.displayName)
                                 .accessibilityValue(String(localized: "\(entry.count) 条内容"))
                                 .accessibilityIdentifier("creator-\(entry.id)")
