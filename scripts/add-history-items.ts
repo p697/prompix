@@ -29,6 +29,7 @@ import { readTranslationCache } from "../ingest/translation-cache.ts";
 import { modelTranslationProvider, TranslationRefused } from "../ingest/translation-provider.ts";
 import { createProvider, isProviderId, modelEnvironment } from "../ingest/models/registry.ts";
 import { appendEvent, pipelineRoot } from "../ingest/pipeline-control.ts";
+import { ModelProviderError } from "../ingest/models/types.ts";
 import { runTranslations } from "../ingest/translation-runner.ts";
 import { attachTranslations, emptyTranslationCache, promptSegments } from "../ingest/translation.ts";
 import { reviewTranslationSemanticsWith } from "../ingest/translation-semantic.ts";
@@ -147,8 +148,17 @@ switch (command) {
       while (next < groups.length) {
         const index = next++, group = groups[index], output = join(directory, String(index));
         const existing = await json<{ reviews?: { id: string; verdict: string }[] } | null>(join(output, "result.json"), null);
-        const review = existing?.reviews?.length === group.length ? existing
-          : await reviewTranslationSemanticsWith(reviewer, group, "zh-Hans", output, "high", record("history-intake:semantic"));
+        let review;
+        try {
+          review = existing?.reviews?.length === group.length ? existing
+            : await reviewTranslationSemanticsWith(reviewer, group, "zh-Hans", output, "high", record("history-intake:semantic"));
+        } catch (error) {
+          if (!(error instanceof ModelProviderError && error.code === "refused")) throw error;
+          // A declined review is final for this group: people decide, no other model is asked.
+          const refusedPath = join(work, "refused-items.json");
+          await atomic(refusedPath, [...new Set([...await json<string[]>(refusedPath, []), ...group.map(item => item.id)])].sort());
+          held += group.length; continue;
+        }
         if (!existing) await atomic(join(output, "result.json"), review);
         const approved = new Set(review.reviews!.filter(value => value.verdict === "pass").map(value => value.id));
         for (const item of group) if (approved.has(item.id)) passed.push(item); else held++;
