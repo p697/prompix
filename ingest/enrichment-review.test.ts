@@ -4,7 +4,7 @@ import { promptSchema, type Prompt } from "../packages/schema/catalog.ts";
 import { enrichedPromptIssues, facetIDs, paletteSchema } from "../packages/schema/enrichment.ts";
 import {
   applyEnrichment, aspectLabel, enrichmentOutputJSONSchema, enrichmentRequest, labelledModel, packEnrichmentBatches,
-  reviewEnrichmentBatch, rightsFor, validateEnrichmentItem, type EnrichmentCandidate,
+  needsPeopleReview, reviewEnrichmentBatch, rightsFor, validateEnrichmentItem, type EnrichmentCandidate,
 } from "./enrichment-review.ts";
 import type { ModelCallSummary } from "./models/call.ts";
 import { ModelProviderError, type ModelProvider, type ModelRequest } from "./models/types.ts";
@@ -34,7 +34,7 @@ function output(id = "x-post-1", overrides: Record<string, unknown> = {}) {
     variables: [{ token: "[a feeling]", name: { zh: "情绪", en: "Feeling" }, default: null, hint: { zh: "想表达的情绪", en: "The mood to convey" } }],
     facets: { useCase: ["portraits"], style: ["cinematic"], subject: ["person", "city"] },
     en: { title: "Rainy neon portrait", summary: "A cinematic portrait from your own photo on a rainy neon street." },
-    shots: [], vocabularyGaps: [],
+    shots: [], vocabularyGaps: [], people: { realPerson: "no", minor: "no" },
     ...overrides,
   };
 }
@@ -81,6 +81,18 @@ test("the model cannot add facets beyond the per-group limit or invent variable 
   const invented = validateEnrichmentItem(candidate(), output("x-post-1", { variables: [{ token: "[city]", name: { zh: "城市", en: "City" }, default: null, hint: null }] }));
   assert.equal(invented.ok, false);
   assert.match(!invented.ok ? invented.error : "", /not in the prompt/);
+});
+
+test("harmless contradictions are repaired; people flags route new items to review", () => {
+  const repaired = validateEnrichmentItem(candidate(), output("x-post-1", {
+    inputs: { requirement: "required", count: 12, kinds: ["product", "product"], ownLikenessOnly: true },
+    generation: { modelFamily: "other", modelVersion: null, mode: "i2i", outputAspect: "2.39:1", durationSeconds: null, hasAudio: null } }));
+  assert.ok(repaired.ok, !repaired.ok ? repaired.error : "");
+  assert.deepEqual(repaired.fields.inputs, { requirement: "required", kinds: ["product"] });
+  assert.equal(repaired.fields.generation.outputAspect, undefined);
+  assert.equal(needsPeopleReview(repaired.evidence), false);
+  const flagged = validateEnrichmentItem(candidate(), output("x-post-1", { people: { realPerson: "unsure", minor: "no" } }));
+  assert.ok(flagged.ok && needsPeopleReview(flagged.evidence));
 });
 
 test("modes must fit the kind and reference modes need an input", () => {
