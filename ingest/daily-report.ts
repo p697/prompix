@@ -6,10 +6,13 @@ import { withPublisherDatabase } from "./database-publication.ts";
 import { estimateUSD } from "./models/pricing.ts";
 import type { ModelUsage } from "./models/types.ts";
 import { pipelineRoot, readConfig, readEvents, stageLabels, type PipelineEvent, type PipelineStage } from "./pipeline-control.ts";
+import { collectItemStates, saveFunnelSnapshot, summarizeFunnel, type FunnelSummary } from "./item-state.ts";
+import { contentRoot } from "./publication.ts";
 
 export const reportWindowMs = 24 * 3600000;
 export type ReportInput = { start: number; end: number; target: number; desired: string; events: readonly PipelineEvent[];
-  database?: { added: number; removed: number; live: number }; databaseError?: string; xSpendUSD?: number };
+  database?: { added: number; removed: number; live: number }; databaseError?: string; xSpendUSD?: number;
+  funnel?: FunnelSummary; funnelError?: string };
 
 const jobNames: Record<string, string> = { intake: "每日采集发布", maintenance: "来源维护复查" };
 const local = (at: number) => new Date(at).toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false });
@@ -46,6 +49,9 @@ export function buildDailyReport(input: ReportInput): DailyReport {
   if (input.desired === "running" && !intakes.length) problems.push("这一天没有成功完成的每日采集发布");
   else if (input.desired === "running" && !published) problems.push("每日流程这一天没有发布新内容");
   if (input.databaseError) problems.push(`读取线上数据失败：${input.databaseError.slice(0, 160)}`);
+  // Every item must end live, excluded with a reason, or waiting for an automatic step.
+  if (input.funnel?.newlyStalled) problems.push(`${input.funnel.newlyStalled} 条内容新进入悬空状态，没有任何环节会再处理它们`);
+  if (input.funnelError) problems.push(`统计条目状态失败：${input.funnelError.slice(0, 160)}`);
 
   // Metered calls are priced; subscription calls are counted by stage.
   // Calls routed by the daily pipeline are logged as "pipeline"; anything else is other work, such as a backfill.
@@ -73,6 +79,9 @@ export function buildDailyReport(input: ReportInput): DailyReport {
     input.database ? `- 新增 ${added} 条，其中每日流程发布 ${published} 条（每日目标 ${input.target}${published < input.target ? `，差 ${input.target - published} 条` : ""}）` : `- 新增：读取失败；每日流程发布 ${published} 条`,
     ...(input.database ? [`- 下架 ${input.database.removed} 条，线上共 ${input.database.live} 条`] : []),
     `- 2.0 审核自动排除 ${excluded} 条，译文复核拦下 ${held} 处`,
+    ...(input.funnel ? ["", "条目状态（npm run pipeline -- funnel）",
+      `- 排队中 ${input.funnel.counts.waiting} 条，悬空 ${input.funnel.counts.stalled} 条（这一天新增 ${input.funnel.newlyStalled} 条）`,
+      ...input.funnel.stalled.slice(0, 5).map(group => `  · ${group.count} 条：${group.reason.slice(0, 120)}`)] : []),
     "",
     "做了哪些事",
     ...(done.length ? done : ["- 没有运行任何任务"]),
@@ -111,6 +120,10 @@ export async function collectDailyReport(start: number, end: number, environment
       count(*) filter (where first_published_at is not null and removed_at is null)::integer as live
       from prompix.content`, [new Date(start).toISOString(), new Date(end).toISOString()])).rows[0], environment);
   } catch (error) { input.databaseError = (error as Error).message; }
+  try {
+    input.funnel = summarizeFunnel(await collectItemStates(contentRoot, environment, end), end, end - start);
+    await saveFunnelSnapshot(root, input.funnel);
+  } catch (error) { input.funnelError = (error as Error).message; }
   return buildDailyReport(input);
 }
 
