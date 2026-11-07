@@ -370,12 +370,22 @@ struct RelatedPrompts {
 
 /// Public information routes never include personal drafts or saved collections.
 enum SupportLinks {
-    enum Page: String { case home = "", support, privacy, content, report }
-    static func url(_ page: Page, contentID: String? = nil, language: String = Bundle.main.preferredLocalizations.first ?? "en") -> URL {
+    enum Page: String { case home = "", support, privacy, content }
+    /// Routed by Cloudflare Email Routing to the owner; takedowns are handled within a day.
+    static let supportEmail = "support@prompix.dev"
+    static func url(_ page: Page, language: String = Bundle.main.preferredLocalizations.first ?? "en") -> URL {
         var parts = URLComponents(string: "https://prompix.dev")!
         let prefix = language.lowercased().hasPrefix("zh") ? "/zh" : ""
         parts.path = prefix + (page.rawValue.isEmpty ? "" : "/\(page.rawValue)")
-        if page == .report, let contentID { parts.queryItems = [URLQueryItem(name: "id", value: contentID)] }
+        return parts.url!
+    }
+    /// A report or takedown request as a mail to support, naming the work so
+    /// the author only adds what is wrong.
+    static func reportMail(contentID: String, title: String, subject: String = String(localized: "报告问题或申请下架")) -> URL {
+        var parts = URLComponents()
+        parts.scheme = "mailto"; parts.path = supportEmail
+        parts.queryItems = [URLQueryItem(name: "subject", value: "\(subject) · \(contentID)"),
+                            URLQueryItem(name: "body", value: "\(title)\nID: \(contentID)\n\n")]
         return parts.url!
     }
 }

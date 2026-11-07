@@ -1278,3 +1278,7 @@ The owner recorded the feed jumping by a fraction of a screen in the middle of a
 ### 2026-11-07 — The app shows images, video and words only
 
 The owner limited Prompix to images, video and text prompts from X and prompts.chat; the service retired every Skill and web item and the web collection (#274). The app drops the Web and Skills kinds from discovery, search and creator filters, the web collection, the Skill install command and file information, the six bundled Prompix Studio website examples with their HTML and screenshots, and the retired web and Skill interests from preferences. The interests stay in the shared schema for the service to retire. Models still decode `skill` and `web` so saved snapshots and caches stay readable. The website home loses its website example card; the rest of its copy, which still talks about Skills and websites, is left to the service session.
+
+### 2026-11-07 — Takedown requests by email
+
+The owner wants authors to ask for removal with one email, handled within 24 hours. The existing `support@prompix.dev` (Cloudflare Email Routing to the owner, since 2026-10-12) serves it. The detail's 报告问题或申请下架 now opens a mail to that address whose subject and body carry only the work's title and ID; the app no longer links to the website report page with an `id` query, and `SupportLinks.Page.report` is gone from the app.
