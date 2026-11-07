@@ -67,7 +67,9 @@ export async function withPublisherDatabase<T>(operation: (db: TransactionalData
   const path = environment.PROMPIX_DATABASE_CA;
   if (!path) throw new Error("Database publisher CA is not configured");
   const config = { ...publisherConfiguration(environment, await readFile(path, "utf8")),
-    query_timeout: 30000, statement_timeout: 25000, lock_timeout: 5000, idle_in_transaction_session_timeout: 30000 };
+    // A batch job, not a reader: with 1.5 GB of history against a 256 MB cache, a cold 25-row page
+    // or a 50-revision search refresh has taken up to 24 s. Readers keep their own short limits.
+    query_timeout: 130000, statement_timeout: 120000, lock_timeout: 5000, idle_in_transaction_session_timeout: 130000 };
   // No query has executed yet. Never replay an uncertain transaction commit here.
   const db = await retryConnection(() => connectDatabase(config));
   try { return await operation(db); } finally { await db.close(); }
