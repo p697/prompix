@@ -9,11 +9,15 @@ permissions:
 concurrency:
   group: checks-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+# `content` and `ios` are the required checks and stay under about two minutes:
+# types, builds and data validation. The full test suites run beside them as
+# `node-tests` and `ios-tests`; they report on every pull request but do not hold
+# the merge. Nothing ships (deploy, release build) until they are green.
 jobs:
   changes:
     runs-on: ubuntu-latest
     outputs:
-      content: ${{ steps.filter.outputs.content }}
+      node: ${{ steps.filter.outputs.node }}
       ios: ${{ steps.filter.outputs.ios }}
     steps:
       - uses: actions/checkout@v4
@@ -27,20 +31,19 @@ jobs:
           HEAD: ${{ github.event.pull_request.head.sha }}
         run: |
           if [[ "$GITHUB_EVENT_NAME" != "pull_request" ]] || ! files=$(git diff --name-only "$BASE...$HEAD") || [[ -z "$files" ]]; then
-            printf 'content=true\nios=true\n' >> "$GITHUB_OUTPUT"; exit 0
+            printf 'node=true\nios=true\n' >> "$GITHUB_OUTPUT"; exit 0
           fi
           echo "$files"
-          content=false; ios=false
-          grep -qvE '^(docs|design)/|\.md$' <<<"$files" && content=true
+          node=false; ios=false
+          grep -qvE '^(docs|design|ios)/|\.md$' <<<"$files" && node=true
           grep -qE '^(ios|packages/schema|\.github/workflows)/' <<<"$files" && ios=true
-          printf 'content=%s\nios=%s\n' "$content" "$ios" >> "$GITHUB_OUTPUT"
+          printf 'node=%s\nios=%s\n' "$node" "$ios" >> "$GITHUB_OUTPUT"
   content:
-    needs: changes
-    # A skipped job satisfies the required check, so run whenever the filter did not succeed.
-    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.content == 'true') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Check complete interface localizations
+        run: python3 scripts/check-localizations.py
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -55,20 +58,30 @@ jobs:
         run: npx wrangler deploy --dry-run --config services/monitor/wrangler.jsonc
         env:
           WRANGLER_SEND_METRICS: 'false'
-      - run: npm test
       - run: npm run validate -- ios/Prompix/Resources/catalog.json
       - name: Check scheduler retention safety
         run: python3 -m unittest discover -s scripts -p 'test_scheduler.py' -v
       - name: Check local release audit safety
         run: python3 -m unittest discover -s scripts -p 'test_release_audit.py' -v
-      - name: Check complete interface localizations
-        run: python3 scripts/check-localizations.py
       - name: Build public website
         run: |
           python3 services/site/build.py
           node --check services/site/site.js
+  node-tests:
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.node == 'true') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm test
   ios:
     needs: changes
+    # A skipped job satisfies the required check, so run whenever the filter did not succeed.
     if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.ios == 'true') }}
     runs-on: xcode-27
     env:
@@ -83,10 +96,27 @@ jobs:
             echo "::error::Expected the iOS 27.1 simulator SDK, found $PROMPIX_SIMULATOR_SDK"
             exit 1
           fi
-          echo "Using iOS simulator SDK $PROMPIX_SIMULATOR_SDK"
-      - name: Select an available iPhone simulator
+      # Compiles the app and both test bundles without a simulator.
+      - name: Build app and tests
+        run: xcodebuild -project ios/Prompix.xcodeproj -scheme Prompix -destination 'generic/platform=iOS Simulator' build-for-testing CODE_SIGNING_ALLOWED=NO COMPILER_INDEX_STORE_ENABLE=NO
+  ios-tests:
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.ios == 'true') }}
+    runs-on: xcode-27
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_27.1.app/Contents/Developer
+    steps:
+      # A cold simulator takes minutes to boot; start it before anything else so
+      # the boot overlaps the checkout and the build.
+      - name: Boot an iPhone simulator
         run: |
-          DEVICE_ID=$(xcrun simctl list devices available -j | python3 -c 'import sys,json; print(next(d["udid"] for devices in json.load(sys.stdin)["devices"].values() for d in devices if d["name"].startswith("iPhone")))')
+          DEVICE_ID=$(xcrun simctl list devices available -j | python3 -c 'import sys,json; phones=[(("iOS-27-1" in r), d["udid"]) for r, ds in json.load(sys.stdin)["devices"].items() for d in ds if d["name"].startswith("iPhone")]; print(max(phones)[1])')
           echo "DEVICE_ID=$DEVICE_ID" >> "$GITHUB_ENV"
-      - name: Build and test native models
-        run: xcodebuild -project ios/Prompix.xcodeproj -scheme Prompix -destination "id=$DEVICE_ID" -only-testing:PrompixTests test CODE_SIGNING_ALLOWED=NO
+          xcrun simctl boot "$DEVICE_ID"
+      - uses: actions/checkout@v4
+      - name: Build tests
+        run: xcodebuild -project ios/Prompix.xcodeproj -scheme Prompix -destination "id=$DEVICE_ID" -only-testing:PrompixTests -derivedDataPath build build-for-testing CODE_SIGNING_ALLOWED=NO COMPILER_INDEX_STORE_ENABLE=NO
+      - name: Test native models
+        run: |
+          xcrun simctl bootstatus "$DEVICE_ID" -b
+          xcodebuild -project ios/Prompix.xcodeproj -scheme Prompix -destination "id=$DEVICE_ID" -only-testing:PrompixTests -derivedDataPath build test-without-building CODE_SIGNING_ALLOWED=NO

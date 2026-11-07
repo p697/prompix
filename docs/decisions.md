@@ -1254,3 +1254,7 @@ Agents kept misreporting why items were not online because each item's state was
 ### 2026-11-07 — 顶部边缘参照 Cosmos，详情大图按原比例
 
 首页页头收起后不再留一条不透明的纸色带，只在状态栏后面放一道纸色加模糊的渐变（`EdgeVeil`），参照 Cosmos 不带分类器的首页；是否常驻分类器之后再定。详情大图原来把竖图裁成接近正方形的横幅，再叠上系统顶部模糊，人像的脸会被切掉或盖住；现在按作品比例显示（最高到 3:4，更高的从底部裁），图上只留状态栏的浅渐变。
+
+### 2026-11-07 — Required checks stay under two minutes
+
+The owner set a one-to-two-minute budget for CI. A typical run took 4–10 minutes: the `ios` job spent 3–5 minutes cold-booting a fresh simulator before about 50 seconds of unit tests, and `content` spent 227 seconds in `npm test`, mostly one 112-second keyset traversal over 10,000 items. The required checks keep their names but now hold only fast work: `content` runs localization, typechecks, Worker dry-runs, catalog validation and the Python safety checks; `ios` compiles the app and both test bundles with `build-for-testing` and no simulator. The full suites run beside them as `node-tests` and `ios-tests` (the simulator boots first, overlapping the build) and report on every pull request without holding auto-merge. Agents run affected tests locally before opening a PR and do not deploy or install a release build until both suites are green; a suite failing after merge is fixed first. Running unit tests as a Designed-for-iPad Mac app would skip the simulator, but it needs a provisioning profile the CI does not have.
