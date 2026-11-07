@@ -23,6 +23,7 @@ import { download } from "./network.ts";
 import { discoverX } from "./x-discovery.ts";
 import { collectNightlyX, importTrialPosts } from "./x-nightly.ts";
 import { reviewDailyX } from "./review-daily.ts";
+import { duplicateTakedownLimit, laterDuplicates } from "./near-duplicates.ts";
 import { isNativeXDraft } from "./x-source.ts";
 import { readAllXIntake as readXIntake } from "./x-thread-intake.ts";
 import { enrichCreators, mergeCreatorCache, mirrorCreatorAvatars, type CreatorCache } from "./creators.ts";
@@ -321,7 +322,18 @@ async function run() {
     }, (creatorID, error) => report.avatarErrors.push(`${creatorID}: ${String(error)}`));
     // Dry-run only reads validated translations; it never starts a paid batch.
     const localized = await prepareDailyTranslations(inheritPreviousTranslations(complete, previous?.prompts ?? []), root, process.env, publishing);
-    const prompts = localized.prompts;
+    // Near-duplicates keep the earliest post (owner, 2026-11-07): a new copy never goes live, and
+    // a later copy already live is taken down, a bounded number per run.
+    const duplicates = laterDuplicates(localized.prompts), liveNow = new Set(previous?.prompts.map(item => item.id) ?? []);
+    const liveCopies = [...duplicates.keys()].filter(id => liveNow.has(id));
+    const takedowns = liveCopies.length <= duplicateTakedownLimit ? liveCopies : [];
+    if (publishing && takedowns.length) {
+      moderation.removedIDs = [...new Set([...moderation.removedIDs, ...takedowns])].sort();
+      await atomic(join(root, "moderation.json"), moderation);
+    }
+    report.sources["near-duplicates"] = { newCopies: duplicates.size - liveCopies.length, liveTakedowns: takedowns.length,
+      ...(takedowns.length < liveCopies.length ? { heldLiveCopies: liveCopies.length } : {}), pairs: Object.fromEntries([...duplicates].slice(0, 100)) };
+    const prompts = localized.prompts.filter(item => !duplicates.has(item.id) || (liveNow.has(item.id) && !takedowns.includes(item.id)));
     report.translations = localized.report;
     report.retainedPrevious = retained.retainedPrevious;
     report.counts.prepared = countByKind(prompts);
