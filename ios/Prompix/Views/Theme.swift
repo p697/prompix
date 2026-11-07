@@ -246,13 +246,21 @@ struct EdgeVeil: View {
     var fade: CGFloat = 10
     var body: some View {
         let top = Self.statusBarHeight + hold
-        let height = top + fade
-        let solid = hold > 0 ? top / height : 0.45
+        // Without a held band the glass runs a little past the status bar and thins out.
+        let height = top + (hold > 0 ? fade : 22)
+        let solid = hold > 0 ? top / height : 0
         ZStack {
-            Rectangle().fill(.ultraThinMaterial)
-                .mask(LinearGradient(stops: [.init(color: .black.opacity(hold > 0 ? 1 : 0.7), location: 0), .init(color: .black.opacity(hold > 0 ? 1 : 0.4), location: solid), .init(color: .clear, location: 1)], startPoint: .top, endPoint: .bottom))
-            LinearGradient(stops: [.init(color: Palette.paper.opacity(hold > 0 ? 0.94 : 0.8), location: 0),
-                                   .init(color: Palette.paper.opacity(hold > 0 ? 0.94 : 0.5), location: solid),
+            // Thin layers that end at different depths blur most at the edge and least
+            // at the bottom, like frosted glass, so there is no line where the veil stops.
+            ForEach(1...3, id: \.self) { layer in
+                Rectangle().fill(.ultraThinMaterial)
+                    .mask(LinearGradient(stops: [.init(color: .black, location: 0), .init(color: .black, location: solid),
+                                                 .init(color: .clear, location: solid + (1 - solid) * Double(layer) / 3)],
+                                         startPoint: .top, endPoint: .bottom))
+            }.opacity(hold > 0 ? 1 : 0.7)
+            // Paper only where a title needs it; over work, just a breath of it.
+            LinearGradient(stops: [.init(color: Palette.paper.opacity(hold > 0 ? 0.9 : 0.2), location: 0),
+                                   .init(color: Palette.paper.opacity(hold > 0 ? 0.9 : 0), location: hold > 0 ? solid : 0.75),
                                    .init(color: Palette.paper.opacity(0), location: 1)], startPoint: .top, endPoint: .bottom)
         }.frame(height: height).frame(maxWidth: .infinity)
             .ignoresSafeArea(edges: .top).allowsHitTesting(false).accessibilityHidden(true)

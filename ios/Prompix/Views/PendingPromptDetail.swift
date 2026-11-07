@@ -96,10 +96,10 @@ struct PromptDetailHeading: View {
     }
 }
 
-/// The work edge to edge, fading into the page. Tall work is cropped to about
-/// 10:9, two fifths of the screen, so the title and the prompt share the first
-/// screen with it; the full frame opens on tap. Several images
-/// page sideways in place, with a counter.
+/// The work edge to edge, fading into the page. Tall work is shown up to 2:3,
+/// cropped from the bottom so faces stay whole, and the title still starts on
+/// the first screen; the full frame opens on tap. Several images page sideways
+/// in place, with a counter, and every page is cropped the same way.
 struct DetailHero: View {
     let preview: ContentPreview
     var title = ""
@@ -107,9 +107,9 @@ struct DetailHero: View {
     @State private var page = 0
     private var urls: [URL] { preview.media?.galleryURLs ?? [] }
     /// The work's own frame, so a portrait keeps its face; only pictures
-    /// taller than 3:4 lose some of their bottom, which fades out anyway.
+    /// taller than 2:3 lose some of their bottom, which fades out anyway.
     private var ratio: Double {
-        max(0.75, min(1.8, preview.media?.aspectRatio ?? 0.8))
+        max(2.0 / 3, min(1.8, preview.media?.aspectRatio ?? 0.8))
     }
     var body: some View {
         Color.clear.aspectRatio(ratio, contentMode: .fit)
@@ -118,14 +118,16 @@ struct DetailHero: View {
             .overlay {
                 VStack(spacing: 0) {
                     Spacer(minLength: 0)
-                    LinearGradient(colors: [Palette.paper.opacity(0), Palette.paper], startPoint: .top, endPoint: .bottom).frame(height: 72)
+                    // A short, eased fade: the work meets the page without a veil over it.
+                    LinearGradient(stops: [.init(color: Palette.paper.opacity(0), location: 0), .init(color: Palette.paper.opacity(0.35), location: 0.5),
+                                           .init(color: Palette.paper, location: 1)], startPoint: .top, endPoint: .bottom).frame(height: 40)
                 }.allowsHitTesting(false).accessibilityHidden(true)
             }
             .overlay(alignment: .bottomTrailing) {
                 if urls.count > 1 {
                     Text(verbatim: "\(page + 1) / \(urls.count)").font(Typography.meta(size: 11)).tracking(1).monospacedDigit()
                         .padding(.horizontal, 10).frame(height: 26).readingGlass()
-                        .padding(.trailing, 16).padding(.bottom, 44)
+                        .padding(.trailing, 16).padding(.bottom, 28)
                         .allowsHitTesting(false).accessibilityHidden(true)
                 }
             }
@@ -149,8 +151,13 @@ struct DetailHero: View {
                 ForEach(urls.indices, id: \.self) { index in
                     Group {
                         if index == 0 { Artwork(preview: preview, fillsFrame: true, showsVideoBadge: false, anchorsTop: true) }
-                        else { RemoteImage(url: urls[index], contentMode: .fill) }
-                    }.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top).clipped().tag(index)
+                        // A fixed frame, as Artwork uses: a flexible one grows to the
+                        // filled image and the page centres it, cropping off the head.
+                        else { GeometryReader { proxy in
+                            RemoteImage(url: urls[index], contentMode: .fill)
+                                .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top).clipped()
+                        } }
+                    }.tag(index)
                 }
             }.tabViewStyle(.page(indexDisplayMode: .never))
         } else {
