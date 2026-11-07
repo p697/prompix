@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { routedProvider } from "./model-routes.ts";
+import { anthropicSpentToday, routedProvider } from "./model-routes.ts";
 import { withFallback } from "./models/fallback.ts";
 import { ModelProviderError, type ModelErrorCode, type ModelProvider, type ModelRequest } from "./models/types.ts";
 import { readConfig, readEvents, updateConfig } from "./pipeline-control.ts";
@@ -46,4 +46,16 @@ test("a stage whose primary cannot be built starts on its fallback and logs the 
   assert.equal(event?.to, "codex-cli·gpt-6.1-terra");
   await assert.rejects(updateConfig(root, "claude-code", undefined, config => ({ ...config, routing: { ...config.routing,
     review: { provider: "codex-cli", fallback: { provider: "codex-cli", fallback: { provider: "codex-cli" } } as never } } })));
+});
+
+test("an Anthropic route stops serving once today's logged spend reaches the cap", async () => {
+  const root = join(await mkdtemp(join(tmpdir(), "prompix-cap-")), "pipeline");
+  await updateConfig(root, "codex", undefined, config => ({ ...config, routing: { ...config.routing,
+    review: { provider: "anthropic-api", model: "claude-sonnet-5-5" } } }));
+  const { appendEvent } = await import("./pipeline-control.ts");
+  // 200,000 Sonnet output tokens at $10 per million is $2.
+  await appendEvent(root, "claude-code", "model.call", { stage: "review", provider: "anthropic-api", model: "claude-sonnet-5-5", usage: { outputTokens: 200_000 } });
+  assert.equal(await anthropicSpentToday(root), 2);
+  const { provider } = await routedProvider("review", "test", root);
+  await assert.rejects(provider.complete(request), (error: unknown) => error instanceof ModelProviderError && error.code === "unavailable" && /\$2/.test(error.message));
 });

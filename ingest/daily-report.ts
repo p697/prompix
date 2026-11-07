@@ -29,7 +29,7 @@ export function buildDailyReport(input: ReportInput): DailyReport {
   const runs = events.filter(event => (event.type === "job.finished" || event.type === "job.failed") && event.job !== "report");
   const problems: string[] = [], notes: string[] = [];
   const done: string[] = [];
-  let total = 0, untimed = 0, excluded = 0, held = 0, editorial = 0, visual = 0;
+  let total = 0, untimed = 0, excluded = 0, editorial = 0, visual = 0;
   for (const name of [...new Set(runs.map(event => String(event.job)))]) {
     const own = runs.filter(event => event.job === name), failed = own.filter(event => event.type === "job.failed");
     const timed = own.filter(event => typeof event.durationMs === "number"), spent = timed.reduce((sum, event) => sum + Number(event.durationMs), 0);
@@ -39,7 +39,7 @@ export function buildDailyReport(input: ReportInput): DailyReport {
     if (own.at(-1)?.type === "job.failed") problems.push(`${jobNames[name] ?? name}最近一次失败`);
     else if (failed.length) notes.push(`${jobNames[name] ?? name}曾失败 ${failed.length} 次，之后已自动恢复`);
     for (const event of own) {
-      excluded += Number(event.excluded ?? 0); held += Number(event.translationsHeld ?? 0);
+      excluded += Number(event.excluded ?? 0);
       editorial += Number(event.editorialRequests ?? 0); visual += Number(event.visualRequests ?? 0);
     }
   }
@@ -78,7 +78,7 @@ export function buildDailyReport(input: ReportInput): DailyReport {
     "线上变化",
     input.database ? `- 新增 ${added} 条，其中每日流程发布 ${published} 条（每日目标 ${input.target}${published < input.target ? `，差 ${input.target - published} 条` : ""}）` : `- 新增：读取失败；每日流程发布 ${published} 条`,
     ...(input.database ? [`- 下架 ${input.database.removed} 条，线上共 ${input.database.live} 条`] : []),
-    `- 2.0 审核自动排除 ${excluded} 条，译文复核拦下 ${held} 处`,
+    `- 审核自动排除 ${excluded} 条`,
     ...(input.funnel ? ["", "条目状态（npm run pipeline -- funnel）",
       `- 排队中 ${input.funnel.counts.waiting} 条，悬空 ${input.funnel.counts.stalled} 条（这一天新增 ${input.funnel.newlyStalled} 条）`,
       ...input.funnel.stalled.slice(0, 5).map(group => `  · ${group.count} 条：${group.reason.slice(0, 120)}`)] : []),
