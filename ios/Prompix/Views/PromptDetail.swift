@@ -224,7 +224,7 @@ struct PromptDetail: View {
                     if let date = item.source.post?.date {
                         infoRow(String(localized: "发布"), date.formatted(.dateTime.year().month().day()), mono: true)
                     }
-                    Link(destination: SupportLinks.url(.report, contentID: item.id)) {
+                    Link(destination: SupportLinks.reportMail(contentID: item.id, title: content.title)) {
                         Text(String(localized: "报告问题或申请下架")).font(.footnote).foregroundStyle(Palette.muted).frame(minHeight: 44)
                     }.accessibilityIdentifier("reportContent")
                 }.padding(.top, 8)
