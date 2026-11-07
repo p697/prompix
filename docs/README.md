@@ -139,6 +139,7 @@ Prompix 是开源、免费的多模态 Prompt 集合 App。用户像逛手机淘
 | [content-operations.md](content-operations.md) | 每日采集、发布、凭据与故障恢复 |
 | [community-skills.md](community-skills.md) | ClawHub 作者与版本采集、文件校验及来源变更处理 |
 | [content-policy.md](content-policy.md) | 来源、署名、许可和轻量下架流程 |
+| [semantic-search.md](semantic-search.md) | 图片语义搜索调研：寻隐分析、300 张实测对比、推荐的混合检索方案和分阶段任务 |
 
 ## 背景与旧方案
 
