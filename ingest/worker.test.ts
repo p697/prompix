@@ -67,16 +67,18 @@ test("the intake runs only while the pipeline is running, and a missing drive or
 test("an extra intake runs once per request, can import trials, and leaves the night's slot", async () => {
   const root = join(await mkdtemp(join(tmpdir(), "prompix-worker-")), "pipeline"), content = await mkdtemp(join(tmpdir(), "prompix-content-"));
   const runs: (string | undefined)[] = [];
-  const jobs = [intakeJob({}, async env => { runs.push(env.PROMPIX_IMPORT_TRIALS); return 0; }, async () => {}, content, root)];
+  const translations: (string | undefined)[] = [];
+  const jobs = [intakeJob({}, async env => { runs.push(env.PROMPIX_IMPORT_TRIALS); translations.push(env.PROMPIX_TRANSLATION_MAX_REQUESTS); return 0; }, async () => {}, content, root)];
   await updateConfig(root, "codex", undefined, config => ({ ...config, desired: "running" }));
   const morning = Date.parse("2026-11-07T08:00:00Z");
   await tick(root, at(0), jobs, { now: () => morning });
   assert.deepEqual(runs, [undefined], "the first tick catches up last night's slot");
   const { atomic } = await import("./publication.ts");
-  await atomic(join(root, intakeRequestFile), { at: new Date(morning + 60_000).toISOString(), by: "test", importTrials: ["2026-11-07T06-27-06-637Z", "../bad"] });
+  await atomic(join(root, intakeRequestFile), { at: new Date(morning + 60_000).toISOString(), by: "test", importTrials: ["2026-11-07T06-27-06-637Z", "../bad"], translationRequests: 300 });
   await tick(root, at(0), jobs, { now: () => morning + 120_000 });
   await tick(root, at(0), jobs, { now: () => morning + hour });
   assert.deepEqual(runs, [undefined, "2026-11-07T06-27-06-637Z"], "a request runs once, with only valid trial ids");
+  assert.deepEqual(translations, [undefined, "300"], "a request may translate more than a night");
   await tick(root, at(0), jobs, { now: () => Date.parse("2026-11-07T18:01:00Z") });
   assert.equal(runs.length, 3, "the night's run still happens");
 });
