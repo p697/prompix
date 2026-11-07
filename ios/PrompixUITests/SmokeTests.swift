@@ -109,14 +109,14 @@ import XCTest
         XCTAssertTrue(editor.waitForExistence(timeout: 5))
         editor.tap()
         editor.typeText(" My personal intention.")
-        // The first change saves a version and retitles the editor, which redraws its toolbar.
-        let finish = app.buttons["finishPromptEditing"]
-        XCTAssertTrue(finish.waitForExistence(timeout: 5)); finish.tap()
+        // The editor saves as it is typed: the version's chip appears behind it. Relaunch
+        // with the editor still open (on iPhone Duo the keyboard leaves no room for Done).
+        let versions = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'version-' AND identifier != 'version-original'"))
+        XCTAssertTrue(versions.firstMatch.waitForExistence(timeout: 5))
         app.terminate(); app.launchPrompix()
         app.chooseKind("kind-text")
         app.buttons["prompt-gentle-tarot"].tap()
         // The detail opens on the original; the saved version is a chip beside it.
-        let versions = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'version-' AND identifier != 'version-original'"))
         let version = versions.firstMatch
         XCTAssertTrue(version.waitForExistence(timeout: 5)); version.tap()
         XCTAssertTrue(version.isSelected)
