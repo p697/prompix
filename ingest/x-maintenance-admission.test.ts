@@ -44,6 +44,15 @@ test("draft admission checks only the bounded review queue and becomes available
   assert.deepEqual(calls[1], ["102", "103", "104"]); assert.equal(next.report.deferredDrafts, 0);
 });
 
+test("scheduled maintenance keeps a floor of draft rechecks after the editorial capacity is spent", async t => {
+  const root = await fixture(t);
+  // Without editorial capacity (no editorial provider here) only the floor admits drafts.
+  const env = { PROMPIX_DATABASE_ENABLED: "true" };
+  const read = async () => new Set<string>();
+  assert.equal((await prepareXMaintenanceAdmission(root, env, new Date(now), read))?.maxDrafts, 0);
+  assert.equal((await prepareXMaintenanceAdmission(root, env, new Date(now), read, 50))?.maxDrafts, 50);
+});
+
 test("fresh unreviewed discoveries occupy slots without duplicate payment or renewed source age", async t => {
   const root = await fixture(t); await atomic(join(root, "x-discovery", "2026-10-16.json"), capture(["101"]));
   const fresh = "2026-10-17T09:00:00.000Z";
