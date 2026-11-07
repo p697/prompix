@@ -11,21 +11,27 @@ import AVKit
     }
     override func tearDown() async throws { try? FileManager.default.removeItem(at: directory) }
 
-    func testVersionsAreKeptNewestFirstAndReconcileWithTheirWork() throws {
+    func testVersionsAreKeptOldestFirstNamedAndReconcileWithTheirWork() throws {
         let library = Library(directory: directory)
         let item = try XCTUnwrap(library.prompts.first), other = try XCTUnwrap(library.prompts.last)
         let start = Date(timeIntervalSince1970: 1_800_000_000)
         let first = try XCTUnwrap(library.saveVersion("First take", id: nil, for: item, now: start))
         let second = try XCTUnwrap(library.saveVersion("Second take", id: nil, for: item, now: start.addingTimeInterval(60)))
-        XCTAssertEqual(library.versions(of: item).map(\.text), ["Second take", "First take"])
+        XCTAssertEqual(library.versions(of: item).map(\.text), ["First take", "Second take"])
+        XCTAssertTrue(library.renameVersion(second, to: "  Shorter  "))
+        XCTAssertEqual(library.versions(of: item).map(\.name), [nil, "Shorter"], "A name never shows up as a version of its own")
         XCTAssertEqual(library.saveVersion("First, revised", id: first, for: item), first)
         XCTAssertNil(library.saveVersion("Wrong work", id: first, for: other))
         XCTAssertTrue(library.draftedIDs.contains(item.id))
         XCTAssertEqual(library.versionedWorks.map(\.id), [item.id])
         let reopened = Library(directory: directory)
-        XCTAssertEqual(reopened.versions(of: item).map(\.text), ["Second take", "First, revised"])
+        XCTAssertEqual(reopened.versions(of: item).map(\.text), ["First, revised", "Second take"])
+        XCTAssertEqual(reopened.versions(of: item).last?.name, "Shorter")
         XCTAssertTrue(reopened.deleteVersion(second))
         XCTAssertEqual(reopened.versions(of: item).map(\.id), [first])
+        XCTAssertFalse(reopened.drafts.keys.contains { $0.hasPrefix(second) }, "Its name goes with it")
+        XCTAssertTrue(reopened.renameVersion(first, to: " "))
+        XCTAssertNil(reopened.versions(of: item).first?.name, "An empty name returns the version to its number")
         XCTAssertTrue(reopened.deleteVersion(first))
         XCTAssertTrue(reopened.versionedWorks.isEmpty, "The kept copy of the work goes with its last version")
     }

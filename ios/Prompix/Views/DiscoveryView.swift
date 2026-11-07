@@ -403,7 +403,7 @@ enum PromptCardGeometry {
     static func aspectRatio(for item: Prompt) -> CGFloat { aspectRatio(for: ContentPreview(item)) }
     static func aspectRatio(for item: ContentPreview) -> CGFloat {
         // Text cards hold up to four lines of their words, so their shape follows the text.
-        if item.usesTextArtwork { return textCardRatio(item.displayTitle, skill: item.isSkill) }
+        if item.usesTextArtwork { return textCardRatio(item) }
         // Retain common portrait and widescreen shapes. Only extreme ratios crop.
         if let ratio = item.media?.aspectRatio { return max(0.65, min(1.8, ratio)) }
         return switch item.kind { case .text: 0.95; case .image: item.artwork == "lake" ? 1.02 : 0.76; case .video: 0.94; case .web: WebsiteExamples.files[item.id] != nil ? 0.62 : 0.87 }
@@ -411,11 +411,23 @@ enum PromptCardGeometry {
     /// Cards carry only the work, so a card is exactly its preview; search results
     /// add one line of title beneath visual works.
     static let titleSpacing: CGFloat = 6
-    /// Estimated at a nominal 180 pt column: 14 pt insets, 16 pt text on 22 pt lines.
-    static func textCardRatio(_ text: String, skill: Bool) -> CGFloat {
-        let units = text.unicodeScalars.reduce(0.0) { sum, scalar in sum + (scalar.value > 0x2E80 ? 1 : 0.55) }
-        let lines = min(4, max(1, (units / 9.5).rounded(.up)))
-        return 180 / (28 + lines * 22 + (skill ? 18 : 0))
+    /// The mono lead and the line under a text card's title. The line is the
+    /// work's own summary, left out when it only repeats the title.
+    static func textNote(_ item: ContentPreview) -> (lead: String, summary: String) {
+        let summary = item.displaySummary.trimmingCharacters(in: .whitespacesAndNewlines)
+        return (item.detailMeta.lead, summary == item.displayTitle ? "" : summary)
+    }
+    /// Estimated at a nominal 180 pt column with 14 pt insets: a 10 pt lead,
+    /// up to three title lines of 16 pt and three summary lines of 13 pt.
+    static func textCardRatio(_ item: ContentPreview) -> CGFloat {
+        func lines(_ text: String, perLine: Double, limit: Double) -> Double {
+            let units = text.unicodeScalars.reduce(0.0) { sum, scalar in sum + (scalar.value > 0x2E80 ? 1 : 0.55) }
+            return text.isEmpty ? 0 : min(limit, max(1, (units / perLine).rounded(.up)))
+        }
+        let note = textNote(item)
+        let title = lines(item.displayTitle, perLine: 9.5, limit: 3), summary = lines(note.summary, perLine: 11.5, limit: 3)
+        let height = 28 + (note.lead.isEmpty ? 0 : 20) + title * 23 + (summary > 0 ? 8 + summary * 19 : 0)
+        return 180 / height
     }
     static func height(for item: ContentPreview, width: CGFloat, titled: Bool = false) -> CGFloat {
         width / aspectRatio(for: item) + (titled && !item.usesTextArtwork ? titleSpacing + ceil(UIFont.preferredFont(forTextStyle: .subheadline).lineHeight) : 0)
@@ -614,26 +626,8 @@ private struct DeckTile: View {
     let items: [Prompt]
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Color.clear.aspectRatio(Self.coverRatio, contentMode: .fit).overlay {
-                // Fewer than four works fill the cover with the first, never with blank cells.
-                if items.count < 4 {
-                    if let first = items.first { Artwork(item: first, compact: true, fillsFrame: true) } else { Palette.surface }
-                } else {
-                Grid(horizontalSpacing: 2, verticalSpacing: 2) {
-                    ForEach(0..<2, id: \.self) { row in
-                        GridRow {
-                            ForEach(0..<2, id: \.self) { column in
-                                let index = row * 2 + column
-                                Group {
-                                    if index < items.count { Artwork(item: items[index], compact: true, fillsFrame: true) }
-                                    else { Palette.surface }
-                                }.frame(maxWidth: .infinity, maxHeight: .infinity).clipped()
-                            }
-                        }
-                    }
-                }
-                }
-            }.clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            Color.clear.aspectRatio(Self.coverRatio, contentMode: .fit).overlay { cover }
+                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
             HStack(alignment: .firstTextBaseline) {
                 Text(name).font(.subheadline.weight(.semibold)).lineLimit(1)
                 Spacer(minLength: 4)
@@ -641,6 +635,26 @@ private struct DeckTile: View {
             }
         }.foregroundStyle(Palette.ink).contentShape(Rectangle())
             .accessibilityElement(children: .ignore).accessibilityLabel(name).accessibilityValue(String(localized: "\(items.count) 张"))
+    }
+    /// A contact sheet of the latest works that never leaves a blank cell:
+    /// one fills the cover, two sit side by side, three put one beside a pair,
+    /// four or more make a 2×2 grid.
+    @ViewBuilder private var cover: some View {
+        let shown = Array(items.prefix(4))
+        switch shown.count {
+        case 0: Palette.surface
+        case 1: cell(shown[0])
+        case 2: HStack(spacing: 2) { cell(shown[0]); cell(shown[1]) }
+        case 3: HStack(spacing: 2) { cell(shown[0]); VStack(spacing: 2) { cell(shown[1]); cell(shown[2]) } }
+        default:
+            VStack(spacing: 2) {
+                HStack(spacing: 2) { cell(shown[0]); cell(shown[1]) }
+                HStack(spacing: 2) { cell(shown[2]); cell(shown[3]) }
+            }
+        }
+    }
+    private func cell(_ item: Prompt) -> some View {
+        Artwork(item: item, compact: true, fillsFrame: true).frame(maxWidth: .infinity, maxHeight: .infinity).clipped()
     }
 }
 

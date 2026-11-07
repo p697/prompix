@@ -84,18 +84,29 @@ struct Artwork: View {
         }
     }
     /// Text and Skill cards are the words themselves on a quiet sheet, sized to them.
+    /// Words as a card: the model in mono, the title, then what it does, in the
+    /// proportions `PromptCardGeometry.textCardRatio` reserves for them.
     private func noteArtwork(size: CGSize) -> some View {
         let words = item.displayTitle
+        let note = PromptCardGeometry.textNote(item)
         return ZStack(alignment: .topLeading) {
             Palette.surface
-            VStack(alignment: .leading, spacing: 6) {
-                if item.isSkill && !compact {
-                    Text(verbatim: "SKILL").font(Typography.meta(size: 10)).tracking(1.2).foregroundStyle(Palette.muted)
-                }
-                Text(words)
-                    .font(compact ? Typography.prompt(size: min(size.width * 0.13, 16), for: words) : Typography.prompt(size: 16, for: words))
-                    .lineSpacing(compact ? 2 : 6).lineLimit(4)
-            }.foregroundStyle(Palette.ink).padding(compact ? 8 : 14)
+            if compact {
+                Text(words).font(Typography.prompt(size: min(size.width * 0.13, 16), for: words))
+                    .lineSpacing(2).lineLimit(4).foregroundStyle(Palette.ink).padding(8)
+            } else {
+                VStack(alignment: .leading, spacing: 8) {
+                    if !note.lead.isEmpty {
+                        Text(verbatim: note.lead).font(Typography.meta(size: 10)).tracking(1.2).foregroundStyle(Palette.muted).lineLimit(1)
+                    }
+                    Text(words).font(Typography.prompt(size: 16, for: words)).lineSpacing(4).lineLimit(3)
+                        .foregroundStyle(Palette.ink)
+                    if !note.summary.isEmpty {
+                        Text(note.summary).font(.system(size: 13)).lineSpacing(3).lineLimit(3)
+                            .foregroundStyle(Palette.muted)
+                    }
+                }.padding(14)
+            }
         }.overlay { RoundedRectangle(cornerRadius: PromptCardGeometry.cornerRadius, style: .continuous).strokeBorder(Palette.line, lineWidth: 0.5) }
     }
     private func photo(_ name: String, size: CGSize) -> some View {

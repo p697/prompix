@@ -17,6 +17,11 @@ struct PromptVersion: Identifiable, Hashable {
     let id: String
     let text: String
     let created: Date?
+    /// The reader's name for it; unnamed versions are numbered by age.
+    var name: String? = nil
+    static func title(of version: PromptVersion, in versions: [PromptVersion]) -> String {
+        version.name ?? String(localized: "我的 \((versions.firstIndex(of: version) ?? 0) + 1)")
+    }
 }
 
 @MainActor @Observable final class Library {
@@ -55,6 +60,8 @@ struct PromptVersion: Identifiable, Hashable {
     /// Works with a saved draft in any language.
     var draftedIDs: Set<String> { Set(drafts.keys.map { String($0.components(separatedBy: "::")[0]) }) }
     private static let snapshotKey = "work"
+    /// A version's name sits beside it as `<version id>::name`.
+    private static let nameKey = "name"
     /// The works the reader has written versions of, from the copy kept beside them.
     var versionedWorks: [Prompt] {
         drafts.compactMap { key, value -> Prompt? in
@@ -265,16 +272,33 @@ struct PromptVersion: Identifiable, Hashable {
     private func draftID(for item: Prompt, language: String?) -> String {
         language.map { item.id + "::" + ContentLanguage.canonical($0) } ?? item.id
     }
-    /// The reader's own versions of a work, newest first. Each lives in the drafts
+    /// The reader's own versions of a work, oldest first. Each lives in the drafts
     /// file under `<item id>::v<milliseconds>`, so removals reconcile them as before;
     /// a draft saved before versions existed appears as the oldest one.
     func versions(of item: Prompt) -> [PromptVersion] {
         drafts.compactMap { key, text -> PromptVersion? in
             let parts = key.components(separatedBy: "::")
-            guard parts[0] == item.id, parts.count < 2 || parts[1] != Self.snapshotKey else { return nil }
+            guard parts[0] == item.id, parts.count <= 2, parts.count < 2 || parts[1] != Self.snapshotKey else { return nil }
             let stamp = parts.count > 1 && parts[1].hasPrefix("v") ? Double(parts[1].dropFirst()) : nil
-            return PromptVersion(id: key, text: text, created: stamp.map { Date(timeIntervalSince1970: $0 / 1000) })
-        }.sorted { ($0.created ?? .distantPast) > ($1.created ?? .distantPast) }
+            return PromptVersion(id: key, text: text, created: stamp.map { Date(timeIntervalSince1970: $0 / 1000) },
+                                 name: drafts[key + "::" + Self.nameKey])
+        }.sorted { ($0.created ?? .distantPast) < ($1.created ?? .distantPast) }
+    }
+    /// Names a version; an empty name returns it to its number.
+    @discardableResult func renameVersion(_ id: String, to name: String) -> Bool {
+        guard draftsReadable, !storageRecoveryPending, drafts[id] != nil else { return false }
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        var updated = drafts
+        updated[id + "::" + Self.nameKey] = trimmed.isEmpty ? nil : String(trimmed.prefix(40))
+        guard updated != drafts else { return true }
+        do {
+            try JSONEncoder().encode(updated).write(to: draftFile, options: .atomic)
+            drafts = updated
+            return true
+        } catch {
+            self.error = String(localized: "草稿未能保存，请检查设备存储空间。你仍可以复制本次修改。")
+            return false
+        }
     }
     /// Saves into an existing version, or starts a new one when `id` is nil.
     /// Returns the version's id, or nil when nothing could be saved.
@@ -308,8 +332,12 @@ struct PromptVersion: Identifiable, Hashable {
         guard draftsReadable, !storageRecoveryPending, drafts[id] != nil else { return false }
         var updated = drafts
         updated[id] = nil
+        updated[id + "::" + Self.nameKey] = nil
         let itemID = id.components(separatedBy: "::")[0], snapshot = itemID + "::" + Self.snapshotKey
-        if !updated.keys.contains(where: { $0 != snapshot && $0.components(separatedBy: "::")[0] == itemID }) { updated[snapshot] = nil }
+        if !updated.keys.contains(where: {
+            let parts = $0.components(separatedBy: "::")
+            return $0 != snapshot && parts.count <= 2 && parts[0] == itemID
+        }) { updated[snapshot] = nil }
         do {
             try JSONEncoder().encode(updated).write(to: draftFile, options: .atomic)
             drafts = updated
