@@ -97,6 +97,12 @@ export function validateReviewItem(candidate: EnrichmentCandidate, raw: unknown)
   const value = raw && typeof raw === "object" ? structuredClone(raw) as Record<string, unknown> : raw;
   const generation = value && typeof value === "object" ? (value as { generation?: Record<string, unknown> }).generation : undefined;
   if (generation && typeof generation.outputAspect === "string" && !/^[1-9]\d{0,2}:[1-9]\d{0,2}$/.test(generation.outputAspect)) delete generation.outputAspect;
+  // Placeholders are a convenience: an empty default becomes none, and a token the prompt does
+  // not contain is dropped instead of failing the whole judgment.
+  const variables = value && typeof value === "object" ? (value as { variables?: unknown }).variables : undefined;
+  if (Array.isArray(variables)) (value as { variables: unknown[] }).variables = variables.filter(variable =>
+    !!variable && typeof variable === "object" && typeof (variable as { token?: unknown }).token === "string" && candidate.item.prompt.includes((variable as { token: string }).token))
+    .map(variable => ({ ...variable as object, ...((variable as { default?: unknown }).default === "" ? { default: null } : {}) }));
   const parsed = itemSchema.safeParse(dropNulls(value));
   if (!parsed.success) return { id, ok: false, error: `Invalid fields: ${parsed.error.issues.slice(0, 3).map(issue => `${issue.path.join(".")} ${issue.message}`).join("; ")}`.slice(0, 500) };
   const fields = parsed.data;
