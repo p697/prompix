@@ -13,8 +13,10 @@ import { applyReview, reviewBatch, reviewBlocker, type ReviewOutcome } from "./r
 import type { Candidate } from "./sources.ts";
 import { portraitShare } from "./x-search-rules.ts";
 
-/** The judged source: an outcome stays valid while the post and its media are unchanged. */
-export const reviewPassHash = (item: Candidate) => createHash("sha256").update(JSON.stringify([item.id, item.fingerprint, item.source.revision ?? null])).digest("hex");
+/** The judged source: an outcome stays valid while the post and its media are unchanged. A
+ * prompts.chat revision is the whole repository's commit, so only the prompt text counts there. */
+export const reviewPassHash = (item: Candidate) => createHash("sha256").update(JSON.stringify([item.id, item.fingerprint,
+  item.source.name === "prompts.chat" ? null : item.source.revision ?? null])).digest("hex");
 const storedSchema = z.object({ hash: z.string(), attempts: z.number().int().min(1), provider: z.string(), model: z.string(),
   at: z.iso.datetime().optional(), creator: z.string().optional(),
   outcome: z.custom<ReviewOutcome>(value => !!value && typeof value === "object") });
@@ -33,7 +35,7 @@ const newestFirst = (a: Candidate, b: Candidate) => postID(a) > postID(b) ? -1 :
 export type DailyReviewReport = { pending: number; reviewed: number; requests: number; failedRequests: number; approved: number;
   rejected: number; deferredPortraits: number; waiting: number; stopped?: string; reasons: Record<string, number> };
 export type DailyReviewOptions = { provider?: ModelProvider; effort?: Effort; record?: (summary: ModelCallSummary) => Promise<void>;
-  maxItems?: number; mirror?: typeof mirrorPromptMediaBatch; prepare?: typeof prepareEnrichmentMedia };
+  maxItems?: number; maxText?: number; mirror?: typeof mirrorPromptMediaBatch; prepare?: typeof prepareEnrichmentMedia };
 
 /** The single review for new X posts (owner, 2026-11-07), replacing the editorial, visual and
  * 2.0 reviews for them. Newest posts first, at most `maxItems` a night. Approved posts come back
@@ -48,8 +50,10 @@ export async function reviewDailyX(items: readonly Candidate[], root: string, op
     const value = await readFile(outcomePath(item.id), "utf8").then(text => storedSchema.parse(JSON.parse(text)), () => undefined);
     if (value?.hash === reviewPassHash(item)) stored.set(item.id, value);
   }
-  const pending = items.filter(item => !stored.has(item.id) || (!stored.get(item.id)!.outcome.ok && stored.get(item.id)!.attempts < maxAttempts))
-    .sort(newestFirst).slice(0, options.maxItems ?? 240);
+  const unjudged = items.filter(item => !stored.has(item.id) || (!stored.get(item.id)!.outcome.ok && stored.get(item.id)!.attempts < maxAttempts));
+  // Visual work first. Text publishes at one per four visual works, so a few dozen a night is plenty.
+  const visual = unjudged.filter(item => item.kind !== "text").sort(newestFirst).slice(0, options.maxItems ?? 240);
+  const pending = [...visual, ...unjudged.filter(item => item.kind === "text").slice(0, options.maxText ?? 40)];
   report.pending = pending.length;
   if (options.provider && pending.length) {
     const provider = options.provider, mediaRoot = join(directory, "media");

@@ -211,9 +211,10 @@ async function run() {
       if (publishing) await atomic(join(root, "moderation.json"), moderation);
     }
     const excluded = new Set(moderation.removedIDs);
-    // New X posts get the single review (2026-11-07) instead of the editorial, visual and 2.0 reviews.
+    // New X posts and prompts.chat prompts get the single review (2026-11-07) instead of the
+    // editorial, visual and 2.0 reviews; live items keep what those reviews decided.
     const liveIDs = new Set(previous?.prompts.map(item => item.id) ?? []);
-    const singleReview = (item: Candidate) => isNativeXDraft(item) && !liveIDs.has(item.id);
+    const singleReview = (item: Candidate) => (isNativeXDraft(item) || item.source.name === "prompts.chat") && !liveIDs.has(item.id);
     const reviewRoute = publishing ? await routedProvider("review", "review:daily") : undefined;
     const xReview = await reviewDailyX(candidates.filter(item => singleReview(item) && !excluded.has(item.id)), root,
       reviewRoute ? { provider: reviewRoute.provider, effort: reviewRoute.effort, record: reviewRoute.record } : {});
