@@ -16,7 +16,8 @@ import { withPublisherDatabase } from "./database-publication.ts";
 /**
  * Every collected item is in exactly one state:
  * - live / removed: decided by the database;
- * - excluded: a final "no", with the stage and reason that decided it;
+ * - excluded: a final "no", with the stage and reason that decided it. A model's deferral or an uncertain visual
+ *   verdict counts: both are cached for the exact content and never sent again, and nobody reviews by hand;
  * - waiting: an automatic step will pick it up (editorial, visual review, a publication slot);
  * - stalled: it is not live and not excluded, but no automatic step will ever move it.
  * Stalled items break the rule that the pipeline decides every item, so they are counted and reported.
@@ -35,7 +36,7 @@ export type ItemStateInput = {
 
 const retiredSources = new Set<string>([...repositories.map(source => source.id), videoArchive.id]);
 // Preflight reasons that judge the content itself; any other preflight reason is a defect nobody will repair.
-const finalPreflight = [/automatic-review allowlist/, /Insufficient complete copyable instructions/, /A real (source image|source poster|webpage preview)/];
+const finalPreflight = [/automatic-review allowlist/, /Insufficient complete copyable instructions/, /A real (source image|source poster|webpage preview)/, /publishable length/];
 
 /** Classifies the daily lane in pipeline order: source, editorial, library rules, visual review, holds, 2.0 review, publication. */
 export function classifyItems(input: ItemStateInput): ItemStatus[] {
@@ -76,9 +77,9 @@ export function classifyItems(input: ItemStateInput): ItemStatus[] {
     if (hold) return status("excluded", hold.reason, "quality");
     const excluded = enrichment.get(item.id);
     if (excluded) return status("excluded", excluded.reason, "enrichment", excluded.at);
-    // A cached model deferral is never sent again unless the content changes, so refreshing the source would not help.
+    // A cached model deferral is final for this content; refreshing the source would not change it.
     if (decision?.decision === "defer" && decision.model !== "preflight-v1" && reviewed.get(item.id)!.reviewStatus !== "candidate")
-      return status("stalled", decision.reason, "editorial", decision.reviewedAt);
+      return status("excluded", decision.reason, "editorial", decision.reviewedAt);
     if (isNativeXDraft(item) && !xVisible.has(item.id)) {
       const record = input.xAvailability[item.id];
       if (record?.removed) return status("excluded", "原帖已删除", "source", record.checkedAt);
@@ -101,7 +102,7 @@ export function classifyItems(input: ItemStateInput): ItemStatus[] {
     if (liveFingerprints.has(item.fingerprint)) return status("excluded", "与线上已有条目重复", "library");
     const rule = libraryIssue(approved, removedByModeration);
     if (rule) return status("excluded", rule, "library");
-    if (visual?.verdict === "uncertain") return status("stalled", visual.reason, "visual", visual.reviewedAt);
+    if (visual?.verdict === "uncertain") return status("excluded", visual.reason, "visual", visual.reviewedAt);
     if (!visual && approved.media?.imageURL && approved.kind !== "web") return status("waiting", "等待图片审核", "visual");
     return status("waiting", "等待发布名额", "publication");
   });
