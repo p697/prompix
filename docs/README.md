@@ -133,7 +133,7 @@ Prompix 是开源、免费的多模态 Prompt 集合 App。用户像逛手机淘
 | [app-store.md](app-store.md) | 九语言商店文案草稿、审核路径、隐私申报依据与待办 |
 | [quality-release.md](quality-release.md) | 持续目标、完整交付的质量关口与完成证据 |
 | [roadmap.md](roadmap.md) | 设计关口、模拟器开发、真机交付、上架与分工 |
-| [decisions.md](decisions.md) | 按时间追加的关键决定；旧决定保留并标明替代关系 |
+| [decisions/](decisions/README.md) | 关键决定，每条一个文件（2026-11-07 起）；更早的在 [decisions.md](decisions.md)，只读保留 |
 | [design.md](design.md) | 设计原则、已确认方向、核心页面和四类卡片要求 |
 | [handoff.md](handoff.md) | 复制、编辑、分享和目标工具打开的能力边界 |
 | [content-operations.md](content-operations.md) | 每日采集、发布、凭据与故障恢复 |
@@ -154,7 +154,7 @@ Prompix 是开源、免费的多模态 Prompt 集合 App。用户像逛手机淘
 ## 维护规则
 
 - 文档与代码不一致时以代码为准，并在同一 PR 更新文档；目前已有原生客户端和轻量采集脚本，线上内容服务已部署于 api.prompix.dev。
-- 新关键决定追加到 decisions.md；旧条目保留，并标明被哪些新条目替代。
+- 新关键决定在 decisions/ 目录新建一个文件；旧条目保留，并标明被哪些新条目替代。
 - 待确认的设计、外部接口能力和部署条件不能写成已经验证。
 
 开发与验证见 [ios/README.md](../ios/README.md)、[ingest/README.md](../ingest/README.md) 与 [acceptance-0.1.md](acceptance-0.1.md)。
