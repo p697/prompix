@@ -46,8 +46,10 @@ extension XCUIApplication {
     @MainActor func goBackInPrompix() {
         // A reading presentation has an explicit close control; its toolbar's
         // first accessibility element can be Share, not the back chevron.
-        if let close = buttons.matching(identifier: "closePromptDetail").allElementsBoundByIndex.first(where: { $0.isHittable }) { close.tap() }
-        else { navigationBars.buttons.firstMatch.tap() }
+        if let close = buttons.matching(identifier: "closePromptDetail").allElementsBoundByIndex.first(where: { $0.isHittable }) { close.tap(); return }
+        // A slow simulator can still be finishing the push that shows the back button.
+        let back = navigationBars.buttons.firstMatch
+        XCTAssertTrue(back.waitForExistence(timeout: 5)); back.tap()
     }
     /// Creators and uses sit after the twelfth work in the discover feed.
     @MainActor func revealDiscoveryRails() {
