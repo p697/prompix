@@ -133,7 +133,8 @@ function inferModality(label: string, context: string, body: string, post: XPost
   const imageInstruction = /\b(?:create|generate|render|draw|paint|design)\b[^\n.!?]{0,100}\b(?:image|portrait|photograph|photo|illustration|poster|logo|sculpture|artwork|picture|sketch)\b/iu.test(body);
   const videoInstruction = /\b(?:opening shot|final shot|slow.motion|camera movements?|animated (?:film|video)|video clip)\b/iu.test(body);
   // Many image prompts are bare scene descriptions ("Ultra-realistic portrait of…") posted with the result under a chat host's name.
-  const imageDescription = /\b(?:ultra[- ]realistic|photo-?realistic|hyper[- ]realistic|portrait|photograph(?:y)?|DSLR|cinematic still|flat[- ]lay|[48]K)\b|\b(?:1:1|2:3|3:2|3:4|4:3|4:5|9:16|16:9)\b|写实|人像|肖像|摄影|插画|海报|构图/iu.test(body);
+  // A request about an attached photo ("Analyze this photograph…") is not image output.
+  const imageDescription = !/\b(?:analy[sz]e|explain|describe (?:this|the)|identify|critique|caption)\b/i.test(body) && /\b(?:ultra[- ]realistic|photo-?realistic|hyper[- ]realistic|portrait|photograph(?:y)?|DSLR|cinematic still|flat[- ]lay|[48]K)\b|\b(?:1:1|2:3|3:2|3:4|4:3|4:5|9:16|16:9)\b|写实|人像|肖像|摄影|插画|海报|构图/iu.test(body);
   if (attachedKinds.has("video") && videoInstruction) evidence.add("video");
   else if (attachedKinds.has("image") && (imageInstruction || imageDescription)) evidence.add("image");
   if (evidence.size > 1) return { reason: "conflicting-modality-evidence" };
