@@ -89,9 +89,11 @@ struct PromptDetail: View {
             }
         }
         .overlay(alignment: .top) {
-            // Over the picture only the status bar gets an edge; the title brings paper behind the bar.
+            // Over the picture the status bar gets the same grain as the hero's bottom;
+            // the title brings frosted paper behind the bar.
             ZStack(alignment: .top) {
-                EdgeVeil().opacity(hasMediaPreview && !titleShown ? 1 : 0)
+                GrainDissolve(edge: .top).ignoresSafeArea(edges: .top).allowsHitTesting(false).accessibilityHidden(true)
+                    .opacity(hasMediaPreview && !titleShown ? 1 : 0)
                 EdgeVeil(hold: 44, fade: 12).opacity(titleShown ? 1 : 0)
             }.animation(.easeOut(duration: 0.2), value: titleShown)
         }

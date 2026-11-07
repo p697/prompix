@@ -35,7 +35,9 @@ struct PendingPromptDetail: View {
                 }.ignoresSafeArea(edges: preview.hasDetailMedia ? .top : []).hidesTopEdgeEffect().preservingReadingPosition(position).readingChrome($actionsCollapsed).readingBottomEdge().accessibilityIdentifier("detailReadingPane")
             }
         }.foregroundStyle(Palette.ink)
-            .overlay(alignment: .top) { if preview.hasDetailMedia { EdgeVeil() } }
+            .overlay(alignment: .top) {
+                if preview.hasDetailMedia { GrainDissolve(edge: .top).ignoresSafeArea(edges: .top).allowsHitTesting(false).accessibilityHidden(true) }
+            }
             .onChange(of: actionsCollapsed) { _, value in position.actionsCollapsed = value }
             .promptActionBar {
                 ReadingActionBar(ready: false, collapsed: actionsCollapsed)
@@ -115,11 +117,13 @@ struct DetailHero: View {
         Color.clear.aspectRatio(ratio, contentMode: .fit)
             .overlay { pages }
             .clipped()
-            .overlay {
+            .overlay(alignment: .bottom) {
+                // Paper runs 2 pt past the hero's edge: its height is rarely a whole pixel,
+                // and while the detail zooms open the picture's last row showed as a grey line.
                 VStack(spacing: 0) {
-                    Spacer(minLength: 0)
                     GrainDissolve()
-                }.allowsHitTesting(false).accessibilityHidden(true)
+                    Palette.paper.frame(height: 2)
+                }.padding(.bottom, -2).allowsHitTesting(false).accessibilityHidden(true)
             }
             .overlay(alignment: .bottomTrailing) {
                 if urls.count > 1 {
@@ -164,27 +168,34 @@ struct DetailHero: View {
     }
 }
 
-/// The work's bottom edge dissolves into the page as film grain, the way a print
-/// fades at its edge in the darkroom, instead of a smooth fade laid over it.
+/// The work dissolves into the page as film grain, the way a print fades at its
+/// edge in the darkroom, instead of a smooth fade or shadow laid over it. At the
+/// bottom it settles to plain paper; at the top it keeps the status bar readable.
 struct GrainDissolve: View {
-    static let height: CGFloat = 90
+    enum Edge { case top, bottom }
+    static let bottomHeight: CGFloat = 60
+    var edge: Edge = .bottom
     var body: some View {
+        let height = edge == .bottom ? Self.bottomHeight : (EdgeVeil.statusBarHeight + 30).rounded()
         Palette.paper
-            .mask { Image(uiImage: Self.mask).resizable().interpolation(.none) }
-            .frame(height: Self.height)
+            .mask { Image(uiImage: Self.mask(edge, points: Int(height))).resizable().interpolation(.none) }
+            .frame(height: height)
     }
-    /// One grain per pixel at 3x across the widest phone, made once. The grain is
-    /// densest mid-way and settles to plain paper at the bottom edge.
-    private static let mask: UIImage = {
-        let width = 1290, height = Int(Self.height) * 3
+    @MainActor private static var masks: [String: UIImage] = [:]
+    /// One grain per pixel at 3x across the widest phone, made once per edge and height.
+    @MainActor private static func mask(_ edge: Edge, points: Int) -> UIImage {
+        let key = "\(edge)-\(points)"
+        if let mask = masks[key] { return mask }
+        let width = 1290, height = max(points, 1) * 3
         var alpha = [UInt8](repeating: 0, count: width * height)
         var seed: UInt32 = 0x9E3779B9
         for y in 0..<height {
-            let t = Double(y) / Double(height - 1)
-            let eased = t * t * (3 - 2 * t)
-            // Grain grows in from nothing at the top and settles to solid paper at the
-            // bottom, so the dissolve has no line at either end.
-            let spread = 0.9 * (1 - abs(2 * eased - 1) * 0.6) * min(1, t / 0.3, (1 - t) / 0.15)
+            // Distance into the work from its edge: 0 at the paper, 1 where the picture is whole.
+            let row = Double(y) / Double(max(height - 1, 1))
+            let t = edge == .bottom ? 1 - row : row
+            let eased = (1 - t * t * (3 - 2 * t)) * (edge == .bottom ? 1 : 0.9)
+            // Grain is densest mid-way and fades out at both ends, so neither end shows a line.
+            let spread = 0.9 * (1 - abs(2 * eased - 1) * 0.6) * min(1, t / 0.15, (1 - t) / 0.3)
             for x in 0..<width {
                 seed ^= seed << 13; seed ^= seed >> 17; seed ^= seed << 5
                 let grain = Double(seed & 0xFFFF) / 65535 - 0.5
@@ -193,8 +204,10 @@ struct GrainDissolve: View {
         }
         let context = CGContext(data: &alpha, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width,
                                 space: CGColorSpaceCreateDeviceGray(), bitmapInfo: CGImageAlphaInfo.alphaOnly.rawValue)
-        return context?.makeImage().map { UIImage(cgImage: $0, scale: 3, orientation: .up) } ?? UIImage()
-    }()
+        let mask = context?.makeImage().map { UIImage(cgImage: $0, scale: 3, orientation: .up) } ?? UIImage()
+        masks[key] = mask
+        return mask
+    }
 }
 
 extension ContentPreview {
