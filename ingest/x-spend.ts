@@ -34,13 +34,19 @@ export type XSpendPurpose = "growth" | "maintenance";
 export const maintenanceReserveSchema = z.object({
   version: z.literal(1), checkedAt: z.iso.datetime(), complete: z.boolean(),
   standalone: z.number().int().min(0).max(100000), officialPosts: z.number().int().min(0).max(2000000),
+  // Standalone posts already a week old: their verification lasts a week (x-source.ts).
+  settled: z.number().int().min(0).max(100000).optional(),
   sourceSetSHA256: z.string().regex(/^[a-f0-9]{64}$/),
 }).strict();
 
-/** Nominal two-scan runway, not an estimate of unpredictable official fallbacks.
- * Keep the entire current day as headroom even if its first scan already ran. */
+/** Nominal runway, not an estimate of unpredictable official fallbacks: two scans a day for
+ * posts under a week old and one per six days for settled ones, which are rechecked half a
+ * day before their week lapses. Keep the entire current day as headroom even if its first
+ * scan already ran. */
 export function maintenanceRunway(plan: z.infer<typeof maintenanceReserveSchema>, now: Date) {
-  const daily = 2 * (plan.standalone * xUnitMicroUSD.twitterapi.post + plan.officialPosts * xUnitMicroUSD.official.post);
+  const settled = Math.min(plan.settled ?? 0, plan.standalone);
+  const daily = 2 * ((plan.standalone - settled) * xUnitMicroUSD.twitterapi.post + plan.officialPosts * xUnitMicroUSD.official.post)
+    + Math.ceil(settled * xUnitMicroUSD.twitterapi.post / 6);
   const days = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0)).getUTCDate() - now.getUTCDate() + 1;
   return { daily, monthly: daily * days, days };
 }

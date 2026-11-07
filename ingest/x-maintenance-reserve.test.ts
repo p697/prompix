@@ -32,6 +32,15 @@ test("missing or malformed protected sources mark census incomplete instead of s
   const result = maintenanceCensus([item, missingPost], new Set([item.id, missingPost.id, "x-post-103"]), new Set(), now, true);
   assert.equal(result.plan.complete, false); assert.deepEqual(result.missing, ["x-post-102", "x-post-103"]);
 });
+test("posts a week old are reserved for one recheck in six days, newer posts for two a day", () => {
+  const { plan } = maintenanceCensus([candidate("101")], new Set(["x-post-101"]), new Set(), now, true);
+  assert.equal(plan.settled, 0);
+  const later = new Date(now.getTime() + 8 * 24 * 3600_000);
+  const settled = maintenanceCensus([candidate("101")], new Set(["x-post-101"]), new Set(), later, true).plan;
+  assert.equal(settled.settled, 1);
+  assert.equal(maintenanceRunway(settled, later).daily, 25, "150 micro-dollars per six days, rounded up");
+  assert.equal(maintenanceRunway({ ...settled, standalone: 7, settled: 1 }, later).daily, 2 * 6 * 150 + 25);
+});
 test("runway uses inclusive UTC month days including leap years and year rollover", () => {
   const { plan } = maintenanceCensus([candidate("101")], new Set(["x-post-101"]), new Set(), now, true);
   for (const [date, days] of [["2028-02-01T00:00:00Z", 29], ["2026-02-01T00:00:00Z", 28], ["2026-12-31T23:59:59Z", 1], ["2027-01-01T00:00:00Z", 31]] as const) {

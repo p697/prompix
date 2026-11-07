@@ -19,8 +19,11 @@ export function maintenanceCensus(items: readonly Candidate[], protectedIDs: Rea
   const standalone = new Set(protectedItems.flatMap(nativeXPostIDs).filter(id => !official.has(id)));
   const present = new Set(protectedItems.filter(item => nativeXPostIDs(item).length > 0).map(item => item.id));
   const missing = expected.filter(id => !present.has(id));
+  const created = new Map(protectedItems.flatMap(item => [...(item.source.context ?? []), ...(item.source.post ? [item.source.post] : [])])
+    .map(post => [post.id, Date.parse(post.createdAt)]));
+  const settled = [...standalone].filter(id => now.getTime() - (created.get(id) ?? now.getTime()) >= 7 * 24 * 3600_000).length;
   const plan = maintenanceReserveSchema.parse({ version: 1, checkedAt: now.toISOString(), complete: missing.length === 0,
-    standalone: standalone.size, officialPosts: official.size,
+    standalone: standalone.size, officialPosts: official.size, settled,
     sourceSetSHA256: createHash("sha256").update(JSON.stringify({ expected: expected.sort(), standalone: [...standalone].sort(), official: [...official].sort() })).digest("hex") });
   return { plan, missing, runway: maintenanceRunway(plan, now) };
 }
