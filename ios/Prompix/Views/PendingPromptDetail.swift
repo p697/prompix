@@ -35,7 +35,7 @@ struct PendingPromptDetail: View {
                 }.ignoresSafeArea(edges: preview.hasDetailMedia ? .top : []).hidesTopEdgeEffect().preservingReadingPosition(position).readingChrome($actionsCollapsed).readingBottomEdge().accessibilityIdentifier("detailReadingPane")
             }
         }.foregroundStyle(Palette.ink)
-            .overlay(alignment: .top) { if preview.hasDetailMedia { EdgeVeil(fade: 14) } }
+            .overlay(alignment: .top) { if preview.hasDetailMedia { EdgeVeil() } }
             .onChange(of: actionsCollapsed) { _, value in position.actionsCollapsed = value }
             .promptActionBar {
                 ReadingActionBar(isSkill: card.contentType == "skill", ready: false, collapsed: actionsCollapsed, canEdit: card.contentType != "skill")

@@ -191,7 +191,7 @@ private struct RootHeader<Trailing: View, Bar: View>: ViewModifier {
             .allowsHitTesting(!collapsed).accessibilityHidden(collapsed)
             .background(alignment: .top) {
                 ZStack(alignment: .top) {
-                    EdgeVeil(hold: height, fade: 28).offset(y: shift).opacity(covered && !collapsed ? 1 : 0)
+                    EdgeVeil(hold: height, fade: 12).offset(y: shift).opacity(covered && !collapsed ? 1 : 0)
                     EdgeVeil().opacity(collapsed ? 1 : 0)
                 }
             }
@@ -200,21 +200,21 @@ private struct RootHeader<Trailing: View, Bar: View>: ViewModifier {
     }
 }
 
-/// The top edge over moving work: paper and a light blur behind the status
-/// bar, held `hold` points further down, then fading out over `fade` points,
-/// so pictures stay visible as they slide underneath.
+/// The top edge over moving work, after Cosmos: a light wash of paper and
+/// blur behind the status bar only, gone `fade` points below it. With `hold`,
+/// paper stays solid that much further down, behind a bar's own controls.
 struct EdgeVeil: View {
     var hold: CGFloat = 0
-    var fade: CGFloat = 34
+    var fade: CGFloat = 10
     var body: some View {
         let top = Self.statusBarHeight + hold
         let height = top + fade
-        let solid = top / height
+        let solid = hold > 0 ? top / height : 0.45
         ZStack {
             Rectangle().fill(.ultraThinMaterial)
-                .mask(LinearGradient(stops: [.init(color: .black, location: 0), .init(color: .black, location: solid), .init(color: .clear, location: 1)], startPoint: .top, endPoint: .bottom))
-            LinearGradient(stops: [.init(color: Palette.paper.opacity(0.94), location: 0),
-                                   .init(color: Palette.paper.opacity(hold > 0 ? 0.94 : 0.6), location: solid),
+                .mask(LinearGradient(stops: [.init(color: .black.opacity(hold > 0 ? 1 : 0.7), location: 0), .init(color: .black.opacity(hold > 0 ? 1 : 0.4), location: solid), .init(color: .clear, location: 1)], startPoint: .top, endPoint: .bottom))
+            LinearGradient(stops: [.init(color: Palette.paper.opacity(hold > 0 ? 0.94 : 0.8), location: 0),
+                                   .init(color: Palette.paper.opacity(hold > 0 ? 0.94 : 0.5), location: solid),
                                    .init(color: Palette.paper.opacity(0), location: 1)], startPoint: .top, endPoint: .bottom)
         }.frame(height: height).frame(maxWidth: .infinity)
             .ignoresSafeArea(edges: .top).allowsHitTesting(false).accessibilityHidden(true)
