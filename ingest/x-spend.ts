@@ -36,6 +36,8 @@ export const maintenanceReserveSchema = z.object({
   standalone: z.number().int().min(0).max(100000), officialPosts: z.number().int().min(0).max(2000000),
   // Standalone posts already a week old: their verification lasts a week (x-source.ts).
   settled: z.number().int().min(0).max(100000).optional(),
+  // Protected items intake no longer yields; priced as the costliest case (a full official thread, twice a day).
+  unaccounted: z.number().int().min(0).max(100000).optional(),
   sourceSetSHA256: z.string().regex(/^[a-f0-9]{64}$/),
 }).strict();
 
@@ -46,7 +48,7 @@ export const maintenanceReserveSchema = z.object({
 export function maintenanceRunway(plan: z.infer<typeof maintenanceReserveSchema>, now: Date) {
   const settled = Math.min(plan.settled ?? 0, plan.standalone);
   const daily = 2 * ((plan.standalone - settled) * xUnitMicroUSD.twitterapi.post + plan.officialPosts * xUnitMicroUSD.official.post)
-    + Math.ceil(settled * xUnitMicroUSD.twitterapi.post / 6);
+    + Math.ceil(settled * xUnitMicroUSD.twitterapi.post / 6) + 2 * (plan.unaccounted ?? 0) * 9 * xUnitMicroUSD.official.post;
   const days = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0)).getUTCDate() - now.getUTCDate() + 1;
   return { daily, monthly: daily * days, days };
 }
