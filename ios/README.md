@@ -88,7 +88,7 @@ Two earlier live simulator UI journeys passed in that external directory: `produ
 
 After all fixes, `final-language-ui.xcresult` passed one test in 33.416 seconds with exit 0 and no runtime warnings against current production `edition-v2-d8f7fc6af6de6061`. The verification JSON confirms Chinese-only to Chinese/Japanese, exactly three active artifacts totaling 2,435,000 bytes, no English pack or old-edition artifacts, unchanged draft bytes, the same 738-byte Japanese clipboard hash, and cached-relaunch Original/Japanese/editor behavior. The dedicated simulator's original App Support snapshot was then restored with all nine file hashes matching; the post-test state was backed up separately (`acceptance-fixture-restored.json`). No user phone was touched. Physical-device acceptance remains separate.
 
-The `--offline` launch argument uses the bundled edition for deterministic UI fixtures. The `studio-005` fallback contains 30 original text, image and website prompts with nine validated content locales. Video examples arrive with the first successful content update; the offline Video channel explains this and offers update and browse actions. Existing downloaded editions, saved snapshots and drafts are preserved. The simulator-only `--cached-only` argument prevents refresh from replacing a staged, validated local catalog with the public edition; it does not bypass catalog validation or create fixture content. Keep third-party staged catalogs and media outside the repository.
+The `--offline` launch argument uses the bundled edition for deterministic UI tests. The `studio-005` fallback contains 30 original text, image and website prompts with nine validated content locales. Video examples arrive with the first successful content update; the offline Video channel explains this and offers update and browse actions. Existing downloaded editions, saved snapshots and drafts are preserved. Keep third-party catalogs and media outside the repository.
 
 First-party assets:
 
@@ -102,17 +102,7 @@ The release catalog must not silently replace editorial studies with unverified 
 
 The editor prevents interactive dismissal while changes are unsaved. A failed write keeps the current text visible and offers retry or an explicit choice to copy and leave, discard and leave, or keep editing. Leaving without saving preserves the last successful draft and stops pending lifecycle saves. Catalog transport tests use isolated injected sessions to verify offline, timeout and checksum-failure recovery, cancellation and retry eligibility, bounded chunk progress, compressed and dishonest lengths, and a creatorless 68-item cache upgrading to 345 synthetic items while preserving personal data. These tests do not modify global networking or the deployed API.
 
-`testDraftWriteFailureKeepsBufferUntilExplicitExit` is an opt-in simulator test. Pass `PROMPIX_DRAFT_FIXTURE_CONTAINER` to the test runner with the simulator's Prompix data-container path; it verifies the running simulator and app metadata before temporarily introducing a write collision. Back up the draft file outside the simulator first and restore it in the host runner's cleanup even if XCTest aborts. The test also registers teardown restoration. Compare its expected clipboard attachment with `simctl pbpaste` for that simulator; reading the clipboard from the test-runner app can be denied by iOS and is not proof of a copy failure. Never run this fixture against a physical device.
-
-`testVoiceOverDetailEditorAndSavedRoundTrip` records actual speech on Xcode 27 / iOS 27 and uses targeted synthetic double-taps to activate spoken controls; it does not replace physical VoiceOver gesture acceptance. Long-draft persistence runs separately from visible-keyboard layout: opt into `testVisibleSoftwareKeyboardLongDraftLayout` with `PROMPIX_VISIBLE_SOFTWARE_KEYBOARD=1` only when the simulator draws an interactive software keyboard. `testReducedMotionImageZoomAndReturn` requires the simulator's Reduce Motion setting to be enabled. Restore simulator settings after these checks.
-
-For the largest-text recovery layout, set the simulator to its largest accessibility content size and add `PROMPIX_DRAFT_LAYOUT_ONLY=1` to the write-collision fixture. It checks that the editor remains hittable with at least one full preferred-body text line inside its window and clear of the visible keyboard, then scrolls the bounded status area to activate recovery controls. The Copy control's frame is diagnostic only: a native toolbar may place it beside the editor, so it does not define the editor's bottom edge. Keep the same external backup and cleanup requirements, and inspect the screenshots rather than relying only on element existence.
-
-`testPublishedEditorialBatch` accepts `PROMPIX_EDITORIAL_ACCEPTANCE_IDS` (comma-separated reviewed item IDs) and the same `PROMPIX_ACCEPTANCE_CONTAINER` simulator guard. It downloads the live edition, searches each item's published title, checks detail/copy/use actions, inspects Skill files and installation-copy feedback, and compares the personal stores before and after. Capture the final simulator clipboard from the host and compare it with the expected original text or pinned command; the test alone does not assert clipboard bytes or execution in a target app. Keep live content and screenshots outside Git.
-
-`testPublishedTranslationCatchUp` accepts `PROMPIX_TRANSLATION_ACCEPTANCE_IDS`, an exact `PROMPIX_TRANSLATION_ACCEPTANCE_VERSION`, and the same container guard. Choose items without existing drafts and back up personal files first. The test checks each item's Chinese and English selection, complete editor body, copy feedback, cached restart and downloaded-pack availability. Drafts and creator bookmarks must remain byte-for-byte unchanged; favorites retain identity, ordering and source fields, while their cached translations may update only to verified published records. Compare the final host clipboard separately. The 465-item edition passed two focused runs on iPhone 18 Pro / iOS 27.0 (24A434): one covered all ten new Skills, and one covered three of them in both languages. These runs do not validate the in-progress 0.4.7 editor changes, Duo layouts, full-catalog translation quality or execution in an external tool.
-
-A first-party procedural MP4 remains only in `PrompixTests/Resources/playback-fixture.mp4` for AVPlayer recovery tests. It is not bundled in the app or listed as a prompt example. The live UI test still verifies remote community video playback.
+A first-party procedural MP4 remains only in `PrompixTests/Resources/playback-fixture.mp4` for AVPlayer recovery tests. It is not bundled in the app or listed as a prompt example.
 
 All six first-party image prompts have real generated examples in `studio-005`.
 The publisher also mirrors these images to the content API, allowing older
@@ -130,110 +120,6 @@ UI translations live in `Prompix/Resources/Localizable.xcstrings`. Keep identifi
 ## Privacy and submission
 
 `Resources/PrivacyInfo.xcprivacy` is bundled with the app. It declares no tracking and describes operational request data retained by the content service; drafts and saved history remain local; v3 search terms are sent to the content service to process the current query. The Feed Worker redacts query strings and does not persist search history. Required-reason API declarations must reflect actual code use. Store metadata, review instructions and the final submission checklist are in [App Store preparation](../docs/app-store.md).
-
-Performance checks are explicitly selected UI tests: `testRepeatedLaunchPerformance`
-and `testScrollingResourcePerformance`. Run with `-configuration Release
-ENABLE_TESTABILITY=YES`. Use a simulator for development; record those results
-separately from any later physical-device run with your signing team. The current
-0.3.2 assignment requires simulator evidence only; do not install on a user device
-without a subsequent request.
-The launch test terminates and relaunches the process five times; it does not clear
-OS caches. The scroll test measures CPU and memory over three passes through the
-bundled offline catalog. These provide a repeatable baseline, not a substitute for
-live-image/network, video, thermal, or long-session measurements. Save each run to
-a new result bundle and report the actual metric values and device conditions.
-
-Live release journeys are explicitly selected: `testLiveFiveScreenBrowsingPreservesReturnPosition`
-checks five consecutive screens and return positions, while
-`testExpandedLibraryBrowsingAndSearch` requires at least 100 distinct, actually
-visible cards, checks return positions, and searches/copies newly reviewed text.
-`testEveryPublishedVideoPlaysAndBackgroundPauses` reads the published inventory and
-requires each video playback clock to advance. It uses one continuous App session,
-returns from every preview to its detail and preserved search text, then clears the
-search for the next item. Process-launch performance is measured separately. Keep
-the content edition unchanged during this run. Leave at least 5 GB free on the
-system volume: simulator recordings and temporary data use it even when DerivedData
-and result bundles live on an external SSD. Failed and interrupted results must be
-retained separately from a completed inventory. `testShareCancellationKeepsDetailUsable` and
-`testCopiedPromptCanOpenExternalToolAndReturn` cover cancellation and external-tool
-return; opening Safari is not proof of tool login, prompt prefill or generation.
-Native tab selection supports both the iPhone bottom bar and iPad floating tabs.
-
-Search now owns a NavigationStack inside its dedicated tab on iPhone and iPad. The
-global journey helper scopes reveal gestures to the scroll view containing the
-target, so drags do not start on the fixed action bar or outside the sheet.
-`testPublisherSkillPackages` uses `PROMPIX_PUBLISHER_ACCEPTANCE=1` and the explicit
-`PROMPIX_ACCEPTANCE_CONTAINER` for real production refresh; back up personal data
-first. The creator journey intentionally changes bookmarks: restore their original
-files after testing. Current 345-to-448 iPad upgrade and four portrait flows are
-recorded in [release quality](../docs/quality-release.md).
-
-## Cached content during network failure
-
-`GlobalDiscoveryUITests/testCachedNetworkFailureEditingAndLiveRetry` is opt-in with
-`TEST_RUNNER_PROMPIX_NETWORK_ACCEPTANCE=1` and the explicit
-`TEST_RUNNER_PROMPIX_ACCEPTANCE_CONTAINER`. Use a **Debug simulator build**, with a
-backed-up real catalog, language packs, and personal files. Do not stage or run it
-on a physical device. The journey temporarily edits the original `gentle-tarot`
-draft, verifies it across a failed-network relaunch and live retry, then restores
-the original draft file on teardown. Host-side byte comparison and restoration
-are still required after a test-runner crash.
-
-The simulator-only `--simulate-network-failure` argument registers a URLProtocol
-that rejects HTTP(S) URLSession requests with `notConnectedToInternet`. The test
-creates `Library/Caches/prompix-ui-network-restored` in the metadata-verified App
-container to stop intercepting requests, then taps the real retry button against
-production. A new fault-injected launch clears the marker; teardown removes it.
-Neither the argument handling nor the protocol is compiled into Release builds.
-
-This exercises catalog/image URLSession failures and the cached text/edit/use
-flow; it is not an OS airplane-mode, AVPlayer, external-App, or slow-link test.
-The final clipboard must match the edited text attached by XCTest: detail copy
-copies the displayed source, while the **use panel** transfers the saved draft.
-
-## Production upgrade and complete-catalog performance
-
-`GlobalDiscoveryUITests/testProductionCatalogUpgradePreservesSavedContentAndDrafts`
-is opt-in with `PROMPIX_PRODUCTION_UPGRADE_TEST=1`. Back up the dedicated simulator
-app data, then stage the external creatorless 68-item catalog, a saved prompt still
-present in production (for example `gentle-tarot`), and a nonempty edited original
-draft. Additional language drafts exercise preservation of the whole draft store.
-Pass `PROMPIX_ACCEPTANCE_CONTAINER` with that simulator's explicit App data-container
-path. The test validates the simulator UUID and bundle metadata, and re-resolves
-the container after each launch because XCTest may change its UUID on reinstall.
-It uses the real production endpoint, observes available update stages, opens a
-downloaded creator, verifies saved source text and all drafts, and repeats the
-checks after a cached restart. It does not fake a slow network or guarantee that a
-fast transfer renders every intermediate progress stage.
-
-After staging the actual production catalog and its downloaded language pack,
-opt into `testCurrentCatalogBrowsingPerformance` and
-`testCurrentCatalogProcessLaunchPerformance`. Supply these runner variables:
-
-- `PROMPIX_FULL_CATALOG_PERFORMANCE=1`
-- `PROMPIX_ACCEPTANCE_CONTAINER`: the explicit simulator App data-container path
-- `PROMPIX_PERFORMANCE_VERSION`: the exact staged edition identity
-- `PROMPIX_PERFORMANCE_COUNT`: its total item count
-- `PROMPIX_PERFORMANCE_LOCALE`: the downloaded locale to browse
-- `PROMPIX_PERFORMANCE_TRANSLATED_COUNT`: that locale's actual nonempty prompt count
-
-Use `TEST_RUNNER_` prefixes when passing these variables directly to `xcodebuild`.
-Run with `-configuration Release ENABLE_TESTABILITY=YES ONLY_ACTIVE_ARCH=YES`.
-The probes reject mismatched edition, count, translation coverage or missing
-language-pack registration. Partial translation coverage is valid: untranslated
-items use the production original-text fallback; never manufacture translations
-just to satisfy a performance fixture. The small bundled catalog is rejected.
-
-The first probe records three rounds of viewport drags and confirms that different
-real cards become visible; CPU and clock include XCTest gestures and accessibility
-queries, not FPS. The second measures five process launches until responsive,
-without clearing OS or filesystem caches. Both compare drafts and favorites before
-and after measurement, and attach the exact edition, locale and translation scope.
-
-Supply these variables through the UI test runner environment (for example an
-external `.xctestrun` file). Keep fixtures, screenshots, logs and result bundles
-outside Git. Restore the simulator data and settings after acceptance work; never
-stage these fixtures in a user's physical-device container.
 
 `LanguagePackCatalog` now validates the v2 download path. Its shared original
 fixture in `PrompixTests/Resources/language-pack-fixture.json` is also verified by
@@ -253,8 +139,6 @@ Current 0.4.5 production-workload Release evidence: 448 items, 376 cached Simpli
 
 Search ranks exact titles, title terms, creator identity, model/tags, then incidental body matches, preserving editorial ties and all filters. All 165 native model tests pass. The 448-item simulator workload passed six largest-text handoff panels (zh-Hans, de, ja; website and Skill), with hit-region/description audits and expanded payloads. Actual VoiceOver reached the Skill Code action, guidance, disclosure, share and copy-install action without activating external tools. See [quality evidence](../docs/quality-release.md).
 
-Run `GlobalDiscoveryUITests/testHandoffLargestTextAccessibility` with `TEST_RUNNER_PROMPIX_HANDOFF_ACCESSIBILITY=1`, the existing explicit acceptance-container variable, and simulator content size `accessibility-extra-extra-extra-large`. Restore the prior size afterward. Run `testSkillHandoffVoiceOverTraversal` separately at the normal size with the same environment; it requires the iOS 27 SDK/service and disables VoiceOver on exit. These opt-in tests use public entries and preserve drafts/favorites.
-
 
 ## Media recovery acceptance (build 20)
 
@@ -265,18 +149,6 @@ page indicator. Cancelled thumbnail requests cannot overwrite a newer view task.
 Video loading follows AVPlayer's transport state: item readiness alone does not
 clear buffering, and pausing through native AVKit controls cancels the deadline.
 This follows Apple's [transport guidance](https://developer.apple.com/documentation/avfoundation/controlling-the-transport-behavior-of-a-player).
-
-`testRetainedImagePreviewCanRetryAndReturnToPrompt` takes a published multi-image
-item ID in `PROMPIX_IMAGE_RECOVERY_ID` plus the existing explicit simulator-container
-guard. It saves an offline thumbnail, clears only the image URL cache, then uses
-`--simulate-network-failure --simulate-slow-image-failure` to observe progress,
-retained-preview retry, an uncached page failure, return/copy and real network
-recovery. The image session explicitly installs the Debug simulator protocol;
-global URLProtocol registration alone did not intercept that custom session in
-the initial run. The optional slow fixture delays media failure by three seconds.
-The recovery marker restores real requests. Back up and restore the whole local
-Prompix data directory from the host even if an assertion aborts teardown.
-Neither fixture flag/protocol is present in Release.
 
 `testRemoteVideoBufferingDeadlineAndSameURLRecovery` requires
 `PROMPIX_MEDIA_FIXTURE_URL`, an isolated HTTPS server with a first-party fast-start
@@ -314,17 +186,13 @@ evidence are retained outside Git at
 
 `PromptUseSheet` prevents interactive dismissal while a prepared variable result has failed to save. Done offers the existing native copy-and-leave, discard-and-leave and continue-editing choices; copying uses the complete in-memory result. The parent editor remains unchanged until an explicit return to editing or successful save.
 
-The three `testPreparedVariables…AfterFailedSave` / `testPreparedVariablesSurviveFailedSaveAndReturnToEditor` journeys in `GlobalDiscoveryUITests` share the guarded production-cache fixture. Set `PROMPIX_VARIABLE_ACCEPTANCE=1` and `PROMPIX_ACCEPTANCE_CONTAINER`, use a separate backed-up simulator, and restore its personal files after any interruption. The copy test attaches the expected buffer; compare host `simctl pbpaste` bytes independently. These tests must not replace the user's running acceptance build.
-
 
 ### iPhone welcome and Cosmos visual acceptance (0.5.0)
 
-`OnboardingTests` covers skip, forward/back, completion persistence, Settings replay and English/German layout. The Debug simulator-only `--reset-onboarding` argument removes only the welcome-completion preference; it never clears content, favorites or drafts. Existing journeys call `launchPrompix()` to begin in discovery. Use `simctl ui <dedicated-device> content_size accessibility-extra-extra-extra-large` and `appearance dark` for the stress-layout pass, then restore `large` / `light`. The welcome body scrolls independently of its actions; decorative artwork is omitted at accessibility sizes.
-
 `python3 scripts/check-localizations.py` checks every `.xcstrings` catalog by default, including the new Onboarding table. Actual evidence, scope and limitations are recorded in [the iPhone visual review](../docs/design-cosmos-iphone.md).
 
-## Database acceptance tests
+## UI tests
 
-`DatabaseFeedUITests` uses a new UUID under the dedicated simulator app's Caches/FeedAcceptance directory. Four deterministic journeys use 10,000 first-party records; two live journeys require `TEST_RUNNER_PROMPIX_DATABASE_LIVE_UI=1` on xcodebuild. Native live API coverage similarly requires `TEST_RUNNER_PROMPIX_LIVE_FEED=1`. The prefix passes settings into the test runner; a plain host variable does not. No paid ingestion or production writes occur. Keep `-parallel-testing-enabled NO` for these serial simulator journeys.
+`PrompixUITests` is deliberately small: `SmokeTests` covers onboarding, the home long-press preview, copy / save / edit / search across a relaunch, search into a detail and back, and a version surviving relaunch; `AccessibilityAuditTests` audits hit regions and element descriptions across the main screens. All run offline on the bundled catalog, each in its own data directory (`--ui-test-data <uuid>`, Debug simulator builds only). They run in `ios-tests` after every merge to `main`, not on pull requests. Verify UI changes with screenshots and on device instead of adding journeys here; see [the decision](../docs/decisions/2026-11-07-ui-smoke-only.md).
 
-The opt-in legacy journey actually downloads v2 using retained legacy code, creates a favorite/draft, and reopens the same isolated directory using v3. It verifies exact personal-file preservation, not a physical-device binary upgrade. The copy journey saves expected UTF-8 text inside that namespace; validate the actual simulator clipboard from the host with `simctl pbpaste` because iOS may deny clipboard reads from XCTest's separate runner. Release builds exclude simulator service fixtures and isolated launch modes.
+`PrompixTests` live checks still require `TEST_RUNNER_PROMPIX_LIVE_FEED=1` on xcodebuild; the prefix passes the setting into the test runner.

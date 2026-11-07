@@ -102,8 +102,9 @@ jobs:
       # only: a generic destination would also build x86_64 and double the time.
       - name: Build app and tests
         run: xcodebuild -project ios/Prompix.xcodeproj -scheme Prompix -destination 'generic/platform=iOS Simulator' build-for-testing ARCHS=arm64 ONLY_ACTIVE_ARCH=NO CODE_SIGNING_ALLOWED=NO COMPILER_INDEX_STORE_ENABLE=NO
-  # The complete iOS unit suite boots a cold simulator (6–10 minutes), so it runs
-  # once per merge on main as a safety net rather than on every pull request.
+  # The complete iOS unit suite and the UI smoke suite boot a cold simulator
+  # (several minutes), so they run once per merge on main as a safety net rather
+  # than on every pull request.
   ios-tests:
     needs: changes
     if: ${{ !cancelled() && github.event_name == 'push' }}
@@ -120,8 +121,18 @@ jobs:
           xcrun simctl boot "$DEVICE_ID"
       - uses: actions/checkout@v4
       - name: Build tests
-        run: xcodebuild -project ios/Prompix.xcodeproj -scheme Prompix -destination "id=$DEVICE_ID" -only-testing:PrompixTests -derivedDataPath build build-for-testing CODE_SIGNING_ALLOWED=NO COMPILER_INDEX_STORE_ENABLE=NO
+        id: build
+        run: xcodebuild -project ios/Prompix.xcodeproj -scheme Prompix -destination "id=$DEVICE_ID" -derivedDataPath build build-for-testing CODE_SIGNING_ALLOWED=NO COMPILER_INDEX_STORE_ENABLE=NO
       - name: Test native models
         run: |
           xcrun simctl bootstatus "$DEVICE_ID" -b
           xcodebuild -project ios/Prompix.xcodeproj -scheme Prompix -destination "id=$DEVICE_ID" -only-testing:PrompixTests -derivedDataPath build test-without-building CODE_SIGNING_ALLOWED=NO
+      # The whole UI suite: core journeys and an accessibility audit on the
+      # bundled catalog, offline. Pull requests do not run UI tests.
+      - name: UI smoke and accessibility
+        # Runs even when a model test failed, so both results show on the same push.
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: |
+          xcrun simctl bootstatus "$DEVICE_ID" -b
+          xcodebuild -project ios/Prompix.xcodeproj -scheme Prompix -destination "id=$DEVICE_ID" -derivedDataPath build -parallel-testing-enabled NO -only-testing:PrompixUITests \
+            test-without-building CODE_SIGNING_ALLOWED=NO

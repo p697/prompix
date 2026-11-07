@@ -30,14 +30,6 @@ import Observation
         thumbnails.totalCostLimit = 8 * 1024 * 1024
         prepared.totalCostLimit = 16 * 1024 * 1024
         let configuration = URLSessionConfiguration.default
-        #if DEBUG && targetEnvironment(simulator)
-        if ProcessInfo.processInfo.arguments.contains("--feed-image-prefetch-test") {
-            configuration.protocolClasses = [SimulatorPrefetchImages.self] + (configuration.protocolClasses ?? [])
-        }
-        if ProcessInfo.processInfo.arguments.contains("--simulate-network-failure") {
-            configuration.protocolClasses = [SimulatorNetworkFailure.self] + (configuration.protocolClasses ?? [])
-        }
-        #endif
         configuration.urlCache = URLCache(memoryCapacity: 4 * 1024 * 1024, diskCapacity: 80 * 1024 * 1024, directory: URL.cachesDirectory.appending(path: "PrompixImages"))
         configuration.requestCachePolicy = .returnCacheDataElseLoad
         configuration.httpMaximumConnectionsPerHost = 4

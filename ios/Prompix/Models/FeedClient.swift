@@ -31,11 +31,6 @@ struct FeedClient: FeedServing {
             configuration.timeoutIntervalForRequest = 20
             configuration.timeoutIntervalForResource = 30
             configuration.httpMaximumConnectionsPerHost = 4
-            #if DEBUG && targetEnvironment(simulator)
-            if ProcessInfo.processInfo.arguments.contains("--simulate-network-failure") {
-                configuration.protocolClasses = [SimulatorNetworkFailure.self]
-            }
-            #endif
             self.session = URLSession(configuration: configuration)
         }
     }

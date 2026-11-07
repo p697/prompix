@@ -372,11 +372,6 @@ struct PromptVersion: Identifiable, Hashable {
         }
     }
     func refresh(force: Bool = false, session: URLSession = .shared, now: Date = Date()) async {
-        #if targetEnvironment(simulator)
-        // A staged, validated catalog can be exercised without replacing it
-        // with the public edition while a release is being prepared.
-        if ProcessInfo.processInfo.arguments.contains("--cached-only") { return }
-        #endif
         guard !Task.isCancelled, !isRefreshing, !ProcessInfo.processInfo.arguments.contains("--offline"), !storageRecoveryPending else { return }
         if databaseFeedRequested {
             guard let feed else { return }
