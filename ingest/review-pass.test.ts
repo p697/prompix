@@ -41,11 +41,13 @@ test("one review decides, labels and names the model with a single spelling", ()
 test("rubric reasons, real people, minors and scale keep items out; contradictions fail", () => {
   const rejected = validateReviewItem(candidate(), answer({ decision: "reject", reasons: ["ad-or-bait"] }));
   assert.ok(rejected.ok); assert.equal(reviewBlocker(rejected.fields), "ad-or-bait");
-  for (const [fields, blocker] of [[{ realPerson: true }, "real-person"], [{ minors: "uncertain" }, "minors-uncertain"],
-    [{ minors: "safe", presentation: "suggestive" }, "minors-with-suggestive"], [{ presentation: "unknown" }, "presentation-unknown"]] as const) {
+  for (const [fields, blocker] of [[{ realPerson: true }, "real-person"], [{ minors: "unsafe" }, "minors-unsafe"],
+    [{ minors: "uncertain", presentation: "suggestive" }, "minors-uncertain-with-suggestive"], [{ minors: "safe", presentation: "suggestive" }, "minors-safe-with-suggestive"], [{ presentation: "unknown" }, "presentation-unknown"]] as const) {
     const outcome = validateReviewItem(candidate(), answer(fields));
     assert.ok(outcome.ok); assert.equal(reviewBlocker(outcome.fields), blocker);
   }
+  const uncertain = validateReviewItem(candidate(), answer({ minors: "uncertain" }));
+  assert.ok(uncertain.ok); assert.equal(reviewBlocker(uncertain.fields), undefined, "an uncertain age alone does not block");
   assert.equal(validateReviewItem(candidate(), answer({ decision: "publish", reasons: ["low-quality"] })).ok, false);
   assert.equal(validateReviewItem(candidate(), answer({ reasons: ["made-up"] })).ok, false);
 });

@@ -47,7 +47,7 @@ ${reasonIDs.map(id => `  ${id}: ${rejectReasons[id]}`).join("\n")}
   - Lingerie, swimwear, revealing outfits and sexy poses are not unsafe: label them suggestive under presentation and publish. Viewers see suggestive work only after opting in.
 - presentation: ${presentationValues.join(", ")}. Apply this standard:
 ${presentationStandard}
-- minors: none when nobody depicted or described may be under 18. safe when a child appears only in ordinary, non-sexual content such as illustration, education or a family scene. unsafe when anyone who is or may be under 18 is sexualized, shown in revealing clothing or poses, or used as an interchangeable model for fashion, beauty or body-focused output. uncertain when a depicted person may be under 18 and the output focuses on their body, attire or attractiveness. Explain in minorsReason. Apart from this, do not infer age, ethnicity, identity or other personal traits.
+- minors: none when nobody depicted or described may be under 18. safe when a child appears only in ordinary, non-sexual content such as illustration, education or a family scene. unsafe when anyone who appears to be under 18 is sexualized, shown in revealing clothing or poses, or used as an interchangeable model for fashion, beauty or body-focused output. uncertain only when there is a concrete sign that a depicted person may be under 18 (a childlike face or body, a school uniform, a stated age, words such as child or kid) and the output focuses on their body, attire or attractiveness. A youthful-looking adult, the word girl, an anime style or a fashion shoot is not such a sign; use none. Explain in minorsReason. Apart from this, do not infer age, ethnicity, identity or other personal traits.
 - realPerson: true when the prompt or source asks to depict a specific real, identifiable person by name (a celebrity, public figure or named private person). A person's own uploaded photo used as a reference is not this.
 - zh: a Chinese card. title: at most 24 characters, naming what the prompt makes. summary: one sentence on what it makes and what makes it good. example: one sentence of usage advice in Chinese. tags: 3 to 5 short Chinese tags.
 - en: the same card in English (title at most 80 characters, summary one or two sentences).
@@ -123,8 +123,9 @@ export function validateReviewItem(candidate: EnrichmentCandidate, raw: unknown)
 export function reviewBlocker(fields: ReviewFields): string | undefined {
   if (fields.decision === "reject") return fields.reasons.join(", ");
   if (fields.realPerson) return "real-person";
-  if (fields.minors === "unsafe" || fields.minors === "uncertain") return `minors-${fields.minors}`;
-  if (fields.minors === "safe" && fields.presentation !== "general") return `minors-with-${fields.presentation}`;
+  if (fields.minors === "unsafe") return "minors-unsafe";
+  // An uncertain age alone no longer blocks (owner, 2026-11-07); with any suggestive styling it still does.
+  if (fields.minors !== "none" && fields.presentation !== "general") return `minors-${fields.minors}-with-${fields.presentation}`;
   if (fields.presentation === "explicit" || fields.presentation === "unknown") return `presentation-${fields.presentation}`;
   return undefined;
 }

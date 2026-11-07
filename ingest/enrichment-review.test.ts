@@ -99,8 +99,9 @@ test("unsafe or undecidable content involving minors is excluded automatically",
   assert.equal(publicationBlocker(judged("none")), undefined);
   assert.equal(publicationBlocker(judged("safe")), undefined, "an ordinary children's illustration is published");
   assert.match(publicationBlocker(judged("unsafe")) ?? "", /^minors-unsafe/);
-  assert.match(publicationBlocker(judged("uncertain")) ?? "", /^minors-uncertain/);
-  assert.match(publicationBlocker(judged("safe", "suggestive")) ?? "", /^minors-with-suggestive/, "a possible minor never sits next to suggestive styling");
+  assert.equal(publicationBlocker(judged("uncertain")), undefined, "an uncertain age alone does not block");
+  assert.match(publicationBlocker(judged("uncertain", "suggestive")) ?? "", /^minors-uncertain-with-suggestive/);
+  assert.match(publicationBlocker(judged("safe", "suggestive")) ?? "", /^minors-safe-with-suggestive/, "a possible minor never sits next to suggestive styling");
   assert.equal(publicationBlocker(judged("none", "suggestive")), undefined);
   assert.equal(publicationBlocker(judged("none"), "unknown"), "presentation-unknown");
   assert.equal(validateEnrichmentItem(candidate(), output("x-post-1", { minors: "maybe" })).ok, false);

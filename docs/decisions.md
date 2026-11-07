@@ -1303,3 +1303,7 @@ The first trial of the new pipeline published 14 of 124 admitted posts. The owne
 ### 2026-11-07 — JSON prompts keep their indentation
 
 About 49 of 2,947 published prompts (1.7%) are a whole JSON object, and 43 of them are indented by level. The detail page read them as Markdown paragraphs, which dropped the indentation and set them in the serif reading face. A prompt that is a bracketed object or array with several quoted keys, or that parses as JSON, now skips Markdown and shows its exact text in monospace. Copying and editing still use the source string. The owner judged the share too small for a structured key-value view.
+
+### 2026-11-07 — An uncertain age alone no longer blocks
+
+In the replay trial "may be under 18" blocked seven ordinary adult fashion, cosplay and poster items, which the owner judged plainly fine. Review now says uncertain only on a concrete sign of a minor (a childlike face or body, a school uniform, a stated age, words such as child or kid), and an uncertain age blocks only together with suggestive styling. A judgment that a minor is sexualized still blocks, as do explicit content and real people.
