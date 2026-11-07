@@ -27,7 +27,7 @@ export function claudeCliProvider(options: ClaudeCliOptions): ModelProvider {
           "--tools", "", "--strict-mcp-config", "--disable-slash-commands", "--no-session-persistence", "--permission-mode", "dontAsk",
           ...(request.effort ? ["--effort", request.effort] : [])];
         const result = await run(executable, args, { stdin: JSON.stringify({ type: "user", message: { role: "user", content } }) + "\n", cwd: directory,
-          timeoutMs: request.timeoutMs ?? 300000, maxStdoutBytes: 8_000_000, env: process.env });
+          timeoutMs: request.timeoutMs ?? 300000, maxStdoutBytes: 8_000_000, env: subscriptionEnvironment(process.env) });
         const final = lastResult(result.stdout);
         if (!final) throw classifyCliFailure("Claude Code", result.exitCode, result.stderrTail);
         if (final.is_error) throw classifyCliFailure("Claude Code", result.exitCode, `${final.result ?? ""} ${final.api_error_status ?? ""} ${result.stderrTail}`);
@@ -42,6 +42,13 @@ export function claudeCliProvider(options: ClaudeCliOptions): ModelProvider {
       }
     },
   };
+}
+
+/** Claude Code bills an API key in place of the signed-in subscription, outside the Anthropic
+ * daily cap, so the pipeline's key never reaches the CLI. */
+export function subscriptionEnvironment(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const { ANTHROPIC_API_KEY: _key, ANTHROPIC_AUTH_TOKEN: _token, ...rest } = env;
+  return rest;
 }
 
 type ResultEvent = { type: "result"; is_error?: boolean; result?: string; api_error_status?: unknown; stop_reason?: string;

@@ -72,15 +72,18 @@ test("Codex quota and missing output map to retry and fail-closed errors", async
 
 test("Claude Code has every tool off and receives images as message content", async () => {
   const image = await fixtureImage();
-  let seen: { args: readonly string[]; stdin: string } | undefined;
+  let seen: { args: readonly string[]; stdin: string; env?: NodeJS.ProcessEnv } | undefined;
   const run: RunProcess = async (_executable, args, options) => {
-    seen = { args, stdin: options.stdin };
+    seen = { args, stdin: options.stdin, env: options.env };
     return { exitCode: 0, stderrTail: "", stdout: [
       JSON.stringify({ type: "system", subtype: "init" }),
       JSON.stringify({ type: "result", is_error: false, stop_reason: "end_turn", structured_output: { color: "blue" }, usage: { input_tokens: 40, output_tokens: 6, cache_read_input_tokens: 0 } }),
     ].join("\n") };
   };
-  const result = await claudeCliProvider({ model: "claude-opus-5-5", run }).complete({ ...request, images: [{ path: image, mediaType: "image/png" }] });
+  process.env.ANTHROPIC_API_KEY = "sk-test-only";
+  const result = await claudeCliProvider({ model: "claude-opus-5-5", run }).complete({ ...request, images: [{ path: image, mediaType: "image/png" }] })
+    .finally(() => { delete process.env.ANTHROPIC_API_KEY; });
+  assert.equal(seen!.env?.ANTHROPIC_API_KEY, undefined, "the subscription never bills the pipeline's API key");
   assert.deepEqual(result.output, { color: "blue" });
   assert.equal(result.usage.inputTokens, 40);
   const args = seen!.args;
