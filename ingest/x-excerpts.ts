@@ -9,6 +9,8 @@ export const xExcerptSelectionSchema = z.object({
   end: z.number().int().min(1).max(50000),
   kind: z.enum(["text", "image", "video", "web"]),
   includeMedia: z.boolean(),
+  /** Set when the prompt is the ALT text of this attached image rather than the post text. */
+  mediaKey: z.string().min(1).max(100).optional(),
 }).strict().refine(value => value.end > value.start, "Excerpt must have a positive length");
 export const xExcerptReviewSchema = xExcerptSelectionSchema.safeExtend({ reviewedAt: z.iso.datetime() });
 export const xExcerptReviewsSchema = z.record(z.string().regex(/^\d{1,19}$/), xExcerptReviewSchema);
