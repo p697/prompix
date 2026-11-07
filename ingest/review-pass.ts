@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { Prompt } from "../packages/schema/catalog.ts";
 import {
-  canonicalModelName, englishCardSchema, enrichmentConsistencyIssues, facetDefinitions, facetGroups, facetIDs, facetLimits, facetsSchema,
+  allowedModes, canonicalModelName, englishCardSchema, enrichmentConsistencyIssues, facetDefinitions, facetGroups, facetIDs, facetLimits, facetsSchema,
   generationModes, generationSchema, modelFamilies, presentationSchema, presentationValues, shotsSchema, variablesSchema,
 } from "../packages/schema/enrichment.ts";
 import {
@@ -108,8 +108,10 @@ export function validateReviewItem(candidate: EnrichmentCandidate, raw: unknown)
     if (!checked.success) return { id, ok: false, error: "Invalid shots" };
     shots = checked.data;
   }
-  // A named model in the source label is authoritative over the model's guess.
-  const resolved = { ...fields.generation, ...labelledModel(candidate.item.model) };
+  // A named model in the source label is authoritative over the model's guess. Intake decided
+  // the kind, so a mode from another kind falls back to that kind's plain mode.
+  const modes = allowedModes(candidate.item);
+  const resolved = { ...fields.generation, ...(modes.includes(fields.generation.mode) ? {} : { mode: modes[0] }), ...labelledModel(candidate.item.model) };
   const issues = enrichmentConsistencyIssues({ ...candidate.item, generation: resolved, variables: fields.variables });
   if (issues.length) return { id, ok: false, error: issues[0].slice(0, 500) };
   const { shots: _, ...rest } = fields;
