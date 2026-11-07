@@ -1,12 +1,14 @@
 /** Owner-approved X search strategy (2026-11-07): images and video first, searched by use, by
  * model, from a curated creator list and a small exploration lane, in Chinese, English, Japanese
- * and Korean. Quality and diversity gates apply before any post enters review. */
+ * and Korean. Quality and diversity gates apply before any post enters review.
+ * Proposed 2026-11-07 (awaiting the owner): a craft lane searches words that appear inside
+ * prompts themselves (framing, light, camera), which found 91% usable posts on a measured day. */
 
-export type XSearchLane = "use" | "model" | "creator" | "explore";
+export type XSearchLane = "use" | "model" | "creator" | "craft" | "explore";
 export type XSearchRule = { id: string; lane: XSearchLane; kind: "image" | "video"; label: string; terms: string };
 
 /** Share of the day's acquisitions per lane. */
-export const laneShares: Record<XSearchLane, number> = { use: 0.4, model: 0.25, creator: 0.25, explore: 0.1 };
+export const laneShares: Record<XSearchLane, number> = { use: 0.35, model: 0.15, creator: 0.25, craft: 0.2, explore: 0.05 };
 /** Target share of video among the day's acquisitions. */
 export const videoShare = 0.3;
 export const minimumLikes = 20;
@@ -19,35 +21,39 @@ const exclusions = "-is:retweet -is:reply -is:quote -sora -giveaway -抽奖";
 
 export const xSearchRules: readonly XSearchRule[] = [
   // By use: what people would make with it.
-  { id: "use-product", lane: "use", kind: "image", label: "产品摄影和广告", terms: "(\"product photography\" OR \"product shot\" OR 产品摄影 OR 商品图 OR 电商)" },
   { id: "use-poster", lane: "use", kind: "image", label: "海报和字体", terms: "(poster OR typography OR 海报 OR ポスター)" },
   { id: "use-brand", lane: "use", kind: "image", label: "Logo 和品牌", terms: "(logo OR branding OR 品牌 OR ロゴ)" },
   { id: "use-space", lane: "use", kind: "image", label: "室内和建筑", terms: "(interior OR architecture OR 室内设计 OR 建筑)" },
-  { id: "use-food", lane: "use", kind: "image", label: "美食", terms: "(food OR 美食 OR 料理 OR 음식)" },
   { id: "use-character", lane: "use", kind: "image", label: "角色设定", terms: "(\"character sheet\" OR \"character design\" OR 角色设定 OR キャラクター)" },
   { id: "use-edit", lane: "use", kind: "image", label: "修图和换装", terms: "(\"photo edit\" OR \"reference image\" OR 修图 OR 换装 OR 参考图)" },
   { id: "use-sticker", lane: "use", kind: "image", label: "贴纸和表情包", terms: "(sticker OR emoji OR 表情包 OR スタンプ)" },
-  { id: "use-wallpaper", lane: "use", kind: "image", label: "壁纸", terms: "(wallpaper OR 壁纸 OR 壁紙)" },
   { id: "use-miniature", lane: "use", kind: "image", label: "3D 和微缩", terms: "(3D OR miniature OR isometric OR 微缩 OR 手办)" },
   { id: "use-illustration", lane: "use", kind: "image", label: "插画", terms: "(illustration OR 插画 OR イラスト OR 일러스트)" },
-  { id: "use-infographic", lane: "use", kind: "image", label: "信息图和图解", terms: "(infographic OR diagram OR 信息图 OR 图解)" },
   { id: "use-fashion", lane: "use", kind: "image", label: "时尚和人像", terms: "(fashion OR portrait OR 穿搭 OR 人像)" },
+  // Each of these returned two or three posts a day alone; together they fill one share.
+  { id: "use-goods", lane: "use", kind: "image", label: "商品、美食、壁纸和图解",
+    terms: "(\"product photography\" OR \"product shot\" OR 产品摄影 OR 商品图 OR 电商 OR food OR 美食 OR 料理 OR 음식 OR wallpaper OR 壁纸 OR 壁紙 OR infographic OR diagram OR 信息图 OR 图解)" },
   { id: "use-film", lane: "use", kind: "video", label: "短片和分镜", terms: "(\"short film\" OR storyboard OR 短片 OR 分镜)" },
   { id: "use-video-ad", lane: "use", kind: "video", label: "视频广告", terms: "(commercial OR \"product video\" OR 广告片 OR 广告)" },
   { id: "use-animation", lane: "use", kind: "video", label: "动画", terms: "(animation OR anime OR 动画 OR アニメ)" },
-  // By model: the generators people are using now.
+  { id: "use-dance", lane: "use", kind: "video", label: "舞蹈", terms: "(dance OR ダンス OR 舞蹈 OR 跳舞 OR 댄스)" },
+  // By model: the generators people are using now. Flux, Seedream, Ideogram, Veo, Kling, Hailuo,
+  // Runway and Wan returned no usable prompt on a measured day (2026-11-02) and are searched only through
+  // the other lanes.
   { id: "model-gpt-image", lane: "model", kind: "image", label: "GPT Image", terms: "(\"gpt image\" OR \"gpt-image\" OR chatgpt)" },
   { id: "model-nano-banana", lane: "model", kind: "image", label: "Nano Banana", terms: "(\"nano banana\" OR \"gemini image\")" },
   { id: "model-midjourney", lane: "model", kind: "image", label: "Midjourney", terms: "(midjourney OR niji)" },
-  { id: "model-flux", lane: "model", kind: "image", label: "Flux", terms: "flux" },
-  { id: "model-seedream", lane: "model", kind: "image", label: "Seedream", terms: "(seedream OR 即梦)" },
-  { id: "model-ideogram", lane: "model", kind: "image", label: "Ideogram", terms: "ideogram" },
+  { id: "model-grok-image", lane: "model", kind: "image", label: "Grok Imagine", terms: "grok" },
   { id: "model-seedance", lane: "model", kind: "video", label: "Seedance", terms: "seedance" },
-  { id: "model-veo", lane: "model", kind: "video", label: "Veo", terms: "veo" },
-  { id: "model-kling", lane: "model", kind: "video", label: "Kling", terms: "(kling OR 可灵)" },
-  { id: "model-hailuo", lane: "model", kind: "video", label: "海螺", terms: "(hailuo OR 海螺 OR minimax)" },
-  { id: "model-runway", lane: "model", kind: "video", label: "Runway", terms: "runway" },
-  { id: "model-wan", lane: "model", kind: "video", label: "Wan", terms: "(\"wan 2\" OR 万相)" },
+  { id: "model-grok-video", lane: "model", kind: "video", label: "Grok Imagine", terms: "grok" },
+  // By craft: words that appear inside prompts rather than around them.
+  { id: "craft-photo", lane: "craft", kind: "image", label: "写实和相机", terms: "(realistic OR photorealistic OR camera OR lens OR 8k OR 写实 OR カメラ OR リアル)" },
+  { id: "craft-framing", lane: "craft", kind: "image", label: "构图和画幅",
+    terms: "(composition OR \"close-up\" OR \"aspect ratio\" OR \"9:16\" OR \"16:9\" OR \"3:4\" OR \"4:5\" OR \"--ar\" OR 构图 OR 構図 OR 竖幅 OR 縦長 OR 구도)" },
+  { id: "craft-light", lane: "craft", kind: "image", label: "光线和电影感", terms: "(cinematic OR lighting OR 光线 OR ライティング OR 电影感 OR 镜头 OR 조명)" },
+  { id: "craft-anime", lane: "craft", kind: "image", label: "二次元标签", terms: "(masterpiece OR \"best quality\" OR 1girl)" },
+  { id: "craft-video-camera", lane: "craft", kind: "video", label: "镜头", terms: "(camera OR lens OR \"close-up\" OR cinematic OR 镜头 OR カメラ)" },
+  { id: "craft-video-light", lane: "craft", kind: "video", label: "光线和写实", terms: "(lighting OR realistic OR photorealistic OR 光线 OR 写实 OR リアル OR \"9:16\" OR \"16:9\")" },
   // Exploration: new tools and techniques, held to a higher engagement bar.
   { id: "explore-image", lane: "explore", kind: "image", label: "新玩法（图片）", terms: "(new OR trend OR 新玩法 OR 爆款)" },
   { id: "explore-video", lane: "explore", kind: "video", label: "新玩法（视频）", terms: "(new OR trend OR 新玩法 OR 爆款)" },
