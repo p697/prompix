@@ -27,7 +27,7 @@ import { pipelineEnvironment } from "./worker-maintenance.ts";
 import { xAcquisitionsPerDay } from "./x-collection.ts";
 import { convertXDiscovery } from "./x-intake.ts";
 import { publishedXIdentities } from "./x-maintenance-admission.ts";
-import { creatorRules, perCreatorDaily, portraitShare, ruleQuery, ruleQuotas, xSearchRules, type XSearchRule } from "./x-search-rules.ts";
+import { creatorRules, japanDay, perCreatorDaily, portraitShare, ruleQuery, ruleQuotas, xSearchRules, type XSearchRule } from "./x-search-rules.ts";
 import { configuredXSpendBudget } from "./x-spend.ts";
 import type { CreatorCache } from "./creators.ts";
 import type { XMedia, XPost } from "./x-intake.ts";
@@ -60,7 +60,7 @@ async function replayedSearch(directory: string) {
     summary: await json<{ window: { since: string; until: string } } | null>(join(directory, "summary.json"), null) };
 }
 
-export async function runTrial(options: { env: NodeJS.ProcessEnv; root?: string; now?: number; dailyPosts?: number; replay?: string }) {
+export async function runTrial(options: { env: NodeJS.ProcessEnv; root?: string; now?: number; dailyPosts?: number; replay?: string; day?: string }) {
   const env = options.env, root = options.root ?? contentRoot, now = options.now ?? Date.now();
   const id = new Date(now).toISOString().replace(/[:.]/g, "-"), directory = join(root, "trials", id), task = `trial:${id}`;
   await mkdir(directory, { recursive: true });
@@ -70,8 +70,9 @@ export async function runTrial(options: { env: NodeJS.ProcessEnv; root?: string;
     try { return await work(); } finally { entry.finishedAt = Date.now(); await atomic(join(directory, "stages.json"), stages); }
   };
   const replay = options.replay ? await replayedSearch(join(root, "trials", options.replay)) : undefined;
-  const since = replay?.summary ? Date.parse(replay.summary.window.since) / 1000 : Math.floor((now - dayMs) / 1000);
-  const until = replay?.summary ? Date.parse(replay.summary.window.until) / 1000 : Math.floor(now / 1000);
+  const window = replay?.summary ? { since: Date.parse(replay.summary.window.since) / 1000, until: Date.parse(replay.summary.window.until) / 1000 }
+    : options.day ? japanDay(options.day) : { since: Math.floor((now - dayMs) / 1000), until: Math.floor(now / 1000) };
+  const { since, until } = window;
   const dailyPosts = options.dailyPosts ?? xAcquisitionsPerDay(env);
 
   // 1. Search under the approved rules, admitting posts until each rule's quota is met.
@@ -261,8 +262,9 @@ export async function runTrial(options: { env: NodeJS.ProcessEnv; root?: string;
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
   trustSystemCertificates();
-  const replay = process.argv.indexOf("--replay");
-  const result = await runTrial({ env: await pipelineEnvironment(), ...(replay > 0 ? { replay: process.argv[replay + 1] } : {}) });
+  const option = (name: string) => { const index = process.argv.indexOf(name); return index > 0 ? process.argv[index + 1] : undefined; };
+  const replay = option("--replay"), day = option("--day");
+  const result = await runTrial({ env: await pipelineEnvironment(), ...(replay ? { replay } : {}), ...(day ? { day } : {}) });
   await writeFile(join(result.directory, "done"), "");
   console.log(JSON.stringify({ event: "trial_finished", directory: result.directory, counts: result.summary.counts }));
 }
