@@ -11,7 +11,7 @@ import UIKit
     private func launch(_ options: [String] = []) {
         app.launchArguments = ["--feed-fixture", fixtureID, "-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh-Hans"] + options
         app.launchPrompix()
-        XCTAssertTrue(app.buttons["discoverySettings"].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.buttons["discoveryFilters"].waitForExistence(timeout: 15))
     }
     private var firstFixtureCard: XCUIElement {
         app.scrollViews["discoveryScroll"].buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'prompt-database-fixture-'" )).firstMatch
@@ -77,9 +77,7 @@ import UIKit
         XCTAssertGreaterThanOrEqual(Set(seeds()).count, 2, "Pull refresh must create a new candidate session")
         scroll.swipeUp(); capture("recommendations-refreshed-feed")
         scroll.swipeDown()
-        let settings = app.buttons["discoverySettings"]
-        if !settings.isHittable { scroll.swipeDown() }
-        settings.tap()
+        app.openPrompixSettings()
         let preferences = app.buttons["recommendationPreferences"]
         for _ in 0..<4 { if preferences.isHittable { break }; app.swipeUp() }
         XCTAssertTrue(preferences.waitForExistence(timeout: 5)); preferences.tap()
@@ -132,7 +130,7 @@ import UIKit
         try data.write(to: directory().appending(path: "catalog.json"), options: .atomic)
         app.launchArguments = ["--feed-legacy-test", fixtureID, "--cached-only", "-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh-Hans"]
         app.launchPrompix()
-        XCTAssertTrue(app.buttons["discoverySettings"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["discoveryFilters"].waitForExistence(timeout: 10))
         app.selectPrompixTab("搜索")
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 3))
         app.typeText("portrait\n")
@@ -188,26 +186,26 @@ import UIKit
         scroll.swipeUp(); capture("visual-feed-02-first-screen")
         scroll.swipeUp(); capture("visual-feed-03-second-screen")
         app.terminate(); launch(["--feed-visual-mix-test"])
-        app.buttons["discoveryFilters"].tap(); app.buttons["最新收录"].tap()
+        app.buttons["discoverySort"].tap(); app.buttons["最新收录"].tap()
         XCTAssertTrue(app.buttons["prompt-database-fixture-9999"].waitForExistence(timeout: 10))
         XCTAssertTrue(try requests().contains { $0["operation"] as? String == "page" && $0["query"] as? String == "__latest__" })
         capture("visual-feed-04-explicit-latest")
-        app.buttons["discoveryFilters"].tap(); app.buttons["推荐"].tap()
+        app.buttons["discoverySort"].tap(); app.buttons["推荐"].tap()
         XCTAssertTrue(firstVisual.waitForExistence(timeout: 10))
     }
 
     func testHomeSkeletonsKeepSectionAnchorsThroughIndependentResponses() throws {
         launch(["--feed-home-loading-test"])
         let root = try directory()
+        // The rails mount inside the feed; their skeletons must keep the same
+        // spacing while the directory and browse responses arrive independently.
         let creators = app.buttons["allCreators"], collections = app.buttons["allCollections"]
-        let heading = app.buttons["discoveryFilters"]
+        XCTAssertTrue(firstFixtureCard.waitForExistence(timeout: 10))
+        app.revealDiscoveryRails()
         XCTAssertTrue(collections.waitForExistence(timeout: 5))
-        XCTAssertTrue(heading.waitForExistence(timeout: 5))
-        let anchors = [creators.frame.minY, collections.frame.minY, heading.frame.minY]
+        let spacing = collections.frame.minY - creators.frame.minY
         func checkAnchors() {
-            for (index, value) in [creators.frame.minY, collections.frame.minY, heading.frame.minY].enumerated() {
-                XCTAssertEqual(value, anchors[index], accuracy: 1, "Section \(index) moved during loading")
-            }
+            XCTAssertEqual(collections.frame.minY - creators.frame.minY, spacing, accuracy: 1, "A rail moved during loading")
         }
         capture("home-loading-01-all-skeletons")
         try FileManager.default.removeItem(at: root.appending(path: "hold-directory"))
@@ -218,6 +216,7 @@ import UIKit
         XCTAssertTrue(firstFixtureCard.waitForExistence(timeout: 15))
         checkAnchors(); capture("home-loading-03-loaded")
         app.terminate(); launch(["--feed-fixture-offline"])
+        app.revealDiscoveryRails()
         XCTAssertTrue(app.buttons["creator-fixture-author-0"].waitForExistence(timeout: 8))
         checkAnchors(); capture("home-loading-04-cached-offline")
     }
@@ -256,7 +255,7 @@ import UIKit
         launch(["--feed-home-loading-test"])
         let root = try directory()
         app.terminate()
-        let preferences: [String: Any] = ["version": 1, "interests": [], "learningEnabled": true, "reduceSuggestive": true,
+        let preferences: [String: Any] = ["version": 1, "interests": [], "learningEnabled": true, "showsSuggestive": false,
             "entries": ["gentle-tarot": ["topics": ["lifestyle"], "kind": "text", "updatedAt": Date().timeIntervalSinceReferenceDate,
                                         "saved": false, "used": false, "dismissed": true]]]
         try JSONSerialization.data(withJSONObject: preferences).write(to: root.appending(path: "recommendation-preferences.json"), options: .atomic)
@@ -274,34 +273,33 @@ import UIKit
     func testHomeFailureAndRetryKeepReservedSpace() throws {
         launch(["--feed-home-loading-test"])
         let root = try directory()
-        let collections = app.buttons["allCollections"], heading = app.buttons["discoveryFilters"]
-        XCTAssertTrue(heading.waitForExistence(timeout: 5))
-        let positions = [collections.frame.minY, heading.frame.minY]
+        let creators = app.buttons["allCreators"], collections = app.buttons["allCollections"]
+        XCTAssertTrue(firstFixtureCard.waitForExistence(timeout: 10))
+        app.revealDiscoveryRails()
+        let spacing = collections.frame.minY - creators.frame.minY
         for gate in ["directory", "browse"] {
             try Data().write(to: root.appending(path: "fail-" + gate))
             try FileManager.default.removeItem(at: root.appending(path: "hold-" + gate))
         }
         try FileManager.default.removeItem(at: root.appending(path: "hold-feed-refresh"))
         XCTAssertTrue(app.buttons["loadCreators"].waitForExistence(timeout: 10))
-        XCTAssertTrue(firstFixtureCard.waitForExistence(timeout: 10))
-        XCTAssertEqual(collections.frame.minY, positions[0], accuracy: 1)
-        XCTAssertEqual(heading.frame.minY, positions[1], accuracy: 1)
+        XCTAssertEqual(collections.frame.minY - creators.frame.minY, spacing, accuracy: 1)
         capture("home-loading-failed")
         try FileManager.default.removeItem(at: root.appending(path: "fail-directory"))
         app.buttons["loadCreators"].tap()
         XCTAssertTrue(app.buttons["creator-fixture-author-0"].waitForExistence(timeout: 10))
-        XCTAssertEqual(collections.frame.minY, positions[0], accuracy: 1)
-        XCTAssertEqual(heading.frame.minY, positions[1], accuracy: 1)
+        XCTAssertEqual(collections.frame.minY - creators.frame.minY, spacing, accuracy: 1)
         capture("home-loading-recovered")
     }
 
     func testCreatorDirectoryControlsRemainReachableAtLargestText() throws {
         guard ProcessInfo.processInfo.environment["PROMPIX_CREATOR_ACCESSIBILITY"] == "1" else { throw XCTSkip("Explicit largest-text acceptance only") }
         launch()
+        app.revealDiscoveryRails()
         app.buttons["allCreators"].tap()
         let filter = app.buttons["creatorDirectoryFilter"], sort = app.buttons["creatorDirectorySort"]
         XCTAssertTrue(filter.waitForExistence(timeout: 10)); XCTAssertTrue(filter.isHittable); XCTAssertTrue(sort.isHittable)
-        filter.tap(); app.buttons["网页"].tap()
+        filter.tap(); app.buttons["视频"].tap()
         sort.tap(); app.buttons["作品数量"].tap()
         XCTAssertTrue(app.buttons["creator-fixture-author-0"].waitForExistence(timeout: 10))
         capture("creator-directory-largest-text-dark")
@@ -333,6 +331,7 @@ import UIKit
 
     func testCreatorDirectoryFiltersSortsSearchesAndOpensMatchingWorks() throws {
         launch(["--feed-detail-preview-test"])
+        app.revealDiscoveryRails()
         app.buttons["allCreators"].tap()
         XCTAssertTrue(app.buttons["creatorDirectoryFilter"].waitForExistence(timeout: 10))
         app.buttons["creatorDirectoryFilter"].tap(); app.buttons["视频"].tap()
@@ -347,7 +346,7 @@ import UIKit
         author.tap()
         let profile = app.scrollViews["creatorProfileScroll"]
         XCTAssertTrue(profile.waitForExistence(timeout: 5))
-        XCTAssertTrue(app.buttons["creatorContentFilter"].exists)
+        XCTAssertTrue(app.buttons["creatorFilter-all"].exists)
         XCTAssertTrue(try requests().contains { $0["operation"] as? String == "creatorWorks" && $0["query"] as? String == "fixture-author-49:video" })
         capture("creator-profile-filter-retained")
         app.navigationBars.buttons.element(boundBy: 0).tap()
@@ -382,9 +381,9 @@ import UIKit
         let loaded = profile.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'prompt-database-fixture-'" )).firstMatch
         XCTAssertTrue(loaded.waitForExistence(timeout: 10))
         let loadedID = loaded.identifier
-        for _ in 0..<3 { if app.buttons["creatorContentFilter"].isHittable { break }; app.swipeDown() }
+        for _ in 0..<3 { if app.buttons["creatorFilter-all"].isHittable { break }; app.swipeDown() }
         try Data().write(to: root.appending(path: "hold-creator"))
-        app.buttons["creatorContentFilter"].tap(); app.buttons["图片"].tap()
+        app.buttons["creatorFilter-image"].tap()
         XCTAssertTrue(app.otherElements["feedLoading"].waitForExistence(timeout: 3))
         XCTAssertFalse(profile.buttons["prompt-database-fixture-0"].exists, "The previous text item cannot remain under the image filter")
         XCTAssertFalse(app.progressIndicators.firstMatch.exists)
@@ -392,12 +391,12 @@ import UIKit
         try FileManager.default.removeItem(at: root.appending(path: "hold-creator"))
         XCTAssertTrue(profile.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'prompt-database-fixture-'" )).firstMatch.waitForExistence(timeout: 10))
         XCTAssertFalse(app.otherElements["feedLoading"].exists)
-        app.buttons["creatorContentFilter"].tap(); app.buttons["Skill"].tap()
+        app.buttons["creatorFilter-all"].tap(); app.buttons["Skill"].tap()
         XCTAssertTrue(app.staticTexts["暂无匹配内容"].waitForExistence(timeout: 8))
         XCTAssertFalse(app.otherElements["feedLoading"].exists, "A confirmed empty result must stop loading")
         capture("polish-04-confirmed-empty-filter")
         try Data().write(to: root.appending(path: "hold-creator"))
-        app.buttons["creatorContentFilter"].tap(); app.buttons["全部"].tap()
+        app.buttons["creatorFilter-all"].tap(); app.buttons["全部"].tap()
         XCTAssertTrue(profile.buttons[loadedID].waitForExistence(timeout: 3), "The cached first page must appear while the next network request is held")
         XCTAssertFalse(app.otherElements["feedLoading"].exists)
         capture("polish-08-cache-before-refresh")
@@ -406,6 +405,7 @@ import UIKit
 
     func testCreatorDirectoryUsesLocalPlaceholdersAndClearsPreviousQuery() throws {
         launch()
+        app.revealDiscoveryRails()
         app.buttons["allCreators"].tap()
         XCTAssertTrue(app.buttons["creator-fixture-author-0"].waitForExistence(timeout: 10))
         let root = try directory()
@@ -449,7 +449,7 @@ import UIKit
         launch()
         XCTAssertTrue(firstFixtureCard.waitForExistence(timeout: 15))
         let allID = firstFixtureCard.identifier
-        let settings = app.buttons["discoverySettings"], top = settings.frame.minY
+        let settings = app.buttons["discoveryFilters"], top = settings.frame.minY
         app.buttons["kind-image"].tap()
         XCTAssertTrue(firstFixtureCard.waitForExistence(timeout: 10))
         let imageID = firstFixtureCard.identifier
@@ -489,7 +489,7 @@ import UIKit
     func testDiscoveryHeaderCollapsesRevealsAndResetsAfterFiltering() throws {
         launch()
         let scroll = app.scrollViews["discoveryScroll"]
-        let settings = app.buttons["discoverySettings"]
+        let settings = app.buttons["discoveryFilters"]
         XCTAssertTrue(firstFixtureCard.waitForExistence(timeout: 15))
         XCTAssertTrue(settings.isHittable)
         let expandedSettingsTop = settings.frame.minY
@@ -521,7 +521,7 @@ import UIKit
 
     func testHomeUsesLatestOrderWithoutLaunchBannerAndPullRefreshes() async throws {
         launch()
-        app.buttons["discoveryFilters"].tap()
+        app.buttons["discoverySort"].tap()
         app.buttons["最新收录"].tap()
         let newest = app.buttons["prompt-database-fixture-9999"]
         XCTAssertTrue(newest.waitForExistence(timeout: 15))
@@ -560,7 +560,7 @@ import UIKit
         app.buttons["kind-all"].tap()
         XCTAssertTrue(added.waitForExistence(timeout: 10))
         app.terminate(); launch(["--feed-fixture-offline"])
-        app.buttons["discoveryFilters"].tap(); app.buttons["最新收录"].tap()
+        app.buttons["discoverySort"].tap(); app.buttons["最新收录"].tap()
         XCTAssertTrue(added.waitForExistence(timeout: 10))
         XCTAssertFalse(app.otherElements["catalogUpdateStatus"].exists)
         capture("refresh-04-offline-cache")
@@ -607,9 +607,9 @@ import UIKit
         XCTAssertEqual(pages.count, 1, "An appended page must not automatically drain the catalog")
     }
 
-    func testSavedLayoutSharesSettingsPositionAndPreservesSearch() throws {
+    func testSavedLayoutSharesSettingsPosition() throws {
         launch()
-        let settingsFrame = app.buttons["discoverySettings"].frame
+        let settingsFrame = app.buttons["discoveryFilters"].frame
         firstDetail()
         app.buttons["detailFavorite"].tap()
         app.buttons["closePromptDetail"].tap()
@@ -618,15 +618,11 @@ import UIKit
         XCTAssertTrue(savedSettings.waitForExistence(timeout: 5))
         XCTAssertEqual(savedSettings.frame.minX, settingsFrame.minX, accuracy: 1)
         XCTAssertEqual(savedSettings.frame.minY, settingsFrame.minY, accuracy: 1)
-        let card = app.buttons["prompt-database-fixture-0"]
-        XCTAssertTrue(card.isHittable)
-        capture("motion-03-saved-gallery")
-        let field = app.searchFields.firstMatch
-        field.tap(); field.typeText("no-matching-item\n")
-        XCTAssertFalse(card.exists)
-        app.buttons["savedCreatorsScope"].tap()
-        XCTAssertFalse(card.exists)
-        capture("motion-04-saved-search-empty")
+        XCTAssertTrue(app.buttons["deck-all"].isHittable)
+        capture("motion-03-saved-decks")
+        app.buttons["创作者"].tap()
+        XCTAssertFalse(app.buttons["deck-all"].exists)
+        capture("motion-04-saved-creators")
     }
 
     func testSavedLayoutAtAccessibilityTextKeepsControlsReachable() throws {
@@ -636,12 +632,9 @@ import UIKit
         app.buttons["closePromptDetail"].tap()
         app.selectPrompixTab("收藏")
         XCTAssertTrue(app.buttons["savedSettings"].isHittable)
-        XCTAssertTrue(app.searchFields.firstMatch.isHittable)
-        XCTAssertTrue(app.buttons["savedPromptsScope"].isHittable)
-        XCTAssertTrue(app.buttons["savedCreatorsScope"].isHittable)
-        let filter = app.buttons["savedKindFilter"]
-        XCTAssertTrue(filter.isHittable)
-        XCTAssertFalse(filter.frame.intersects(app.buttons["savedCreatorsScope"].frame))
+        XCTAssertTrue(app.buttons["卡组"].isHittable)
+        XCTAssertTrue(app.buttons["创作者"].isHittable)
+        XCTAssertTrue(app.buttons["deck-all"].isHittable)
         capture("motion-accessibility-saved")
         try app.performAccessibilityAudit(for: [.hitRegion, .sufficientElementDescription])
         app.buttons["savedSettings"].tap()
@@ -660,18 +653,18 @@ import UIKit
         XCTAssertFalse(app.progressIndicators.firstMatch.exists)
         XCTAssertTrue(app.buttons["copyPrompt"].exists)
         XCTAssertFalse(app.buttons["copyPrompt"].isEnabled)
-        XCTAssertTrue(app.buttons["usePrompt"].exists)
+        XCTAssertTrue(app.buttons["copyPrompt"].exists)
         XCTAssertTrue(app.buttons["sharePrompt"].exists)
         XCTAssertTrue(app.buttons["detailFavorite"].exists)
         capture("progressive-01-image-before-response")
         let pane = app.scrollViews["detailReadingPane"]
         pane.swipeUp(velocity: .slow)
         for _ in 0..<30 {
-            if app.buttons["usePrompt"].frame.width < 80 { break }
+            if app.buttons["copyPrompt"].frame.width < 80 { break }
             try await Task.sleep(for: .milliseconds(100))
         }
         let pendingY = title.frame.minY
-        let pendingActionWidth = app.buttons["usePrompt"].frame.width
+        let pendingActionWidth = app.buttons["copyPrompt"].frame.width
         XCTAssertLessThan(pendingActionWidth, 80, "Scrolling a pending detail should collapse its actions")
         capture("progressive-02-scrolled-before-response")
         try Data().write(to: directory().appending(path: "release-detail"))
@@ -679,7 +672,7 @@ import UIKit
         XCTAssertTrue(app.buttons["copyPrompt"].wait(for: \.isEnabled, toEqual: true, timeout: 8))
         XCTAssertFalse(app.otherElements["promptBodySkeleton"].exists)
         XCTAssertEqual(title.frame.minY, pendingY, accuracy: 5, "Completing the body must preserve reading position")
-        XCTAssertEqual(app.buttons["usePrompt"].frame.width, pendingActionWidth, accuracy: 2, "Body completion must preserve the compact action bar")
+        XCTAssertEqual(app.buttons["copyPrompt"].frame.width, pendingActionWidth, accuracy: 2, "Body completion must preserve the compact action bar")
         capture("progressive-03-complete-same-position")
         app.buttons["closePromptDetail"].tap()
         XCTAssertTrue(card.waitForExistence(timeout: 5)); card.tap()
@@ -703,7 +696,7 @@ import UIKit
             XCTAssertFalse(app.progressIndicators.firstMatch.exists)
             XCTAssertTrue(app.buttons["copyPrompt"].exists)
             XCTAssertFalse(app.buttons["copyPrompt"].isEnabled)
-            XCTAssertTrue(app.buttons["usePrompt"].exists)
+            XCTAssertTrue(app.buttons["copyPrompt"].exists)
             XCTAssertTrue(app.buttons["sharePrompt"].exists)
             XCTAssertTrue(app.buttons["detailFavorite"].exists)
             capture("progressive-08-preview-type-\(index)")
@@ -734,7 +727,7 @@ import UIKit
         XCTAssertEqual(app.staticTexts["detailTitle"].label, "Database item 0000")
         XCTAssertTrue(app.buttons["copyPrompt"].exists)
         XCTAssertFalse(app.buttons["copyPrompt"].isEnabled)
-        XCTAssertTrue(app.buttons["usePrompt"].exists)
+        XCTAssertTrue(app.buttons["copyPrompt"].exists)
         XCTAssertTrue(app.buttons["sharePrompt"].exists)
         XCTAssertTrue(app.buttons["detailFavorite"].exists)
         XCTAssertFalse(app.progressIndicators.firstMatch.exists)
@@ -769,13 +762,14 @@ import UIKit
         guard ProcessInfo.processInfo.environment["PROMPIX_DATABASE_LIVE_UI"] == "1" else { throw XCTSkip("Explicit live acceptance only") }
         app.launchArguments = ["--feed-live-test", fixtureID, "-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh-Hans"]
         app.launchPrompix()
-        XCTAssertTrue(app.buttons["discoverySettings"].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.buttons["discoveryFilters"].waitForExistence(timeout: 15))
         capture("polish-live-01-home")
         search("盐水礼服")
         let card = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'prompt-'")).firstMatch
         XCTAssertTrue(card.waitForExistence(timeout: 20)); card.tap()
         XCTAssertTrue(app.buttons["copyPrompt"].waitForExistence(timeout: 20))
         let pane = app.scrollViews["detailReadingPane"]
+        if !app.buttons["creatorByline"].exists { app.expandPromptInformation() }
         for _ in 0..<6 { if app.buttons["creatorByline"].isHittable { break }; pane.swipeUp() }
         XCTAssertTrue(app.buttons["creatorByline"].waitForExistence(timeout: 5)); app.buttons["creatorByline"].tap()
         let profile = app.scrollViews["creatorProfileScroll"]
@@ -801,7 +795,7 @@ import UIKit
         guard ProcessInfo.processInfo.environment["PROMPIX_DATABASE_LIVE_UI"] == "1" else { throw XCTSkip("Explicit live acceptance only") }
         app.launchArguments = ["--feed-live-test", fixtureID, "-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh-Hans"]
         app.launchPrompix()
-        XCTAssertTrue(app.buttons["discoverySettings"].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.buttons["discoveryFilters"].waitForExistence(timeout: 15))
         for (query, id) in [("给想逃离", "tiny-island"), ("把品牌网站变成", "x-post-2109576638136795289")] {
             search(query)
             let card = app.buttons["prompt-\(id)"]
@@ -828,7 +822,7 @@ import UIKit
             app.launchArguments = ["--feed-live-test", fixtureID, "-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh-Hans"]
             if offline { app.launchArguments += ["--simulate-network-failure"] }
             app.launchPrompix()
-            XCTAssertTrue(app.buttons["discoverySettings"].waitForExistence(timeout: 15))
+            XCTAssertTrue(app.buttons["discoveryFilters"].waitForExistence(timeout: 15))
         }
         openLive()
         let (feedData, feedResponse) = try await URLSession.shared.data(from: URL(string: "https://api.prompix.dev/v3/feed?sort=latest&locale=zh-Hans&limit=30")!)
@@ -899,7 +893,7 @@ import UIKit
         func open(_ mode: String) {
             app.launchArguments = [mode, fixtureID, "-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh-Hans"]
             app.launchPrompix()
-            XCTAssertTrue(app.buttons["discoverySettings"].waitForExistence(timeout: 15))
+            XCTAssertTrue(app.buttons["discoveryFilters"].waitForExistence(timeout: 15))
         }
         open("--feed-legacy-test")
         let path = try directory()
@@ -974,6 +968,7 @@ import UIKit
 
     func testCreatorDirectoryAndCollectionUseTheirOwnPaginatedQueries() throws {
         launch()
+        app.revealDiscoveryRails()
         let creators = app.buttons["allCreators"]
         XCTAssertTrue(creators.waitForExistence(timeout: 15)); creators.tap()
         XCTAssertTrue(app.buttons["creator-fixture-author-0"].waitForExistence(timeout: 10))

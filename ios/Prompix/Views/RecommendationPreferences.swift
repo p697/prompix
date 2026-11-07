@@ -18,7 +18,7 @@ struct InterestSelection: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: typeSize.isAccessibilitySize ? 1 : 2), spacing: 10) {
-                ForEach(InterestCatalog.topics) { topic in
+                ForEach(InterestCatalog.offered) { topic in
                     let selected = library.recommendations.interests.contains(topic.id)
                     Button {
                         var values = library.recommendations.interests
@@ -35,6 +35,7 @@ struct InterestSelection: View {
                                 .font(.system(size: typeSize.isAccessibilitySize ? 28 : 20))
                                 .frame(width: typeSize.isAccessibilitySize ? 34 : 22).foregroundStyle(Palette.accent)
                             Text(topic.title).font(.subheadline.weight(selected ? .semibold : .regular))
+                                .lineLimit(typeSize.isAccessibilitySize ? nil : 1).minimumScaleFactor(0.8)
                                 .fixedSize(horizontal: false, vertical: true)
                             Spacer(minLength: 0)
                             Image(systemName: selected ? "checkmark.circle.fill" : "circle")
@@ -49,17 +50,6 @@ struct InterestSelection: View {
                         .accessibilityAddTraits(selected ? .isSelected : [])
                         .accessibilityIdentifier("interest-\(topic.id)")
                 }
-            }
-            VStack(alignment: .leading, spacing: 8) {
-                Toggle(RecommendationCopy.text("comfort.title"), isOn: Binding(get: { library.recommendations.reduceSuggestive }, set: { library.recommendations.setReduceSuggestive($0) }))
-                    .accessibilityIdentifier("reduceSuggestiveRecommendations")
-                if requiredCount == nil {
-                    Text(RecommendationCopy.text("comfort.description")).font(.footnote).foregroundStyle(Palette.muted)
-                }
-            }
-            if requiredCount == nil {
-                Text(RecommendationCopy.text("interests.private"))
-                    .font(.footnote).foregroundStyle(Palette.muted).fixedSize(horizontal: false, vertical: true)
             }
             if library.recommendations.storageFailed {
                 Text(RecommendationCopy.text("preferences.failed")).font(.footnote).foregroundStyle(Palette.muted)
@@ -85,9 +75,12 @@ struct RecommendationPreferences: View {
             VStack(alignment: .leading, spacing: 28) {
                 InterestSelection()
                 VStack(alignment: .leading, spacing: 8) {
+                    Toggle(RecommendationCopy.text("suggestive.title"), isOn: Binding(get: { library.recommendations.showsSuggestive }, set: { value in Task { await library.setShowsSuggestive(value) } }))
+                        .accessibilityIdentifier("showsSuggestiveContent").tint(Palette.muted)
+                }
+                VStack(alignment: .leading, spacing: 8) {
                     Toggle(RecommendationCopy.text("learning.title"), isOn: Binding(get: { library.recommendations.learningEnabled }, set: { library.recommendations.setLearning($0) }))
-                        .accessibilityIdentifier("recommendationLearning")
-                    Text(RecommendationCopy.text("learning.description")).font(.footnote).foregroundStyle(Palette.muted)
+                        .accessibilityIdentifier("recommendationLearning").tint(Palette.muted)
                 }
                 Button(RecommendationCopy.text("reset.title"), role: .destructive) { confirmsReset = true }
                     .frame(minHeight: 44).accessibilityIdentifier("resetRecommendations")

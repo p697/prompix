@@ -144,7 +144,9 @@ test("full source input is never truncated to fit the character budget", async (
   assert.equal(result.report.requests, 1); assert.equal(result.report.preflightDeferred, 1);
   assert.ok(sent.length <= 3); assert.ok(JSON.stringify(sent).length <= 36000);
   for (const input of sent) assert.equal(input.prompt, items.find(item => item.id === input.id)?.prompt);
-  assert.match(automaticReviewEligibility(items[3])!, /Complete source exceeds/);
+  assert.match(automaticReviewEligibility(items[3])!, /publishable length/, "Instructions too long to publish are not worth reviewing");
+  const wide = { ...candidate("wide", "Copy every step. " + "q".repeat(29000)), summary: "s".repeat(8000) };
+  assert.match(automaticReviewEligibility(wide)!, /Complete source exceeds/);
 });
 
 test("published edits lead the queue and source/modality rotation changes the first new shelf", () => {

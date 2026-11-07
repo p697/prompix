@@ -25,8 +25,11 @@ export async function publishedXIdentities(db: Database): Promise<Set<string>> {
 }
 
 /** No remote X call: bound draft maintenance to available editorial capacity, never live inventory. */
+/** `minimumDrafts` lets scheduled maintenance recheck a few drafts even after the day's
+ * editorial capacity is spent: a post a week old stays verified for a week, long enough for
+ * editorial review to reach it. */
 export async function prepareXMaintenanceAdmission(root: string, environment: NodeJS.ProcessEnv = process.env,
-  now = new Date(), readPublished = () => withPublisherDatabase(publishedXIdentities, environment)): Promise<XMaintenanceAdmission | undefined> {
+  now = new Date(), readPublished = () => withPublisherDatabase(publishedXIdentities, environment), minimumDrafts = 0): Promise<XMaintenanceAdmission | undefined> {
   // Legacy publishers keep the existing conservative route until authoritative history is available.
   if (environment.PROMPIX_DATABASE_ENABLED !== "true") return;
   const day = now.toISOString().slice(0, 10);
@@ -38,5 +41,5 @@ export async function prepareXMaintenanceAdmission(root: string, environment: No
   const limit = windowBudget(reviewRequestLimit(environment.PROMPIX_EDITORIAL_MAX_REQUESTS), now);
   const blocked = ledger?.attempts.some(attempt => attempt.state !== "completed") ?? false;
   return { publishedIDs: await readPublished(), attemptedIDs: new Set(ledger?.attempts.flatMap(attempt => attempt.candidateIDs) ?? []),
-    maxDrafts: provider === "codex" && !blocked ? Math.max(0, limit - (ledger?.requests ?? 0)) * 3 : 0 };
+    maxDrafts: Math.max(minimumDrafts, provider === "codex" && !blocked ? Math.max(0, limit - (ledger?.requests ?? 0)) * 3 : 0) };
 }

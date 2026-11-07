@@ -1,7 +1,7 @@
 import { en } from "./locales/en.ts";
 import { zh } from "./locales/zh.ts";
 
-export type Kind = "text" | "image" | "video" | "web" | "skill";
+export type Kind = "text" | "image" | "video";
 export type LegalPage = "support" | "privacy" | "content" | "report";
 export type LegalPages = Record<LegalPage, { title: string; intro: string; body: string }>;
 
@@ -22,8 +22,8 @@ export interface Messages {
   prompt: {
     copy: string; copied: string; copyFailed: string; prompt: string; translated: string; original: string; expand: string;
     usage: string; details: string; type: string; model: string; tags: string; source: string; license: string; published: string;
-    viewSource: string; profile: string; openTool: (host: string) => string; repository: string; report: string;
-    moreFrom: (name: string) => string; moreLike: string; skillFiles: string; unavailable: string; previewNote: string;
+    viewSource: string; profile: string; openTool: (host: string) => string; report: string;
+    moreFrom: (name: string) => string; moreLike: string; unavailable: string; previewNote: string;
   };
   footer: { explore: string; prompix: string; project: string; github: string; license: string; note: string; languages: string };
   legal: LegalPages & { updated: string; privacyUpdated: string; reportID: string; supportLink: string; privacyLink: string; contentLink: string; reportLink: string };
@@ -72,5 +72,7 @@ export function resolveLocale(pathname: string): { locale: Locale; path: string 
 /** Locale-prefixed path; `path` is locale-independent and starts with "/". */
 export const localePath = (locale: Locale, path: string) => path === "/" ? (locale.prefix || "/") : locale.prefix + path;
 
-export const kindSlugs: Record<Kind, string> = { image: "images", video: "videos", text: "text", web: "websites", skill: "skills" };
+export const kindSlugs: Record<Kind, string> = { image: "images", video: "videos", text: "text" };
+/** Categories retired on 2026-11-07; their old pages redirect to Explore. */
+export const retiredKindSlugs = ["websites", "skills"];
 export const kindFromSlug = (slug: string) => (Object.keys(kindSlugs) as Kind[]).find(kind => kindSlugs[kind] === slug);

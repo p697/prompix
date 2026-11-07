@@ -39,12 +39,6 @@ function mediaColumn(locale: Locale, item: Item) {
   else if (images.length)
     media = html`<img class="media-main" src="${images[0]}" width="${width}" height="${height}" alt="${item.title}" fetchpriority="high">
 ${images.length > 1 ? html`<div class="media-more">${images.slice(1).map(src => html`<img src="${src}" width="600" height="600" alt="" loading="lazy" decoding="async">`)}</div>` : ""}`;
-  else if (kind === "skill")
-    media = html`<pre class="skill-file skill-file-large" aria-hidden="true"><span class="skill-file-name">SKILL.md</span>
-<span class="dim">---</span>
-<span class="key">name:</span> ${item.skill?.name ?? item.title}
-<span class="key">description:</span> ${item.summary}
-<span class="dim">---</span></pre>`;
   else media = cover(item, m.kinds.one[kind], "large");
   return html`<figure class="media">${media}<figcaption>${item.previewLabel}</figcaption></figure>`;
 }
@@ -61,7 +55,6 @@ function details(locale: Locale, item: Item) {
     [m.prompt.source, source ? html`<a href="${source}" rel="nofollow noopener" target="_blank">${item.source.author ?? item.source.name} ${icons.external}</a>` : item.source.author ?? item.source.name],
     [m.prompt.license, item.source.license],
     published ? [m.prompt.published, html`<time datetime="${item.publishedAt}">${published}</time>`] : undefined,
-    item.skill?.files?.length ? [m.prompt.skillFiles, html`<code>${item.skill.files.join(", ")}</code>`] : undefined,
   ].filter(row => !!row);
   const tags = item.tags.filter(tag => locale.fits(tag) || !cjk.test(tag)).slice(0, 12);
   return html`<section class="details" aria-labelledby="details-heading"><h2 id="details-heading">${m.prompt.details}</h2>
@@ -80,7 +73,6 @@ export async function prompt(locale: Locale, id: string, env: Env, ctx: Executio
     .then(page => page.items.filter(card => card.id !== id && listable(card) && (!!creator || locale.fits(card.title))).slice(0, 8))
     .catch(() => []);
   const tool = safeLink(item.toolURL);
-  const repositoryURL = safeLink(item.skill?.installURL ?? item.skill?.repository);
   const source = safeLink(item.source.url);
   const image = isMedia(item.media?.imageURL) ? item.media!.imageURL : undefined;
   // A language version is worth indexing only when it has a translation or its base title reads naturally there.
@@ -100,8 +92,7 @@ ${creator ? html`<a class="byline" href="${localePath(locale, "/explore")}?creat
 <div class="actions">
 <button type="button" class="button" data-copy="${translated ? "prompt-translated" : "prompt-original"}" data-copied="${m.prompt.copied}" data-failed="${m.prompt.copyFailed}">${m.prompt.copy}</button>
 ${tool ? html`<a class="button button-quiet" href="${tool}" rel="noopener" target="_blank">${m.prompt.openTool(hostOf(tool))} ${icons.external}</a>` : ""}
-${repositoryURL ? html`<a class="link" href="${repositoryURL}" rel="noopener" target="_blank">${m.prompt.repository}${icons.external}</a>`
-    : source ? html`<a class="link" href="${source}" rel="nofollow noopener" target="_blank">${m.prompt.viewSource}${icons.external}</a>` : ""}
+${source ? html`<a class="link" href="${source}" rel="nofollow noopener" target="_blank">${m.prompt.viewSource}${icons.external}</a>` : ""}
 <span class="copy-status" role="status" aria-live="polite"></span>
 </div>
 ${promptBlock(locale, item, original, translated)}
@@ -137,6 +128,6 @@ ${related.length ? html`<section class="related" aria-labelledby="related-headin
         ],
       }],
     }],
-  }, body, kind === "skill" ? "prompt-page skill" : "prompt-page");
+  }, body, "prompt-page");
 }
 

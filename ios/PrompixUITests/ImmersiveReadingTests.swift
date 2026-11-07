@@ -49,17 +49,19 @@ import UIKit
     }
 
     func testDiscoverChromeAndCollectionsNavigation() {
-        XCTAssertTrue(app.buttons["discoverySettings"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["discoveryFilters"].waitForExistence(timeout: 10))
         XCTAssertFalse(app.tabBars.buttons["专题"].exists)
         capture("immersive-01-home")
         drag(from: 0.78, to: 0.30)
-        XCTAssertTrue(NSPredicate(format: "hittable == false").evaluate(with: app.buttons["discoverySettings"]))
+        XCTAssertTrue(NSPredicate(format: "hittable == false").evaluate(with: app.buttons["discoveryFilters"]))
         capture("immersive-02-header-hidden")
         drag(from: 0.42, to: 0.60)
-        XCTAssertTrue(app.buttons["discoverySettings"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["discoveryFilters"].waitForExistence(timeout: 3))
         capture("immersive-03-header-return")
-        app.swipeDown(); app.swipeDown()
+        app.revealDiscoveryRails()
         let all = app.buttons["allCollections"]
+        for _ in 0..<3 { if all.isHittable { break }; app.scrollViews["discoveryScroll"].swipeUp(velocity: .slow) }
+        capture("immersive-03b-rails-in-feed")
         XCTAssertTrue(all.waitForExistence(timeout: 3)); all.tap()
         XCTAssertTrue(app.buttons["collection-play"].waitForExistence(timeout: 3))
         capture("immersive-04-collections")
@@ -76,10 +78,10 @@ import UIKit
         XCTAssertTrue(app.buttons["copyPrompt"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["closePromptDetail"].isHittable)
         capture("immersive-06-image-detail")
-        let expandedWidth = app.buttons["usePrompt"].frame.width
+        let expandedWidth = app.buttons["copyPrompt"].frame.width
         drag(from: 0.75, to: 0.28)
         XCTAssertTrue(app.otherElements["readingActionsCompact"].waitForExistence(timeout: 3))
-        XCTAssertLessThan(app.buttons["usePrompt"].frame.width, expandedWidth - 30)
+        XCTAssertLessThan(app.buttons["copyPrompt"].frame.width, expandedWidth - 30)
         capture("immersive-07-reading-compact")
         app.buttons["copyPrompt"].tap()
         XCTAssertEqual(app.buttons["copyPrompt"].label, "已复制")
@@ -109,7 +111,7 @@ import UIKit
         app.buttons["prompt-gentle-tarot"].tap()
         app.expandPromptInformation()
         let report = app.descendants(matching: .any)["reportContent"]
-        for _ in 0..<5 { if report.isHittable { break }; drag(from: 0.72, to: 0.38) }
+        for _ in 0..<8 { if report.isHittable { break }; drag(from: 0.72, to: 0.38) }
         XCTAssertTrue(report.isHittable)
         capture("immersive-13-source-disclosure")
     }
@@ -121,16 +123,138 @@ import UIKit
         XCTAssertTrue(app.buttons["copyPrompt"].waitForExistence(timeout: 3))
         XCTAssertFalse(app.buttons["expandPrompt"].exists)
         capture("immersive-10-text-detail")
-        app.buttons["usePrompt"].tap()
-        XCTAssertTrue(app.buttons["handoffOpen"].waitForExistence(timeout: 3))
+        app.buttons["copyPrompt"].tap()
         capture("immersive-11-use-sheet")
     }
+    func testDecksCollectSavedWorks() {
+        app.selectPrompixTab("收藏")
+        XCTAssertTrue(app.buttons["newDeck"].waitForExistence(timeout: 5))
+        app.buttons["newDeck"].tap()
+        let name = app.alerts.textFields.firstMatch
+        XCTAssertTrue(name.waitForExistence(timeout: 3)); name.typeText("Weekend")
+        app.alerts.buttons["创建"].tap()
+        XCTAssertTrue(app.buttons["deck-all"].waitForExistence(timeout: 3))
+        capture("decks-01-grid")
+        app.selectPrompixTab("搜索")
+        let field = app.searchFields["搜索 Prompt、Skills 或创作者"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5)); field.tap(); field.typeText("小岛\n")
+        app.buttons["prompt-tiny-island"].tap()
+        app.buttons["detailFavorite"].tap()
+        let deck = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'pickDeck-'")).firstMatch
+        XCTAssertTrue(deck.waitForExistence(timeout: 3)); deck.tap()
+        XCTAssertTrue(deck.isSelected)
+        capture("decks-02-picker")
+        app.buttons["pickerDone"].tap()
+        app.buttons["closePromptDetail"].tap()
+        app.selectPrompixTab("收藏")
+        let tile = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'deck-' AND identifier != 'deck-all'")).firstMatch
+        XCTAssertTrue(tile.waitForExistence(timeout: 3))
+        XCTAssertEqual(tile.value as? String, "1 张")
+        tile.tap()
+        XCTAssertTrue(app.buttons["prompt-tiny-island"].waitForExistence(timeout: 3))
+        capture("decks-03-deck")
+        app.buttons["deckActions"].tap(); app.buttons["删除卡组"].tap()
+        app.buttons["删除卡组"].firstMatch.tap()
+        XCTAssertTrue(app.buttons["newDeck"].waitForExistence(timeout: 3))
+        app.buttons["deck-all"].tap()
+        app.buttons["prompt-tiny-island"].press(forDuration: 0.8)
+        app.buttons["取消收藏"].tap()
+    }
+    func testPeekShowsTheWorkWithItsActions() {
+        let card = app.scrollViews["discoveryScroll"].buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'prompt-'")).firstMatch
+        XCTAssertTrue(card.waitForExistence(timeout: 10))
+        card.press(forDuration: 1.0)
+        XCTAssertTrue(app.buttons["复制 Prompt"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["收藏 Prompt"].exists)
+        capture("peek-01-preview")
+        app.buttons["复制 Prompt"].tap()
+        XCTAssertTrue(card.waitForExistence(timeout: 3))
+    }
+    /// Uses the live content service, since bundled works carry no creator identities.
+    func testCreatorPageLeadsWithSaving() throws {
+        guard ProcessInfo.processInfo.environment["PROMPIX_LIVE_UI"] == "1" else { throw XCTSkip("Explicit live service check only") }
+        app.terminate()
+        app.launchArguments = ["-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN"]
+        app.launchPrompix()
+        XCTAssertTrue(app.buttons["discoveryFilters"].waitForExistence(timeout: 15))
+        app.revealDiscoveryRails()
+        let creator = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'creator-'")).firstMatch
+        XCTAssertTrue(creator.waitForExistence(timeout: 5)); creator.tap()
+        let save = app.buttons["saveCreator"]
+        XCTAssertTrue(app.scrollViews["creatorProfileScroll"].waitForExistence(timeout: 8))
+        capture("creator-01-profile")
+        XCTAssertTrue(save.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.descendants(matching: .any)["creatorExternalProfile"].exists)
+        save.tap()
+        XCTAssertEqual(save.label, "取消收藏创作者")
+        save.tap()
+        XCTAssertEqual(save.label, "收藏创作者")
+    }
+    /// Live: an enriched image and video show their needs, glow and shots.
+    func testEnrichedDetailsShowNeedsAndShots() throws {
+        guard ProcessInfo.processInfo.environment["PROMPIX_LIVE_UI"] == "1" else { throw XCTSkip("Explicit live service check only") }
+        app.terminate()
+        app.launchArguments = ["-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN"]
+        app.launchPrompix()
+        for kind in ["kind-image", "kind-video"] {
+            XCTAssertTrue(app.buttons[kind].waitForExistence(timeout: 15)); app.buttons[kind].tap()
+            sleep(4) // Let the served page replace the cached one before choosing a card.
+            let card = app.scrollViews["discoveryScroll"].buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'prompt-'")).firstMatch
+            XCTAssertTrue(card.waitForExistence(timeout: 15)); card.tap()
+            XCTAssertTrue(app.buttons["copyPrompt"].waitForExistence(timeout: 15))
+            sleep(2)
+            capture("enriched-\(kind)")
+            if kind == "kind-video" {
+                let shots = app.descendants(matching: .any)["promptShots"]
+                for _ in 0..<4 { if shots.exists { break }; app.swipeUp() }
+                capture("enriched-video-shots")
+            }
+            app.buttons["closePromptDetail"].tap()
+        }
+    }
+    /// Live: a detail opened while a served page replaces the cached one stays open.
+    func testDetailSurvivesThePageThatReplacesItsCard() throws {
+        guard ProcessInfo.processInfo.environment["PROMPIX_LIVE_UI"] == "1" else { throw XCTSkip("Explicit live service check only") }
+        app.terminate()
+        app.launchArguments = ["-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN"]
+        app.launchPrompix()
+        for kind in ["kind-image", "kind-video", "kind-all"] {
+            XCTAssertTrue(app.buttons[kind].waitForExistence(timeout: 15)); app.buttons[kind].tap()
+            let card = app.scrollViews["discoveryScroll"].buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'prompt-'")).firstMatch
+            XCTAssertTrue(card.waitForExistence(timeout: 15)); card.tap()
+            XCTAssertTrue(app.buttons["copyPrompt"].waitForExistence(timeout: 15))
+            sleep(4)
+            XCTAssertTrue(app.buttons["copyPrompt"].exists, "The detail must stay open after \(kind) settles")
+            app.buttons["closePromptDetail"].tap()
+        }
+    }
+    /// Live: the served use, model-family and reference filters narrow the feed.
+    func testServedFiltersNarrowTheFeed() throws {
+        guard ProcessInfo.processInfo.environment["PROMPIX_LIVE_UI"] == "1" else { throw XCTSkip("Explicit live service check only") }
+        app.terminate()
+        app.launchArguments = ["-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN"]
+        app.launchPrompix()
+        let filters = app.buttons["discoveryFilters"]
+        XCTAssertTrue(filters.waitForExistence(timeout: 15)); sleep(3)
+        filters.tap()
+        XCTAssertTrue(app.buttons["filterUse"].waitForExistence(timeout: 5))
+        capture("filters-01-menu")
+        app.buttons["filterUse"].tap()
+        XCTAssertTrue(app.buttons["人像写真"].waitForExistence(timeout: 5)); app.buttons["人像写真"].tap()
+        XCTAssertEqual(filters.value as? String, "已筛选")
+        XCTAssertFalse(app.staticTexts["筛选结果"].exists, "A filtered feed keeps the board's context row")
+        let card = app.scrollViews["discoveryScroll"].buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'prompt-'")).firstMatch
+        XCTAssertTrue(card.waitForExistence(timeout: 15))
+        capture("filters-02-portraits")
+        filters.tap(); app.buttons["clearFilters"].tap()
+        XCTAssertEqual(filters.value as? String, "")
+    }
     func testRefinedChromeAndInteractiveReturn() {
-        XCTAssertTrue(app.buttons["discoverySettings"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["discoveryFilters"].waitForExistence(timeout: 10))
         XCTAssertFalse(app.buttons["searchButton"].exists)
         XCTAssertEqual(app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "收藏：")).count, 0)
         capture("refinement-home")
-        app.buttons["discoverySettings"].tap()
+        app.openPrompixSettings()
         XCTAssertTrue(app.buttons["replayOnboarding"].waitForExistence(timeout: 3))
         capture("refinement-settings")
         app.buttons["完成"].tap()
@@ -139,13 +263,13 @@ import UIKit
         XCTAssertTrue(field.waitForExistence(timeout: 5)); field.tap(); field.typeText("小岛\n")
         let card = app.buttons["prompt-tiny-island"]
         XCTAssertTrue(card.waitForExistence(timeout: 5)); card.tap()
-        XCTAssertTrue(app.buttons["usePrompt"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["copyPrompt"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.tabBars.buttons["收藏"].isHittable)
         capture("refinement-detail")
         // A short edge drag cancels the native interactive return.
         app.coordinate(withNormalizedOffset: CGVector(dx: 0.005, dy: 0.48))
             .press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.15, dy: 0.48)), withVelocity: .slow, thenHoldForDuration: 2)
-        XCTAssertTrue(app.buttons["usePrompt"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["copyPrompt"].waitForExistence(timeout: 3))
         XCTAssertFalse(app.tabBars.buttons["收藏"].isHittable)
         capture("refinement-cancelled-return")
         app.coordinate(withNormalizedOffset: CGVector(dx: 0.005, dy: 0.48))
@@ -156,7 +280,7 @@ import UIKit
         app.selectPrompixTab("收藏")
         XCTAssertTrue(app.buttons["savedSettings"].waitForExistence(timeout: 3))
         app.selectPrompixTab("发现")
-        XCTAssertTrue(app.buttons["discoverySettings"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["discoveryFilters"].waitForExistence(timeout: 3))
     }
 
     func testAccessibleReadingActions() throws {
@@ -170,7 +294,7 @@ import UIKit
         XCTAssertTrue(field.waitForExistence(timeout: 5)); field.tap(); field.typeText("塔罗\n")
         app.buttons["prompt-gentle-tarot"].tap()
         XCTAssertTrue(app.buttons["copyPrompt"].waitForExistence(timeout: 3))
-        for id in ["copyPrompt", "editPromptAction", "usePrompt"] {
+        for id in ["copyPrompt", "editPromptAction", "copyPrompt"] {
             let action = app.buttons[id]
             XCTAssertTrue(action.isHittable)
             XCTAssertGreaterThanOrEqual(action.frame.width, 44)
@@ -187,5 +311,4 @@ import UIKit
         app.buttons["editPromptAction"].tap()
         XCTAssertTrue(app.textViews["promptEditor"].waitForExistence(timeout: 3))
     }
-
 }

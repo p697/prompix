@@ -26,7 +26,7 @@ struct FeedCreatorResults: View {
                 ContentRecoveryRow(retryAt: store.retryAt, retryID: "retryCreators") {
                     Task {
                         if !store.failedFirstPage, store.nextCursor != nil, !store.isCached, store.failure as? FeedError != .snapshotExpired { await store.loadMore() }
-                        else { await store.load(query, force: true) }
+                        else { await store.load(query) } // keeps any cards already read
                     }
                 }
             } else if items.isEmpty && !waiting && !store.isLoading {
@@ -65,10 +65,10 @@ struct FeedCreatorSearch: View {
         VStack(alignment: .leading, spacing: 8) {
             if !items.isEmpty {
                 HStack {
-                    Text(String(localized: "创作者")).font(.subheadline.weight(.medium)).accessibilityAddTraits(.isHeader)
+                    Text(String(localized: "创作者")).font(.subheadline.weight(.semibold)).accessibilityAddTraits(.isHeader)
                     Spacer()
                     NavigationLink { CreatorsView(query: query) } label: {
-                        Text(String(localized: "查看全部")).font(.footnote).frame(minHeight: 44)
+                        Text(String(localized: "查看全部")).font(.footnote).foregroundStyle(Palette.muted).frame(minHeight: 44)
                     }.accessibilityIdentifier("allSearchCreators")
                 }
                 ForEach(items.prefix(3)) { item in
@@ -82,7 +82,7 @@ struct FeedCreatorSearch: View {
                         .font(.footnote).frame(minHeight: 44)
                 }
             }
-        }.padding(.horizontal, 20).accessibilityIdentifier("searchCreators")
+        }.padding(.horizontal, 20).padding(.bottom, items.isEmpty ? 0 : 16).accessibilityIdentifier("searchCreators")
             .task(id: query) {
                 do { try await Task.sleep(for: .milliseconds(300)) } catch { return }
                 await store.load(query)

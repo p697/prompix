@@ -1,34 +1,5 @@
 import SwiftUI
 
-/// Feathered reading protection, with no hard edge between chrome and artwork.
-/// The scroll view keeps its original safe-area layout but draws behind this veil.
-struct ReadingTopFade: View {
-    var collapsed = false
-    static let featherHeight: CGFloat = 24
-    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
-    var body: some View {
-        Group {
-            if reduceTransparency { Rectangle().fill(Palette.paper) }
-            else {
-                Rectangle().fill(.regularMaterial).overlay(Palette.paper.opacity(0.12))
-                    .opacity(collapsed ? 0.72 : 1)
-            }
-        }
-        .mask(alignment: .bottom) {
-            VStack(spacing: 0) {
-                Rectangle()
-                LinearGradient(stops: [
-                    .init(color: .black, location: 0),
-                    .init(color: .black.opacity(0.85), location: 0.25),
-                    .init(color: .black.opacity(0.35), location: 0.65),
-                    .init(color: .clear, location: 1)
-                ], startPoint: .top, endPoint: .bottom).frame(height: Self.featherHeight)
-            }
-        }
-        .allowsHitTesting(false).accessibilityHidden(true)
-    }
-}
-
 /// Accumulates deliberate travel, ignores bounce and programmatic layout changes.
 struct ReadingScrollState {
     private var previous: CGFloat?
@@ -110,12 +81,7 @@ extension View {
 private struct ReadingGlass: ViewModifier {
     let prominent: Bool
     @Environment(\.colorScheme) private var colorScheme
-    // Material snapshots can supply temporary UIKit traits during interactive zoom.
-    // Resolve the tint from the page appearance before handing it to Liquid Glass.
-    private var tint: Color {
-        colorScheme == .dark ? Color(red: 210 / 255, green: 224 / 255, blue: 218 / 255)
-            : Color(red: 47 / 255, green: 61 / 255, blue: 55 / 255)
-    }
+    private var tint: Color { Palette.glassAccent(for: colorScheme) }
     @ViewBuilder func body(content: Content) -> some View {
         if #available(iOS 26, *) {
             content.glassEffect(prominent ? .regular.tint(tint).interactive() : .regular.interactive(), in: Capsule())
@@ -130,17 +96,15 @@ private struct ReadingGlass: ViewModifier {
 /// The same geometry is mounted for a card preview and its complete content.
 /// Loading never inserts a new bottom bar or changes the reader's viewport.
 struct ReadingActionBar: View {
-    let isSkill: Bool
     var ready = true
     var collapsed = false
     var copied = false
     var edit: () -> Void = {}
     var copy: () -> Void = {}
-    var use: () -> Void = {}
     @Namespace private var transition
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Environment(\.dynamicTypeSize) private var typeSize
     @Environment(\.colorScheme) private var colorScheme
+    private var title: String { copied ? String(localized: "已复制") : String(localized: "复制 Prompt") }
     var body: some View {
         Group {
             if #available(iOS 26, *) { GlassEffectContainer(spacing: 12) { buttons } }
@@ -148,33 +112,33 @@ struct ReadingActionBar: View {
         }
         .padding(.horizontal, 20).padding(.vertical, 8)
         .frame(maxWidth: 600).frame(maxWidth: .infinity)
-        .animation(reduceMotion ? nil : .spring(response: 0.38, dampingFraction: 0.86), value: collapsed)
+        // The reading fades into paper beneath the buttons rather than running behind them.
+        .background {
+            LinearGradient(stops: [.init(color: Palette.paper.opacity(0), location: 0), .init(color: Palette.paper.opacity(0.92), location: 0.55), .init(color: Palette.paper, location: 1)],
+                           startPoint: .top, endPoint: .bottom)
+                .padding(.top, -40).ignoresSafeArea(edges: .bottom).allowsHitTesting(false)
+        }
+        .animation(reduceMotion ? nil : Motion.chrome, value: collapsed)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier(collapsed ? "readingActionsCompact" : "readingActionsExpanded")
     }
     private var buttons: some View {
         HStack(spacing: 10) {
             Button(action: edit) {
-                Image(systemName: "square.and.pencil").font(.body).frame(width: 50, height: 50)
+                PrompixIcon.edit.image.frame(width: 50, height: 50)
             }.buttonStyle(.plain).readingGlass().actionGlassIdentity("edit", in: transition)
-                .accessibilityLabel(String(localized: "编辑后使用")).accessibilityIdentifier("editPromptAction")
+                .accessibilityLabel(String(localized: "写我的版本")).accessibilityIdentifier("editPromptAction")
             Button(action: copy) {
-                Image(systemName: copied ? "checkmark" : "doc.on.doc").font(.body).frame(width: 50, height: 50)
-            }.buttonStyle(.plain).readingGlass().actionGlassIdentity("copy", in: transition)
-                .accessibilityLabel(copied ? String(localized: "已复制") : String(localized: "复制 Prompt"))
-                .accessibilityIdentifier("copyPrompt").sensoryFeedback(.success, trigger: copied)
-            Button(action: use) {
                 HStack(spacing: 8) {
-                    Image(systemName: "arrow.up.right")
-                    if !collapsed {
-                        Text(typeSize.isAccessibilitySize ? String(localized: "使用") : isSkill ? String(localized: "使用这个 Skill") : String(localized: "使用 Prompt"))
-                            .lineLimit(1).minimumScaleFactor(0.8)
-                    }
+                    (copied ? PrompixIcon.check : PrompixIcon.copy).image
+                    if !collapsed { Text(title).lineLimit(1).minimumScaleFactor(0.8) }
                 }.font(.body.weight(.semibold)).frame(minWidth: 50, maxWidth: collapsed ? 50 : .infinity, minHeight: 50)
-                    .foregroundStyle(colorScheme == .dark ? Color(red: 0.10, green: 0.13, blue: 0.12) : .white)
-            }.buttonStyle(.plain).readingGlass(prominent: true).actionGlassIdentity("use", in: transition)
-                .accessibilityLabel(isSkill ? String(localized: "使用这个 Skill") : String(localized: "使用 Prompt"))
-                .accessibilityIdentifier("usePrompt")
+                    .foregroundStyle(Palette.onGlassAccent(for: colorScheme))
+                    .contentTransition(.opacity)
+            }.buttonStyle(.plain)
+                .readingGlass(prominent: true).actionGlassIdentity("copy", in: transition)
+                .accessibilityLabel(title).accessibilityIdentifier("copyPrompt")
+                .sensoryFeedback(.success, trigger: copied)
         }
         .disabled(!ready)
         .accessibilityHint(ready ? "" : String(localized: "正在加载内容…"))

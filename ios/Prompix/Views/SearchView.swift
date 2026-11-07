@@ -11,25 +11,24 @@ struct SearchView: View {
     @FocusState private var searchFocused: Bool
     @State private var handledActivation: Int?
     @State private var kind: PromptKind?
-    @State private var skillsOnly = false
-    @State private var recent = UserDefaults.standard.stringArray(forKey: "recentSearches") ?? []
+    @State private var recent = SearchView.collapsed(UserDefaults.standard.stringArray(forKey: "recentSearches") ?? [])
     @State private var completedSearch: LocalSearchRequest?
     @State private var matchedPrompts: [Prompt] = []
     @State private var matchedCreators: [CreatorEntry] = []
 
     private var normalizedQuery: String { query.trimmingCharacters(in: .whitespacesAndNewlines) }
-    private var isBrowsing: Bool { normalizedQuery.isEmpty && kind == nil && !skillsOnly }
+    private var isBrowsing: Bool { normalizedQuery.isEmpty && kind == nil }
     private var localSearch: LocalSearchRequest? {
         guard !isBrowsing else { return nil }
         if let store = library.feed?.search {
             // Server results are primary. Scan local full text only when the
             // current request failed without a usable cached page.
-            let feedQuery = FeedQuery(kind: skillsOnly ? "skill" : kind?.rawValue, q: query)
+            let feedQuery = FeedQuery(kind: kind?.rawValue, q: query)
             guard let normalized = try? feedQuery.validated(), store.query == normalized,
                   store.failure != nil, store.items.isEmpty else { return nil }
         }
-        return LocalSearchRequest(query: PromptQuery(text: query, kind: kind, skillsOnly: skillsOnly),
-                                  catalog: library.prompts, includesCreators: library.feed == nil && kind == nil && !skillsOnly && !normalizedQuery.isEmpty)
+        return LocalSearchRequest(query: PromptQuery(text: query, kind: kind),
+                                  catalog: library.prompts, includesCreators: library.feed == nil && kind == nil && !normalizedQuery.isEmpty)
     }
     private var results: [Prompt] { completedSearch == localSearch ? matchedPrompts : [] }
     private var creators: [CreatorEntry] { completedSearch == localSearch ? matchedCreators : [] }
@@ -48,42 +47,34 @@ struct SearchView: View {
     var body: some View {
         NavigationStack {
             searchableContent(ScrollView {
-                LazyVStack(alignment: .leading, spacing: 20) {
-                    KindPicker(selection: $kind, skillsOnly: $skillsOnly)
+                LazyVStack(alignment: .leading, spacing: 20, pinnedViews: [.sectionHeaders]) {
                     if isBrowsing {
-                        Text(String(localized: "搜索全部已发布内容，联网时自动更新。"))
-                            .font(.footnote).foregroundStyle(Palette.muted)
-                            .fixedSize(horizontal: false, vertical: true).padding(.horizontal, 20)
-                        browseSuggestions
-                        CollectionRail()
-                        CreatorRail()
+                        if !recent.isEmpty { recentSearches }
+                        SearchUseTiles()
                     } else {
-                        searchResults
+                        // Kinds narrow a search, so they appear once there is one and stay pinned while results scroll.
+                        Section {
+                            searchResults
+                        } header: {
+                            KindPicker(selection: $kind).padding(.bottom, 4)
+                                .background(Palette.paper)
+                        }
                     }
-                }.padding(.bottom, 28)
+                }.padding(.top, 8).padding(.bottom, 28)
             }
             .accessibilityIdentifier("searchResults")
             .scrollDismissesKeyboard(.interactively)
-            .plainTopEdge().paperScreen()
+            .background(Palette.paper).foregroundStyle(Palette.ink)
             .navigationTitle(String(localized: "搜索"))
-            .navigationBarTitleDisplayMode(.inline)
-            .searchable(text: searchText, isPresented: $searchPresented, prompt: String(localized: "搜索 Prompt、Skills 或创作者"))
+            .navigationBarTitleDisplayMode(.large)
+            .searchable(text: searchText, isPresented: $searchPresented, prompt: String(localized: "搜索 Prompt 或创作者"))
             .autocorrectionDisabled().textInputAutocapitalization(.never)
             .onSubmit(of: .search) { rememberQuery() }
             .pageRefreshable {
                 await library.refresh(force: true)
-                await library.feed?.search.load(FeedQuery(kind: skillsOnly ? "skill" : kind?.rawValue, q: query), force: true)
+                await library.feed?.search.load(FeedQuery(kind: kind?.rawValue, q: query), force: true)
             }
-            .task { await library.refresh() }
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        Task { await library.refresh(force: true) }
-                    } label: {
-                        Label(String(localized: "更新内容"), systemImage: "arrow.clockwise")
-                    }.disabled(library.isRefreshing).accessibilityIdentifier("refreshSearchCatalog")
-                }
-            })
+            .task { await library.refresh() })
         }
         .task(id: isSelected ? activation : nil) {
             guard isSelected, handledActivation != activation else { return }
@@ -123,49 +114,38 @@ struct SearchView: View {
         }
     }
 
-    private var browseSuggestions: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            if !recent.isEmpty {
-                HStack {
-                    Text(String(localized: "最近搜索")).font(.subheadline.weight(.medium))
-                        .accessibilityAddTraits(.isHeader)
-                    Spacer()
-                    Button(String(localized: "清除")) {
-                        recent = []
-                        UserDefaults.standard.removeObject(forKey: "recentSearches")
-                    }.font(.footnote).frame(minHeight: 44).accessibilityIdentifier("clearRecentSearches")
-                }
-                ForEach(recent, id: \.self) { term in
-                    searchSuggestion(term, symbol: "clock")
-                }
-            } else {
-                Text(String(localized: "试试这些用途")).font(.subheadline.weight(.medium))
+    private var recentSearches: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text(String(localized: "最近")).font(.subheadline.weight(.semibold)).foregroundStyle(Palette.ink)
                     .accessibilityAddTraits(.isHeader)
-                ForEach(["塔罗", "网站", "电影"], id: \.self) { term in
-                    searchSuggestion(NSLocalizedString(term, comment: "Suggested search"), symbol: "magnifyingglass")
-                }
+                Spacer()
+                Button(String(localized: "清除")) {
+                    recent = []
+                    UserDefaults.standard.removeObject(forKey: "recentSearches")
+                }.font(.footnote).foregroundStyle(Palette.muted).frame(minHeight: 44).accessibilityIdentifier("clearRecentSearches")
+            }.padding(.horizontal, 20)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(recent, id: \.self) { term in
+                        Button { query = term; rememberQuery() } label: {
+                            Text(term).font(.subheadline).padding(.horizontal, 14).frame(minHeight: 34)
+                                .background(Palette.soft, in: Capsule()).frame(minHeight: 44).contentShape(Rectangle())
+                        }.buttonStyle(.plain).accessibilityIdentifier("searchSuggestion-\(term)")
+                    }
+                }.padding(.horizontal, 20)
             }
-        }.padding(.horizontal, 20)
-    }
-
-    private func searchSuggestion(_ term: String, symbol: String) -> some View {
-        Button {
-            query = term
-            rememberQuery()
-        } label: {
-            HStack(spacing: 12) {
-                Image(systemName: symbol).font(.footnote).foregroundStyle(Palette.muted)
-                Text(term).font(.body)
-                Spacer(minLength: 12)
-                Image(systemName: "arrow.up.left").font(.footnote).foregroundStyle(Palette.muted)
-            }.frame(minHeight: 44).contentShape(Rectangle())
-        }.buttonStyle(.plain).accessibilityIdentifier("searchSuggestion-\(term)")
+        }
     }
 
     @ViewBuilder private var searchResults: some View {
         if let feed = library.feed {
-            if kind == nil && !skillsOnly && !normalizedQuery.isEmpty { FeedCreatorSearch(repository: feed, query: normalizedQuery) }
-            FeedResults(store: feed.search, query: FeedQuery(kind: skillsOnly ? "skill" : kind?.rawValue, q: query), debounce: true, fallback: results)
+            // One stack, so an empty creator section adds no gap above the works.
+            VStack(alignment: .leading, spacing: 0) {
+                if kind == nil && !normalizedQuery.isEmpty { FeedCreatorSearch(repository: feed, query: normalizedQuery) }
+                FeedResults(store: feed.search, query: FeedQuery(kind: kind?.rawValue, q: query), debounce: true, fallback: results)
+                    .environment(\.cardShowsTitle, true)
+            }
         } else { legacyResults }
     }
     @ViewBuilder private var legacyResults: some View {
@@ -213,14 +193,29 @@ struct SearchView: View {
             Text(String(localized: "\(matchedPrompts.count) 条内容")).font(.footnote)
                 .foregroundStyle(Palette.muted).padding(.horizontal, 20)
                 .accessibilityIdentifier("searchResultCount")
-            PromptGrid(items: matchedPrompts).padding(.horizontal, 16)
+            PromptGrid(items: matchedPrompts).padding(.horizontal, 16).environment(\.cardShowsTitle, true)
         }
     }
 
+    /// Keeps the newest of any terms where one extends the other: island, islands, islandsss.
+    static func collapsed(_ terms: [String]) -> [String] {
+        var kept: [String] = []
+        for term in terms {
+            let key = term.folding(options: [.caseInsensitive, .diacriticInsensitive, .widthInsensitive], locale: nil)
+            if !kept.contains(where: {
+                let other = $0.folding(options: [.caseInsensitive, .diacriticInsensitive, .widthInsensitive], locale: nil)
+                return other.hasPrefix(key) || key.hasPrefix(other)
+            }) { kept.append(term) }
+        }
+        return kept
+    }
     private func rememberQuery() {
         guard !normalizedQuery.isEmpty else { return }
+        // A term that extends or shortens another replaces it: typing island, then islands, keeps one.
+        let key = normalizedQuery.folding(options: [.caseInsensitive, .diacriticInsensitive, .widthInsensitive], locale: nil)
         recent = Array(([normalizedQuery] + recent.filter {
-            $0.compare(normalizedQuery, options: [.caseInsensitive, .diacriticInsensitive, .widthInsensitive]) != .orderedSame
+            let other = $0.folding(options: [.caseInsensitive, .diacriticInsensitive, .widthInsensitive], locale: nil)
+            return !other.hasPrefix(key) && !key.hasPrefix(other)
         }).prefix(6))
         UserDefaults.standard.set(recent, forKey: "recentSearches")
     }
@@ -230,4 +225,46 @@ private struct LocalSearchRequest: Equatable {
     let query: PromptQuery
     let catalog: [Prompt]
     let includesCreators: Bool
+}
+
+/// Four uses as photo tiles; the full list sits behind "查看全部".
+private struct SearchUseTiles: View {
+    @Environment(Library.self) private var library
+    private var collections: [Collection] {
+        ["portraits", "graphics", "video"].compactMap { id in Collection.all.first { $0.id == id } }
+    }
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text(String(localized: "按用途")).font(.subheadline.weight(.semibold)).foregroundStyle(Palette.ink)
+                    .accessibilityAddTraits(.isHeader)
+                Spacer()
+                NavigationLink { CollectionsDirectory() } label: {
+                    Text(String(localized: "查看全部")).font(.footnote).foregroundStyle(Palette.muted).frame(minHeight: 44)
+                }.accessibilityIdentifier("searchAllCollections")
+            }
+            LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], spacing: 8) {
+                ForEach(collections) { collection in
+                    NavigationLink { CollectionDetail(collection: collection) } label: { tile(collection) }
+                        .buttonStyle(.cardPress).accessibilityIdentifier("searchUse-\(collection.id)")
+                }
+            }
+        }.padding(.horizontal, 20)
+    }
+    /// The service's browse covers first, then the bundled catalog.
+    private func cover(_ collection: Collection) -> ContentPreview? {
+        let served = library.feed?.browse.value?.collections.first { $0.id == collection.id }?.covers.map(ContentPreview.init) ?? []
+        return (served + collection.previews(in: library)).first { !$0.usesTextArtwork && !library.isRemoved(id: $0.id) }
+    }
+    private func tile(_ collection: Collection) -> some View {
+        ZStack(alignment: .bottomLeading) {
+            Palette.soft
+            if let cover = cover(collection) {
+                Artwork(preview: cover, compact: true, fillsFrame: true, showsVideoBadge: false)
+                LinearGradient(colors: [.black.opacity(0), .black.opacity(0.6)], startPoint: .top, endPoint: .bottom)
+            }
+            Text(collection.title).font(.subheadline.weight(.semibold)).foregroundStyle(.white)
+                .lineLimit(2).multilineTextAlignment(.leading).padding(12)
+        }.frame(height: 84).clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous)).contentShape(Rectangle())
+    }
 }

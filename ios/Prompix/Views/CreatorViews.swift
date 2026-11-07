@@ -99,13 +99,13 @@ enum CreatorDirectory {
 
     static func browse(in items: [Prompt], query: CreatorQuery) -> [CreatorEntry] {
         let matching = items.filter { item in
-            query.kind == nil || (query.kind == "skill" ? item.isSkill : !item.isSkill && item.kind.rawValue == query.kind)
+            query.kind == nil || item.kind.rawValue == query.kind
         }
         let entries = entries(in: matching).filter { $0.creator.matchesSearch(query.q) }
         let works = Dictionary(uniqueKeysWithValues: entries.map { entry in
             (entry.id, matching.filter { $0.creator.map { Library.creatorsMatch($0, entry.creator, in: items) } ?? false })
         })
-        func visual(_ entry: CreatorEntry) -> Int { works[entry.id, default: []].filter { $0.kind != .text && !$0.isSkill }.count }
+        func visual(_ entry: CreatorEntry) -> Int { works[entry.id, default: []].filter { $0.kind != .text }.count }
         func rotation(_ id: String) -> UInt64 {
             (query.day + ":" + id).utf8.reduce(UInt64(14695981039346656037)) { ($0 ^ UInt64($1)) &* 1099511628211 }
         }
@@ -152,7 +152,8 @@ struct CreatorRail: View {
         library.feed == nil ? LocalCreatorRailRequest(catalog: library.prompts, query: CreatorQuery()) : nil
     }
     private var entries: [CreatorEntry] {
-        if let feed = library.feed { return Array(feed.creatorDiscovery.items.prefix(12)).map { CreatorEntry(creator: $0.creator, count: $0.count, preview: feed.creatorPreview($0)) } }
+        // A rail of people with a body of work: one-off accounts stay findable by search.
+        if let feed = library.feed { return Array(feed.creatorDiscovery.items.filter { $0.count >= 3 }.prefix(12)).map { CreatorEntry(creator: $0.creator, count: $0.count, preview: feed.creatorPreview($0)) } }
         return completedLocalRequest == localRequest ? localEntries : []
     }
 
@@ -179,13 +180,8 @@ struct CreatorRail: View {
     private var content: some View {
         let entries = entries
         return VStack(alignment: .leading, spacing: 4) {
-            HStack {
-                Text(String(localized: "创作者")).font(.subheadline.weight(.medium)).accessibilityAddTraits(.isHeader)
-                Spacer()
-                NavigationLink { CreatorsView() } label: {
-                    Text(String(localized: "查看全部")).font(.footnote).frame(minHeight: 44)
-                }.foregroundStyle(Palette.muted).accessibilityIdentifier("allCreators")
-            }.padding(.horizontal, 16)
+            SectionHeader(title: String(localized: "创作者"), linkID: "allCreators") { CreatorsView() }
+                .padding(.horizontal, 20)
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(alignment: .top, spacing: 12) {
                     if entries.isEmpty {
@@ -194,7 +190,7 @@ struct CreatorRail: View {
                         ForEach(entries) { entry in
                             NavigationLink { CreatorDetail(creator: entry.creator, initialPreview: entry.preview) } label: {
                                 CreatorRailCard(entry: entry)
-                            }.buttonStyle(.plain).foregroundStyle(Palette.ink)
+                            }.buttonStyle(.cardPress).foregroundStyle(Palette.ink)
                                 .accessibilityLabel(entry.creator.displayName)
                                 .accessibilityValue(String(localized: "\(entry.count) 条内容"))
                                 .accessibilityIdentifier("creator-\(entry.id)")
@@ -313,8 +309,8 @@ private struct CreatorWorkPreview: View {
     var body: some View {
         Artwork(preview: ContentPreview(card), compact: true, fillsFrame: true, showsVideoBadge: false)
             .overlay(alignment: .topTrailing) {
-                if card.kind == .video || card.kind == .web {
-                    Image(systemName: card.kind == .video ? "play.fill" : "globe")
+                if card.kind == .video {
+                    Image(systemName: "play.fill")
                         .font(.system(size: 10, weight: .semibold)).foregroundStyle(.white)
                         .padding(5).background(.black.opacity(0.45), in: Circle()).padding(5)
                 }
@@ -357,7 +353,7 @@ struct CreatorRow: View {
                 CreatorWorkPreview(card: preview)
                     .frame(width: 82, height: 70).clipShape(RoundedRectangle(cornerRadius: 10))
             } else {
-                Image(systemName: "chevron.right").font(.caption).foregroundStyle(Palette.muted).accessibilityHidden(true)
+                PrompixIcon.chevronRight.image(size: 14).foregroundStyle(Palette.muted).accessibilityHidden(true)
             }
         }
     }
@@ -375,7 +371,7 @@ struct CreatorByline: View {
                     Text(CreatorIdentity.subtitle(creator)).font(.caption).foregroundStyle(Palette.muted)
                 }
                 Spacer(minLength: 0)
-                Image(systemName: "chevron.right").font(.caption).foregroundStyle(Palette.muted)
+                PrompixIcon.chevronRight.image(size: 14).foregroundStyle(Palette.muted)
                     .accessibilityHidden(true)
             }.frame(minHeight: 44).contentShape(Rectangle())
         }.buttonStyle(.plain).accessibilityIdentifier("creatorByline")
@@ -427,23 +423,38 @@ struct CreatorDetail: View {
                             }
                         }
                     }
-                    Link(destination: creator.profileURL) {
-                        Label(String(localized: "查看 \(creator.platformName) 主页"), systemImage: "arrow.up.right")
-                            .font(.subheadline).frame(minHeight: 28)
-                    }.buttonStyle(.bordered).controlSize(.regular)
-                        .accessibilityIdentifier("creatorExternalProfile")
+                    // Saving is the one primary action; the profile link sits beside it.
+                    HStack(spacing: 10) {
+                        Button {
+                            if library.toggleCreator(creator) { savedFeedback.toggle() }
+                        } label: {
+                            PrimaryActionLabel(title: library.isCreatorSaved(creator) ? String(localized: "已收藏") : String(localized: "收藏创作者"),
+                                               compactTitle: library.isCreatorSaved(creator) ? String(localized: "已收藏") : String(localized: "收藏"),
+                                               symbol: library.isCreatorSaved(creator) ? "checkmark" : "bookmark")
+                        }.buttonStyle(.plain)
+                            .accessibilityLabel(library.isCreatorSaved(creator) ? String(localized: "取消收藏创作者") : String(localized: "收藏创作者"))
+                            .accessibilityIdentifier("saveCreator").sensoryFeedback(.selection, trigger: savedFeedback)
+                        Link(destination: creator.profileURL) {
+                            HStack(spacing: 6) {
+                                Text(String(localized: "在 \(creator.platformName) 上查看"))
+                                PrompixIcon.arrowUpRight.image(size: 16)
+                            }.font(.subheadline.weight(.semibold)).lineLimit(1).minimumScaleFactor(0.8)
+                                .frame(maxWidth: .infinity, minHeight: 24).padding(.vertical, 13)
+                                .background(Palette.soft, in: Capsule())
+                        }.buttonStyle(.plain).foregroundStyle(Palette.ink)
+                            .accessibilityIdentifier("creatorExternalProfile")
+                    }
                 }.padding(.horizontal, 20).padding(.vertical, 12)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                VStack(alignment: .leading, spacing: 14) {
-                    ViewThatFits(in: .horizontal) {
-                        HStack { contentHeading; Spacer(); filterPicker }
-                        VStack(alignment: .leading, spacing: 8) { contentHeading; filterPicker }
-                    }.padding(.horizontal, 20)
+                VStack(alignment: .leading, spacing: 10) {
+                    if availableFilters.count > 2 {
+                        ChipRow(values: availableFilters, selection: $filter, title: \.title) { "creatorFilter-\($0.rawValue)" }
+                            .accessibilityIdentifier("creatorContentFilter")
+                    }
                     if let feed = library.feed {
                         OwnedFeedResults(repository: feed, query: FeedQuery(kind: filter == .all ? nil : filter.rawValue, creator: creator.id, sort: "recommended"), fallback: items, initialPreviews: [initialPreview].compactMap { $0 })
                     } else if items.isEmpty {
-                        ContentUnavailableView(String(localized: "暂无匹配内容"), systemImage: "square.grid.2x2",
-                            description: Text(String(localized: "试试其他分类，或清除筛选条件。")))
+                        QuietEmpty(title: String(localized: "这里还没有作品"))
                     } else {
                         PromptGrid(items: items).padding(.horizontal, 16)
                     }
@@ -452,20 +463,11 @@ struct CreatorDetail: View {
         }
         .background(Palette.paper)
         .accessibilityIdentifier("creatorProfileScroll")
-        .navigationTitle(creator.displayName).navigationBarTitleDisplayMode(.inline)
+        .navigationTitle("").navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Button {
-                    if library.toggleCreator(creator) { savedFeedback.toggle() }
-                } label: {
-                    Label(library.isCreatorSaved(creator) ? String(localized: "取消收藏创作者") : String(localized: "收藏创作者"), systemImage: library.isCreatorSaved(creator) ? "bookmark.fill" : "bookmark")
-                        .frame(minWidth: 44, minHeight: 44)
-                }.accessibilityLabel(library.isCreatorSaved(creator) ? String(localized: "取消收藏创作者") : String(localized: "收藏创作者"))
-                    .accessibilityIdentifier("saveCreator").sensoryFeedback(.selection, trigger: savedFeedback)
-            }
-            ToolbarItem(placement: .topBarTrailing) {
                 ShareLink(item: creator.profileURL) {
-                    Label(String(localized: "分享"), systemImage: "square.and.arrow.up")
+                    Label { Text(String(localized: "分享")) } icon: { PrompixIcon.share.image }
                 }.accessibilityIdentifier("shareCreator")
             }
         }
@@ -476,32 +478,17 @@ struct CreatorDetail: View {
 
     private var identity: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(creator.displayName).font(Typography.editorial(.title)).fixedSize(horizontal: false, vertical: true)
-            Text(CreatorIdentity.subtitle(creator)).font(.subheadline).foregroundStyle(Palette.muted)
+            Text(creator.displayName).font(.title.bold()).fixedSize(horizontal: false, vertical: true)
+            Text(CreatorIdentity.subtitle(creator)).font(Typography.meta(size: 12)).foregroundStyle(Palette.muted)
                 .fixedSize(horizontal: false, vertical: true)
             if let feed = library.feed {
                 if let count = (feed.creatorDiscovery.items + feed.creators.items).first(where: { $0.id == creator.id })?.count {
-                    Text(String(localized: "\(count) 条内容")).font(.footnote).foregroundStyle(Palette.muted)
+                    Text(String(localized: "\(count) 条内容")).font(Typography.meta(size: 12)).foregroundStyle(Palette.muted)
                 }
-            } else { Text(String(localized: "\(allItems.count) 条内容")).font(.footnote).foregroundStyle(Palette.muted) }
+            } else { Text(String(localized: "\(allItems.count) 条内容")).font(Typography.meta(size: 12)).foregroundStyle(Palette.muted) }
         }
     }
 
-    private var contentHeading: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(filter == .all ? String(localized: "全部内容") : filter.title)
-                .font(Typography.editorial(.title3)).accessibilityAddTraits(.isHeader)
-            if filter != .all && library.feed == nil {
-                Text(String(localized: "\(items.count) 条内容")).font(.footnote).foregroundStyle(Palette.muted)
-            }
-        }
-    }
-
-    private var filterPicker: some View {
-        Picker(String(localized: "内容类型"), selection: $filter) {
-            ForEach(availableFilters) { value in Text(value.title).tag(value) }
-        }.pickerStyle(.menu).accessibilityIdentifier("creatorContentFilter")
-    }
 }
 
 struct SavedCreators: View {
@@ -521,9 +508,8 @@ struct SavedCreators: View {
             actions: { Button(String(localized: "重新读取收藏")) { library.reloadSavedCreators() }.buttonStyle(.bordered) }
         } else if creators.isEmpty {
             if query.isEmpty {
-                ContentUnavailableView(String(localized: "暂无收藏的创作者"), systemImage: "person.crop.circle",
-                    description: Text(String(localized: "在创作者主页轻点书签，方便下次找到。收藏保存在本机。")))
-            } else { ContentUnavailableView.search(text: query) }
+                QuietEmpty(title: String(localized: "还没有收藏创作者"), message: String(localized: "在创作者主页点「收藏创作者」，下次就能在这里找到。"))
+            } else { QuietEmpty(title: String(localized: "没有找到「\(query)」")) }
         } else {
             LazyVStack(spacing: 20) {
                 ForEach(creators) { creator in
@@ -544,8 +530,8 @@ private enum CreatorIdentity {
     }
 }
 
-private enum CreatorContentFilter: String, CaseIterable, Identifiable {
-    case all, text, image, video, web, skill
+private enum CreatorContentFilter: String, CaseIterable, Identifiable, Hashable {
+    case all, image, video, text
     var id: String { rawValue }
     var title: String {
         switch self {
@@ -553,15 +539,9 @@ private enum CreatorContentFilter: String, CaseIterable, Identifiable {
         case .text: PromptKind.text.title
         case .image: PromptKind.image.title
         case .video: PromptKind.video.title
-        case .web: PromptKind.web.title
-        case .skill: "Skill"
         }
     }
     func includes(_ item: Prompt) -> Bool {
-        switch self {
-        case .all: true
-        case .skill: item.isSkill
-        default: !item.isSkill && item.kind.rawValue == rawValue
-        }
+        self == .all || item.kind.rawValue == rawValue
     }
 }

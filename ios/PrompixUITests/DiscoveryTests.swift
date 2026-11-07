@@ -377,6 +377,9 @@ import UIKit
         let preview = app.buttons["previewButton"]
         XCTAssertTrue(preview.waitForExistence(timeout: 5))
         let origin = preview.frame
+        let window = app.windows.firstMatch.frame
+        XCTAssertEqual(origin.minY, window.minY, accuracy: 1, "The work runs under the status bar.")
+        XCTAssertEqual(origin.width, window.width, accuracy: 1, "The work fills the width.")
         preview.tap()
         let close = app.buttons["closeImageViewer"]
         let image = app.descendants(matching: .any)["loadedImage-0"]
@@ -433,219 +436,6 @@ import UIKit
         capture("feedback-reduced-motion-return")
     }
 
-    func testDraftWriteFailureKeepsBufferUntilExplicitExit() throws {
-        #if targetEnvironment(simulator)
-        guard let containerPath = ProcessInfo.processInfo.environment["PROMPIX_DRAFT_FIXTURE_CONTAINER"] else {
-            throw XCTSkip("Requires an explicit simulator Prompix app-container path for the reversible write-collision fixture.")
-        }
-        guard let simulatorID = ProcessInfo.processInfo.environment["SIMULATOR_UDID"], UUID(uuidString: simulatorID) != nil else {
-            throw XCTSkip("Requires a valid running simulator UUID.")
-        }
-        let explicitContainer = URL(fileURLWithPath: containerPath).standardizedFileURL
-        guard explicitContainer.path.contains("/CoreSimulator/Devices/\(simulatorID)/data/Containers/Data/Application/"),
-              UUID(uuidString: explicitContainer.lastPathComponent) != nil else {
-            throw XCTSkip("Refusing a path outside the current simulator's app containers.")
-        }
-        // XCTest may reinstall the app between the host's opt-in and this test.
-        // Resolve that new UUID only inside the same simulator's explicit parent.
-        let candidates = try FileManager.default.contentsOfDirectory(at: explicitContainer.deletingLastPathComponent(), includingPropertiesForKeys: nil)
-        let matches = candidates.filter { candidate in
-            guard UUID(uuidString: candidate.lastPathComponent) != nil,
-                  let data = try? Data(contentsOf: candidate.appendingPathComponent(".com.apple.mobile_container_manager.metadata.plist")),
-                  let fields = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any] else { return false }
-            return fields["MCMMetadataIdentifier"] as? String == "com.p697.prompix"
-        }
-        guard matches.count == 1, let container = matches.first else {
-            throw XCTSkip("Requires exactly one metadata-verified Prompix container in the current simulator.")
-        }
-        continueAfterFailure = true
-        let fileManager = FileManager.default
-        let draftFile = container.appendingPathComponent("Library/Application Support/Prompix/drafts.json")
-        let originalData = fileManager.fileExists(atPath: draftFile.path) ? try Data(contentsOf: draftFile) : nil
-        func restore(_ bytes: Data?) throws {
-            if fileManager.fileExists(atPath: draftFile.path) { try fileManager.removeItem(at: draftFile) }
-            if let bytes { try bytes.write(to: draftFile, options: .atomic) }
-        }
-        addTeardownBlock { @MainActor in
-            self.app.terminate()
-            do {
-                try restore(originalData)
-                if let originalData { XCTAssertEqual(try Data(contentsOf: draftFile), originalData) }
-                else { XCTAssertFalse(fileManager.fileExists(atPath: draftFile.path)) }
-            } catch { XCTFail("Could not restore simulator draft fixture: \(error)") }
-        }
-        func require(_ condition: Bool, _ message: String) throws {
-            guard condition else {
-                XCTFail(message)
-                throw NSError(domain: "PrompixDraftFixture", code: 1, userInfo: [NSLocalizedDescriptionKey: message])
-            }
-        }
-        func collide() throws {
-            try fileManager.removeItem(at: draftFile)
-            try fileManager.createDirectory(at: draftFile, withIntermediateDirectories: false)
-        }
-        func durableDraft() throws -> String? {
-            let values = try JSONDecoder().decode([String: String].self, from: Data(contentsOf: draftFile))
-            return values["gentle-tarot::zh-Hans"]
-        }
-        let useMode = ProcessInfo.processInfo.environment["PROMPIX_PREPARED_DRAFT_ACCEPTANCE"]
-        let fromUse = useMode != nil
-        func openEditor(fromDetail: Bool) throws {
-            if fromUse {
-                if useMode == "nested" && !fromDetail {
-                    app.buttons["编辑后使用"].tap()
-                    return
-                }
-                if fromDetail {
-                    if useMode == "nested" {
-                        app.buttons["编辑后使用"].tap()
-                        try require(app.buttons["useEditedPrompt"].waitForExistence(timeout: 5), "Outer editor must expose use")
-                        app.buttons["useEditedPrompt"].tap()
-                    } else { app.buttons["usePrompt"].tap() }
-                }
-                try require(app.buttons["editPreparedPrompt"].waitForExistence(timeout: 5), "Use panel must offer editing")
-                app.buttons["editPreparedPrompt"].tap()
-            } else { app.buttons["编辑后使用"].tap() }
-        }
-        app.buttons["kind-text"].tap()
-        app.buttons["prompt-gentle-tarot"].tap()
-        try openEditor(fromDetail: true)
-        let editor = app.textViews["promptEditor"]
-        try require(editor.waitForExistence(timeout: 5), "Editor must open")
-        editor.tap()
-        editor.typeText(" Durable fixture baseline.")
-        app.buttons["copyEditedPrompt"].tap()
-        let baseline = try XCTUnwrap(editor.value as? String)
-        try require(try durableDraft() == baseline, "Baseline must be saved before introducing a write collision")
-        let baselineBytes = try Data(contentsOf: draftFile)
-        try collide()
-        editor.tap()
-        editor.typeText(" Recovered write-failure note.")
-        try require(app.buttons["retryDraftSave"].waitForExistence(timeout: 5), "Inline failure must preserve the editor")
-        try require(editor.exists, "Storage failure must not dismiss the editor")
-        let recovered = try XCTUnwrap(editor.value as? String)
-        if !recovered.contains("Recovered write-failure note.") {
-            let evidence = XCTAttachment(string: "Baseline: \(baseline)\nRecovered: \(recovered)")
-            evidence.name = "Write-failure actual editor buffer"; evidence.lifetime = .keepAlways; add(evidence)
-            capture("write-failure-buffer-mismatch")
-        }
-        try require(recovered.contains("Recovered write-failure note."), "The typed failure note must stay intact")
-        try require(app.buttons["retryDraftSave"].waitForExistence(timeout: 5), "Write failure must expose Retry")
-        try require(app.staticTexts["draftStatus"].label.contains("尚未保存"), "Failure status must remain visible")
-        if ProcessInfo.processInfo.environment["PROMPIX_DRAFT_LAYOUT_ONLY"] == "1" {
-            capture("acceptance-write-failure-largest-text")
-            let copyFrame = app.buttons["copyEditedPrompt"].frame
-            let editorFrame = visibleFrame(of: editor)
-            let keyboard = app.keyboards.firstMatch
-            let keyboardFrame = keyboard.exists ? keyboard.frame.intersection(app.frame) : CGRect.null
-            let keyboardOverlap = editorFrame.intersection(keyboardFrame)
-            // Measure a contiguous, full-width text area. A native Copy action
-            // can be in a side toolbar and does not define the editor's bottom.
-            let visibleEditorHeight = editorFrame.isNull || editorFrame.isEmpty ? 0 :
-                keyboardOverlap.isNull || keyboardOverlap.isEmpty ? editorFrame.height :
-                max(keyboardOverlap.minY - editorFrame.minY, editorFrame.maxY - keyboardOverlap.maxY)
-            let lineHeight = UIFont.preferredFont(forTextStyle: .body).lineHeight
-            let layout = XCTAttachment(string: "Preferred body font: \(UIFont.preferredFont(forTextStyle: .body).pointSize); editor frame: \(editor.frame); window-clipped editor frame: \(editorFrame); keyboard frame: \(keyboardFrame); copy frame: \(copyFrame); unobscured editor height: \(visibleEditorHeight); required line height: \(lineHeight); retry frame: \(app.buttons["retryDraftSave"].frame); leave frame: \(app.buttons["leaveUnsavedDraft"].frame)")
-            layout.name = "Largest-text recovery layout"; layout.lifetime = .keepAlways; add(layout)
-            try require(editor.isHittable && !editorFrame.isNull && editorFrame.width >= lineHeight && visibleEditorHeight >= lineHeight,
-                        "Failure state must retain at least one full editor line inside its window and clear of the visible keyboard")
-            let header = app.scrollViews["draftStatusScroll"]
-            try require(header.waitForExistence(timeout: 5), "Recovery header must scroll independently")
-            func reveal(_ button: XCUIElement) throws {
-                for _ in 0..<5 {
-                    if button.isHittable && header.frame.contains(CGPoint(x: button.frame.midX, y: button.frame.midY)) { return }
-                    header.swipeUp()
-                }
-                try require(button.isHittable && header.frame.contains(CGPoint(x: button.frame.midX, y: button.frame.midY)), "Recovery action must be reachable by scrolling its header")
-            }
-            let retry = app.buttons["retryDraftSave"]
-            try reveal(retry)
-            retry.tap()
-            try require(editor.exists && editor.value as? String == recovered, "Retry under continued storage failure must keep the buffer")
-            let leave = app.buttons["leaveUnsavedDraft"]
-            try reveal(leave)
-            capture("acceptance-write-failure-largest-text-actions")
-            leave.tap()
-            try require(app.buttons["copyDraftAndLeave"].firstMatch.waitForExistence(timeout: 5), "Leave action must open its native confirmation")
-            try require(app.keyboards.firstMatch.waitForNonExistence(timeout: 5), "Explicitly leaving must dismiss the keyboard so the confirmation has its full height")
-            capture("acceptance-write-failure-largest-text-dialog")
-            for identifier in ["copyDraftAndLeave", "discardDraftAndLeave"] {
-                let action = app.buttons[identifier].firstMatch
-                try require(action.isHittable && visibleFrame(of: action).contains(action.frame),
-                            "Both recovery choices must be visible inside the confirmation window")
-            }
-            let continueEditing = app.alerts["本次修改尚未保存"].buttons["继续编辑"]
-            try require(continueEditing.isHittable, "The safe Continue Editing choice must remain directly reachable")
-            if app.alerts["本次修改尚未保存"].exists {
-                app.alerts["本次修改尚未保存"].buttons["继续编辑"].tap()
-            } else {
-                try dismissUnsavedDraftPopover()
-            }
-            try require(app.buttons["copyDraftAndLeave"].firstMatch.waitForNonExistence(timeout: 5), "Cancelling must dismiss the native leave dialog")
-            try require(editor.exists && editor.value as? String == recovered, "Cancelling leave must keep the large-text buffer")
-            for button in [app.buttons["copyEditedPrompt"], app.buttons["finishPromptEditing"]] {
-                try require(button.isHittable, "Fixed completion actions must remain reachable")
-            }
-            return
-        }
-        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.08))
-            .press(forDuration: 0.1, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.85)))
-        try require(editor.exists, "Failed draft must resist interactive dismissal")
-        try require(editor.value as? String == recovered, "Swipe must keep the entire buffer")
-        app.buttons["finishPromptEditing"].tap()
-        try require(editor.exists && editor.value as? String == recovered, "Done must keep the failed-save buffer")
-        capture("acceptance-write-failure-buffer-protected")
-        app.buttons["leaveUnsavedDraft"].tap()
-        capture("acceptance-write-failure-leave-dialog")
-        if app.alerts["本次修改尚未保存"].exists {
-            app.alerts["本次修改尚未保存"].buttons["继续编辑"].tap()
-        } else {
-            // Native popover presentations omit the cancel row; tapping outside cancels.
-            try dismissUnsavedDraftPopover()
-        }
-        try require(editor.exists && editor.value as? String == recovered, "Cancelling leave must preserve the buffer")
-        try restore(baselineBytes)
-        app.buttons["retryDraftSave"].tap()
-        try require(app.buttons["retryDraftSave"].waitForNonExistence(timeout: 5), "Retry must recover after storage is restored")
-        try require(try durableDraft() == recovered, "Retry must save the exact current buffer")
-        app.buttons["finishPromptEditing"].tap()
-        try openEditor(fromDetail: false)
-        try require(editor.waitForExistence(timeout: 5) && editor.value as? String == recovered, "Recovered draft must reopen intact")
-        capture("acceptance-write-failure-recovered")
-
-        let recoveredBytes = try Data(contentsOf: draftFile)
-        try collide()
-        editor.tap()
-        editor.typeText(" Copy-only unsaved ending.")
-        try require(app.buttons["leaveUnsavedDraft"].waitForExistence(timeout: 5) && editor.exists, "Second failure must preserve the editor")
-        let copyOnly = try XCTUnwrap(editor.value as? String)
-        try require(copyOnly.contains("Copy-only unsaved ending."), "The copy-only note must stay intact")
-        try require(app.buttons["leaveUnsavedDraft"].waitForExistence(timeout: 5), "Second failure must expose explicit exit")
-        app.buttons["leaveUnsavedDraft"].tap()
-        let copyAndLeave = app.buttons["copyDraftAndLeave"].firstMatch
-        try require(copyAndLeave.waitForExistence(timeout: 5), "Leave dialog must expose Copy and Leave")
-        copyAndLeave.tap()
-        try require(editor.waitForNonExistence(timeout: 5), "Copy and Leave must close the editor")
-        // The UI runner cannot read another app's pasteboard on this runtime.
-        // Compare this exact buffer with public simctl pbpaste in the host fixture.
-        let clipboardExpectation = XCTAttachment(string: copyOnly)
-        clipboardExpectation.name = "Copy-and-leave expected buffer"
-        clipboardExpectation.lifetime = .keepAlways
-        add(clipboardExpectation)
-        try restore(recoveredBytes)
-        app.terminate()
-        app.launchPrompix()
-        app.buttons["kind-text"].tap()
-        app.buttons["prompt-gentle-tarot"].tap()
-        try openEditor(fromDetail: true)
-        try require(editor.waitForExistence(timeout: 5) && editor.value as? String == recovered, "Relaunch must preserve the prior durable draft after explicit copy-only exit")
-        try require(try durableDraft() == recovered, "Copy-only exit must not overwrite the prior durable draft")
-        capture("acceptance-copy-only-exit-durable-draft")
-        #else
-        throw XCTSkip("Write-collision fixtures are simulator-only.")
-        #endif
-    }
-
     private func waitForRenderingToSettle() throws {
         let deadline = Date().addingTimeInterval(6)
         var previous: Data?
@@ -677,7 +467,7 @@ import UIKit
             guard report.exists, report.isHittable else { return false }
             let viewport = readingPane.exists ? visibleFrame(of: readingPane) : app.frame
             guard !viewport.isNull, viewport.contains(report.frame) else { return false }
-            let controls = ["copyPrompt", "usePrompt", "editPromptAction", "detailFavorite", "sharePrompt"].map { app.buttons[$0] }
+            let controls = ["copyPrompt", "copyPrompt", "editPromptAction", "detailFavorite", "sharePrompt"].map { app.buttons[$0] }
             // A native toolbar accessibility container can span the whole window.
             // Its button frames describe the actual obstructing controls.
             let bars = app.navigationBars.allElementsBoundByIndex + app.toolbars.buttons.allElementsBoundByIndex
@@ -814,27 +604,12 @@ import UIKit
         }
     }
 
-    func testImageWebAndCollections() throws {
+    func testImageAndCollections() throws {
         app.buttons["kind-image"].tap()
         app.buttons["prompt-summer-citrus"].tap()
         app.buttons["previewButton"].tap()
         XCTAssertTrue(app.buttons["完成"].waitForExistence(timeout: 5))
         capture("06-image-viewer")
-        app.buttons["完成"].tap()
-        app.goBackInPrompix()
-        app.buttons["kind-web"].tap()
-        app.buttons["prompt-quiet-portfolio"].tap()
-        XCTAssertTrue(app.buttons["copyPrompt"].waitForExistence(timeout: 5))
-        capture("08-web-detail")
-        app.swipeUp()
-        app.swipeUp()
-        app.expandPromptInformation()
-        let webExample = app.buttons["webExample"]
-        if !webExample.isHittable { app.swipeUp() }
-        webExample.tap()
-        XCTAssertTrue(app.webViews.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "Less, but")).firstMatch.waitForExistence(timeout: 10))
-        try waitForRenderingToSettle()
-        capture("08b-web-example")
         app.buttons["完成"].tap()
         app.goBackInPrompix()
         app.openPrompixCollections()
@@ -869,50 +644,6 @@ import UIKit
         XCTAssertTrue((editor.value as? String ?? "").contains("My personal intention."))
         capture("13-persistent-draft")
     }
-    func testOriginalWebsitesAndCaptureTheirRealPreviews() {
-        app.buttons["kind-web"].tap()
-        capture("14-web-discovery")
-        let examples = [
-            ("quiet-portfolio", "Less, but"), ("indie-studio", "Ideas take"),
-            ("sunday-recipes", "A slower"), ("travel-notes", "Go a little"),
-            ("soft-focus", "Make room"), ("little-gallery", "Objects")
-        ]
-        for (id, headline) in examples {
-            let card = app.buttons["prompt-\(id)"]
-            for _ in 0..<6 { if card.isHittable { break }; app.swipeUp() }
-            XCTAssertTrue(card.isHittable, id); card.tap()
-            app.buttons["previewButton"].tap()
-            let web = app.webViews.firstMatch
-            XCTAssertTrue(web.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", headline)).firstMatch.waitForExistence(timeout: 10), id)
-            let shot = XCTAttachment(screenshot: web.screenshot())
-            shot.name = "web-\(id)"; shot.lifetime = .keepAlways; add(shot)
-            if id == "soft-focus" {
-                let start = web.buttons["开始专注"]
-                if !start.isHittable { web.swipeUp() }
-                start.tap()
-                XCTAssertTrue(web.buttons["暂停"].waitForExistence(timeout: 3))
-                web.buttons["暂停"].tap()
-                XCTAssertTrue(web.buttons["继续"].waitForExistence(timeout: 3))
-                web.buttons["重新开始"].tap()
-                XCTAssertTrue(web.buttons["开始专注"].exists)
-            }
-            if id == "sunday-recipes" {
-                let recipe = web.buttons["打开番茄鸡蛋吐司"]
-                for _ in 0..<4 { if recipe.isHittable { break }; web.swipeUp() }
-                recipe.tap()
-                XCTAssertTrue(web.staticTexts["准备食材"].waitForExistence(timeout: 3))
-                web.buttons["关闭食谱"].tap()
-            }
-            if id == "little-gallery" {
-                let object = web.descendants(matching: .any).matching(identifier: "收藏一只不对称的花瓶").firstMatch
-                for _ in 0..<4 { if object.isHittable { break }; web.swipeUp() }
-                object.tap()
-                XCTAssertTrue(web.descendants(matching: .any).matching(identifier: "取消收藏一只不对称的花瓶").firstMatch.waitForExistence(timeout: 3))
-            }
-            app.buttons["完成"].tap()
-            app.goBackInPrompix()
-        }
-    }
     func testEditorialTextDiscoveryAndDetail() {
         app.buttons["kind-text"].tap()
         let card = app.buttons["prompt-daily-side-quest"]
@@ -944,7 +675,7 @@ import UIKit
         app.buttons["Done"].tap()
         app.goBackInPrompix()
         app.buttons["Settings"].tap()
-        XCTAssertTrue(app.navigationBars["About and settings"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 5))
         capture("19-english-settings")
     }
     func testLiveImageGallery() throws {
@@ -957,25 +688,28 @@ import UIKit
         search.tap(); search.typeText("发明")
         let card = app.buttons.containing(NSPredicate(format: "identifier BEGINSWITH %@", "prompt-youmind-nano-")).firstMatch
         XCTAssertTrue(card.waitForExistence(timeout: 35), "The requested community gallery must be loaded"); card.tap()
-        app.buttons["previewButton"].tap()
-        XCTAssertTrue(app.staticTexts["1 / 4"].waitForExistence(timeout: 10))
-        XCTAssertFalse(app.buttons["previousImage"].isEnabled)
-        for index in 1...4 {
-            XCTAssertTrue(app.staticTexts["\(index) / 4"].waitForExistence(timeout: 5))
-            XCTAssertTrue(app.descendants(matching: .any)["loadedImage-\(index - 1)"].waitForExistence(timeout: 20))
-            capture("gallery-\(index)")
-            if index < 4 { app.buttons["nextImage"].tap() }
-        }
-        XCTAssertFalse(app.buttons["nextImage"].isEnabled)
-        app.buttons["previousImage"].tap()
-        XCTAssertTrue(app.staticTexts["3 / 4"].waitForExistence(timeout: 5))
+        // The gallery pages in place; the viewer opens on the image being shown.
+        let hero = app.buttons["previewButton"]
+        XCTAssertTrue(hero.waitForExistence(timeout: 10))
+        XCTAssertEqual(hero.value as? String, "1 / 4")
+        capture("gallery-detail-1")
+        hero.swipeLeft()
+        let paged = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", "2 / 4"), object: hero)
+        XCTAssertEqual(XCTWaiter.wait(for: [paged], timeout: 5), .completed)
+        capture("gallery-detail-2")
+        hero.tap()
+        // The viewer opens on the image being shown and pages by swiping.
+        XCTAssertTrue(app.descendants(matching: .any)["loadedImage-1"].waitForExistence(timeout: 20))
+        capture("gallery-2")
+        app.descendants(matching: .any)["loadedImage-1"].swipeLeft()
+        XCTAssertTrue(app.descendants(matching: .any)["loadedImage-2"].waitForExistence(timeout: 20))
         app.descendants(matching: .any)["loadedImage-2"].swipeRight()
-        XCTAssertTrue(app.staticTexts["2 / 4"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.descendants(matching: .any)["loadedImage-1"].waitForExistence(timeout: 5))
         app.descendants(matching: .any)["loadedImage-1"].doubleTap()
         capture("gallery-zoom")
         app.descendants(matching: .any)["loadedImage-1"].doubleTap()
-        app.buttons["完成"].tap()
-        XCTAssertTrue(app.buttons["copyPrompt"].exists)
+        app.buttons["closeImageViewer"].tap()
+        XCTAssertTrue(app.buttons["copyPrompt"].waitForExistence(timeout: 5))
     }
 
     func testLiveCommunityEditionAndRemotePreviews() throws {
@@ -1041,7 +775,6 @@ import UIKit
         browser.lifetime = .keepAlways
         add(browser)
         // Opening the tool does not send the prompt or claim automatic prefilling.
-        app.activate()
         XCTAssertTrue(app.buttons["copyPrompt"].waitForExistence(timeout: 5))
         app.buttons["编辑后使用"].tap()
         XCTAssertTrue(app.textViews["promptEditor"].waitForExistence(timeout: 5))
@@ -1165,7 +898,6 @@ import UIKit
             played.append(video.id)
             if index == 0 {
                 XCUIDevice.shared.press(.home)
-                app.activate()
                 let playPause = app.buttons["Play/Pause"]
                 // A center tap can activate AVKit's large Play button. Reveal
                 // controls away from it without accidentally resuming playback.

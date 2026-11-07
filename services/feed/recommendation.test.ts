@@ -4,7 +4,7 @@ import type { Prompt } from "../../packages/schema/catalog.ts";
 import { parseFeedQuery, type FeedFilters } from "../../packages/schema/feed.ts";
 import { createTestDatabase } from "./test-database.ts";
 import { activatePublication, preparePublication, removeContent, stagePublication } from "./publication.ts";
-import { getFeed } from "./queries.ts";
+import { getDetail, getFeed } from "./queries.ts";
 import { contentTopics } from "../../packages/schema/interests.ts";
 
 const secret = "recommendation-test-secret-000000000000000000000";
@@ -13,7 +13,7 @@ const item = (n: number): Prompt => ({
   id: `recommendation-${n}`, kind: n % 5 === 4 ? "text" : "image", title: `Original fixture ${n}`,
   summary: "Original test content", prompt: "Create a still life with an original ceramic cup.", example: "A cup",
   tags: ["fixture"], model: "Fixture", toolURL: null, artwork: "test", previewLabel: "Preview",
-  source: { name: "Prompix", url: null, license: "Original", method: "Test" },
+  source: { name: "Prompix", url: null, license: "Original", method: "Test" }, presentation: "general",
   media: n % 5 === 4 ? null : { image: "lake", video: null, demoURL: null },
 });
 const input = (prompts: Prompt[]) => ({ schemaVersion: 1 as const, version: "fixture", prompts });
@@ -32,11 +32,11 @@ test("editorial topic coverage includes visual design and everyday tasks without
 
 test("published cards expose newly covered interests without changing their media or presentation evidence", async t => {
   const { pg, reader, writer } = await createTestDatabase(); t.after(() => pg.close());
-  const prompt = { ...item(0), tags: ["时装编辑"], presentation: "unknown" as const };
+  const prompt = { ...item(0), tags: ["时装编辑"], presentation: "suggestive" as const };
   const release = await stagePublication(writer, input([prompt])); await activatePublication(writer, release, "0");
-  const page = await getFeed(reader, { filters, limit: 30 }, secret);
+  const page = await getFeed(reader, { filters: { ...filters, presentation: "suggestive" }, limit: 30 }, secret);
   assert.deepEqual(page.items[0].topics, ["fashion"]);
-  assert.equal(page.items[0].presentation, "unknown");
+  assert.equal(page.items[0].presentation, "suggestive");
   assert.deepEqual(page.items[0].media, prompt.media);
 });
 
@@ -111,8 +111,11 @@ test("publication rejects explicit imagery while carrying independent reviewed p
     { ...item(2), presentation: "unknown" as const },
   ];
   const release = await stagePublication(writer, input(prompts)); await activatePublication(writer, release, "0");
-  const page = await getFeed(reader, { filters, limit: 30 }, secret);
-  for (const prompt of prompts) assert.equal(page.items.find(card => card.id === prompt.id)?.presentation, prompt.presentation);
+  const page = await getFeed(reader, { filters: { ...filters, presentation: "suggestive" }, limit: 30 }, secret);
+  for (const prompt of prompts.slice(0, 2)) assert.equal(page.items.find(card => card.id === prompt.id)?.presentation, prompt.presentation);
+  // Unreviewed imagery never enters a list, but its label survives for direct links.
+  assert.equal(page.items.some(card => card.id === prompts[2].id), false);
+  assert.equal((await getDetail(reader, prompts[2].id, "original")).item.presentation, "unknown");
   assert.deepEqual(page.items.find(card => card.id === prompts[0].id)?.topics, ["portrait"]);
   assert.deepEqual(page.items.find(card => card.id === prompts[1].id)?.topics, ["fashion"]);
 });

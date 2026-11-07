@@ -1091,6 +1091,7 @@ Do not abort historical batches when approved Chinese metadata contains untransl
 ### 2026-10-21 — One complete source per historical visual request
 
 Reduce historical visual request fan-in from up to three sources to one, retaining complete per-source attachments and all existing request/worker budgets. Do not reduce frame coverage to improve latency.
+
 ### 2026-10-21 — Share verified source freshness at publication
 
 Campaign inventory and actual publication must consume the same verified source checks. Transfer only current exact-source third-party records for the publication candidates, preserving timestamps, removal decisions and chain coverage.
@@ -1117,6 +1118,170 @@ The same run showed all three leases held by large review/translation batches wh
 
 Continue the frozen `additional-1000-20261023` baseline2982/target3982. Do not rebase or request another1,000. The old stop combined a subscription denial with post-reservation guards, which mislabeled unsent search/visual work as provider failure. Move guards before reservation; retain original records and require explicit evidence for operator dispositions. Near the protection line, measure the account every minute. Keep the default90% threshold; the previous stage's95% grant is not reused.
 
+### 2026-11-06 — Soften reading text beneath the detail actions
+
+The owner keeps the detail action bar, including its collapse into three circular buttons while scrolling. Only the collision is fixed: reading scroll views opt into the system soft bottom scroll-edge effect so text fades beneath the bar. No layout, color or motion changes. Verified on the iOS 27.1 simulator and installed on the owner's iPhone Air (iOS 27.0.1).
+
+### 2026-11-06 — Keep the full detail preview on ordinary iPhones from iOS 27.1
+
+The iOS 27.1+ detail uses `ArrangementView`, which shows only the reading pane on an ordinary iPhone. The OS-version gate therefore replaced the full image with a 76pt thumbnail on every phone, while iOS 27.0 kept the full preview the owner approved. Layout now follows whether the media pane is actually laid out: when it is collapsed, the full preview sits above the reading content; only a visible split keeps the compact entry. Verified on an iPhone 18 Pro simulator with iOS 27.2; the expanded iPhone Duo split was not re-verified in this change.
+
+### 2026-11-06 — Let root headers yield through the system top bar
+
+The home header sat over a hand-drawn material veil that looked muddy and had a hard edge. Root headers now live in the scroll view's `safeAreaBar` with the system hard top edge effect; the soft style left the category row unreadable over artwork. The home header still collapses on scroll with the reading-bar spring, and the bar's height goes with it so the edge effect retreats to the status bar. Growing the top inset mid-scroll made SwiftUI jump the content by hundreds of points, so a matching top content margin replaces the bar height while collapsed and the total inset never changes. The tab bar minimizes on scroll from iOS 26. Cards scale to 0.97 when pressed; category switches add a selection haptic. Verified on an iPhone 18 Pro simulator with iOS 27.2 in light and dark.
+
+### 2026-11-06 — Cut onboarding to two steps
+
+Following the 2.0 boards, onboarding is a one-line welcome and the three-interest choice. The collage and ChatGPT-handoff pages from 0.14.0 are removed with their strings, since one-step use now lives in the detail. Exactly three interests are still required with no skip, as the owner set in 0.14.0, even though the board shows "跳过". The board's third step (notifications or a widget) waits until either feature exists.
+
+### 2026-11-06 — Open feed details from the list, not the card
+
+A detail opened from a feed card used to be owned by that card, so when a served page replaced the cached one the card left the hierarchy and its full-screen detail closed a moment after opening. Feed lists (`FeedResults` and the related grid) now own the presentation through `feedDetailHost()`, and cards only ask it to open; the zoom transition shares the list's namespace. Cards outside a host keep presenting themselves. A gated live UI test opens a card right after switching kinds and checks the detail is still open four seconds later; it failed before the change.
+
+### 2026-11-06 — Make the detail action one step after the first use
+
+The 2.0 boards ask for "one-step use": once a tool has been chosen in the use tray, the detail's main action names that tool and copies (or prefills) the Prompt and opens it in one tap. A long press offers "choose another tool". The tray still opens the first time, when the remembered tool is not among this item's choices, when the Prompt has blanks to fill, and as the fallback when the tool cannot be opened. UI tests launch with `-preferredPromptDestination none` so the tray path stays deterministic.
+
+### 2026-11-06 — Keep decks local, separate and optional
+
+Saved works gain decks, stored in their own `decks.json` beside `favorites.json`; an unreadable deck file is kept and never overwritten, and it never blocks saving a work. "全部收藏" is every favorite, not a stored deck, and unsaving removes a work from all decks. Until the owner makes a deck, the deck scope opens straight onto every saved work and the detail bookmark stays one tap; with decks, the bookmark opens a "收藏到" sheet. This departs slightly from the board, which always shows the sheet, to avoid an empty extra step. iCloud sync is left for later. A new "我的改写" scope lists works with saved drafts.
+
+### 2026-11-06 — Decode the 2.0 fields leniently on iOS
+
+The app reads the optional 2.0 fields from `packages/schema/enrichment.ts` (inputs, generation, variables, facets, palette, shots, rights and `localization.en`) on cards and details, plus the browse facet and model-family counts and the `facet`, `mode`, `inputs` and `modelFamily` feed filters. Vocabularies stay plain strings so a newer server value never makes an older app reject a work, and a malformed field is dropped on its own rather than hiding the card or detail; variables must point at text in the prompt and shots must be numbered from 1. Items without these fields keep today's behavior.
+
+### 2026-11-06 — Treat model calls as pluggable providers behind one control plane
+
+Pipeline stages call models only through `ingest/models/` providers: local subscriptions (Codex CLI, Claude Code CLI, Kimi membership) and metered APIs (Moonshot, DeepSeek, OpenAI, Anthropic) share one contract of trusted instructions, delimited untrusted input and schema-validated JSON. CLI routes run with tools, MCP, web and saved sessions off. Refusals are final for the item rather than retried on another model. Which provider and model serve each stage is configuration in the control directory, changed through `npm run pipeline` with the author and reason recorded in an append-only log, so any agent can inspect or redirect the pipeline. Defaults keep the heavy stages on the Codex subscription, as the owner asked. The long-running worker that consumes this routing is the next step.
+
+### 2026-11-06 — Adopt the Darkroom White palette for Prompix 2.0
+
+After five style studies and red, white and blue Darkroom variants, the owner chose Darkroom White: the interface is black, grey and white only, and artwork supplies every other color. Dark mode uses `#0B0B0C` paper, `#18181A` panels and `#F5F5F2` ink; light mode is photographic paper (`#F4F3EF`) with black ink. The accent equals ink, so the primary action is white with black text in dark mode and the reverse in light mode. This replaces the blue-violet spectrum and the leftover ink-green tint on the detail "use" button. The app icon becomes three white cards on black, and the compact mark, onboarding fan and loading slips use the same monochrome cards. Toggles take the muted tint because a white tint hides the thumb. Page structure changes from the 2.0 boards land separately, one screen at a time.
+
+### 2026-11-06 — Hide suggestive and unreviewed imagery from every list by default
+
+The owner asked for adult content to be hidden by default with its own switch in Settings. Filtering moves to the server so every list agrees: feed, search, recommendations, discovery, browse facets and creator directories return only `general` imagery unless the request carries `presentation=suggestive`, which adds `suggestive`. `unknown` (and unlabeled) items stay out of all lists until visual review labels them, because an unreviewed image may be explicit; the stored-catalog backfill will review the 250 such items. `explicit` is still never published. Detail by ID is not filtered, so saved items and shared links keep working. Older app versions get the default without changes.
+
+### 2026-11-06 — Issue the daily pack by the viewer's local date, chosen by the pipeline
+
+Each pack is keyed by a calendar date and is the same worldwide; the app requests the pack for the phone's local date, as Wordle does. The server publishes the next date's pack before 10:00 UTC (the moment UTC+14 reaches it) and keeps one spare pack, falling back to the latest pack if a day is missing. A published pack does not change, except that a takedown removes the item. The pipeline agent picks packs on its own after the daily intake, without waiting for the owner: candidates are items published in the last seven days that no pack has used, grouped under one theme, favoring the last 48 hours, at most two per creator, and no theme repeated within 14 days. The owner can ask any agent to swap a pack before it is published.
+
+### 2026-11-06 — Describe catalog items with fixed 2.0 fields from one combined review
+
+Prompix 2.0 browses by structured fields instead of free-form tags. Items gain optional `inputs`, `generation`, `variables`, `facets`, `palette`, `shots`, `rights` and English card metadata at `localization.en`; the public schema keeps them optional so older clients and releases validate unchanged. Facets come only from the fixed bilingual vocabulary in `packages/schema/facets.json`; an off-vocabulary value fails that item rather than being dropped or mapped. One model call per batch produces every model-derived field through the provider layer and the `review` route, reusing the visual review's presentation standard. Facts the pipeline can measure are not asked of the model: rights follow the source license (third-party X posts are attribution-only and never export images), a recognisable model label decides the model family, video duration and audio come from the file, and the palette is a local k-means over the preview. English card text sits beside the nine-language translations because those require a full body. Source metrics are collected by the worker and never published.
+
+### 2026-11-06 — Run only the checks a pull request can affect
+
+The owner found CI slowing development. The `ios` job takes 5–8 minutes and ran on every pull request, including server-only and docs-only ones. A `changes` job now reads the pull request's diff. `ios` runs only when `ios/`, `packages/schema/` (shared with the app) or workflows change; `content` is skipped only when every file is under `docs/` or `design/`, or is Markdown. Pushes to `main` run everything, and if the filter itself fails, both checks run, because GitHub counts a skipped job as passing a required check. A newer push to the same pull request cancels its running checks. Because several sessions append to this log, feature pull requests leave their entry to a separate docs-only pull request, which merges in seconds.
+
+### 2026-11-06 — Make suggestive works an explicit settings choice
+
+The owner hides suggestive works by default and offers one settings switch, "show mature content", to include them. Explicit works are never published and unreviewed works stay out of every list. The service filters lists itself, so the app sends `presentation=suggestive` on feed, browse and creator requests only while the switch is on; detail by id is unaffected so saved items and shared links keep opening. Cursors are bound to the audience, so switching rebuilds the feed repository with a separate cache. The switch replaces the local "less revealing recommendations" preference, leaves onboarding, defaults to off and does not inherit an earlier opt-out.
+
+### 2026-11-06 — Backfill 2.0 fields with Sonnet 5.5; settled scale labels only tighten
+
+A 50-item pilot compared the Codex subscription, Claude Sonnet 5.5, Claude Opus 5.5 and (on 20 items) Claude Haiku 5.5 on the same instructions. Sonnet and Opus agreed on mode, model family and input requirement for every item and on 96% of scale labels; Haiku was valid but chose coarser facets. At the owner's direction the backfill uses Sonnet 5.5 on the metered API with high concurrency that backs off on rate limits, while media work stays at four local workers. Existing items keep their text; `unknown` takes the new visually reviewed label, and a settled label may become stricter but never looser, because the pilot shows reviewers disagree in both directions on borderline imagery. Explicit findings leave through the existing removal publication.
+
+### 2026-11-06 — Let discovery cards carry only the work
+
+Following the 2.0 discover board, feed cards drop their titles and badges: a card is exactly its preview, with 12 pt continuous corners and 6 pt gutters inside a 16 pt inset. Titles remain the accessibility label. Text and Skill cards show a serif title beneath a monospaced "kind ▸ model" line, and video cards show only a play mark until a real duration field exists. The discover header becomes a large "发现" title with one glass filter button (use and model); sort stays in the "为你挑的 · 推荐 ▾" row, and settings live only in the Saved header, so each action has a single entry. Moving the creator and use rails into the feed follows separately.
+
+### 2026-11-07 — Root pages use the system large title; cached pages never swap under the reader
+
+Owner feedback on 2.0.0 (48): switching a category often flashed one set of cards into another, scrolling the home page jittered as its header collapsed, a "筛选结果" line appeared under the tabs, the search page left a large blank gap after cancelling, and the saved page did not follow its board. Discover and Saved now use the system large title, which shrinks into a centered inline title as the page scrolls, with the kind tabs (or the saved segmented control) pinned in a `safeAreaBar` under the soft, gradual top edge, as on WDiscoverScroll. Nothing above the content changes height any more, so the collapse spring and the compensating content margin from the previous entry are gone. The context row always reads 为你挑的 / 最新收录; clearing filters moved into the filter menu, and the Skills explainer line is removed. A cold category waits up to 1.2 s for the network before showing its disk cache; when a served page arrives after the cache is on screen and the release is unchanged, the cards already shown stay and the served page continues below them. Pull to refresh still replaces the page. The search page's large title was hidden by a forced opaque bar background, which left its space empty after cancelling; the page now uses the default bar. Saved follows WSaved: a segmented 卡组 / 创作者 / 我的改写 control, a deck grid with 全部收藏 first and a 新建卡组 tile last, an empty state of six blank frames, and deck pages with a parameter line and kind chips; the saved search field and kind menu are removed.
+
+### 2026-11-07 — Root headers collapse on scroll over an opaque paper veil
+
+On the device the system soft top edge left the unselected kind tabs unreadable over artwork, the same problem the hard style once solved. The owner asked for the header to collapse when scrolling down and return when scrolling up, and for the tabs to stay legible. Discover and Saved now draw their own title row and bar in a `safeAreaBar`; `readingChrome` decides when to collapse, and the header slides up by its own height and fades. The inset never changes, so the content does not move. Behind the header, an opaque paper veil covers the status bar and the header and fades out 32 pt below it once content has scrolled under; when the header collapses, the veil slides with it and keeps covering the status bar. The system top edge effect is hidden on these pages. This replaces the large title from the previous entry.
+
+### 2026-11-07 — The detail shows the work, the model and the prompt; the rest folds away
+
+The owner found the detail page cluttered. The AI-written summary sat where the prompt should be and was often mistaken for it, the model and ratio appeared twice (meta line and chips), and the creator and translation rows pushed the prompt below the first screen. Following the WDetailLite board, the hero is capped near 10:9, about two fifths of the screen. The meta line leads with the model in ink. The title is followed directly by a PROMPT row with a small language menu and the prompt itself, folded to about seven lines with "展开全文". Creator, reference needs, language state, summary, example and source all live in one muted "更多信息" disclosure. The needs chips are gone; the reference requirement is a row inside that disclosure.
+
+### 2026-11-07 — Copy is the only use action; personal versions replace the use tray
+
+Opening ChatGPT or Gemini in a browser could not carry the prompt, so the owner asked to drop "复制并打开" and the 使用 Prompt tray, whose prepared-content and variable fields confused them. The detail bar is now a pencil and one primary 复制 button (复制安装命令 for Skills with a verified installer). PromptUseSheet, PromptVariablesSheet, PromptTemplate and the destination table are deleted; the Skill installer check survives as `SkillInstall`. Editing now writes the reader's own versions: each lives in `drafts.json` under `<item id>::v<milliseconds>`, beside a `<item id>::work` copy of the work, so the existing removal reconciliation covers both and 我的版本 can list works from the online feed. Drafts saved earlier appear as the oldest version. The detail shows 原版 / 我的 N chips when versions exist, and copy and edit act on the chosen one. The UI now uses its own stroke icon set (`PrompixIcon`), drawn from the design boards; the 收藏 tab uses a bookmark instead of a heart.
+
+### 2026-11-07 — Search pins its kinds; text cards fit their words; no reference filter
+
+Owner feedback: search kinds sat far from the results under 全部 and close under 图片 (an empty creator section left a gap), the kinds scrolled away, result titles were too small, collection grids had double side padding, and the 参考图 filter added complexity without meaning. Search now shows kinds only once there is a query, as a pinned section header; the creator section adds no space when empty; result titles are 15 pt; recent terms that are prefixes of each other collapse to the newest. Collection pages use the system large title and the feed's 16 pt inset. The `inputs` filter is removed from the app and `FeedQuery`; the pipeline session was asked to drop the field. From the independent review: text and Skill cards show just their words on surface with a hairline, sized to the text; CJK prompts use the system face so Latin words inside them stay in the same face.
+
+### 2026-11-07 — Detail scroll veil, info rows, quiet empty states
+
+From the owner's request to stop shipping visible flaws and an independent review of a full walkthrough: the detail no longer lets text run under the bar buttons. Past the title, a 118 pt paper veil fades in and the title returns at 15 pt between the buttons; a paper fade sits behind the bottom bar. 更多信息 becomes 44 pt rows (creator, language, source, licence in words, posted date) plus a report link; the summary, example, source preview label and duplicate source links are gone. The meta line is model ▸ frame ▸ length, omitting an unknown model and the frame for words, web and Skills; the title is 24 pt semibold. Multi-shot videos show their shots instead of the prompt. Related works are one quiet section of six from the same use (else kind), at the shared 16 pt inset, hidden when empty. Empty places use `QuietEmpty`: one sentence and at most one more, left-aligned, no illustration. Onboarding drops the 'Prompix' bar title and the separate count line (the count sits on the button); the first page's button reads 开始. Creator pages drop the duplicate bar title, use kind chips (`ChipRow`, shared with decks) instead of a menu, and link out with 在 X 上查看. The long-press preview uses the detail's meta line.
+
+### 2026-11-06 — Place the creator and use rails inside the discover feed
+
+The first screen of discovery is now all work. The creator rail and the use rail sit together after the first twelve feed items (`FeedInterleave`), so later pages never move them; they are hidden while filtering, as before, and appear only once the feed has more than twelve items. Creator discovery therefore loads when its rail first scrolls into view rather than at launch. UI tests reach the rails through `revealDiscoveryRails()`.
+
+### 2026-11-06 — Retranslate held history items through the provider layer
+
+About 700 collected, reviewed and translated history items never went live because the independent semantic review held their Simplified Chinese text. They are translated again with each item's findings attached to the quoted segment, then reviewed again in a separate call; everything else (editorial and visual evidence, source checks, deduplication, holds, quota) still passes through the history publisher. The Codex gpt-6 models used by the original translation and semantic stages were unavailable on the subscription, and the owner prefers the metered Anthropic API for this bulk round, so both stages run through the provider layer with the unchanged instructions and validators. New items carry people flags from the combined review; a possible real identifiable person or minor waits for a person instead of being published.
+
+
+### 2026-11-06 — The pipeline decides every item; no manual review queue
+
+The owner removed the manual review step: every item is decided by the pipeline. Cases that used to wait for a person now fail closed. Model refusals, unclear presentation, insufficient source evidence and any item where minors appear in a sexualized, revealing or swappable-model context are excluded automatically, with the item ID, stage, reason and model logged. An item whose age cannot be judged and that involves a person's presentation is also excluded. Real people are handled by the existing automated rules. An excluded item may be judged again when it is collected or rechecked later. Safety standards do not change; only the human step is gone.
+
+### 2026-11-06 — Exclude automatically instead of waiting for people
+
+The owner removed every manual review branch: the pipeline decides each item, and anything it cannot decide is not published. The combined review judges minors as none, safe, unsafe or uncertain; unsafe (sexualized, revealing, or a child used as an interchangeable model) and uncertain items are never published, and a possible minor next to suggestive styling counts as uncertain. Ordinary children's content such as illustration or education follows the normal rules. Real people follow the existing rules (own-likeness hints and scale labels). Refusals, validator rejections, held translations, unavailable sources and invalid reviews are excluded with one auditable line each (item, stage, reason, model); a refusal is final for that content, the rest may be judged again after a later collection or recheck.
+
+### 2026-11-06 — Recheck X posts by age
+
+Rechecking every published X post daily cost about $0.4–0.6/day on twitterapi.io, which would exhaust the prepaid balance within weeks. The owner chose tiered rechecks: a post younger than 7 days when checked stays verified for 24 hours; an older one stays verified for 7 days. Maintenance rechecks each item 12 hours before its verification lapses, and the publish gate uses the same lifetime. Authors delete most posts soon after posting, so the cost drops to a few cents a day; the trade-off is that a deleted older post can stay live for up to 7 days.
+
+### 2026-11-07 — Show one label for face inputs
+
+The detail page used to say "your own photo" when `inputs.ownLikenessOnly` was true and "portrait photo" otherwise. The owner judged the distinction worth little to people: it guards nothing, and when the review cannot tell, the default is a guess. The app now always shows "portrait photo" for a face input. The feed keeps `ownLikenessOnly` as data; safety decisions about real people stay in the combined review.
+
+### 2026-11-07 — Fall back between vendors per stage
+
+A 20-item comparison of zh-Hans translation, each checked by Sonnet 5.5, left 19 publishable from gpt-6.1-terra (Codex subscription), 16 from gpt-6-luna and from Sonnet 5.5, and 14 from Haiku 5.5. Haiku as the checker passed 2 of the 3 translations Sonnet held. The owner chose gpt-6.1-terra for translation and Sonnet 5.5 for the check. Each side backs up the other: when the GPT route cannot serve, translation falls back to Haiku; when the Claude API cannot serve, the check falls back to a GPT model. A stage route may therefore name one fallback route. It is used only when the primary reports `unavailable` (not signed in, no such model, no credit) or `rate_limited` (rate limit or used-up quota), and every switch is logged. A refusal or an invalid answer is a verdict on the content and never goes to the fallback.
+
+### 2026-11-07 — Retire the upload requirement field
+
+The owner removed the 参考图 filter (none / optional / required uploads), saying it means nothing to users and only adds complexity, and asked that the pipeline drop the classification as well. The 2.0 review no longer produces `inputs`, the feed no longer serves or filters by it, and older apps that still send `inputs=` are answered as if they had not. The owner also chose to drop the own-likeness hint that rode on the same field; real people remain covered by the presentation rules. Older catalogs keep the field readable so they still validate.
+
+### 2026-11-07 — A daily email report, and X growth priced against tiered rechecks
+
+The owner asked for a short daily email: what ran, how long it took, how many items went live, whether the day succeeded, and what it cost. The worker sends it through the monitor Worker at the first tick after midnight UTC. It leads with the outcome and separates the daily pipeline's additions and spend from other sessions' work, such as a backfill. The first live runs published nothing new because the X spend guard still reserved two full rechecks a day for every protected post, which over the rest of the month exceeded the monthly X budget and blocked all searches. Posts a week old are now reserved for one recheck in six days, matching the tiered rechecks. Translation reviews are capped per run (new items and Simplified Chinese first) after the first runs spent most of their budget on new locales for live items.
+
+### 2026-11-07 — Count every item that no step will move
+
+Agents kept misreporting why items were not online because each item's state was spread across a dozen stores with different keys. An audit of 80 X drafts found 46 editorial deferrals cached for good and 14 drafts whose source check had lapsed with nothing to recheck them; nothing reported either. The owner asked to fix observability before the individual bugs. `npm run pipeline -- funnel` and `item <id>` now classify every daily-lane candidate as live, removed, excluded (with stage and reason), waiting for an automatic step, or stalled, reusing the pipeline's own decision functions. Stalled items break the rule that the pipeline decides every item: the daily report counts them and marks the day as having a problem when new ones appear, and `status --brief` shows the last count. The first count was 366 stalled items. Fixing the causes (cached deferrals, lapsed drafts, type mismatches) is separate work. Agents report item counts from this command instead of reading the stores by hand. History campaign items that are not live are not covered yet. See [data-pipeline-v2.md](data-pipeline-v2.md).
+
+### 2026-11-07 — 顶部边缘参照 Cosmos，详情大图按原比例
+
+首页页头收起后不再留一条不透明的纸色带，只在状态栏后面放一道纸色加模糊的渐变（`EdgeVeil`），参照 Cosmos 不带分类器的首页；是否常驻分类器之后再定。详情大图原来把竖图裁成接近正方形的横幅，再叠上系统顶部模糊，人像的脸会被切掉或盖住；现在按作品比例显示（最高到 3:4，更高的从底部裁），图上只留状态栏的浅渐变。
+
+### 2026-11-07 — Required checks stay under two minutes
+
+The owner set a one-to-two-minute budget for CI. A typical run took 4–10 minutes: the `ios` job spent 3–5 minutes cold-booting a fresh simulator before about 50 seconds of unit tests, and `content` spent 227 seconds in `npm test`, mostly one 112-second keyset traversal over 10,000 items. The required checks keep their names but now hold only fast work: `content` runs localization, typechecks, Worker dry-runs, catalog validation and the Python safety checks; `ios` compiles the app and both test bundles with `build-for-testing` and no simulator. The full suites run beside them as `node-tests` and `ios-tests` (the simulator boots first, overlapping the build) and report on every pull request without holding auto-merge. Agents run affected tests locally before opening a PR and do not deploy or install a release build until both suites are green; a suite failing after merge is fixed first. Running unit tests as a Designed-for-iPad Mac app would skip the simulator, but it needs a provisioning profile the CI does not have.
+
+### 2026-11-07 — Treat cached deferrals as final and fix the causes of stalled items
+
+The first item-state count found 366 stalled items. Most were model deferrals in editorial review (308) and uncertain visual verdicts (5): both are cached for the exact content and never sent again, and the owner's rule leaves no manual review, so they are now counted as excluded with the model's reason. They are reviewed again when the content or source changes. Instructions longer than 30,000 characters can never be published, so editorial preflight excludes them instead of deferring them for a manual review that no longer exists (45). X posts that show their image result under a chat host's name ("Generated by ChatGPT … Ultra-realistic portrait …") were classified as text and deferred for the type mismatch; a scene description with an attached image now counts as image output (14 unpublished posts; no live item changes). Unpublished X drafts whose source check lapses are still stalled until maintenance also rechecks them.
+
+### 2026-11-07 — Named versions, grid covers and text cards with a summary
+
+The owner could not find how to add a second version, could not rename one, and saw the prompt text jump when switching between the original and a version, because the language menu that sets the PROMPT row's height was missing on versions. The version chips now end in a ＋ that starts a new version from the shown text; a chosen version's ⋯ menu, in the language menu's place on a fixed 44 pt row, renames or deletes it, and the editor keeps only copy. Names are stored beside their version as `<version id>::name` in `drafts.json`, so removals still reconcile by the work's id. Deck covers were a single picture below four works; the owner asked for the grid from the boards, so covers now tile one, two, three or four works without blank cells. Text cards showed only a title and read as bare; they now carry the model in mono and the work's summary under the title. Feed cards carry no prompt text, so showing an excerpt of the prompt itself would need a new feed field.
+
+### 2026-11-07 — Nothing replaces the works being read
+
+The owner kept seeing the discover feed reset while scrolling: they opened the phone, read a few works, and everything was swapped. On every foreground, `Library.refresh()` force-reloaded the first page whenever a new publication existed and the reader had not reached a second page; and any revalidation of an aged (over five minutes) or older-release page replaced the cards on screen. Now only a pull refresh or a change of query replaces visible cards. A revalidated first page continues beneath them without repeats, an expired cursor continues from a fresh first page the same way, the recovery row's retry keeps what was read, and the foreground check only refetches a feed that is empty. New publications reach the reader with the next page, a pull refresh or another category.
+
+### 2026-11-07 — Masonry columns use exact heights, not lazy estimates
+
+The owner recorded the feed jumping by a fraction of a screen in the middle of a scroll, a second or two after the header collapsed. Frame-by-frame analysis and timestamped logs showed two causes. In the older build, a foreground refresh replaced the cards (fixed in #268). In the current build, each masonry column was a `LazyVStack` nested in an `HStack`: unbuilt cards had estimated heights, the grid's total height swung between about 14,000 and 21,000 pt while scrolling, and the scroll view corrected its offset by 30–100 pt at a time. The header collapse was only coincident. Every card's height is already known from `PromptCardGeometry`, so a column is now a plain stack of exact frames that builds only the cards within a screen of the viewport; the grid's height no longer changes while scrolling. All masonry grids (discover, search, collections, creators, related) share this code. The creators and collections rails inside the feed are also no longer force-reloaded when a new publication appears, and collections already shown are only replaced by a pull refresh or a new language.
+
+### 2026-11-07 — The app shows images, video and words only
+
+The owner limited Prompix to images, video and text prompts from X and prompts.chat; the service retired every Skill and web item and the web collection (#274). The app drops the Web and Skills kinds from discovery, search and creator filters, the web collection, the Skill install command and file information, the six bundled Prompix Studio website examples with their HTML and screenshots, and the retired web and Skill interests from preferences. The interests stay in the shared schema for the service to retire. Models still decode `skill` and `web` so saved snapshots and caches stay readable. The website home loses its website example card; the rest of its copy, which still talks about Skills and websites, is left to the service session.
+
+### 2026-11-07 — Takedown requests by email
+
+The owner wants authors to ask for removal with one email, handled within 24 hours. The existing `support@prompix.dev` (Cloudflare Email Routing to the owner, since 2026-10-12) serves it. The detail's 报告问题或申请下架 now opens a mail to that address whose subject and body carry only the work's title and ID; the app no longer links to the website report page with an `id` query, and `SupportLinks.Page.report` is gone from the app.
 ## 2026-10-30：官网改为服务端渲染并展示最新 Prompt
 
 用户要求以 `prompix.dev` 做正式官网（用户提到的 promptx.dev 不在本账号 Cloudflare 中），视觉对标近年 Apple 产品页，展示最新抓取内容并做好 SEO。替代 0.3 时期只放三条原创示例的静态官网，以及产品文档中「完整 SEO 网页产品后置」的边界：本次只做浏览与阅读，不做账号、收藏同步或生成。

@@ -26,7 +26,7 @@ struct FeedCheckpoint: Codable {
     private(set) var details: [String: FeedDetail] = [:]
     private var detailOrder: [String] = []
     private var detailSizes: [String: Int] = [:]
-    private var checkpoint: FeedCheckpoint
+    private(set) var checkpoint: FeedCheckpoint
     private let commitRemovals: (FeedCheckpoint) throws -> Void
     init(service: any FeedServing, cache: FeedCache, checkpoint: FeedCheckpoint, recommendations: LocalRecommendations? = nil,
          commitRemovals: @escaping (FeedCheckpoint) throws -> Void) {
@@ -181,7 +181,7 @@ struct FeedCheckpoint: Codable {
         if let metadata = fresh.localization ?? snapshot.localization {
             let translations = (snapshot.localization?.translations ?? [:]).merging(fresh.localization?.translations ?? [:]) { _, value in value }
                 .filter { available.contains($0.key) }
-            item.localization = Prompt.Localization(sourceLanguage: metadata.sourceLanguage, sourceFingerprint: metadata.sourceFingerprint, translations: translations)
+            item.localization = Prompt.Localization(sourceLanguage: metadata.sourceLanguage, sourceFingerprint: metadata.sourceFingerprint, translations: translations, en: metadata.en)
         }
         return item
     }

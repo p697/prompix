@@ -90,7 +90,7 @@ function header(meta: PageMeta) {
 function footer(meta: PageMeta) {
   const { locale } = meta;
   const m = locale.messages;
-  const kinds: Kind[] = ["image", "video", "text", "web", "skill"];
+  const kinds: Kind[] = ["image", "video", "text"];
   return html`<footer class="footer"><div class="footer-inner">
 <div class="footer-columns">
 <div><h2>${m.footer.explore}</h2><ul>${kinds.map(kind => html`<li><a href="${localePath(locale, `/explore/${kindSlugs[kind]}`)}">${m.kinds.plural[kind]}</a></li>`)}</ul></div>

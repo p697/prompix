@@ -4,14 +4,14 @@ import { legalEN } from "./legal-en.ts";
 export const en: Messages = {
   meta: {
     homeTitle: "Prompix — See the words behind the work",
-    homeDescription: "Discover the latest AI prompts for images, video, text and websites, plus Agent Skills, with every creator credited and every source linked. Free and open source.",
-    exploreDescription: "Browse the latest AI prompts for images, video, text and websites, plus Agent Skills, with creators credited and sources linked.",
+    homeDescription: "Discover the latest AI prompts for images, video and text, with every creator credited and every source linked. Free and open source.",
+    exploreDescription: "Browse the latest AI prompts for images, video and text, with creators credited and sources linked.",
     promptDescription: (title, creator) => `${title}${creator ? ` by ${creator}` : ""}. Read the full prompt, see its preview and copy it to your favorite AI tool.`,
   },
   nav: { label: "Main", home: "Prompix home", explore: "Explore", support: "Support", menu: "Menu", skip: "Skip to content", language: "Language" },
   hero: {
     title: 'See the words<br><span class="spectral">behind the work.</span>',
-    lead: "Images, video, text, websites and Agent Skills. Discover the prompts that made them, and the people who wrote them.",
+    lead: "Images, video and text. Discover the prompts that made them, and the people who wrote them.",
     primary: "Start exploring",
     secondary: "Made for iPhone",
     wallLabel: "Latest images",
@@ -20,20 +20,18 @@ export const en: Messages = {
   kinds: {
     title: "Every kind of prompt.<br>All in one place.",
     browse: "Browse",
-    one: { image: "Image", video: "Video", text: "Text", web: "Website", skill: "Skill" },
-    names: { image: "Images", video: "Video", text: "Text", web: "Websites", skill: "Agent Skills" },
-    plural: { image: "Images", video: "Videos", text: "Text", web: "Websites", skill: "Skills" },
+    one: { image: "Image", video: "Video", text: "Text" },
+    names: { image: "Images", video: "Video", text: "Text" },
+    plural: { image: "Images", video: "Videos", text: "Text" },
     lines: {
       image: "From portraits to product shots.",
       video: "Scenes that move.",
       text: "Play, write, learn and work.",
-      web: "A website, from a single prompt.",
-      skill: "Reusable workflows for your coding assistant.",
     },
   },
   stats: {
     title: count => `<span class="spectral">${count}</span>`,
-    label: "prompts and skills, and counting.",
+    label: "prompts, and counting.",
     items: [{ value: "9", label: "Languages" }, { value: "0", label: "Ads" }, { value: "MIT", label: "Open source" }],
   },
   creators: {
@@ -54,7 +52,7 @@ export const en: Messages = {
   },
   explore: {
     title: "Explore.",
-    titles: { image: "Images.", video: "Video.", text: "Text.", web: "Websites.", skill: "Agent Skills." },
+    titles: { image: "Images.", video: "Video.", text: "Text." },
     all: "All",
     search: "Search prompts",
     searchLabel: "Search",
@@ -85,11 +83,9 @@ export const en: Messages = {
     viewSource: "View original",
     profile: "Profile",
     openTool: host => `Open ${host}`,
-    repository: "Repository",
     report: "Report this content",
     moreFrom: name => `More from ${name}`,
     moreLike: "More like this",
-    skillFiles: "Files",
     unavailable: "This prompt is no longer available.",
     previewNote: "Preview",
   },

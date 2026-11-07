@@ -9,7 +9,7 @@ export interface Media {
 }
 export interface Cover { text: string; eyebrow: string; tone?: "sage" | "clay" | "ink" | "sky" | "cream" }
 export interface Card {
-  id: string; kind: Exclude<Kind, "skill">; contentType: "prompt" | "skill"; title: string; summary: string;
+  id: string; kind: Kind | "web"; contentType: "prompt" | "skill"; title: string; summary: string;
   tags: string[]; model: string; previewLabel: string; creator?: Creator; media: Media | null; cover?: Cover | null;
   language: string; availableLanguages: string[]; presentation?: string;
 }
@@ -17,7 +17,6 @@ export interface Translation { title: string; summary: string; prompt: string; e
 export interface Item extends Omit<Card, "language" | "availableLanguages"> {
   prompt: string; example: string; toolURL: string | null; publishedAt?: string;
   source: { name: string; url: string | null; license: string; method: string; author?: string; repository?: string };
-  skill?: { name: string; description: string; repository: string; directory: string; installURL: string; files?: string[] };
   localization?: { sourceLanguage: string; translations: Partial<Record<string, Translation>> };
 }
 export interface Page { items: Card[]; nextCursor: string | null }
@@ -56,7 +55,8 @@ export const coverImage = (card: Pick<Card, "media">) => isMedia(card.media?.ima
  */
 export const listable = (card: Pick<Card, "presentation" | "media">) => card.presentation === "general" || !coverImage(card);
 
-export const kindOf = (card: Pick<Card, "kind" | "contentType">): Kind => card.contentType === "skill" ? "skill" : card.kind;
+// Skills and web prompts left the library on 2026-11-07; a stray one reads as text.
+export const kindOf = (card: Pick<Card, "kind" | "contentType">): Kind => card.contentType === "skill" || card.kind === "web" ? "text" : card.kind;
 
 /**
  * Merges the translation for `language` into an item. Metadata may be translated even when the

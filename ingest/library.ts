@@ -11,21 +11,25 @@ export function countByKind(items: readonly Pick<Prompt, "kind">[]): KindCounts 
 }
 
 /** Select the complete eligible library after current-fingerprint editorial review. */
+/** Longer instructions are never published, so they are not worth reviewing either. */
+export const maximumPromptLength = 30000;
+
+/** Why a reviewed item cannot enter the library, or undefined when it can. */
+export function libraryIssue(item: Candidate, excluded: ReadonlySet<string>): string | undefined {
+  if (excluded.has(item.id)) return "已被下架处理";
+  const source = nativeXSourceIssue(item);
+  if (source) return source;
+  if (item.prompt.length < (item.editorialRank !== undefined ? 20 : 80)) return "正文太短";
+  if (item.prompt.length > maximumPromptLength) return "正文太长";
+  if (item.title.length > 160) return "标题太长";
+  if (item.reviewStatus !== "candidate") return "没有通过编辑审核";
+  if (item.kind === "video" && !(item.media?.imageURL && item.media?.videoURL)) return "视频缺少来源封面或片段";
+  if (/nsfw|porn|nudity|nude |jailbreak|越狱|裸体|色情|鬼灭之刃|demon slayer|dragon ball|naruto|蜘蛛侠|spider-man|血腥|gore/i.test(item.title + " " + item.prompt))
+    return "命中屏蔽词";
+}
+
 export function selectLibrary(items: readonly Candidate[], excluded: ReadonlySet<string>): Candidate[] {
-  const eligible = items.filter((item) => {
-    if (
-      excluded.has(item.id) ||
-      nativeXSourceIssue(item) ||
-      item.prompt.length < (item.editorialRank !== undefined ? 20 : 80) ||
-      item.prompt.length > 30000 ||
-      item.title.length > 160 ||
-      item.reviewStatus !== "candidate" ||
-      (item.kind === "video" && !(item.media?.imageURL && item.media?.videoURL))
-    ) return false;
-    return !/nsfw|porn|nudity|nude |jailbreak|越狱|裸体|色情|鬼灭之刃|demon slayer|dragon ball|naruto|蜘蛛侠|spider-man|血腥|gore/i.test(
-      item.title + " " + item.prompt,
-    );
-  });
+  const eligible = items.filter(item => !libraryIssue(item, excluded));
   eligible.sort((a, b) => {
     const rank = (b.editorialRank ?? -1) - (a.editorialRank ?? -1);
     if (rank) return rank;

@@ -8,51 +8,58 @@ struct PendingPromptDetail: View {
     let position: DetailReadingPosition
     let retry: () -> Void
     @State private var actionsCollapsed = false
+    @State private var mediaPaneVisible = false
     private var preview: ContentPreview { ContentPreview(card) }
 
     var body: some View {
         Group {
             if #available(iOS 27.1, *), preview.hasDetailMedia {
                 ArrangementView {
-                    ScrollView { reading.padding(.bottom, 28).frame(maxWidth: 700).frame(maxWidth: .infinity) }
-                        .preservingReadingPosition(position).readingChrome($actionsCollapsed).accessibilityIdentifier("detailReadingPane")
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 0) {
+                            if !mediaPaneVisible { media }
+                            reading
+                        }.padding(.bottom, 28).frame(maxWidth: 700).frame(maxWidth: .infinity)
+                    }.ignoresSafeArea(edges: mediaPaneVisible ? [] : .top).hidesTopEdgeEffect()
+                        .preservingReadingPosition(position).readingChrome($actionsCollapsed).readingBottomEdge().accessibilityIdentifier("detailReadingPane")
                 } secondary: {
-                    ScrollView { media.padding(.bottom, 24).frame(maxWidth: 600).frame(maxWidth: .infinity) }
-                        .preservingReadingPosition(position, media: true).accessibilityIdentifier("detailMediaPane")
+                    ScrollView { media.padding(.bottom, 24).frame(maxWidth: 600).frame(maxWidth: .infinity) }.ignoresSafeArea(edges: .top)
+                        .preservingReadingPosition(position, media: true).reportsPaneVisibility($mediaPaneVisible).accessibilityIdentifier("detailMediaPane")
                 }.arrangementViewStyle(.split.axes(.horizontal))
             } else {
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 25) {
+                    VStack(alignment: .leading, spacing: 0) {
                         media
                         reading
                     }.padding(.bottom, 28).frame(maxWidth: 700).frame(maxWidth: .infinity)
-                }.preservingReadingPosition(position).readingChrome($actionsCollapsed).accessibilityIdentifier("detailReadingPane")
+                }.ignoresSafeArea(edges: preview.hasDetailMedia ? .top : []).hidesTopEdgeEffect().preservingReadingPosition(position).readingChrome($actionsCollapsed).readingBottomEdge().accessibilityIdentifier("detailReadingPane")
             }
         }.foregroundStyle(Palette.ink)
+            .overlay(alignment: .top) { if preview.hasDetailMedia { EdgeVeil() } }
             .onChange(of: actionsCollapsed) { _, value in position.actionsCollapsed = value }
             .promptActionBar {
-                ReadingActionBar(isSkill: card.contentType == "skill", ready: false, collapsed: actionsCollapsed)
+                ReadingActionBar(ready: false, collapsed: actionsCollapsed)
             }
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button {} label: { Label(String(localized: "分享"), systemImage: "square.and.arrow.up").frame(minWidth: 44, minHeight: 44) }
+                    Button {} label: { Label { Text(String(localized: "分享")) } icon: { PrompixIcon.share.image }.frame(minWidth: 44, minHeight: 44) }
                         .disabled(true).accessibilityIdentifier("sharePrompt")
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button {} label: { Label(String(localized: "收藏 Prompt"), systemImage: "bookmark").frame(minWidth: 44, minHeight: 44) }
+                    Button {} label: { Label { Text(String(localized: "收藏 Prompt")) } icon: { PrompixIcon.saved.image }.frame(minWidth: 44, minHeight: 44) }
                         .disabled(true).accessibilityIdentifier("detailFavorite")
                 }
             }
     }
     @ViewBuilder private var media: some View {
         if preview.hasDetailMedia {
-            PromptDetailArtwork(preview: preview).padding(.horizontal, 12).padding(.top, 8).accessibilityIdentifier("detailPreviewArtwork")
+            DetailHero(preview: preview, title: card.title).accessibilityIdentifier("detailPreviewArtwork")
         }
     }
     private var reading: some View {
         VStack(alignment: .leading, spacing: 24) {
-            PromptDetailHeading(title: card.title, summary: card.summary, creator: card.creator)
-            if #available(iOS 27.1, *), preview.hasDetailMedia {
+            PromptDetailHeading(preview: ContentPreview(card), title: card.title)
+            if #available(iOS 27.1, *), preview.hasDetailMedia, mediaPaneVisible {
                 HStack(spacing: 14) {
                     Artwork(preview: preview).frame(width: 76, height: 86).clipped()
                         .clipShape(RoundedRectangle(cornerRadius: 10))
@@ -70,33 +77,112 @@ struct PendingPromptDetail: View {
     }
 }
 
+/// The model leads, because it decides what the prompt will make; then the title.
 struct PromptDetailHeading: View {
+    let preview: ContentPreview
     let title: String
-    let summary: String
-    let creator: Prompt.Creator?
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text(title).font(Typography.editorial(.title)).lineSpacing(3)
+        let meta = preview.detailMeta
+        VStack(alignment: .leading, spacing: 10) {
+            if !meta.lead.isEmpty || !meta.rest.isEmpty {
+                (Text(meta.lead).foregroundStyle(Palette.ink).fontWeight(.semibold) + Text(meta.rest).foregroundStyle(Palette.muted))
+                    .font(Typography.meta(size: 11)).tracking(1.4)
+                    .accessibilityIdentifier("detailMeta")
+            }
+            Text(title).font(.system(size: 24, weight: .semibold)).lineSpacing(4)
                 .fixedSize(horizontal: false, vertical: true).accessibilityAddTraits(.isHeader)
                 .accessibilityIdentifier("detailTitle")
-            if !summary.isEmpty { Text(summary).font(.body).lineSpacing(4).foregroundStyle(Palette.muted) }
-            if let creator { CreatorByline(creator: creator) }
         }
     }
 }
 
-struct PromptDetailArtwork: View {
+/// The work edge to edge, fading into the page. Tall work is cropped to about
+/// 10:9, two fifths of the screen, so the title and the prompt share the first
+/// screen with it; the full frame opens on tap. Several images
+/// page sideways in place, with a counter.
+struct DetailHero: View {
     let preview: ContentPreview
+    var title = ""
+    var open: ((Int) -> Void)? = nil
+    @State private var page = 0
+    private var urls: [URL] { preview.media?.galleryURLs ?? [] }
+    /// The work's own frame, so a portrait keeps its face; only pictures
+    /// taller than 3:4 lose some of their bottom, which fades out anyway.
+    private var ratio: Double {
+        max(0.75, min(1.8, preview.media?.aspectRatio ?? 0.8))
+    }
     var body: some View {
-        Artwork(preview: preview)
-            .aspectRatio(preview.media?.aspectRatio.map { max(0.65, min(1.8, $0)) } ?? (preview.kind == .image ? 0.95 : 1.15), contentMode: .fit)
-            .clipShape(RoundedRectangle(cornerRadius: 6))
+        Color.clear.aspectRatio(ratio, contentMode: .fit)
+            .overlay { pages }
+            .clipped()
+            .overlay {
+                VStack(spacing: 0) {
+                    Spacer(minLength: 0)
+                    LinearGradient(colors: [Palette.paper.opacity(0), Palette.paper], startPoint: .top, endPoint: .bottom).frame(height: 72)
+                }.allowsHitTesting(false).accessibilityHidden(true)
+            }
+            .overlay(alignment: .bottomTrailing) {
+                if urls.count > 1 {
+                    Text(verbatim: "\(page + 1) / \(urls.count)").font(Typography.meta(size: 11)).tracking(1).monospacedDigit()
+                        .padding(.horizontal, 10).frame(height: 26).readingGlass()
+                        .padding(.trailing, 16).padding(.bottom, 44)
+                        .allowsHitTesting(false).accessibilityHidden(true)
+                }
+            }
+            .contentShape(Rectangle())
+            .onTapGesture { open?(page) }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(title)
+            .accessibilityValue(urls.count > 1 ? "\(page + 1) / \(urls.count)" : "")
+            .accessibilityAddTraits(open == nil ? .isImage : [.isImage, .isButton])
+            .accessibilityAction { open?(page) }
+            .accessibilityActions {
+                if urls.count > 1 {
+                    if page < urls.count - 1 { Button(String(localized: "下一张")) { page += 1 } }
+                    if page > 0 { Button(String(localized: "上一张")) { page -= 1 } }
+                }
+            }
+    }
+    @ViewBuilder private var pages: some View {
+        if urls.count > 1 {
+            TabView(selection: $page) {
+                ForEach(urls.indices, id: \.self) { index in
+                    Group {
+                        if index == 0 { Artwork(preview: preview, fillsFrame: true, showsVideoBadge: false, anchorsTop: true) }
+                        else { RemoteImage(url: urls[index], contentMode: .fill) }
+                    }.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top).clipped().tag(index)
+                }
+            }.tabViewStyle(.page(indexDisplayMode: .never))
+        } else {
+            Artwork(preview: preview, fillsFrame: true, showsVideoBadge: false, anchorsTop: true)
+        }
     }
 }
 
 extension ContentPreview {
+    /// Film-edge meta: kind, model and, for visual work, its frame ratio.
+    var metaLine: String {
+        [displayKind, Prompt.namesModel(model) ? Prompt.localizedModel(model) : "", generation?.outputAspect ?? media?.aspectRatio.flatMap(Self.ratioLabel) ?? "", durationLabel ?? ""]
+            .filter { !$0.isEmpty }.joined(separator: " ▸ ").uppercased()
+    }
+    /// The detail's line: model ▸ frame ▸ length. Words have no frame, and an
+    /// unknown model is left out rather than replaced by the kind.
+    var detailMeta: (lead: String, rest: String) {
+        let lead = Prompt.namesModel(model) ? Prompt.localizedModel(model).uppercased() : ""
+        let frame = kind == .text ? "" : generation?.outputAspect ?? media?.aspectRatio.flatMap(Self.ratioLabel) ?? ""
+        let rest = [frame, durationLabel ?? ""].filter { !$0.isEmpty }
+        return (lead, rest.enumerated().map { ($0.offset == 0 && lead.isEmpty ? "" : " ▸ ") + $0.element }.joined())
+    }
+    /// The nearest common frame ratio, or nothing for an unusual shape.
+    static func ratioLabel(_ ratio: Double) -> String? {
+        let common: [(String, Double)] = [("1:1", 1), ("4:5", 0.8), ("3:4", 0.75), ("2:3", 2.0 / 3), ("9:16", 9.0 / 16),
+                                          ("5:4", 1.25), ("4:3", 4.0 / 3), ("3:2", 1.5), ("16:9", 16.0 / 9), ("21:9", 21.0 / 9)]
+        guard ratio > 0, let nearest = common.min(by: { abs($0.1 - ratio) < abs($1.1 - ratio) }),
+              abs(nearest.1 - ratio) / nearest.1 < 0.03 else { return nil }
+        return nearest.0
+    }
     var hasDetailMedia: Bool {
-        WebsiteExamples.files[id] != nil || kind == .video || media?.image != nil || media?.imageURL != nil
+        kind == .video || media?.image != nil || media?.imageURL != nil
     }
 }
 
@@ -130,6 +216,12 @@ final class DetailReadingPosition {
 }
 
 extension View {
+    /// A collapsed arrangement does not lay out its secondary pane; narrow
+    /// screens then keep the full preview above the reading content.
+    func reportsPaneVisibility(_ visible: Binding<Bool>) -> some View {
+        onGeometryChange(for: Bool.self) { $0.size.width > 1 && $0.size.height > 1 } action: { visible.wrappedValue = $0 }
+            .onDisappear { visible.wrappedValue = false }
+    }
     @ViewBuilder func preservingReadingPosition(_ position: DetailReadingPosition?, media: Bool = false) -> some View {
         if #available(iOS 18, *), let position {
             modifier(RestoreReadingPosition(saved: position, media: media))

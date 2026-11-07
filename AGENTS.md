@@ -12,9 +12,19 @@ Prompix is built mostly by AI coding agents. These rules apply to every agent an
 ## Workflow
 
 - Never commit to `main` directly. For each task, create a git worktree outside the main checkout (for example `../worktrees/<branch>`) on a new branch from the latest `origin/main`.
-- Every change goes through a pull request. Once CI passes, or when no CI applies to the change, the author may merge their own PR with a squash merge.
+- Every change goes through a pull request. Merge your own PR with a squash merge as soon as your own verification passes and CI (when it runs) is green. Do not ask the owner for permission to merge; that is the default. If verification or CI fails, fix it before merging. Right after opening the PR, enable auto-merge with squash (`gh pr merge --auto --squash`); `main` requires the `content` and `ios` checks (types, builds and data validation, about two minutes), so it lands only when they pass. The full suites run without holding the merge: `node-tests` on each pull request, `ios-tests` once per merge on `main`; run the affected tests locally before opening the PR. Do not deploy a service until `node-tests` is green. An app build may go to the owner's device once the required checks pass, since the affected tests already ran locally; do not hold it for `ios-tests`. If either suite fails after merging, fixing it comes before anything else.
 - After a PR is merged or abandoned: delete the remote branch, remove the worktree and the local branch, then fast-forward the main checkout to `origin/main`. If the main checkout has uncommitted changes, leave it alone and report it.
 - Write commit messages and PR titles in concise, imperative English.
+- Drive agreed work to the end without waiting on the owner. Once a change is merged, deploy it yourself (for example `npx wrangler deploy --config services/<name>/wrangler.jsonc` from the updated main checkout) and verify it on the live service. Then move on to the next agreed step. Ask only for real product decisions or for actions the safety rules reserve for the owner.
+- To wait for CI or a merge, run one blocking command in the background (for example `gh pr checks <n> --watch`) that wakes you when it ends. Do not ask the owner to report progress, and do not poll in a loop.
+
+## Data pipeline control
+
+- Operate the content pipeline only through `npm run pipeline -- <command>`; see [docs/data-pipeline-v2.md](docs/data-pipeline-v2.md). Never edit files under `~/.local/share/prompix/pipeline/` by hand.
+- Every change names its author: `--by codex`, `--by claude-code`, or the person. Add `--reason` when the owner gave one.
+- To answer "is the pipeline running and how is it going", run `status --brief`, then `log` only if something looks wrong.
+- To answer why items are not online, how many are pending, or where one item is stuck, run `funnel` or `item <id>` and quote its output. Do not count by reading the content stores by hand, and label anything the command does not cover as unverified. Do not poll more often than every two hours unless the owner asks; failures alert through the monitor.
+- Model choice is routing (`route <stage> <provider>`), not code. Add a vendor as an adapter under `ingest/models/`.
 
 ## Secrets
 

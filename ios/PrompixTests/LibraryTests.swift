@@ -11,14 +11,36 @@ import AVKit
     }
     override func tearDown() async throws { try? FileManager.default.removeItem(at: directory) }
 
+    func testVersionsAreKeptOldestFirstNamedAndReconcileWithTheirWork() throws {
+        let library = Library(directory: directory)
+        let item = try XCTUnwrap(library.prompts.first), other = try XCTUnwrap(library.prompts.last)
+        let start = Date(timeIntervalSince1970: 1_800_000_000)
+        let first = try XCTUnwrap(library.saveVersion("First take", id: nil, for: item, now: start))
+        let second = try XCTUnwrap(library.saveVersion("Second take", id: nil, for: item, now: start.addingTimeInterval(60)))
+        XCTAssertEqual(library.versions(of: item).map(\.text), ["First take", "Second take"])
+        XCTAssertTrue(library.renameVersion(second, to: "  Shorter  "))
+        XCTAssertEqual(library.versions(of: item).map(\.name), [nil, "Shorter"], "A name never shows up as a version of its own")
+        XCTAssertEqual(library.saveVersion("First, revised", id: first, for: item), first)
+        XCTAssertNil(library.saveVersion("Wrong work", id: first, for: other))
+        XCTAssertTrue(library.draftedIDs.contains(item.id))
+        XCTAssertEqual(library.versionedWorks.map(\.id), [item.id])
+        let reopened = Library(directory: directory)
+        XCTAssertEqual(reopened.versions(of: item).map(\.text), ["First, revised", "Second take"])
+        XCTAssertEqual(reopened.versions(of: item).last?.name, "Shorter")
+        XCTAssertTrue(reopened.deleteVersion(second))
+        XCTAssertEqual(reopened.versions(of: item).map(\.id), [first])
+        XCTAssertFalse(reopened.drafts.keys.contains { $0.hasPrefix(second) }, "Its name goes with it")
+        XCTAssertTrue(reopened.renameVersion(first, to: " "))
+        XCTAssertNil(reopened.versions(of: item).first?.name, "An empty name returns the version to its number")
+        XCTAssertTrue(reopened.deleteVersion(first))
+        XCTAssertTrue(reopened.versionedWorks.isEmpty, "The kept copy of the work goes with its last version")
+    }
+
     func testSpecificCollectionsDoNotCollapseIntoEveryVisualPrompt() throws {
         let library = Library(directory: directory)
         let products = try XCTUnwrap(Collection.all.first { $0.id == "products" })
         XCTAssertTrue(products.items(in: library).contains { $0.id == "object-poster" })
         XCTAssertFalse(products.items(in: library).contains { $0.id == "tiny-island" })
-        let websites = try XCTUnwrap(Collection.all.first { $0.id == "web" })
-        XCTAssertEqual(websites.items(in: library).count, 6)
-        XCTAssertTrue(websites.items(in: library).allSatisfy { $0.kind == .web })
         let play = try XCTUnwrap(Collection.all.first { $0.id == "play" })
         XCTAssertTrue(play.items(in: library).contains { $0.id == "gentle-tarot" })
         XCTAssertTrue(play.items(in: library).allSatisfy { $0.kind == .text })
@@ -46,6 +68,37 @@ import AVKit
         raw["media"] = ["imageURLs": Array(repeating: cover.absoluteString, count: 9)]
         let tooMany = try JSONDecoder().decode(Prompt.self, from: JSONSerialization.data(withJSONObject: raw))
         XCTAssertThrowsError(try Catalog(schemaVersion: 1, version: "test", prompts: [tooMany]).validated())
+    }
+
+    func testDecksPersistApartFromFavoritesAndFollowUnsaving() throws {
+        let library = Library(directory: directory)
+        let item = try XCTUnwrap(library.prompts.first { $0.id == "tiny-island" })
+        XCTAssertTrue(library.toggle(item))
+        let deck = try XCTUnwrap(library.decks.create(named: "  产品图灵感\n  "))
+        XCTAssertEqual(deck.name, "产品图灵感")
+        XCTAssertNil(library.decks.create(named: " \n "), "A blank name never makes a deck")
+        XCTAssertTrue(library.decks.set(item.id, in: deck.id, member: true))
+        XCTAssertTrue(library.decks.rename(deck.id, to: String(repeating: "海", count: 60)))
+        let reopened = Library(directory: directory)
+        XCTAssertEqual(reopened.decks.decks.map(\.itemIDs), [[item.id]])
+        XCTAssertEqual(reopened.decks.decks.first?.name.count, DeckStore.maximumNameLength)
+        XCTAssertEqual(reopened.decks.decks(containing: item.id).map(\.id), [deck.id])
+        XCTAssertTrue(reopened.toggle(item), "Unsaving takes the work out of every deck")
+        XCTAssertTrue(reopened.decks.decks.first?.itemIDs.isEmpty == true)
+        XCTAssertTrue(reopened.decks.delete(deck.id))
+        XCTAssertTrue(Library(directory: directory).decks.decks.isEmpty)
+    }
+
+    func testUnreadableDeckFileIsKeptAndNeverOverwritten() throws {
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let file = directory.appending(path: DeckStore.fileName)
+        try Data("{not json".utf8).write(to: file)
+        let library = Library(directory: directory)
+        XCTAssertFalse(library.decks.readable)
+        XCTAssertNil(library.decks.create(named: "新卡组"))
+        XCTAssertEqual(try Data(contentsOf: file), Data("{not json".utf8))
+        let item = try XCTUnwrap(library.prompts.first)
+        XCTAssertTrue(library.toggle(item), "A damaged deck file never blocks saving a work")
     }
 
     func testFavoritesSurviveRelaunchAndStorePromptSnapshot() throws {
@@ -390,12 +443,12 @@ import AVKit
     func testBundledFallbackAndSearchIntersection() throws {
         let library = Library(directory: directory)
         XCTAssertEqual(library.version, "studio-005")
-        XCTAssertEqual(library.prompts.count, 30)
-        XCTAssertEqual(Set(library.prompts.map(\.kind)), Set([PromptKind.text, .image, .web]))
-        for kind in [PromptKind.text, .image, .web] { XCTAssertGreaterThanOrEqual(library.prompts.filter { $0.kind == kind }.count, 6) }
+        XCTAssertEqual(library.prompts.count, 24)
+        XCTAssertEqual(Set(library.prompts.map(\.kind)), Set([PromptKind.text, .image]))
+        for kind in [PromptKind.text, .image] { XCTAssertGreaterThanOrEqual(library.prompts.filter { $0.kind == kind }.count, 6) }
         let query = PromptQuery(text: "塔罗", kind: .text)
         XCTAssertEqual(library.prompts.filter(query.matches).map(\.id), ["gentle-tarot"])
-        XCTAssertTrue(library.prompts.filter(PromptQuery(text: "塔罗", kind: .web).matches).isEmpty)
+        XCTAssertTrue(library.prompts.filter(PromptQuery(text: "塔罗", kind: .image).matches).isEmpty)
         XCTAssertTrue(library.prompts.filter(PromptQuery(text: "  ").matches).count == library.prompts.count)
     }
 
@@ -466,9 +519,10 @@ import AVKit
     func testPublicSupportRoutesRespectLanguageAndOnlyIncludeContentIdentity() throws {
         XCTAssertEqual(SupportLinks.url(.privacy, language: "en").absoluteString, "https://prompix.dev/privacy")
         XCTAssertEqual(SupportLinks.url(.support, language: "zh-Hans").absoluteString, "https://prompix.dev/zh/support")
-        let report = SupportLinks.url(.report, contentID: "gentle-tarot", language: "en")
-        XCTAssertEqual(report.absoluteString, "https://prompix.dev/report?id=gentle-tarot")
-        XCTAssertNil(URLComponents(url: SupportLinks.url(.home, contentID: "ignored", language: "en"), resolvingAgainstBaseURL: false)?.query)
+        let mail = try XCTUnwrap(URLComponents(url: SupportLinks.reportMail(contentID: "gentle-tarot", title: "Tarot", subject: "Report"), resolvingAgainstBaseURL: false))
+        XCTAssertEqual(mail.scheme, "mailto"); XCTAssertEqual(mail.path, "support@prompix.dev")
+        XCTAssertEqual(mail.queryItems?.first { $0.name == "subject" }?.value, "Report · gentle-tarot")
+        XCTAssertEqual(mail.queryItems?.first { $0.name == "body" }?.value, "Tarot\nID: gentle-tarot\n\n", "Only the work's own identity, nothing about the reader")
     }
 
     func testBundledMediaExist() throws {
@@ -480,10 +534,7 @@ import AVKit
         XCTAssertNotNil(Bundle(for: LibraryTests.self).url(forResource: "playback-fixture", withExtension: "mp4"))
         XCTAssertNil(Bundle.main.url(forResource: "playback-fixture", withExtension: "mp4"))
         XCTAssertTrue((Bundle.main.urls(forResourcesWithExtension: "mp4", subdirectory: nil) ?? []).isEmpty)
-        for (id, filename) in WebsiteExamples.files {
-            XCTAssertNotNil(Bundle.main.url(forResource: filename, withExtension: "html", subdirectory: "WebExamples"), filename)
-            XCTAssertNotNil(UIImage(named: "web-\(id)"), id)
-        }
+        XCTAssertFalse(library.prompts.contains { $0.kind == .web || $0.isSkill }, "Prompix ships images, video and words only")
     }
     func testCachedVideoEditionAndSavedSnapshotSurviveFallbackRetirement() throws {
         let library = Library(directory: directory)

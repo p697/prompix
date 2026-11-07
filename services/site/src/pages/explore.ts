@@ -63,7 +63,7 @@ export async function explore(locale: Locale, query: ExploreQuery, env: Env, ctx
     : creatorName ? m.explore.by(creatorName)
     : query.tag ? m.explore.tagged(query.tag)
     : query.kind ? m.explore.titles[query.kind] : m.explore.title;
-  const kinds: (Kind | undefined)[] = [undefined, "image", "video", "text", "web", "skill"];
+  const kinds: (Kind | undefined)[] = [undefined, "image", "video", "text"];
   const keep = exploreSearch({ ...query, after: undefined, creator: undefined, tag: undefined });
   const filters = html`<nav class="segments" aria-label="${m.explore.filters}">${kinds.map(kind => {
     const href = localePath(locale, kind ? `/explore/${kindSlugs[kind]}` : "/explore") + keep;

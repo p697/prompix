@@ -8,12 +8,20 @@ protocol FeedServing: Sendable {
     func creatorDiscovery(query: CreatorQuery, cursor: String?, release: String?) async throws -> FeedCreatorsPage
     func state() async throws -> FeedState
     func removals(after: String) async throws -> FeedRemovals
+    /// The service variant whose lists also contain suggestive works.
+    func presenting(suggestive: Bool) -> any FeedServing
+}
+
+extension FeedServing {
+    func presenting(suggestive: Bool) -> any FeedServing { self }
 }
 
 struct FeedClient: FeedServing {
     static let pageSize = 30
     let session: URLSession
     private let gate = FeedRequestGate()
+    /// Lists default to general works. Cursors are bound to this audience.
+    private(set) var includesSuggestive = false
     init(session: URLSession? = nil) {
         if let session { self.session = session }
         else {
@@ -33,7 +41,7 @@ struct FeedClient: FeedServing {
     }
     func page(query: FeedQuery, cursor: String? = nil, release: String? = nil) async throws -> FeedPage {
         let query = try query.validated()
-        let parameters = try pagination(query.parameters, cursor: cursor)
+        let parameters = try pagination(audience(query.parameters), cursor: cursor)
         let page: FeedPage = try await fetch("feed", parameters: parameters)
         return try page.validated(locale: query.locale, limit: Self.pageSize, release: release)
     }
@@ -46,19 +54,19 @@ struct FeedClient: FeedServing {
     }
     func creators(q: String = "", cursor: String? = nil, release: String? = nil) async throws -> FeedCreatorsPage {
         let query = try FeedQuery(q: q).validated()
-        let parameters = try pagination([URLQueryItem(name: "q", value: query.q)], cursor: cursor)
+        let parameters = try pagination(audience([URLQueryItem(name: "q", value: query.q)]), cursor: cursor)
         let page: FeedCreatorsPage = try await fetch("creators", parameters: parameters)
         return try page.validated(limit: Self.pageSize, release: release)
     }
     func creatorDiscovery(query: CreatorQuery, cursor: String? = nil, release: String? = nil) async throws -> FeedCreatorsPage {
         let query = try query.validated()
-        let page: FeedCreatorsPage = try await fetch("creators", parameters: pagination(query.parameters, cursor: cursor))
+        let page: FeedCreatorsPage = try await fetch("creators", parameters: pagination(audience(query.parameters), cursor: cursor))
         try CreatorDiscoverySource.validate(page, query: query, release: release)
         return page
     }
     func browse(locale: String) async throws -> FeedBrowse {
         guard FeedValidation.locale(locale) else { throw FeedError.invalidQuery }
-        let value: FeedBrowse = try await fetch("browse", parameters: [URLQueryItem(name: "locale", value: locale)])
+        let value: FeedBrowse = try await fetch("browse", parameters: audience([URLQueryItem(name: "locale", value: locale)]))
         return try value.validated(locale: locale)
     }
     func state() async throws -> FeedState {
@@ -69,6 +77,13 @@ struct FeedClient: FeedServing {
         guard FeedValidation.sequence(after) != nil else { throw FeedError.invalidQuery }
         let value: FeedRemovals = try await fetch("removals", parameters: [URLQueryItem(name: "after", value: after)], maximum: 150_000)
         return try value.validated(after: after)
+    }
+    func presenting(suggestive: Bool) -> any FeedServing {
+        var client = self; client.includesSuggestive = suggestive
+        return client
+    }
+    private func audience(_ parameters: [URLQueryItem]) -> [URLQueryItem] {
+        includesSuggestive ? parameters + [URLQueryItem(name: "presentation", value: "suggestive")] : parameters
     }
     private func pagination(_ parameters: [URLQueryItem], cursor: String?) throws -> [URLQueryItem] {
         guard FeedValidation.cursor(cursor) else { throw FeedError.invalidQuery }

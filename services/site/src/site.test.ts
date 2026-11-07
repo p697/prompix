@@ -141,3 +141,16 @@ test("feed outages render a retryable page instead of an error", async () => {
   assert.equal(response.headers.get("Retry-After"), "30");
   assert.equal(response.headers.get("Cache-Control"), "no-store");
 });
+
+test("the retired website and skill categories redirect to explore and no longer appear", async () => {
+  const env = fakeEnv({ "/v3/feed": { items: [card()], nextCursor: null }, "/v3/state": { count: 3130 } });
+  for (const [path, target] of [["/explore/websites", "/explore"], ["/zh/explore/skills", "/zh/explore"]]) {
+    const response = await get(env, path);
+    assert.equal(response.status, 301); assert.equal(response.headers.get("Location"), target);
+  }
+  const explore = await (await get(env, "/explore")).text();
+  assert.ok(!/websites|skills/i.test(explore.match(/<nav class="segments"[\s\S]*?<\/nav>/)?.[0] ?? ""));
+  const support = legal(zh, "support", new URLSearchParams());
+  assert.ok(!support.includes("Skill"));
+  assert.match(legal(zh, "report", new URLSearchParams()), /24 小时内/);
+});

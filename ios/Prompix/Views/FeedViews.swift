@@ -9,6 +9,8 @@ struct FeedResults: View {
     var previews: [FeedCard] = []
     var excludingID: String?
     var layout: PromptGridLayout? = nil
+    /// Full-width modules placed a little way into the feed rather than above it.
+    var interlude: AnyView? = nil
     @State private var fallbackQuery: FeedQuery?
     @Environment(Library.self) private var library
     var body: some View {
@@ -30,22 +32,25 @@ struct FeedResults: View {
                         ContentActivityLabel(size: 40)
                     }.frame(minHeight: 44).padding(.horizontal, 16)
                 }
-                PromptGrid(items: offlineItems).padding(.horizontal, 12)
+                PromptGrid(items: offlineItems).padding(.horizontal, PromptGridLayout.inset)
             }
             if !showsFallback {
                 // Keep measured column geometry mounted through cold loads.
                 ZStack(alignment: .top) {
-                    PreviewMasonryGrid(items: items, preview: ContentPreview.init, cell: { FeedPromptCard(card: $0) }, suppliedLayout: layout)
-                    if waiting && items.isEmpty { FeedLoadingGrid() }
-                }.padding(.horizontal, 12)
+                    FeedInterleave(items: items, interlude: interlude) { part in
+                        PreviewMasonryGrid(items: part, preview: ContentPreview.init, cell: { FeedPromptCard(card: $0) }, suppliedLayout: layout)
+                            .padding(.horizontal, PromptGridLayout.inset)
+                    }
+                    if waiting && items.isEmpty { FeedLoadingGrid().padding(.horizontal, PromptGridLayout.inset) }
+                }
             }
             if waiting {
                 if !items.isEmpty && !showsFallback { ContentActivityLabel(size: 48).frame(maxWidth: .infinity) }
             } else if matches && store.failure != nil {
                 if !showsFallback { recovery(message: String(localized: "暂时无法连接")) }
             } else if items.isEmpty && !store.isLoading {
-                ContentUnavailableView(String(localized: "暂无匹配内容"), systemImage: "sparkle",
-                                       description: Text(String(localized: "试试其他分类，或清除筛选条件。")))
+                if query.q.isEmpty { QuietEmpty(title: String(localized: "这里还没有作品")) }
+                else { QuietEmpty(title: String(localized: "没有找到「\(query.q)」"), message: String(localized: "换个说法，或者少用几个词。")) }
             }
             if matches && store.nextCursor != nil && store.failure == nil {
                 FeedNextPageButton(isLoading: store.isLoading, enabled: true) {
@@ -53,6 +58,7 @@ struct FeedResults: View {
                 }.accessibilityIdentifier("loadMoreFeed")
             }
         }
+        .feedDetailHost()
         .onChange(of: matches && store.failure != nil && items.isEmpty) { _, failed in
             if failed { fallbackQuery = query }
         }
@@ -75,15 +81,42 @@ struct FeedResults: View {
         ContentRecoveryRow(message: message, retryAt: store.retryAt, retryID: "retryFeed") {
             Task {
                 if !store.failedFirstPage, store.nextCursor != nil, !store.isCached, store.failure as? FeedError != .snapshotExpired { await store.loadMore() }
-                else { await store.load(query, force: true) }
+                else { await store.load(query) } // keeps any cards already read
             }
         }.padding(.horizontal, 16)
     }
 }
 
+/// Splits a feed around one full-width interlude. The leading part is fixed at
+/// a screen or two of works, so later pages never move the interlude.
+struct FeedInterleave<Item: Identifiable, Grid: View>: View {
+    static var leadingCount: Int { 12 }
+    let items: [Item]
+    let interlude: AnyView?
+    @ViewBuilder let grid: ([Item]) -> Grid
+    var body: some View {
+        if let interlude, items.count > Self.leadingCount {
+            VStack(alignment: .leading, spacing: 20) {
+                grid(Array(items.prefix(Self.leadingCount)))
+                interlude
+                grid(Array(items.dropFirst(Self.leadingCount)))
+            }
+        } else { grid(items) }
+    }
+}
+
+extension EnvironmentValues {
+    /// Search results name each visual work in one line; the feed shows only the work.
+    @Entry var cardShowsTitle = false
+    /// A fixed frame for every card, such as squares on a deck's contact sheet.
+    @Entry var cardAspectRatio: CGFloat? = nil
+}
+
 struct PromptCardFace: View {
     let preview: ContentPreview
+    @Environment(\.cardAspectRatio) private var fixedRatio
     @Environment(\.dynamicTypeSize) private var typeSize
+    @Environment(\.cardShowsTitle) private var titled
     private var titleIsInArtwork: Bool { preview.usesTextArtwork }
     var body: some View {
         VStack(alignment: .leading, spacing: PromptCardGeometry.titleSpacing) {
@@ -92,14 +125,13 @@ struct PromptCardFace: View {
                     Text(preview.displayTitle).font(.headline).foregroundStyle(.primary)
                     Text(preview.displaySummary).font(.subheadline).foregroundStyle(Palette.muted)
                 }.fixedSize(horizontal: false, vertical: true).frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(20).background(Palette.soft, in: RoundedRectangle(cornerRadius: 6))
+                    .padding(20).background(Palette.soft, in: RoundedRectangle(cornerRadius: PromptCardGeometry.cornerRadius, style: .continuous))
             } else {
-                Artwork(preview: preview, fillsFrame: true).aspectRatio(PromptCardGeometry.aspectRatio(for: preview), contentMode: .fit)
-                    .clipShape(RoundedRectangle(cornerRadius: titleIsInArtwork ? 6 : 4, style: .continuous))
+                Artwork(preview: preview, compact: fixedRatio != nil, fillsFrame: true).aspectRatio(fixedRatio ?? PromptCardGeometry.aspectRatio(for: preview), contentMode: .fit)
+                    .clipShape(RoundedRectangle(cornerRadius: fixedRatio == nil ? PromptCardGeometry.cornerRadius : 4, style: .continuous))
             }
-            if !titleIsInArtwork {
-                Text(preview.displayTitle).font(.footnote).foregroundStyle(Palette.ink)
-                    .lineLimit(typeSize.isAccessibilitySize ? nil : 2).multilineTextAlignment(.leading).padding(.horizontal, 2)
+            if titled && !titleIsInArtwork && !typeSize.isAccessibilitySize {
+                Text(preview.displayTitle).font(.subheadline).foregroundStyle(Palette.ink).lineLimit(1).padding(.horizontal, 2)
             }
         }.contentShape(Rectangle())
     }
@@ -117,25 +149,34 @@ struct FeedPromptCard: View {
     @State private var savedFeedback = false
     @State private var copiedFeedback = false
     @Namespace private var transition
+    @Environment(\.feedDetailHost) private var host
+    private enum Action { case copy, save }
+    private var isPresenting: Bool { host.map { $0.presentedID == card.id } ?? detailPresented }
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Button { library.recommendations.record(.open, card: card); detailPresented = true } label: {
-                PromptCardFace(preview: ContentPreview(card)).promptTransitionSource(id: card.id, in: transition)
+            Button {
+                library.recommendations.record(.open, card: card)
+                if let host { host.open(card) } else { detailPresented = true }
+            } label: {
+                PromptCardFace(preview: ContentPreview(card)).promptTransitionSource(id: card.id, in: host?.namespace ?? transition)
                     .overlay(alignment: .bottomTrailing) {
                         if actionID != nil { ContentActivityLabel(size: 40).padding(8).background(.regularMaterial, in: Capsule()).padding(8) }
                     }
-            }.buttonStyle(.plain).accessibilityLabel(card.title).accessibilityIdentifier("prompt-\(card.id)")
+            }.buttonStyle(.cardPress).accessibilityLabel(card.title).accessibilityIdentifier("prompt-\(card.id)")
                 .contextMenu {
-                    Button { library.recommendations.record(.dismiss, card: card) } label: {
-                        Label(RecommendationCopy.text("feedback.less"), systemImage: "minus.circle")
-                    }
-                    Button { perform(save: false) } label: {
-                        Label(card.contentType == "skill" ? String(localized: "复制 Skill") : String(localized: "复制 Prompt"), systemImage: "doc.on.doc")
+                    Button { perform(.copy) } label: {
+                        Label { Text(String(localized: "复制 Prompt")) } icon: { PrompixIcon.copy.image }
                     }.disabled(actionID != nil)
-                    Button { perform(save: true) } label: {
+                    Button { perform(.save) } label: {
                         Label(library.savedIDs.contains(card.id) ? String(localized: "取消收藏") : String(localized: "收藏 Prompt"),
                               systemImage: library.savedIDs.contains(card.id) ? "bookmark.slash" : "bookmark")
                     }.disabled(actionID != nil)
+                    Button { library.recommendations.record(.dismiss, card: card) } label: {
+                        Label { Text(RecommendationCopy.text("feedback.less")) } icon: { PrompixIcon.less.image }
+                    }
+                } preview: {
+                    WorkPeek(preview: ContentPreview(card), title: card.title,
+                             text: library.feed?.cachedDetail(for: card)?.displayContent.prompt ?? card.summary)
                 }
                 .sensoryFeedback(.success, trigger: copiedFeedback).sensoryFeedback(.selection, trigger: savedFeedback)
             if typeSize.isAccessibilitySize || voiceOverEnabled, let creator = card.creator {
@@ -148,14 +189,15 @@ struct FeedPromptCard: View {
                 }.buttonStyle(.plain).foregroundStyle(Palette.muted).accessibilityLabel(creator.displayName)
             }
         }
-        .recommendationExposure(card, enabled: !detailPresented)
+        .recommendationExposure(card, enabled: !isPresenting)
         .fullScreenCover(isPresented: $detailPresented) {
             FeedReadingPresentation(card: card).preferredColorScheme(colorScheme)
                 .promptTransitionDestination(id: card.id, in: transition)
         }
         .onDisappear { action?.cancel(); action = nil; actionID = nil }
     }
-    private func perform(save: Bool) {
+    private func perform(_ kind: Action) {
+        let save = kind == .save
         guard actionID == nil, let feed = library.feed else { return }
         if save, let saved = library.favorites.first(where: { $0.id == card.id }) {
             if library.toggle(saved) { savedFeedback.toggle() }; return
@@ -168,11 +210,75 @@ struct FeedPromptCard: View {
                 try Task.checkCancellation()
                 guard actionID == owner, !library.isRemoved(item) else { throw FeedError.removed }
                 if save { if library.toggle(item) { savedFeedback.toggle() } }
-                else { UIPasteboard.general.string = item.displayContent.prompt; library.recommendations.record(.use, card: card); copiedFeedback.toggle() }
+                else {
+                    UIPasteboard.general.string = item.displayContent.prompt
+                    library.recommendations.record(.use, card: card); copiedFeedback.toggle()
+                }
             } catch is CancellationError { }
             catch { if !Task.isCancelled, actionID == owner { library.reportContentFailure(error) } }
         }
     }
+}
+
+/// The long-press preview: the work large, its meta line, title and the first lines of text.
+struct WorkPeek: View {
+    let preview: ContentPreview
+    let title: String
+    let text: String
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            if !preview.usesTextArtwork {
+                Artwork(preview: preview, fillsFrame: true).aspectRatio(PromptCardGeometry.aspectRatio(for: preview), contentMode: .fit)
+            }
+            VStack(alignment: .leading, spacing: 6) {
+                let meta = preview.detailMeta
+                if !meta.lead.isEmpty || !meta.rest.isEmpty {
+                    (Text(meta.lead).foregroundStyle(Palette.ink).fontWeight(.semibold) + Text(meta.rest).foregroundStyle(Palette.muted))
+                        .font(Typography.meta(size: 10)).tracking(1.2)
+                }
+                Text(title).font(.headline).lineLimit(2)
+                Text(text.replacingOccurrences(of: "\n", with: " ")).font(Typography.prompt(size: 14, for: text)).foregroundStyle(Palette.muted).lineLimit(3)
+            }.padding(.horizontal, 16).padding(.bottom, 16).padding(.top, preview.usesTextArtwork ? 16 : 0)
+        }.frame(width: 320).background(Palette.surface).foregroundStyle(Palette.ink)
+    }
+}
+
+/// Opens feed details from a list that outlives its cards. A served page that
+/// replaces the tapped card (a cached first page, a refresh) never closes the
+/// detail it just opened.
+struct FeedDetailHost: Sendable {
+    let namespace: Namespace.ID
+    let presentedID: String?
+    let open: @MainActor @Sendable (FeedCard) -> Void
+}
+
+private struct FeedDetailHostKey: EnvironmentKey {
+    static let defaultValue: FeedDetailHost? = nil
+}
+
+extension EnvironmentValues {
+    var feedDetailHost: FeedDetailHost? {
+        get { self[FeedDetailHostKey.self] }
+        set { self[FeedDetailHostKey.self] = newValue }
+    }
+}
+
+private struct FeedDetailHosting: ViewModifier {
+    @State private var presented: FeedCard?
+    @Namespace private var transition
+    @Environment(\.colorScheme) private var colorScheme
+    func body(content: Content) -> some View {
+        content
+            .environment(\.feedDetailHost, FeedDetailHost(namespace: transition, presentedID: presented?.id) { presented = $0 })
+            .fullScreenCover(item: $presented) { card in
+                FeedReadingPresentation(card: card).preferredColorScheme(colorScheme)
+                    .promptTransitionDestination(id: card.id, in: transition)
+            }
+    }
+}
+
+extension View {
+    func feedDetailHost() -> some View { modifier(FeedDetailHosting()) }
 }
 
 struct FeedReadingPresentation: View {
@@ -201,7 +307,7 @@ struct FeedReadingPresentation: View {
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .topBarLeading) {
-                        Button { dismiss() } label: { Image(systemName: "chevron.left").frame(minWidth: 44, minHeight: 44) }
+                        Button { dismiss() } label: { PrompixIcon.back.image.frame(minWidth: 44, minHeight: 44) }
                             .accessibilityLabel(String(localized: "返回列表")).accessibilityIdentifier("closePromptDetail")
                     }
                 }
@@ -298,69 +404,46 @@ struct FeedRelatedResults: View {
     let item: Prompt
     let repository: FeedRepository
     @State private var store: FeedStore
-    @State private var selectedID: String?
     @Environment(Library.self) private var library
-    @Environment(\.dynamicTypeSize) private var typeSize
     init(item: Prompt, repository: FeedRepository) {
         self.item = item; self.repository = repository; _store = State(initialValue: repository.makeStore())
     }
-    private var paths: [FeedExplorationPath] { FeedExplorationPath.paths(for: item) }
-    private var selected: FeedExplorationPath? { paths.first { $0.id == selectedID } ?? paths.first }
+    /// Works from the same use, else the same kind; one quiet heading, no chooser.
+    private var path: FeedExplorationPath {
+        FeedExplorationPath.paths(for: item).first { $0.id == "topic" }
+            ?? FeedExplorationPath(id: "kind", label: "", title: item.displayKind,
+                                   query: FeedQuery(kind: item.kind.rawValue, sort: "recommended"))
+    }
     var body: some View {
-        if let path = selected {
-            let matches = store.query == path.query
-            let waiting = !matches || (store.failure == nil && (store.release == nil || (store.items.isEmpty && store.isLoading)))
-            let source = matches && store.release != nil ? store.items : repository.previewCards(for: path.query)
-            let cards = Array(source.filter { $0.id != item.id && !library.isRemoved(id: $0.id) }.prefix(4))
-            VStack(alignment: .leading, spacing: 18) {
-                Divider()
-                HStack {
-                    Text(String(localized: "继续探索")).font(.headline).accessibilityAddTraits(.isHeader)
+        let path = path
+        let matches = store.query == path.query
+        let waiting = !matches || (store.failure == nil && (store.release == nil || (store.items.isEmpty && store.isLoading)))
+        let source = matches && store.release != nil ? store.items : repository.previewCards(for: path.query)
+        let cards = Array(source.filter { $0.id != item.id && !library.isRemoved(id: $0.id) }.prefix(6))
+        VStack(alignment: .leading, spacing: 12) {
+            if !cards.isEmpty || waiting {
+                HStack(alignment: .firstTextBaseline) {
+                    Text(String(localized: "相关")).font(.subheadline.weight(.semibold)).accessibilityAddTraits(.isHeader)
                     Spacer()
                     NavigationLink {
                         FeedExplorationView(path: path, excludingID: item.id, repository: repository)
                     } label: {
-                        Label(String(localized: "查看全部"), systemImage: "arrow.right").font(.footnote).frame(minHeight: 44)
+                        Text(String(localized: "查看全部")).font(.footnote).foregroundStyle(Palette.muted).frame(minHeight: 44)
                     }.accessibilityIdentifier("allExplorationResults")
                 }
-                if typeSize.isAccessibilitySize {
-                    VStack(spacing: 8) { pathButtons }
-                } else {
-                    ScrollView(.horizontal) { HStack(spacing: 8) { pathButtons } }.scrollIndicators(.hidden)
-                }
+            }
+            // The detail's text sits 22 pt in; works align with every other grid at 16 pt.
+            Group {
                 if !cards.isEmpty {
                     PreviewMasonryGrid(items: cards, preview: ContentPreview.init) { FeedPromptCard(card: $0) }
-                        .accessibilityIdentifier("relatedFeed")
-                }
-                if waiting && cards.isEmpty {
+                        .feedDetailHost().accessibilityIdentifier("relatedFeed")
+                } else if waiting {
                     FeedLoadingGrid()
-                } else if matches && store.failure != nil {
-                    ContentRecoveryRow(retryAt: store.retryAt, retryID: "retryExploration") {
-                        Task { await store.load(path.query, force: true) }
-                    }
-                } else if !waiting && cards.isEmpty && !store.isLoading {
-                    Text(String(localized: "暂无匹配内容")).font(.subheadline).foregroundStyle(Palette.muted).padding(.vertical, 12)
                 }
-            }.task(id: path.query) { await store.load(path.query) }.onDisappear { store.cancel() }
-        }
+            }.padding(.horizontal, -6)
+        }.task(id: path.query) { await store.load(path.query) }.onDisappear { store.cancel() }
     }
-    private var pathButtons: some View {
-        ForEach(paths) { path in
-            let active = path.id == selected?.id
-            Button { selectedID = path.id } label: {
-                VStack(alignment: .leading, spacing: 5) {
-                    Text(path.label).font(.caption).opacity(active ? 0.85 : 0.7)
-                    Text(path.title).font(.subheadline.weight(.medium)).lineLimit(typeSize.isAccessibilitySize ? nil : 1)
-                }
-                .frame(minWidth: 100, maxWidth: typeSize.isAccessibilitySize ? .infinity : 230, minHeight: 44, alignment: .leading)
-                .padding(.horizontal, 14).padding(.vertical, 8)
-                .foregroundStyle(active ? Palette.paper : Palette.ink)
-                .background(active ? Palette.accent : Palette.soft, in: RoundedRectangle(cornerRadius: 12))
-                .contentShape(RoundedRectangle(cornerRadius: 12))
-            }.buttonStyle(.plain).accessibilityAddTraits(active ? .isSelected : [])
-                .accessibilityIdentifier("explore-\(path.id)")
-        }
-    }
+
 }
 
 private struct FeedExplorationView: View {

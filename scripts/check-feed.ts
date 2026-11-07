@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { performance } from "node:perf_hooks";
-import { feedPageSchema, feedDetailSchema } from "../packages/schema/feed.ts";
+import { allowedPresentations, feedPageSchema, feedDetailSchema, publicCard } from "../packages/schema/feed.ts";
 import { preparePublication, type PublicationInput } from "../services/feed/publication.ts";
 import { contentTopics } from "../packages/schema/interests.ts";
 import { publicationIdentity } from "../ingest/release-publication.ts";
@@ -26,21 +26,24 @@ async function request(path: string, status = 200, method = "GET"): Promise<unkn
   return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
 }
 const byID = new Map(expected.records.map(row => [row.content_id, row]));
-for (const locale of ["original", "zh-Hans"] as const) for (const sort of ["curated", "latest"] as const) {
+// Lists carry only general imagery by default and add suggestive on opt-in; unknown never lists.
+const passes = [["original", "curated"], ["original", "latest"], ["zh-Hans", "curated"], ["zh-Hans", "latest"], ["original", "latest", "suggestive"]] as const;
+for (const [locale, sort, presentation] of passes) {
+  const listed = expected.records.filter(row => allowedPresentations(presentation).includes(row.card.presentation ?? "unknown"));
   const ids: string[] = []; let cursor: string | null = null, pages = 0;
   do {
-    const query = new URLSearchParams({ limit: "50", locale, sort }); if (cursor) query.set("cursor", cursor);
+    const query = new URLSearchParams({ limit: "50", locale, sort, ...(presentation ? { presentation } : {}) }); if (cursor) query.set("cursor", cursor);
     const page = validateArtifact(feedPageSchema, await request("/v3/feed?" + query));
     assert.equal(page.release, expected.id);
     for (const card of page.items) {
-      const row = sort === "curated" ? expected.records[ids.length] : byID.get(card.id); assert.ok(row, "Unexpected feed row");
-      const expectedCard = row.translations.find(item => item.locale === locale)?.card ?? row.card;
+      const row = sort === "curated" ? listed[ids.length] : byID.get(card.id); assert.ok(row, "Unexpected feed row");
+      const expectedCard = publicCard(row.translations.find(item => item.locale === locale)?.card ?? row.card, locale);
       assert.equal(publicationIdentity(card), publicationIdentity({ ...expectedCard, topics: contentTopics(expectedCard) })); ids.push(card.id);
     }
     assert.notEqual(page.nextCursor, cursor || "never-a-cursor"); cursor = page.nextCursor;
     assert.ok(++pages <= 2001, "Pagination did not terminate");
   } while (cursor);
-  const expectedIDs = source.prompts.map(item => item.id);
+  const expectedIDs = listed.map(row => row.content_id);
   assert.deepEqual(sort === "curated" ? ids : [...ids].sort(), sort === "curated" ? expectedIDs : expectedIDs.sort());
   assert.equal(new Set(ids).size, ids.length);
 }

@@ -7,7 +7,6 @@ import Observation
     private(set) var query: Source.Query?
     private(set) var release: String?
     private(set) var nextCursor: String?
-    private(set) var hasLoadedAdditionalPages = false
     private(set) var firstPageGeneration = 0
     private(set) var failedFirstPage = false
     private(set) var isLoading = false
@@ -16,6 +15,10 @@ import Observation
     private(set) var cacheWriteFailed = false
     private(set) var retryAt: Date?
     private var transportQuery: Source.Query?
+    /// Cards kept above a served page that arrived after a cached one was shown.
+    private var retainedIDs: Set<String> = []
+    /// How long a cold first page waits for the network before showing the disk cache.
+    private let cacheGrace: Duration
     private let recommendations: LocalRecommendations?
     private var loadedAt: Date?
     private var requestID: UUID?
@@ -32,8 +35,8 @@ import Observation
     }
     private var snapshots: [Source.Query: Snapshot] = [:]
     private var snapshotOrder: [Source.Query] = []
-    init(service: any FeedServing, cache: FeedCache? = nil, memoryPageLimit: Int = 0, recommendations: LocalRecommendations? = nil) {
-        self.recommendations = recommendations
+    init(service: any FeedServing, cache: FeedCache? = nil, memoryPageLimit: Int = 0, recommendations: LocalRecommendations? = nil, cacheGrace: Duration = .milliseconds(1200)) {
+        self.recommendations = recommendations; self.cacheGrace = cacheGrace
         self.service = service; self.cache = cache; self.memoryPageLimit = max(0, memoryPageLimit)
     }
 
@@ -49,7 +52,7 @@ import Observation
         guard let normalized = try? Source.validate(value), normalized != query else { return }
         cancel()
         query = normalized; failedFirstPage = false; cacheWriteFailed = false
-        hasLoadedAdditionalPages = false
+        retainedIDs = []
         if retryAt == nil || now >= retryAt! { failure = nil; retryAt = nil }
         if let page = snapshots[normalized] {
             items = page.items; release = page.release; loadedAt = page.loadedAt; transportQuery = page.transportQuery
@@ -89,28 +92,47 @@ import Observation
         let owner = UUID(); requestID = owner
         let task = Task { [weak self] in
             guard let self else { return }
-            if needsDiskCache, let page = try? await Source.cached(in: cache, query: normalized), self.owns(owner) {
-                self.items = page.items; self.release = page.release; self.isCached = true
-                // Cached cursors may be expired; revalidate the first page before paging.
-                self.nextCursor = nil
+            // The disk cache appears only when the network is slow, so a quick
+            // answer never replaces cards the reader has already seen.
+            let cached = needsDiskCache ? try? await Source.cached(in: cache, query: normalized) : nil
+            let reveal = cached.map { page in
+                Task { [weak self] in
+                    try? await Task.sleep(for: self?.cacheGrace ?? .zero)
+                    guard !Task.isCancelled, let self, self.owns(owner) else { return }
+                    self.show(cached: page)
+                }
             }
             do {
                 try Task.checkCancellation()
                 var page = try await Source.fetch(from: service, query: requestQuery, cursor: nil, release: nil)
+                reveal?.cancel()
                 try Task.checkCancellation()
                 guard self.owns(owner) else { return }
                 try Source.validate(page, query: normalized, release: nil)
                 page = Source.ranked(page, query: normalized, recommendations: recommendations, now: now)
+                // Cards already on screen stay where they are, from the disk cache,
+                // an aged snapshot or an older release; the served page continues
+                // below them. Only a pull refresh or another query replaces them.
+                let keeps = !force && !self.items.isEmpty
+                let kept = keeps ? self.items : []
+                let retained = Set(kept.map(\.id))
                 self.transportQuery = requestQuery
-                self.items = page.items; self.release = page.release; self.nextCursor = page.nextCursor
+                self.items = kept + page.items.filter { !retained.contains($0.id) }
+                self.retainedIDs = retained
+                self.release = page.release; self.nextCursor = page.nextCursor
                 self.isCached = false; self.loadedAt = now; self.failure = nil
-                self.hasLoadedAdditionalPages = false; self.failedFirstPage = false
+                self.failedFirstPage = false
                 self.remember(page, query: normalized, now: now)
+                if keeps { self.snapshots[normalized]?.items = self.items }
                 if let cache {
                     do { try await Source.save(page, in: cache, query: normalized, now: now); if self.owns(owner) { self.cacheWriteFailed = false } }
                     catch { if self.owns(owner) { self.cacheWriteFailed = true } }
                 }
-            } catch { self.record(error, owner: owner, now: now) }
+            } catch {
+                reveal?.cancel()
+                if let cached, self.owns(owner), self.release == nil { self.show(cached: cached) }
+                self.record(error, owner: owner, now: now)
+            }
             self.finish(owner)
         }
         pending = task
@@ -128,16 +150,21 @@ import Observation
                 try Task.checkCancellation()
                 guard self.owns(owner) else { return }
                 try Source.validate(page, query: query, release: release)
-                let existing = Set(self.items.map(\.id))
-                guard page.nextCursor != cursor, !page.items.contains(where: { existing.contains($0.id) }) else { throw FeedError.invalidResponse }
+                let served = Set(self.items.map(\.id)).subtracting(self.retainedIDs)
+                guard page.nextCursor != cursor, !page.items.contains(where: { served.contains($0.id) }) else { throw FeedError.invalidResponse }
                 page = Source.ranked(page, query: query, recommendations: recommendations, now: now)
-                self.items.append(contentsOf: page.items); self.nextCursor = page.nextCursor
-                self.hasLoadedAdditionalPages = true
+                self.items.append(contentsOf: page.items.filter { !self.retainedIDs.contains($0.id) }); self.nextCursor = page.nextCursor
             } catch { self.record(error, owner: owner, now: now) }
             self.finish(owner)
         }
         pending = task
         await withTaskCancellationHandler { await task.value } onCancel: { task.cancel() }
+        // A publication retired this session's cursor: continue from a fresh
+        // first page beneath the cards already read instead of stopping.
+        if !Task.isCancelled, failure as? FeedError == .snapshotExpired, self.query == query {
+            failure = nil; loadedAt = nil
+            await load(query, now: now)
+        }
     }
     func cancel() {
         pending?.cancel(); pending = nil; requestID = nil; isLoading = false
@@ -147,6 +174,11 @@ import Observation
         for key in Array(snapshots.keys) { snapshots[key]?.items.removeAll { ids.contains($0.id) } }
     }
     private func owns(_ owner: UUID) -> Bool { requestID == owner }
+    private func show(cached page: Source.Page) {
+        items = page.items; release = page.release; isCached = true
+        // Cached cursors may be expired; revalidate the first page before paging.
+        nextCursor = nil
+    }
     private func finish(_ owner: UUID) {
         guard owns(owner) else { return }
         isLoading = false; pending = nil; requestID = nil

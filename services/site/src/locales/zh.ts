@@ -4,14 +4,14 @@ import { legalZH } from "./legal-zh.ts";
 export const zh: Messages = {
   meta: {
     homeTitle: "Prompix — 看见作品背后的那句话",
-    homeDescription: "发现最新的图片、视频、文本与网页 AI Prompt，以及 Agent Skill。每条内容都标注创作者并链接原始出处，免费且开源。",
-    exploreDescription: "浏览最新的图片、视频、文本与网页 AI Prompt，以及 Agent Skill，标注创作者并链接原始出处。",
+    homeDescription: "发现最新的图片、视频与文本 AI Prompt。每条内容都标注创作者并链接原始出处，免费且开源。",
+    exploreDescription: "浏览最新的图片、视频与文本 AI Prompt，标注创作者并链接原始出处。",
     promptDescription: (title, creator) => `${title}${creator ? `，来自 ${creator}` : ""}。查看完整 Prompt 与预览，一键复制到你常用的 AI 工具。`,
   },
   nav: { label: "主导航", home: "Prompix 首页", explore: "探索", support: "帮助", menu: "菜单", skip: "跳到正文", language: "语言" },
   hero: {
     title: '看见作品背后的<br><span class="spectral">那句话。</span>',
-    lead: "图片、视频、文本、网页与 Agent Skill。发现成就它们的 Prompt，也认识写下它们的人。",
+    lead: "图片、视频与文本。发现成就它们的 Prompt，也认识写下它们的人。",
     primary: "开始探索",
     secondary: "为 iPhone 而生",
     wallLabel: "最新图片",
@@ -20,20 +20,18 @@ export const zh: Messages = {
   kinds: {
     title: "每一种 Prompt，<br>都在这里。",
     browse: "浏览",
-    one: { image: "图片", video: "视频", text: "文本", web: "网页", skill: "Skill" },
-    names: { image: "图片", video: "视频", text: "文本", web: "网页", skill: "Agent Skill" },
-    plural: { image: "图片", video: "视频", text: "文本", web: "网页", skill: "Skill" },
+    one: { image: "图片", video: "视频", text: "文本" },
+    names: { image: "图片", video: "视频", text: "文本" },
+    plural: { image: "图片", video: "视频", text: "文本" },
     lines: {
       image: "从人像写真，到产品大片。",
       video: "让画面动起来。",
       text: "好玩、写作、学习与工作。",
-      web: "一句 Prompt，做出一个网站。",
-      skill: "让编程助手学会一套可复用的方法。",
     },
   },
   stats: {
     title: count => `<span class="spectral">${count}</span>`,
-    label: "条 Prompt 与 Skill，持续更新中。",
+    label: "条 Prompt，持续更新中。",
     items: [{ value: "9", label: "种阅读语言" }, { value: "0", label: "广告" }, { value: "MIT", label: "开源许可" }],
   },
   creators: {
@@ -54,7 +52,7 @@ export const zh: Messages = {
   },
   explore: {
     title: "探索。",
-    titles: { image: "图片。", video: "视频。", text: "文本。", web: "网页。", skill: "Agent Skill。" },
+    titles: { image: "图片。", video: "视频。", text: "文本。" },
     all: "全部",
     search: "搜索 Prompt",
     searchLabel: "搜索",
@@ -85,11 +83,9 @@ export const zh: Messages = {
     viewSource: "查看原始出处",
     profile: "主页",
     openTool: host => `打开 ${host}`,
-    repository: "代码仓库",
     report: "反馈这条内容",
     moreFrom: name => `${name} 的更多作品`,
     moreLike: "更多同类",
-    skillFiles: "文件",
     unavailable: "这条 Prompt 已不可用。",
     previewNote: "预览",
   },

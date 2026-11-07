@@ -32,24 +32,27 @@ struct RootView: View {
         if #available(iOS 18, *) {
             TabView(selection: selection) {
                 Tab(value: MainTab.discover) { DiscoverView() } label: {
-                    Label { Text(String(localized: "发现")) } icon: { TabSymbol.image("safari") }
+                    Label { Text(String(localized: "发现")) } icon: { PrompixIcon.discover.image(size: 24) }
                 }
                 Tab(value: MainTab.saved) { FavoritesView() } label: {
-                    Label { Text(String(localized: "收藏")) } icon: { TabSymbol.image("heart") }
+                    Label { Text(String(localized: "收藏")) } icon: { PrompixIcon.saved.image(size: 24) }
                 }
                 if #available(iOS 27, *) {
-                    Tab(String(localized: "搜索"), systemImage: "magnifyingglass", value: MainTab.search, role: .prominent) { search }
+                    Tab(value: MainTab.search, role: .prominent) { search } label: {
+                        Label { Text(String(localized: "搜索")) } icon: { PrompixIcon.search.image(size: 24) }
+                    }
                 } else {
                     Tab(value: MainTab.search, role: .search) { search }
                 }
             }
             .autocorrectionDisabled().textInputAutocapitalization(.never)
+            .minimizesTabBarOnScroll()
         } else {
             TabView(selection: selection) {
                 DiscoverView().tag(MainTab.discover)
-                    .tabItem { Label { Text(String(localized: "发现")) } icon: { TabSymbol.image("safari") } }
+                    .tabItem { Label { Text(String(localized: "发现")) } icon: { PrompixIcon.discover.image(size: 24) } }
                 FavoritesView().tag(MainTab.saved)
-                    .tabItem { Label { Text(String(localized: "收藏")) } icon: { TabSymbol.image("heart") } }
+                    .tabItem { Label { Text(String(localized: "收藏")) } icon: { PrompixIcon.saved.image(size: 24) } }
                 search.tag(MainTab.search)
                     .tabItem { Label(String(localized: "搜索"), systemImage: "magnifyingglass") }
             }
@@ -63,185 +66,180 @@ struct RootView: View {
 struct DiscoverView: View {
     @Environment(Library.self) private var library
     @State private var kind: PromptKind?
-    @State private var skillsOnly = false
     @State private var topic: String?
     @State private var feedSort = "recommended"
     @Environment(\.recommendationSurfaceVisible) private var recommendationSurfaceVisible
     @State private var appliedPreferenceRevision = 0
     @State private var model: String?
-    @State private var settingsPresented = false
-    @State private var chromeCollapsed = false
-    @State private var headerHeight: CGFloat = 112
+    @State private var facet: String?
+    @State private var modelFamily: String?
     @State private var viewportHeight: CGFloat = 0
     @State private var feedLayout = PromptGridLayout(width: 0)
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private let topics = ["好玩一点", "创作灵感", "日常有用"]
     private var items: [Prompt] {
         library.prompts.filter {
-            PromptQuery(kind: kind, topic: topic, model: model, skillsOnly: skillsOnly).matches($0) &&
+            PromptQuery(kind: kind, topic: topic, model: model).matches($0) &&
                 (feedSort != "recommended" || library.recommendations.allowsRecommended($0))
         }
     }
-    private var feedQuery: FeedQuery { FeedQuery(kind: skillsOnly ? "skill" : kind?.rawValue, tag: topic, model: model, sort: feedSort) }
+    private var feedQuery: FeedQuery {
+        FeedQuery(kind: kind?.rawValue, tag: topic, model: model, sort: feedSort, facet: facet, modelFamily: modelFamily)
+    }
     private var models: [String] {
         if let feed = library.feed { return feed.browse.value?.models.map(\.name) ?? [] }
-        return Array(Set(library.prompts.filter { PromptQuery(kind: kind, skillsOnly: skillsOnly).matches($0) }.map(\.model))).sorted()
+        return Array(Set(library.prompts.filter { PromptQuery(kind: kind).matches($0) }.map(\.model))).sorted()
     }
-    private var isFiltered: Bool { kind != nil || skillsOnly || topic != nil || model != nil }
+    private var isFiltered: Bool { kind != nil || refined }
+    private var refined: Bool { topic != nil || model != nil || facet != nil || modelFamily != nil }
     private var needsFirstVideoUpdate: Bool {
         kind == .video && library.version.hasPrefix("studio-") && !library.prompts.contains { $0.kind == .video }
     }
     var body: some View {
         NavigationStack {
-            ZStack(alignment: .top) {
-                ScrollViewReader { scroll in
-                    ScrollView {
-                        LazyVStack(alignment: .leading, spacing: 14) {
-                            Group {
-                                if !isFiltered {
-                                    CreatorRail()
-                                    CollectionRail(query: feedQuery).padding(.bottom, 6)
-                                }
-                                discoveryContext
-                                if skillsOnly {
-                                    Text(String(localized: "可在支持 Agent Skills 的工具中使用，包含完整说明与源文件；具体依赖请查看详情。"))
-                                        .font(.subheadline).foregroundStyle(Palette.muted).padding(.horizontal, 20)
-                                }
-                                if let feed = library.feed {
-                                    FeedResults(store: feed.discovery, query: feedQuery, loadsOnAppear: false, fallback: items, layout: feedLayout)
-                                } else if items.isEmpty {
-                                    if needsFirstVideoUpdate {
-                                        ContentUnavailableView {
-                                            Label(String(localized: "视频内容需要联网更新"), systemImage: "play.rectangle")
-                                        } description: {
-                                            Text(String(localized: "首次联网更新后可浏览视频 Prompt。你也可以先查看其他类型的内容。"))
-                                        } actions: {
-                                            Button(library.isRefreshing ? String(localized: "正在更新…") : String(localized: "检查内容更新")) {
-                                                Task { await library.refresh(force: true) }
-                                            }.buttonStyle(.borderedProminent).disabled(library.isRefreshing).accessibilityIdentifier("loadVideoExamples")
-                                            Button(String(localized: "查看其他内容")) { kind = nil; skillsOnly = false; topic = nil; model = nil }
-                                                .buttonStyle(.bordered).accessibilityIdentifier("browseOtherIdeas")
-                                        }
-                                    } else {
-                                        ContentUnavailableView(String(localized: "暂无匹配内容"), systemImage: "sparkle", description: Text(String(localized: "试试其他分类，或清除筛选条件。")))
+            ScrollViewReader { scroll in
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 14) {
+                        Group {
+                            discoveryContext
+                            if let feed = library.feed {
+                                FeedResults(store: feed.discovery, query: feedQuery, loadsOnAppear: false, fallback: items, layout: feedLayout, interlude: rails)
+                            } else if items.isEmpty {
+                                if needsFirstVideoUpdate {
+                                    ContentUnavailableView {
+                                        Label(String(localized: "视频内容需要联网更新"), systemImage: "play.rectangle")
+                                    } description: {
+                                        Text(String(localized: "首次联网更新后可浏览视频 Prompt。你也可以先查看其他类型的内容。"))
+                                    } actions: {
+                                        Button(library.isRefreshing ? String(localized: "正在更新…") : String(localized: "检查内容更新")) {
+                                            Task { await library.refresh(force: true) }
+                                        }.buttonStyle(.borderedProminent).foregroundStyle(Palette.paper).disabled(library.isRefreshing).accessibilityIdentifier("loadVideoExamples")
+                                        Button(String(localized: "查看其他内容")) { kind = nil; topic = nil; model = nil }
+                                            .buttonStyle(.bordered).accessibilityIdentifier("browseOtherIdeas")
                                     }
                                 } else {
-                                    PromptGrid(items: items).padding(.horizontal, 12)
+                                    ContentUnavailableView(String(localized: "暂无匹配内容"), systemImage: "sparkle", description: Text(String(localized: "试试其他分类，或清除筛选条件。")))
                                 }
+                            } else {
+                                FeedInterleave(items: items, interlude: rails) { PromptGrid(items: $0).padding(.horizontal, PromptGridLayout.inset) }
                             }
-                        }.id("discovery-top").padding(.bottom, 24)
-                            .frame(minHeight: viewportHeight, alignment: .top)
-                            .transaction { $0.animation = nil }
-                    }
-                    .accessibilityIdentifier("discoveryScroll")
-                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { viewportHeight = $0 }
-                    .onGeometryChange(for: PromptGridLayout.self) { proxy in
-                        PromptGridLayout.measured(in: proxy, inset: 12)
-                    } action: { if !$0.widths.isEmpty { feedLayout = $0 } }
-                    .plainTopEdge()
-                    .scrollClipDisabled()
-                    .background(Palette.paper).foregroundStyle(Palette.ink)
-                    .readingChrome($chromeCollapsed)
-                    .safeAreaInset(edge: .top, spacing: 0) {
-                        // Reserve space for native refresh without moving content
-                        // when chrome collapses. Controls are overlaid independently
-                        // so their layout is separate from the scrolling cards.
-                        Color.clear.frame(height: headerHeight).allowsHitTesting(false)
-                    }
-                    .pageRefreshable {
-                        // SwiftUI can cancel the refresh action when lazy sections
-                        // move during overscroll. The user's bounded request owns its
-                        // lifetime; query changes still cancel it inside the store.
-                        await Task { @MainActor in
-                            async let metadata: Void = library.refresh(force: true)
-                            if let feed = library.feed {
-                                await feed.discovery.load(feedQuery, force: true)
-                            }
-                            await metadata
-                        }.value
-                    }
-                    .onChange(of: feedQuery) { _, query in
-                        // One reset for the complete query; no intermediate kind +
-                        // previous model/tag combinations or animated scroll jump.
-                        var transaction = Transaction(); transaction.disablesAnimations = true
-                        withTransaction(transaction) {
-                            library.feed?.discovery.select(query)
-                            chromeCollapsed = false
-                            scroll.scrollTo("discovery-top", anchor: .top)
                         }
+                    }.id("discovery-top").padding(.bottom, 24)
+                        .frame(minHeight: viewportHeight, alignment: .top)
+                        .transaction { $0.animation = nil }
+                }
+                .accessibilityIdentifier("discoveryScroll")
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { viewportHeight = $0 }
+                .onGeometryChange(for: PromptGridLayout.self) { proxy in
+                    PromptGridLayout.measured(in: proxy, inset: PromptGridLayout.inset)
+                } action: { if !$0.widths.isEmpty { feedLayout = $0 } }
+                .scrollClipDisabled()
+                .background(Palette.paper).foregroundStyle(Palette.ink)
+                .rootHeader(title: String(localized: "发现"), titleID: "discoveryHeading") { filterMenu } bar: {
+                    KindPicker(selection: $kind, onSelect: selectKind).padding(.bottom, 6)
+                }
+                .pageRefreshable {
+                    // SwiftUI can cancel the refresh action when lazy sections
+                    // move during overscroll. The user's bounded request owns its
+                    // lifetime; query changes still cancel it inside the store.
+                    await Task { @MainActor in
+                        async let metadata: Void = library.refresh(force: true)
+                        if let feed = library.feed {
+                            await feed.discovery.load(feedQuery, force: true)
+                        }
+                        await metadata
+                    }.value
+                }
+                .onChange(of: feedQuery) { _, query in
+                    // One reset for the complete query; no intermediate kind +
+                    // previous model/tag combinations or animated scroll jump.
+                    var transaction = Transaction(); transaction.disablesAnimations = true
+                    withTransaction(transaction) {
+                        library.feed?.discovery.select(query)
+                        scroll.scrollTo("discovery-top", anchor: .top)
                     }
                 }
-                discoveryChrome.zIndex(1)
             }
-            .toolbar(.hidden, for: .navigationBar)
-            .sheet(isPresented: $settingsPresented) { SettingsView().promptSheet() }
             .task(id: feedQuery) { await library.feed?.discovery.load(feedQuery) }
-            .task(id: "\(library.recommendations.preferenceRevision)-\(settingsPresented)-\(recommendationSurfaceVisible)") {
+            .task(id: "\(library.recommendations.preferenceRevision)-\(recommendationSurfaceVisible)") {
                 let revision = library.recommendations.preferenceRevision
-                guard recommendationSurfaceVisible, !settingsPresented, revision != appliedPreferenceRevision else { return }
+                guard recommendationSurfaceVisible, revision != appliedPreferenceRevision else { return }
                 appliedPreferenceRevision = revision
                 library.feed?.discovery.invalidateCachedPages()
                 if feedSort == "recommended" { await library.feed?.discovery.load(feedQuery, force: true) }
             }
         }
     }
-    private func selectKind(_ next: PromptKind?, _ skills: Bool) {
-        kind = next; skillsOnly = skills; topic = nil; model = nil
+    // Creators and uses sit a screen or two into the feed, so the first screen is all work.
+    private var rails: AnyView? {
+        guard !isFiltered else { return nil }
+        return AnyView(VStack(alignment: .leading, spacing: 14) {
+            CreatorRail()
+            CollectionRail(query: feedQuery)
+        })
+    }
+    private func selectKind(_ next: PromptKind?) {
+        kind = next; topic = nil; model = nil; facet = nil; modelFamily = nil
         library.feed?.discovery.select(feedQuery)
     }
-    private var discoveryChrome: some View {
-        discoveryHeader
-            .offset(y: chromeCollapsed ? -headerHeight - 12 : 0)
-            .opacity(chromeCollapsed ? 0 : 1)
-            .allowsHitTesting(!chromeCollapsed)
-            .accessibilityHidden(chromeCollapsed)
-            .background {
-                GeometryReader { proxy in
-                    ReadingTopFade(collapsed: chromeCollapsed)
-                        .frame(height: proxy.safeAreaInsets.top + (chromeCollapsed ? 0 : proxy.size.height) + ReadingTopFade.featherHeight)
-                        .offset(y: -proxy.safeAreaInsets.top)
-                }.allowsHitTesting(false).accessibilityHidden(true)
-            }
-            .animation(reduceMotion ? nil : .smooth(duration: 0.28), value: chromeCollapsed)
-    }
-    private var discoveryHeader: some View {
-        VStack(spacing: 4) {
-            RootPageHeader(settingsID: "discoverySettings") { settingsPresented = true }
-            KindPicker(selection: $kind, skillsOnly: $skillsOnly, onSelect: selectKind)
-        }.foregroundStyle(Palette.ink).padding(.bottom, 4)
-            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { headerHeight = $0 }
-            .accessibilityElement(children: .contain).accessibilityIdentifier("discoveryHeader")
-    }
     private var discoveryContext: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(alignment: .firstTextBaseline) { resultHeading; Spacer(); resultActions }
-            VStack(alignment: .leading, spacing: 4) { resultHeading; resultActions }
-        }.padding(.horizontal, 16)
+        HStack(alignment: .center) {
+            Text(feedSort == "latest" ? String(localized: "最新收录") : String(localized: "为你挑的"))
+                .font(.subheadline.weight(.semibold))
+            Spacer()
+            sortMenu
+        }.padding(.leading, 20).padding(.trailing, 16)
     }
-    private var resultHeading: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Text(skillsOnly ? String(localized: "Agent Skills") : isFiltered ? String(localized: "筛选结果") : String(localized: "全部内容"))
-                .font(.subheadline.weight(.medium))
-
-        }
-    }
-    private var resultActions: some View {
-        HStack(spacing: 16) {
-            if isFiltered {
-                Button(String(localized: "清除筛选")) { selectKind(nil, false) }
-                    .font(.footnote).frame(minHeight: 44)
-            }
-            filterPicker
-        }
-    }
-    private var filterPicker: some View {
+    private var sortMenu: some View {
         Menu {
-            Group {
-                Picker(String(localized: "排序"), selection: $feedSort) {
-                    Text(String(localized: "推荐")).tag("recommended")
-                    Text(String(localized: "最新收录")).tag("latest")
-                }
+            Picker(String(localized: "排序"), selection: $feedSort) {
+                Text(String(localized: "推荐")).tag("recommended")
+                Text(String(localized: "最新收录")).tag("latest")
             }
+        } label: {
+            HStack(spacing: 4) {
+                Text(feedSort == "latest" ? String(localized: "最新") : String(localized: "推荐")).font(Typography.meta(size: 12)).tracking(1.2)
+                PrompixIcon.chevronDown.image(size: 12)
+            }.foregroundStyle(Palette.muted).frame(minWidth: 44, minHeight: 44).contentShape(Rectangle())
+        }.accessibilityLabel(String(localized: "排序")).accessibilityIdentifier("discoverySort")
+    }
+    private var filterMenu: some View {
+        Menu {
+            if let browse = library.feed?.browse.value, let uses = browse.facets?.useCase, !uses.isEmpty {
+                servedFilters(uses: uses, families: browse.modelFamilies ?? [])
+            } else { catalogFilters }
+            if refined {
+                Button(String(localized: "清除筛选"), role: .destructive) { selectKind(kind) }
+                    .accessibilityIdentifier("clearFilters")
+            }
+        } label: {
+            PrompixIcon.filter.image.frame(width: 44, height: 44)
+                .overlay(alignment: .topTrailing) {
+                    if refined { Circle().fill(Palette.accent).frame(width: 7, height: 7).padding(9) }
+                }
+        }.accessibilityLabel(String(localized: "筛选")).accessibilityValue(refined ? String(localized: "已筛选") : "")
+            .accessibilityIdentifier("discoveryFilters")
+    }
+    /// 2.0 filters from the service's own counts: use and model family.
+    @ViewBuilder private func servedFilters(uses: [FeedBrowse.Count], families: [FeedBrowse.Count]) -> some View {
+        Menu(facet.flatMap(FacetCatalog.name) ?? String(localized: "全部用途")) {
+            choice(String(localized: "全部用途"), selected: facet == nil) { facet = nil }
+            ForEach(uses.filter { $0.count > 0 }.sorted { $0.count > $1.count }) { use in
+                if let name = FacetCatalog.name(use.id) { choice(name, selected: facet == use.id) { facet = use.id } }
+            }
+        }.accessibilityIdentifier("filterUse")
+        Menu(modelFamily.flatMap { FacetCatalog.modelFamilies[$0] } ?? String(localized: "模型")) {
+            choice(String(localized: "全部模型"), selected: modelFamily == nil) { modelFamily = nil }
+            ForEach(families.filter { $0.count > 0 && FacetCatalog.modelFamilies[$0.id] != nil }.sorted { $0.count > $1.count }) { family in
+                choice(FacetCatalog.modelFamilies[family.id]!, selected: modelFamily == family.id) { modelFamily = family.id }
+            }
+        }.accessibilityIdentifier("filterModelFamily")
+    }
+    private func choice(_ title: String, selected: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) { if selected { Label(title, systemImage: "checkmark") } else { Text(title) } }
+    }
+    /// The bundled catalog's simpler use and model filters, offline or on an older service.
+    @ViewBuilder private var catalogFilters: some View {
             Menu(String(localized: "全部用途")) {
                 Button(String(localized: "全部用途")) { topic = nil }
                 ForEach(topics, id: \.self) { value in
@@ -259,11 +257,6 @@ struct DiscoverView: View {
                     }
                 }
             }
-        } label: {
-            Label(String(localized: "筛选"), systemImage: "line.3.horizontal.decrease")
-                .font(.footnote).foregroundStyle(topic == nil && model == nil ? Palette.muted : Palette.accent)
-                .frame(minHeight: 44)
-        }.accessibilityIdentifier("discoveryFilters")
     }
 
 }
@@ -281,6 +274,7 @@ struct PreviewMasonryGrid<Item: Identifiable, Cell: View>: View {
     let preview: (Item) -> ContentPreview
     @ViewBuilder let cell: (Item) -> Cell
     var suppliedLayout: PromptGridLayout? = nil
+    @Environment(\.cardShowsTitle) private var titled
     @Environment(\.dynamicTypeSize) private var typeSize
     @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
     @State private var measuredLayout = PromptGridLayout(width: 0)
@@ -288,7 +282,6 @@ struct PreviewMasonryGrid<Item: Identifiable, Cell: View>: View {
     @State private var viewport = GridViewport()
     @State private var prefetchOwner = UUID()
     @Environment(\.scenePhase) private var scenePhase
-    @ScaledMetric(relativeTo: .footnote) private var titleSize = 13
     var body: some View {
         // Separate masonry columns read column-first. A linear native stack
         // preserves the editorial sequence when navigating with VoiceOver.
@@ -299,7 +292,7 @@ struct PreviewMasonryGrid<Item: Identifiable, Cell: View>: View {
                 let columns = balancedColumns
                 HStack(alignment: .top, spacing: 0) {
                     ForEach(0..<layout.columns, id: \.self) { index in
-                        column(columns[index]).frame(width: layout.widths.isEmpty ? nil : layout.widths[index])
+                        column(columns[index], width: columnWidths[index]).frame(width: layout.widths.isEmpty ? nil : layout.widths[index])
                         if index < layout.columns - 1 { Color.clear.frame(width: layout.gaps[index], height: 1) }
                     }
                 }.frame(minWidth: 0, maxWidth: .infinity)
@@ -321,36 +314,63 @@ struct PreviewMasonryGrid<Item: Identifiable, Cell: View>: View {
         let widths = linear ? [max(1, viewport.width)] : (layout.widths.isEmpty ? [180, 180] : layout.widths)
         var bottoms = Array(repeating: CGFloat.zero, count: widths.count)
         var candidates: [(CGFloat, URL)] = []
-        let font = UIFont.systemFont(ofSize: titleSize)
         for item in items {
             let column = bottoms.indices.min { bottoms[$0] < bottoms[$1] }!
             let value = preview(item)
             let top = bottoms[column]
-            let height = PromptCardGeometry.height(for: value, width: widths[column], titleFont: font)
-            bottoms[column] += height + (linear ? 24 : 14)
+            let height = PromptCardGeometry.height(for: value, width: widths[column], titled: titled)
+            bottoms[column] += height + (linear ? 24 : PromptGridLayout.gap)
             if !value.usesTextArtwork, viewport.includes(top: top, height: height), let url = value.media?.imageURL { candidates.append((top, url)) }
             if bottoms.allSatisfy({ $0 > viewport.end }) { break }
         }
         var seen = Set<URL>()
         return Array(candidates.sorted { $0.0 < $1.0 }.map(\.1).filter { seen.insert($0).inserted }.prefix(20))
     }
+    private var columnWidths: [CGFloat] {
+        layout.widths.isEmpty ? Array(repeating: CGFloat(180), count: layout.columns) : layout.widths
+    }
     private var balancedColumns: [[Int]] {
-        let widths = layout.widths.isEmpty ? Array(repeating: CGFloat(180), count: layout.columns) : layout.widths
-        let font = UIFont.systemFont(ofSize: titleSize)
-        return PromptMasonry.columns(itemCount: items.count, widths: widths, spacing: 14) { index, width in
-            PromptCardGeometry.height(for: preview(items[index]), width: width, titleFont: font)
+        PromptMasonry.columns(itemCount: items.count, widths: columnWidths, spacing: PromptGridLayout.gap) { index, width in
+            PromptCardGeometry.height(for: preview(items[index]), width: width, titled: titled)
         }
     }
-    private func column(_ indices: [Int]) -> some View {
-        LazyVStack(spacing: 14) {
-            ForEach(indices.map { items[$0] }) { item in
-                cell(item)
+    /// Every card's height is known before it is drawn, so a column is a plain
+    /// stack of exact frames rather than a lazy stack of estimates: the grid's
+    /// height never changes while scrolling and nothing above the reader moves.
+    /// Only cards within a screen of the viewport are built.
+    private func column(_ indices: [Int], width: CGFloat) -> some View {
+        var top: CGFloat = 0
+        let slots = indices.map { index -> GridSlot<Item.ID> in
+            let height = PromptCardGeometry.height(for: preview(items[index]), width: width, titled: titled)
+            defer { top += height + PromptGridLayout.gap }
+            return GridSlot(id: items[index].id, index: index, top: top, height: height)
+        }
+        return VStack(spacing: PromptGridLayout.gap) {
+            ForEach(slots, id: \.id) { slot in
+                ZStack(alignment: .top) {
+                    if builds(slot) { cell(items[slot.index]) }
+                }.frame(maxWidth: .infinity).frame(height: slot.height, alignment: .top)
             }
         }.frame(maxWidth: .infinity)
     }
+    private func builds<ID>(_ slot: GridSlot<ID>) -> Bool {
+        // Before the first measurement, build the opening screen.
+        guard viewport.height > 0 else { return slot.top < 1200 }
+        return slot.top + slot.height >= viewport.top - viewport.height && slot.top <= viewport.top + viewport.height * 2
+    }
+}
+
+private struct GridSlot<ID: Hashable> {
+    let id: ID
+    let index: Int
+    let top: CGFloat
+    let height: CGFloat
 }
 
 struct PromptGridLayout: Equatable {
+    /// The feed reads as one contact sheet: narrow gutters, works edge to edge.
+    static let gap: CGFloat = 6
+    static let inset: CGFloat = 16
     let columns: Int
     let widths: [CGFloat]
     let gaps: [CGFloat]
@@ -372,16 +392,16 @@ struct PromptGridLayout: Equatable {
         let roomForFour = usableDivision.map { min($0.minX, width - $0.maxX) >= 302 } ?? true
         let count = width >= 760 && roomForFour ? 4 : 2
         columns = count
-        guard width > 0 else { widths = []; gaps = [14]; return }
+        guard width > 0 else { widths = []; gaps = [Self.gap]; return }
         let half = count / 2
         if let division = usableDivision {
-            let leading = max(0, (division.minX - 8 - CGFloat(half - 1) * 14) / CGFloat(half))
-            let trailing = max(0, (width - division.maxX - 8 - CGFloat(half - 1) * 14) / CGFloat(half))
+            let leading = max(0, (division.minX - 8 - CGFloat(half - 1) * Self.gap) / CGFloat(half))
+            let trailing = max(0, (width - division.maxX - 8 - CGFloat(half - 1) * Self.gap) / CGFloat(half))
             widths = Array(repeating: leading, count: half) + Array(repeating: trailing, count: half)
-            gaps = (0..<(count - 1)).map { $0 == half - 1 ? division.width + 16 : 14 }
+            gaps = (0..<(count - 1)).map { $0 == half - 1 ? division.width + 16 : Self.gap }
         } else {
-            widths = Array(repeating: max(0, (width - CGFloat(count - 1) * 14) / CGFloat(count)), count: count)
-            gaps = Array(repeating: 14, count: count - 1)
+            widths = Array(repeating: max(0, (width - CGFloat(count - 1) * Self.gap) / CGFloat(count)), count: count)
+            gaps = Array(repeating: Self.gap, count: count - 1)
         }
     }
 }
@@ -404,25 +424,38 @@ enum PromptMasonry {
 }
 
 enum PromptCardGeometry {
-    static let titleSpacing: CGFloat = 6
+    static let cornerRadius: CGFloat = 12
     static func aspectRatio(for item: Prompt) -> CGFloat { aspectRatio(for: ContentPreview(item)) }
     static func aspectRatio(for item: ContentPreview) -> CGFloat {
-        if item.usesTextArtwork { return 0.95 }
+        // Text cards hold up to four lines of their words, so their shape follows the text.
+        if item.usesTextArtwork { return textCardRatio(item) }
         // Retain common portrait and widescreen shapes. Only extreme ratios crop.
         if let ratio = item.media?.aspectRatio { return max(0.65, min(1.8, ratio)) }
-        return switch item.kind { case .text: 0.95; case .image: item.artwork == "lake" ? 1.02 : 0.76; case .video: 0.94; case .web: WebsiteExamples.files[item.id] != nil ? 0.62 : 0.87 }
+        return switch item.kind { case .text: 0.95; case .image: item.artwork == "lake" ? 1.02 : 0.76; case .video: 0.94; case .web: 0.87 }
     }
-    static func height(for item: Prompt, width: CGFloat, titleFont: UIFont) -> CGFloat {
-        height(for: ContentPreview(item), width: width, titleFont: titleFont)
+    /// Cards carry only the work, so a card is exactly its preview; search results
+    /// add one line of title beneath visual works.
+    static let titleSpacing: CGFloat = 6
+    /// The mono lead and the line under a text card's title. The line is the
+    /// work's own summary, left out when it only repeats the title.
+    static func textNote(_ item: ContentPreview) -> (lead: String, summary: String) {
+        let summary = item.displaySummary.trimmingCharacters(in: .whitespacesAndNewlines)
+        return (item.detailMeta.lead, summary == item.displayTitle ? "" : summary)
     }
-    static func height(for item: ContentPreview, width: CGFloat, titleFont: UIFont) -> CGFloat {
-        let preview = width / aspectRatio(for: item)
-        guard !item.usesTextArtwork else { return preview }
-        let bounds = (item.displayTitle as NSString).boundingRect(
-            with: CGSize(width: max(1, width - 4), height: .greatestFiniteMagnitude),
-            options: [.usesLineFragmentOrigin, .usesFontLeading],
-            attributes: [.font: titleFont], context: nil)
-        return preview + titleSpacing + ceil(min(bounds.height, titleFont.lineHeight * 2))
+    /// Estimated at a nominal 180 pt column with 14 pt insets: a 10 pt lead,
+    /// up to three title lines of 16 pt and three summary lines of 13 pt.
+    static func textCardRatio(_ item: ContentPreview) -> CGFloat {
+        func lines(_ text: String, perLine: Double, limit: Double) -> Double {
+            let units = text.unicodeScalars.reduce(0.0) { sum, scalar in sum + (scalar.value > 0x2E80 ? 1 : 0.55) }
+            return text.isEmpty ? 0 : min(limit, max(1, (units / perLine).rounded(.up)))
+        }
+        let note = textNote(item)
+        let title = lines(item.displayTitle, perLine: 9.5, limit: 3), summary = lines(note.summary, perLine: 11.5, limit: 3)
+        let height = 28 + (note.lead.isEmpty ? 0 : 20) + title * 23 + (summary > 0 ? 8 + summary * 19 : 0)
+        return 180 / height
+    }
+    static func height(for item: ContentPreview, width: CGFloat, titled: Bool = false) -> CGFloat {
+        width / aspectRatio(for: item) + (titled && !item.usesTextArtwork ? titleSpacing + ceil(UIFont.preferredFont(forTextStyle: .subheadline).lineHeight) : 0)
     }
 }
 
@@ -441,16 +474,16 @@ struct PromptCard: View {
         VStack(alignment: .leading, spacing: 0) {
             Button { detailPresented = true } label: {
                 PromptCardFace(preview: ContentPreview(item)).promptTransitionSource(id: item.id, in: transition)
-            }.buttonStyle(.plain).accessibilityLabel(item.displayTitle).accessibilityIdentifier("prompt-\(item.id)")
+            }.buttonStyle(.cardPress).accessibilityLabel(item.displayTitle).accessibilityIdentifier("prompt-\(item.id)")
                 .contextMenu {
                     Button {
                         UIPasteboard.general.string = item.displayContent.prompt
                         copiedFeedback.toggle()
-                    } label: { Label(item.isSkill ? String(localized: "复制 Skill") : String(localized: "复制 Prompt"), systemImage: "doc.on.doc") }
+                    } label: { Label { Text(String(localized: "复制 Prompt")) } icon: { PrompixIcon.copy.image } }
                     Button {
                         if library.toggle(item) { savedFeedback.toggle() }
                     } label: { Label(library.isSaved(item) ? String(localized: "取消收藏") : String(localized: "收藏 Prompt"), systemImage: library.isSaved(item) ? "bookmark.slash" : "bookmark") }
-                }
+                } preview: { WorkPeek(preview: ContentPreview(item), title: item.displayTitle, text: item.displayContent.prompt) }
                 .sensoryFeedback(.success, trigger: copiedFeedback)
                 .sensoryFeedback(.selection, trigger: savedFeedback)
             if typeSize.isAccessibilitySize || voiceOverEnabled {
@@ -479,7 +512,7 @@ struct PromptCard: View {
                 .promptTransitionDestination(id: item.id, in: transition)
         }
     }
-    private var titleIsInArtwork: Bool { item.isSkill || item.kind == .text }
+    private var titleIsInArtwork: Bool { item.kind == .text }
     private var ratio: CGFloat { PromptCardGeometry.aspectRatio(for: item) }
 
 }
@@ -497,7 +530,7 @@ private struct PromptReadingPresentation: View {
                 .toolbar {
                     ToolbarItem(placement: .topBarLeading) {
                         Button { dismiss() } label: {
-                            Image(systemName: "chevron.left").frame(minWidth: 44, minHeight: 44)
+                            PrompixIcon.back.image.frame(minWidth: 44, minHeight: 44)
                         }.accessibilityLabel(String(localized: "返回列表"))
                             .accessibilityIdentifier("closePromptDetail")
                     }
@@ -508,152 +541,281 @@ private struct PromptReadingPresentation: View {
 
 struct FavoritesView: View {
     @Environment(Library.self) private var library
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Environment(\.dynamicTypeSize) private var typeSize
-    @State private var kind: PromptKind?
-    @State private var skillsOnly = false
-    @State private var query = ""
-    @State private var images = ImageStore.shared
-    @State private var showCreators = false
+    @State private var scope = SavedScope.decks
     @State private var settingsPresented = false
-    @Namespace private var scopeLine
-    @ScaledMetric(relativeTo: .body) private var searchHeight = 48
+    @State private var namingDeck = false
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 14) {
-                    SavedSearchField(text: $query).frame(height: searchHeight).padding(.horizontal, 12)
-                    Group {
-                        if typeSize.isAccessibilitySize {
-                            VStack(alignment: .leading, spacing: 8) {
-                                savedScopes
-                                if !showCreators { kindMenu }
-                            }
-                        } else {
-                            HStack(spacing: 16) { savedScopes; if !showCreators { kindMenu } }
-                        }
-                    }.padding(.horizontal, 20)
-                    if showCreators { SavedCreators(query: query) }
-                    else { savedContent }
-                }.padding(.top, 2).padding(.bottom, 24)
+                Group {
+                    switch scope {
+                    case .creators: SavedCreators(query: "")
+                    case .drafts: draftedContent
+                    case .decks: if library.favorites.isEmpty && library.favoritesReadable && library.decks.decks.isEmpty { SavedEmpty() } else { DeckGrid { namingDeck = true } }
+                    }
+                }.padding(.top, 8).padding(.bottom, 24)
             }
-            .scrollDismissesKeyboard(.interactively)
-            .plainTopEdge().background(Palette.paper).foregroundStyle(Palette.ink)
-            .safeAreaInset(edge: .top, spacing: 0) {
-                RootPageHeader(title: String(localized: "收藏"), settingsID: "savedSettings") { settingsPresented = true }
-                    .background(Palette.paper)
+            .background(Palette.paper).foregroundStyle(Palette.ink)
+            .rootHeader(title: String(localized: "收藏")) {
+                // Settings keeps its corner; the deck button appears beside it without moving it.
+                HStack(spacing: 8) {
+                    if scope == .decks {
+                        Button { namingDeck = true } label: { PrompixIcon.plus.image.frame(width: 44, height: 44) }
+                            .disabled(!library.decks.readable).accessibilityLabel(String(localized: "新建卡组")).accessibilityIdentifier("newDeck")
+                    }
+                    Button { settingsPresented = true } label: { PrompixIcon.person.image.frame(width: 44, height: 44) }
+                        .accessibilityLabel(String(localized: "设置")).accessibilityIdentifier("savedSettings")
+                }
+            } bar: {
+                Picker(String(localized: "收藏"), selection: $scope) {
+                    Text(String(localized: "卡组")).tag(SavedScope.decks)
+                    Text(String(localized: "创作者")).tag(SavedScope.creators)
+                    Text(String(localized: "我的版本")).tag(SavedScope.drafts)
+                }.pickerStyle(.segmented).padding(.horizontal, 20).padding(.bottom, 8)
+                    .accessibilityIdentifier("savedScope")
             }
-            .toolbar(.hidden, for: .navigationBar)
             .sheet(isPresented: $settingsPresented) { SettingsView().promptSheet() }
+            .deckNamePrompt(isPresented: $namingDeck) { library.decks.create(named: $0) }
         }
     }
-    private var savedScopes: some View {
-        HStack(spacing: 24) {
-            savedScope(false, title: String(localized: "内容"), count: library.favorites.count)
-            savedScope(true, title: String(localized: "创作者"), count: library.savedCreators.count)
-            Spacer(minLength: 0)
+    @ViewBuilder private var draftedContent: some View {
+        let drafted = library.draftedIDs, kept = library.versionedWorks
+        let keptIDs = Set(kept.map(\.id))
+        // Drafts saved before versions kept no copy of their work; find those in the catalog or saved works.
+        let earlier = (library.favorites + library.prompts).filter { drafted.contains($0.id) && !keptIDs.contains($0.id) }
+        var seen = Set<String>()
+        let items = (kept + earlier).filter { seen.insert($0.id).inserted }
+        if items.isEmpty {
+            QuietEmpty(title: String(localized: "还没有自己的版本"), message: String(localized: "在详情页点铅笔，就能基于任意 Prompt 写自己的版本。"))
+        } else { PromptGrid(items: items, origin: .favorite).padding(.horizontal, PromptGridLayout.inset).environment(\.cardShowsTitle, true) }
+    }
+}
+
+/// Nothing saved yet: six empty frames waiting to develop.
+private struct SavedEmpty: View {
+    var body: some View {
+        VStack(spacing: 22) {
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 3), spacing: 8) {
+                ForEach(1...6, id: \.self) { index in
+                    RoundedRectangle(cornerRadius: 5).fill(Palette.surface)
+                        .overlay { RoundedRectangle(cornerRadius: 5).strokeBorder(Palette.line, lineWidth: 0.5) }
+                        .overlay(alignment: .bottomLeading) {
+                            Text(String(format: "%02d", index)).font(Typography.meta(size: 9)).tracking(1).foregroundStyle(Palette.muted).padding(6)
+                        }.frame(height: 96)
+                }
+            }.padding(12).background(Palette.soft.opacity(0.5), in: RoundedRectangle(cornerRadius: 16))
+                .frame(maxWidth: 290).accessibilityHidden(true)
+            VStack(spacing: 8) {
+                Text(String(localized: "还没有收藏")).font(.title3.weight(.semibold))
+                Text(String(localized: "长按任何作品，或者点详情页右上角的书签，收藏的作品会一格一格显影在这里。"))
+                    .font(.subheadline).foregroundStyle(Palette.muted).multilineTextAlignment(.center).lineSpacing(4)
+            }
+        }.padding(.horizontal, 56).padding(.top, 40).frame(maxWidth: .infinity)
+            .accessibilityElement(children: .combine).accessibilityIdentifier("savedEmpty")
+    }
+}
+
+private enum SavedScope { case decks, creators, drafts }
+
+/// Every saved work first, then the decks you made, then room for one more.
+private struct DeckGrid: View {
+    let newDeck: () -> Void
+    @Environment(Library.self) private var library
+    var body: some View {
+        LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 20) {
+            NavigationLink { DeckDetail(deckID: nil) } label: {
+                DeckTile(name: String(localized: "全部收藏"), items: library.favorites)
+            }.buttonStyle(.cardPress).accessibilityIdentifier("deck-all")
+            ForEach(library.decks.decks) { deck in
+                NavigationLink { DeckDetail(deckID: deck.id) } label: {
+                    DeckTile(name: deck.name, items: DeckDetail.items(deck.itemIDs, in: library))
+                }.buttonStyle(.cardPress).accessibilityIdentifier("deck-\(deck.id)")
+            }
+            if library.decks.readable {
+                Button(action: newDeck) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Palette.line, lineWidth: 1)
+                            .aspectRatio(DeckTile.coverRatio, contentMode: .fit)
+                            .overlay { PrompixIcon.plus.image(size: 24).foregroundStyle(Palette.muted) }
+                        Text(String(localized: "新建卡组")).font(.subheadline).foregroundStyle(Palette.muted)
+                    }.contentShape(Rectangle())
+                }.buttonStyle(.cardPress).accessibilityLabel(String(localized: "新建卡组")).accessibilityIdentifier("newDeckTile")
+            }
+        }.padding(.horizontal, PromptGridLayout.inset)
+    }
+}
+
+private struct DeckTile: View {
+    static let coverRatio: CGFloat = 1.2
+    let name: String
+    let items: [Prompt]
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Color.clear.aspectRatio(Self.coverRatio, contentMode: .fit).overlay { cover }
+                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            HStack(alignment: .firstTextBaseline) {
+                Text(name).font(.subheadline.weight(.semibold)).lineLimit(1)
+                Spacer(minLength: 4)
+                Text(items.count.formatted()).font(Typography.meta(size: 11)).foregroundStyle(Palette.muted)
+            }
+        }.foregroundStyle(Palette.ink).contentShape(Rectangle())
+            .accessibilityElement(children: .ignore).accessibilityLabel(name).accessibilityValue(String(localized: "\(items.count) 张"))
+    }
+    /// A contact sheet of the latest works that never leaves a blank cell:
+    /// one fills the cover, two sit side by side, three put one beside a pair,
+    /// four or more make a 2×2 grid.
+    @ViewBuilder private var cover: some View {
+        let shown = Array(items.prefix(4))
+        switch shown.count {
+        case 0: Palette.surface
+        case 1: cell(shown[0])
+        case 2: HStack(spacing: 2) { cell(shown[0]); cell(shown[1]) }
+        case 3: HStack(spacing: 2) { cell(shown[0]); VStack(spacing: 2) { cell(shown[1]); cell(shown[2]) } }
+        default:
+            VStack(spacing: 2) {
+                HStack(spacing: 2) { cell(shown[0]); cell(shown[1]) }
+                HStack(spacing: 2) { cell(shown[2]); cell(shown[3]) }
+            }
         }
     }
-    private func savedScope(_ creators: Bool, title: String, count: Int) -> some View {
-        Button { withAnimation(reduceMotion ? nil : .snappy(duration: 0.25)) { showCreators = creators } } label: {
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Text(title).font(.headline)
-                Text(count.formatted()).font(.caption.monospacedDigit()).fixedSize().foregroundStyle(Palette.muted)
-            }.foregroundStyle(showCreators == creators ? Palette.ink : Palette.muted)
-                .frame(minHeight: 48).contentShape(Rectangle())
-                .overlay(alignment: .bottom) {
-                    if showCreators == creators {
-                        Capsule().fill(Palette.accent).frame(height: 2).matchedGeometryEffect(id: "saved-scope", in: scopeLine)
+    private func cell(_ item: Prompt) -> some View {
+        Artwork(item: item, compact: true, fillsFrame: true).frame(maxWidth: .infinity, maxHeight: .infinity).clipped()
+    }
+}
+
+/// One deck as a contact sheet. `nil` shows every saved work.
+private struct DeckDetail: View {
+    let deckID: String?
+    @Environment(Library.self) private var library
+    @Environment(\.dismiss) private var dismiss
+    @State private var renaming = false
+    @State private var confirmsDelete = false
+    static func items(_ ids: [String], in library: Library) -> [Prompt] {
+        let saved = Dictionary(library.favorites.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        return ids.compactMap { saved[$0] }
+    }
+    private var deck: Deck? { deckID.flatMap { id in library.decks.decks.first { $0.id == id } } }
+    private var items: [Prompt] { deck.map { Self.items($0.itemIDs, in: library) } ?? library.favorites }
+    @State private var kind: PromptKind?
+    @State private var images = ImageStore.shared
+    private var kinds: [(PromptKind, Int)] {
+        [PromptKind.image, .video, .text].compactMap { value in
+            let count = items.filter { $0.kind == value }.count
+            return count > 0 ? (value, count) : nil
+        }
+    }
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(String(localized: "卡组 ▸ \(items.count) 张")).font(.footnote).monospacedDigit().foregroundStyle(Palette.muted)
+                    Text(deck?.name ?? String(localized: "全部收藏")).font(.system(size: 30, weight: .bold)).accessibilityAddTraits(.isHeader)
+                }.padding(.horizontal, 20)
+                if kinds.count > 1 {
+                    ChipRow(values: [nil] + kinds.map { Optional($0.0) }, selection: $kind) { value in
+                        guard let value else { return String(localized: "全部") }
+                        return "\(value.title) \(kinds.first { $0.0 == value }?.1 ?? 0)"
                     }
                 }
-        }.buttonStyle(.plain).accessibilityAddTraits(showCreators == creators ? .isSelected : [])
-            .accessibilityIdentifier(creators ? "savedCreatorsScope" : "savedPromptsScope")
-    }
-    private var kindMenu: some View {
-        Menu {
-            Button(String(localized: "全部")) { kind = nil; skillsOnly = false }
-            ForEach(PromptKind.allCases) { value in
-                Button(value.title) { kind = value; skillsOnly = false }
-            }
-            Button("Skills") { kind = nil; skillsOnly = true }
-        } label: {
-            HStack(spacing: 5) {
-                Text(skillsOnly ? "Skills" : kind?.title ?? String(localized: "全部"))
-                Image(systemName: "chevron.down").font(.caption2)
-            }.font(.subheadline).foregroundStyle(Palette.muted).frame(minHeight: 44)
-        }.accessibilityIdentifier("savedKindFilter")
-    }
-    @ViewBuilder private var savedContent: some View {
-        if !images.offlineFailures.isEmpty {
-            Button { Task { if let urls = library.savedImageURLs { await images.keepOffline(urls) } } } label: {
-                Label(String(localized: "部分收藏预览尚未下载，轻点重试"), systemImage: "arrow.down.circle")
-                    .font(.footnote).foregroundStyle(Palette.muted)
-            }.padding(.horizontal, 20)
+                if deckID == nil, !images.offlineFailures.isEmpty {
+                    Button { Task { if let urls = library.savedImageURLs { await images.keepOffline(urls) } } } label: {
+                        Label(String(localized: "部分收藏预览尚未下载，轻点重试"), systemImage: "arrow.down.circle")
+                            .font(.footnote).foregroundStyle(Palette.muted)
+                    }.padding(.horizontal, 20)
+                }
+                if items.isEmpty {
+                    QuietEmpty(title: String(localized: "卡组里还没有作品"), message: String(localized: "在详情页点书签，选这个卡组即可加入。"))
+                }
+                // A deck reads as a contact sheet: three equal squares per row.
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 4), count: 3), spacing: 4) {
+                    ForEach(items.filter { kind == nil || $0.kind == kind }) { item in PromptCard(item: item, origin: .favorite) }
+                }.environment(\.cardAspectRatio, 1).padding(.horizontal, PromptGridLayout.inset)
+            }.padding(.bottom, 24)
         }
-        let items = library.favorites.filter { PromptQuery(text: query, kind: kind, skillsOnly: skillsOnly).matches($0) }
-        if !library.favoritesReadable {
-            ContentUnavailableView {
-                Label(String(localized: "收藏暂时无法读取"), systemImage: "bookmark.slash")
-            } description: { Text(String(localized: "原文件和离线预览已保留，暂时不会覆盖你的收藏。")) }
-            actions: { Button(String(localized: "重新读取收藏")) { library.reloadFavorites() }.buttonStyle(.bordered) }
-        } else if items.isEmpty {
-            if !query.isEmpty { ContentUnavailableView.search(text: query) }
-            else if !library.favorites.isEmpty {
-                ContentUnavailableView(String(localized: "暂无匹配内容"), systemImage: "bookmark", description: Text(String(localized: "试试其他分类，或清除筛选条件。")))
-            } else {
-                VStack(spacing: 18) {
-                    SpectralPages(openness: 0.7, compact: true).frame(width: 112, height: 112)
-                    Text(String(localized: "暂无收藏")).font(.title3.weight(.medium))
-                    Text(String(localized: "在详情页收藏喜欢的内容，也可以长按卡片收藏。"))
-                        .font(.subheadline).foregroundStyle(Palette.muted).multilineTextAlignment(.center).lineSpacing(4)
-                }.padding(.horizontal, 48).padding(.vertical, 50).frame(maxWidth: .infinity)
+        .background(Palette.paper).foregroundStyle(Palette.ink)
+        .toolbar {
+            if let deck {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Menu {
+                        Button { renaming = true } label: { Label(String(localized: "重命名"), systemImage: "pencil") }
+                        Button(role: .destructive) { confirmsDelete = true } label: { Label(String(localized: "删除卡组"), systemImage: "trash") }
+                    } label: { PrompixIcon.more.image.frame(minWidth: 44, minHeight: 44) }
+                        .accessibilityLabel(deck.name).accessibilityIdentifier("deckActions")
+                }
             }
-        } else { PromptGrid(items: items, origin: .favorite).padding(.horizontal, 12) }
+        }
+        .deckNamePrompt(isPresented: $renaming, initial: deck?.name ?? "") { name in
+            guard let deckID else { return nil }
+            return library.decks.rename(deckID, to: name) ? deck : nil
+        }
+        .confirmationDialog(String(localized: "删除卡组"), isPresented: $confirmsDelete) {
+            Button(String(localized: "删除卡组"), role: .destructive) {
+                if let deckID, library.decks.delete(deckID) { dismiss() }
+            }
+        } message: { Text(String(localized: "卡组里的作品仍会留在全部收藏。")) }
     }
 }
 
-/// Identical placement, material, tint and hit area across the two root pages.
-struct RootPageHeader: View {
-    var title: String?
-    let settingsID: String
-    let settings: () -> Void
+/// "收藏到": every saved work is always in 全部收藏; decks are optional extras.
+struct DeckPicker: View {
+    let item: Prompt
+    @Environment(Library.self) private var library
+    @Environment(\.dismiss) private var dismiss
+    @State private var naming = false
     var body: some View {
-        HStack {
-            if let title { Text(title).font(.title2.weight(.semibold)).tracking(-0.5).accessibilityAddTraits(.isHeader) }
-            else { PrompixWordmark().accessibilityIdentifier("discoveryHeading") }
-            Spacer()
-            Button(action: settings) { Image(systemName: "gearshape").frame(width: 44, height: 44) }
-                .buttonStyle(.plain).readingGlass().accessibilityLabel(String(localized: "设置"))
-                .accessibilityIdentifier(settingsID)
-        }.font(.title3).foregroundStyle(Palette.ink).padding(.horizontal, 20).padding(.vertical, 6)
+        NavigationStack {
+            List {
+                Label(String(localized: "全部收藏"), systemImage: "checkmark.circle.fill")
+                    .foregroundStyle(Palette.muted).accessibilityAddTraits(.isSelected)
+                ForEach(library.decks.decks) { deck in
+                    let member = deck.itemIDs.contains(item.id)
+                    Button { library.decks.set(item.id, in: deck.id, member: !member) } label: {
+                        HStack {
+                            Image(systemName: member ? "checkmark.circle.fill" : "circle").foregroundStyle(member ? Palette.accent : Palette.muted)
+                            Text(deck.name).foregroundStyle(Palette.ink)
+                            Spacer()
+                            Text(deck.itemIDs.count.formatted()).font(Typography.meta(size: 12)).foregroundStyle(Palette.muted)
+                        }.frame(minHeight: 44).contentShape(Rectangle())
+                    }.buttonStyle(.plain).accessibilityAddTraits(member ? .isSelected : []).accessibilityIdentifier("pickDeck-\(deck.id)")
+                }
+                Button { naming = true } label: { Label(String(localized: "新建卡组"), systemImage: "plus") }
+                    .disabled(!library.decks.readable).accessibilityIdentifier("pickerNewDeck")
+                Section {
+                    Button(String(localized: "取消收藏"), role: .destructive) { if library.toggle(item) { dismiss() } }
+                        .accessibilityIdentifier("pickerUnsave")
+                }
+            }
+            .scrollContentBackground(.hidden).background(Palette.paper)
+            .navigationTitle(String(localized: "收藏到")).navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button(String(localized: "完成")) { dismiss() }.accessibilityIdentifier("pickerDone") } }
+            .deckNamePrompt(isPresented: $naming) { name in
+                guard let deck = library.decks.create(named: name) else { return nil }
+                library.decks.set(item.id, in: deck.id, member: true)
+                return deck
+            }
+        }
+        .presentationDetents([.medium, .large]).tint(Palette.accent)
     }
 }
 
-/// UISearchBar retains native clear, keyboard and accessibility behavior without
-/// reserving a navigation drawer above this compact collection layout.
-private struct SavedSearchField: UIViewRepresentable {
-    @Binding var text: String
-    func makeUIView(context: Context) -> UISearchBar {
-        let bar = UISearchBar()
-        bar.searchBarStyle = .minimal
-        bar.placeholder = String(localized: "搜索收藏")
-        bar.delegate = context.coordinator
-        bar.autocapitalizationType = .none
-        bar.autocorrectionType = .no
-        bar.searchTextField.font = .preferredFont(forTextStyle: .subheadline)
-        bar.searchTextField.adjustsFontForContentSizeCategory = true
-        return bar
+private struct DeckNamePrompt: ViewModifier {
+    @Binding var isPresented: Bool
+    let initial: String
+    let commit: (String) -> Deck?
+    @State private var name = ""
+    func body(content: Content) -> some View {
+        content.alert(initial.isEmpty ? String(localized: "新建卡组") : String(localized: "重命名"), isPresented: $isPresented) {
+            TextField(String(localized: "卡组名称"), text: $name).accessibilityIdentifier("deckName")
+            Button(String(localized: "取消"), role: .cancel) { }
+            Button(initial.isEmpty ? String(localized: "创建") : String(localized: "完成")) { _ = commit(name) }
+                .disabled(DeckStore.cleanName(name) == nil)
+        }
+        .onChange(of: isPresented) { _, shown in if shown { name = initial } }
     }
-    func updateUIView(_ bar: UISearchBar, context: Context) {
-        context.coordinator.parent = self
-        if bar.text != text { bar.text = text }
-        bar.tintColor = UIColor(Palette.accent)
-    }
-    func makeCoordinator() -> Coordinator { Coordinator(self) }
-    final class Coordinator: NSObject, UISearchBarDelegate {
-        var parent: SavedSearchField
-        init(_ parent: SavedSearchField) { self.parent = parent }
-        func searchBar(_ searchBar: UISearchBar, textDidChange searchText: String) { parent.text = searchText }
-        func searchBarSearchButtonClicked(_ searchBar: UISearchBar) { searchBar.resignFirstResponder() }
+}
+
+extension View {
+    func deckNamePrompt(isPresented: Binding<Bool>, initial: String = "", commit: @escaping (String) -> Deck?) -> some View {
+        modifier(DeckNamePrompt(isPresented: isPresented, initial: initial, commit: commit))
     }
 }

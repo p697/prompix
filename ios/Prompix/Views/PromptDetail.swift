@@ -9,12 +9,14 @@ struct PromptDetail: View {
     private let origin: PromptDetailOrigin
     @Environment(Library.self) private var library
     @State private var editorContext: EditorContext?
-    @State private var useContext: UseContext?
+    /// The reader's own version on show; nil shows the work's prompt.
+    @State private var selectedVersion: String?
     @State private var imagePresented = false
+    @State private var imagePage = 0
+    @State private var deckPickerPresented = false
     @Namespace private var imageTransition
     @State private var playerPresented = false
     @State private var copied = false
-    @State private var webPresented = false
     @State private var language: String?
     @State private var hasChosenLanguage = false
     @State private var pendingLanguage: String?
@@ -22,25 +24,32 @@ struct PromptDetail: View {
     @State private var languageRequestID: UUID?
     @State private var languageTask: Task<Void, Never>?
     @State private var actionsCollapsed = false
+    @State private var mediaPaneVisible = false
+    /// Once the title scrolls away it returns, small, between the bar buttons over a paper veil.
+    @State private var titleShown = false
+    @State private var informationExpanded = false
+    @State private var renamingVersion: PromptVersion?
+    @State private var versionName = ""
+    @State private var deletingVersion: PromptVersion?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var typeSize
     @Environment(\.colorScheme) private var colorScheme
-    private struct UseContext: Identifiable {
-        let id = UUID()
-        let item: Prompt
-        let text: String
-        let title: String
-        let language: String?
-    }
+    @Environment(\.openURL) private var openURL
     private struct EditorContext: Identifiable {
         let id = UUID()
         let item: Prompt
-        let language: String?
+        /// The version being edited; nil starts a new one from `text`.
+        let version: String?
+        let text: String
     }
     private var item: Prompt { library.resolvedDetail(snapshot, origin: origin) }
     private var effectiveLanguage: String? { language.flatMap { item.availableLanguages.contains($0) ? $0 : nil } }
     private var content: Prompt.TranslatedContent { item.content(in: effectiveLanguage) }
     private var displaysOriginalContent: Bool { content == item.content(in: nil) }
+    private var versions: [PromptVersion] { library.versions(of: item) }
+    /// What the copy button copies and the editor starts from.
+    private var shownText: String { versions.first { $0.id == selectedVersion }?.text ?? content.prompt }
+    private var shownVersion: PromptVersion? { versions.first { $0.id == selectedVersion } }
     private var spokenLicense: String {
         // Give the common abbreviation a pronounceable name for VoiceOver.
         item.source.license == "CC0-1.0" ? "Creative Commons Zero" : item.source.license
@@ -63,81 +72,114 @@ struct PromptDetail: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                ShareLink(item: "\(content.title)\n\n\(content.prompt)\n\n\(String(localized: "来自")) \(item.source.author ?? item.source.name) · \(item.source.license)\n\(item.source.url?.absoluteString ?? "https://prompix.dev")") { Label(String(localized: "分享"), systemImage: "square.and.arrow.up").frame(minWidth: 44, minHeight: 44) }
+                ShareLink(item: "\(content.title)\n\n\(content.prompt)\n\n\(String(localized: "来自")) \(item.source.author ?? item.source.name) · \(item.source.license)\n\(item.source.url?.absoluteString ?? "https://prompix.dev")") { Label { Text(String(localized: "分享")) } icon: { PrompixIcon.share.image }.frame(minWidth: 44, minHeight: 44) }
                     .accessibilityIdentifier("sharePrompt")
             }
             ToolbarItem(placement: .topBarTrailing) {
-                Button { library.toggle(item) } label: {
-                    Label(library.isSaved(item) ? String(localized: "取消收藏") : String(localized: "收藏 Prompt"), systemImage: library.isSaved(item) ? "bookmark.fill" : "bookmark")
+                // With decks of your own, saving asks where; otherwise it stays one tap.
+                Button {
+                    if library.decks.decks.isEmpty { library.toggle(item) }
+                    else if library.isSaved(item) || library.toggle(item) { deckPickerPresented = true }
+                } label: {
+                    Label { Text(library.isSaved(item) ? String(localized: "取消收藏") : String(localized: "收藏 Prompt")) } icon: { (library.isSaved(item) ? PrompixIcon.savedFill : PrompixIcon.saved).image }
                         .frame(minWidth: 44, minHeight: 44)
                 }
                     .accessibilityLabel(library.isSaved(item) ? String(localized: "取消收藏") : String(localized: "收藏 Prompt")).accessibilityIdentifier("detailFavorite")
                     .disabled(library.isRemoved(item))
             }
         }
+        .overlay(alignment: .top) {
+            // Over the picture only the status bar gets an edge; the title brings paper behind the bar.
+            ZStack(alignment: .top) {
+                EdgeVeil().opacity(hasMediaPreview && !titleShown ? 1 : 0)
+                EdgeVeil(hold: 44, fade: 12).opacity(titleShown ? 1 : 0)
+            }.animation(.easeOut(duration: 0.2), value: titleShown)
+        }
+        .toolbar {
+            ToolbarItem(placement: .principal) {
+                Text(content.title).font(.subheadline.weight(.semibold)).lineLimit(1).frame(maxWidth: 200)
+                    .opacity(titleShown ? 1 : 0).animation(.easeOut(duration: 0.2), value: titleShown)
+                    .accessibilityHidden(!titleShown)
+            }
+        }
         .promptActionBar { readingActions }
         .onChange(of: content) { _, _ in copied = false }
+        .onChange(of: selectedVersion) { _, _ in copied = false }
         .onChange(of: item.preferredTranslation, initial: true) { _, preferred in
             if !hasChosenLanguage { language = preferred }
+        }
+        .onChange(of: versions.map(\.id)) { _, ids in
+            if let selectedVersion, !ids.contains(selectedVersion) { self.selectedVersion = nil }
         }
         .onChange(of: library.isRemoved(item)) { _, removed in
             if removed { cancelLanguageSelection(); failedLanguage = nil }
         }
         .onDisappear { if languageRequestID != nil { cancelLanguageSelection() } }
-        .sheet(item: $useContext) { context in
-            PromptUseSheet(item: context.item, text: context.text, sourceText: context.item.content(in: context.language).prompt, title: context.title, language: context.language, onPrepared: { prepared in
-                let saved = library.saveDraft(prepared, for: context.item, language: context.language)
-                if !saved { library.dismissError() }
-                return saved
-            })
+        .sheet(item: $editorContext) { context in
+            PromptEditor(item: context.item, version: context.version, text: context.text) { selectedVersion = $0 }
         }
-        .sheet(item: $editorContext) { context in PromptEditor(item: context.item, language: context.language) }
+        .sheet(isPresented: $deckPickerPresented) { DeckPicker(item: item) }
+        .alert(String(localized: "重命名"), isPresented: Binding { renamingVersion != nil } set: { if !$0 { renamingVersion = nil } }) {
+            TextField(renamingVersion.map { PromptVersion.title(of: $0, in: versions) } ?? "", text: $versionName).accessibilityIdentifier("versionName")
+            Button(String(localized: "取消"), role: .cancel) { }
+            Button(String(localized: "完成")) { if let renamingVersion { library.renameVersion(renamingVersion.id, to: versionName) } }
+        }
+        .confirmationDialog(String(localized: "删除这个版本？"), isPresented: Binding { deletingVersion != nil } set: { if !$0 { deletingVersion = nil } }, titleVisibility: .visible) {
+            Button(String(localized: "删除"), role: .destructive) {
+                if let deletingVersion, library.deleteVersion(deletingVersion.id) { selectedVersion = nil }
+            }.accessibilityIdentifier("confirmDeleteVersion")
+            Button(String(localized: "取消"), role: .cancel) {}
+        } message: { Text(String(localized: "原版和其他版本不受影响。")) }
         .fullScreenCover(isPresented: $imagePresented) {
-            ImageViewer(name: item.media?.image ?? item.artwork, urls: item.media?.galleryURLs ?? [])
+            ImageViewer(name: item.media?.image ?? item.artwork, urls: item.media?.galleryURLs ?? [], selection: imagePage)
                 .promptTransitionDestination(id: "image-\(item.id)", in: imageTransition)
-        }
-        .sheet(isPresented: $webPresented) {
-            if let filename = WebsiteExamples.files[item.id] { WebExample(filename: filename) }
         }
         .sheet(isPresented: $playerPresented) { MovieView(filename: item.media?.video, remoteURL: item.media?.videoURL, caption: content.previewLabel) }
     }
     private var hasMediaPreview: Bool {
-        WebsiteExamples.files[item.id] != nil || item.kind == .video || item.media?.image != nil || item.media?.imageURL != nil
+        item.kind == .video || item.media?.image != nil || item.media?.imageURL != nil
     }
     private var previewTitle: String {
-        WebsiteExamples.files[item.id] != nil ? String(localized: "打开网页作品") : item.kind == .video ? String(localized: "播放视频") : String(localized: "放大图片")
+        item.kind == .video ? String(localized: "播放视频") : String(localized: "放大图片")
     }
-    private func openPreview() {
-        if WebsiteExamples.files[item.id] != nil { webPresented = true }
-        else if item.kind == .video { playerPresented = true }
-        else { imagePresented = true }
+    private func openPreview(page: Int = 0) {
+        if item.kind == .video { playerPresented = true }
+        else { imagePage = page; imagePresented = true }
     }
     @ViewBuilder private var detailLayout: some View {
         if #available(iOS 27.1, *), hasMediaPreview {
             ArrangementView {
                 ScrollView {
-                    readingContent.padding(.bottom, 28).frame(maxWidth: 700).frame(maxWidth: .infinity)
-                }.preservingReadingPosition(readingPosition).readingChrome($actionsCollapsed).accessibilityIdentifier("detailReadingPane")
+                    VStack(alignment: .leading, spacing: 0) {
+                        if !mediaPaneVisible { largePreview }
+                        readingContent
+                    }.padding(.bottom, 28).frame(maxWidth: 700).frame(maxWidth: .infinity)
+                }.ignoresSafeArea(edges: mediaPaneVisible ? [] : .top).hidesTopEdgeEffect()
+                    .tracksTitle($titleShown, after: mediaPaneVisible ? 60 : 340)
+                    .preservingReadingPosition(readingPosition).readingChrome($actionsCollapsed).readingBottomEdge().accessibilityIdentifier("detailReadingPane")
             } secondary: {
                 ScrollView {
                     largePreview.padding(.bottom, 24).frame(maxWidth: 600).frame(maxWidth: .infinity)
-                }.preservingReadingPosition(readingPosition, media: true).accessibilityIdentifier("detailMediaPane")
+                }.ignoresSafeArea(edges: .top)
+                    .preservingReadingPosition(readingPosition, media: true).reportsPaneVisibility($mediaPaneVisible).accessibilityIdentifier("detailMediaPane")
             }.arrangementViewStyle(.split.axes(.horizontal))
         } else {
             ScrollView {
-                VStack(alignment: .leading, spacing: 25) {
+                VStack(alignment: .leading, spacing: 0) {
                     largePreview
                     readingContent
                 }.padding(.bottom, 28).frame(maxWidth: 700).frame(maxWidth: .infinity)
-            }.preservingReadingPosition(readingPosition).readingChrome($actionsCollapsed).accessibilityIdentifier("detailReadingPane")
+            }.ignoresSafeArea(edges: hasMediaPreview ? .top : []).hidesTopEdgeEffect()
+                .tracksTitle($titleShown, after: hasMediaPreview ? 340 : 60)
+                .preservingReadingPosition(readingPosition).readingChrome($actionsCollapsed).readingBottomEdge().accessibilityIdentifier("detailReadingPane")
         }
     }
     private var compactPreview: some View {
-        Button(action: openPreview) {
+        Button { openPreview() } label: {
             HStack(spacing: 14) {
                 Artwork(item: item).frame(width: 76, height: 86).clipped()
                     .clipShape(RoundedRectangle(cornerRadius: 10)).accessibilityHidden(true)
-                Label(previewTitle, systemImage: item.kind == .video ? "play.circle" : WebsiteExamples.files[item.id] != nil ? "safari" : "arrow.up.left.and.arrow.down.right")
+                Label(previewTitle, systemImage: item.kind == .video ? "play.circle" : "arrow.up.left.and.arrow.down.right")
                     .font(.subheadline.weight(.medium)).multilineTextAlignment(.leading)
                 Spacer(minLength: 0)
             }.padding(10).background(Palette.surface, in: RoundedRectangle(cornerRadius: 14))
@@ -146,46 +188,48 @@ struct PromptDetail: View {
     }
     @ViewBuilder private var largePreview: some View {
         if hasMediaPreview {
-            Button(action: openPreview) {
-                hero.overlay(alignment: .bottomTrailing) {
-                    if WebsiteExamples.files[item.id] != nil {
-                        Label(String(localized: "打开作品"), systemImage: "safari").font(.subheadline.weight(.medium))
-                            .padding(.horizontal, 16).padding(.vertical, 12).background(.regularMaterial, in: Capsule()).padding(16)
-                    } else {
-                        Image(systemName: item.kind == .video ? "play.fill" : (item.media?.galleryURLs.count ?? 0) > 1 ? "square.stack" : "arrow.up.left.and.arrow.down.right")
-                            .font(.body).padding(14).background(.regularMaterial, in: Circle()).padding(16)
+            DetailHero(preview: ContentPreview(item), title: previewTitle) { page in openPreview(page: page) }
+                .accessibilityIdentifier("previewButton")
+                .promptTransitionSource(id: "image-\(item.id)", in: imageTransition)
+                .overlay(alignment: .bottomTrailing) {
+                    if item.kind == .video {
+                        PrompixIcon.play.image(size: 20).padding(14).background(.regularMaterial, in: Circle()).padding(16)
+                            .allowsHitTesting(false).accessibilityHidden(true)
                     }
                 }
-            }.buttonStyle(.plain).accessibilityLabel(previewTitle).accessibilityIdentifier("previewButton")
         }
     }
     private var readingContent: some View {
-        VStack(alignment: .leading, spacing: 24) {
-            PromptDetailHeading(title: content.title, summary: content.summary, creator: item.creator)
-            if #available(iOS 27.1, *), hasMediaPreview { compactPreview }
-            languagePicker
-            PromptMarkdown(content.prompt)
-                .accessibilityIdentifier("promptBody")
-            DisclosureGroup {
-                VStack(alignment: .leading, spacing: 20) {
-                    Label("\(item.displayKind) · \(item.displayModel)", systemImage: item.displaySymbol)
-                        .font(.footnote).foregroundStyle(Palette.muted)
-                    if item.kind != .text { Text(content.previewLabel).font(.footnote).foregroundStyle(Palette.muted) }
-                    Text(content.example).font(.body).lineSpacing(5).textSelection(.enabled)
-                    if let skill = item.skill { SkillInformation(skill: skill) }
-                    if WebsiteExamples.files[item.id] != nil {
-                        Button { webPresented = true } label: {
-                            Label(String(localized: "打开原创网页示例"), systemImage: "safari").frame(minHeight: 44)
-                        }.accessibilityIdentifier("webExample")
+        VStack(alignment: .leading, spacing: 16) {
+            PromptDetailHeading(preview: ContentPreview(item), title: content.title)
+            if #available(iOS 27.1, *), hasMediaPreview, mediaPaneVisible { compactPreview }
+            VStack(alignment: .leading, spacing: 10) {
+                languagePicker
+                if !versions.isEmpty { versionPicker }
+                // A multi-shot video reads as its shots; the same words are not shown twice.
+                if let shots = item.shots, selectedVersion == nil { PromptShots(shots: shots).accessibilityIdentifier("promptBody") }
+                else { FoldedPrompt(text: shownText).accessibilityIdentifier("promptBody") }
+            }
+            DisclosureGroup(isExpanded: $informationExpanded) {
+                VStack(alignment: .leading, spacing: 0) {
+                    if let creator = item.creator { CreatorByline(creator: creator).padding(.bottom, 6) }
+                    infoRow(String(localized: "语言"), displaysOriginalContent ? String(localized: "原文") : String(localized: "AI 译文"))
+                    if let link = item.source.url ?? item.source.repository {
+                        Link(destination: link) {
+                            infoRow(String(localized: "原帖"), (item.source.post != nil ? "X" : item.source.name) + " ↗")
+                        }.accessibilityIdentifier("originalSource")
                     }
-                    if let demo = item.media?.demoURL {
-                        Link(String(localized: "打开网页示例"), destination: demo).frame(minHeight: 44)
+                    infoRow(String(localized: "许可"), licenseText)
+                        .accessibilityLabel(String(localized: "内容许可：\(spokenLicense)"))
+                    if let date = item.source.post?.date {
+                        infoRow(String(localized: "发布"), date.formatted(.dateTime.year().month().day()), mono: true)
                     }
-                    sourceInformation
-                }.padding(.top, 16)
+                    Link(destination: SupportLinks.reportMail(contentID: item.id, title: content.title)) {
+                        Text(String(localized: "报告问题或申请下架")).font(.footnote).foregroundStyle(Palette.muted).frame(minHeight: 44)
+                    }.accessibilityIdentifier("reportContent")
+                }.padding(.top, 8)
             } label: {
-                Text(String(localized: "说明与来源")).font(.subheadline.weight(.medium)).frame(minHeight: 44)
-                    .accessibilityIdentifier("promptInformation")
+                moreInformationLabel.accessibilityIdentifier("promptInformation")
             }
             if let feed = library.feed {
                 FeedRelatedResults(item: item, repository: feed)
@@ -196,65 +240,97 @@ struct PromptDetail: View {
             }
         }.padding(.horizontal, 22).padding(.top, 12)
     }
-    private var sourceInformation: some View {
-            VStack(alignment: .leading, spacing: 8) {
-                ViewThatFits(in: .horizontal) {
-                    HStack { sourceAuthor; Spacer(); sourceKind }
-                    VStack(alignment: .leading, spacing: 6) { sourceAuthor; sourceKind }
-                }
-                Text(item.source.license == "X-API-Terms" ? String(localized: "通过 X API 收录") : item.source.license).font(.footnote).foregroundStyle(Palette.muted)
-                    .accessibilityLabel(String(localized: "内容许可：\(spokenLicense)"))
-                if let post = item.source.post {
-                    if let date = post.date {
-                        Text(date, format: .dateTime.year().month().day().hour().minute())
-                            .font(.caption).foregroundStyle(Palette.muted)
-                    }
-                    DisclosureGroup(String(localized: "查看 X 原帖")) {
-                        Text(post.text).font(.subheadline).lineSpacing(5).textSelection(.enabled)
-                            .frame(maxWidth: .infinity, alignment: .leading).padding(.vertical, 10)
-                    }.font(.subheadline).accessibilityIdentifier("originalXPost")
-                }
-                if let context = item.source.context {
-                    ForEach(context, id: \.id) { source in
-                        DisclosureGroup(source.id == item.source.mediaPostID ? String(localized: "作品原帖") : String(localized: "上下文原帖")) {
-                            VStack(alignment: .leading, spacing: 10) {
-                                if let date = source.date { Text(date, format: .dateTime.year().month().day().hour().minute()).foregroundStyle(Palette.muted) }
-                                Text(source.text).textSelection(.enabled).lineSpacing(5)
-                                if let url = URL(string: "https://x.com/i/web/status/\(source.id)") {
-                                    Link(String(localized: "在 X 查看"), destination: url).frame(minHeight: 44)
-                                }
-                            }.font(.subheadline).frame(maxWidth: .infinity, alignment: .leading).padding(.vertical, 10)
-                        }.font(.subheadline).accessibilityIdentifier("sourceContext-\(source.id)")
-                    }
-                }
-                if let repository = item.source.repository { Link(destination: repository) { Text(String(localized: "收录于 \(item.source.name)")).font(.footnote).frame(minHeight: 44).contentShape(Rectangle()) } }
-                if let source = item.source.url { Link(destination: source) { Text(String(localized: "查看原始来源 ↗")).font(.footnote).frame(minHeight: 44).contentShape(Rectangle()) } }
-                Link(destination: SupportLinks.url(.report, contentID: item.id)) { Text(String(localized: "反馈这条内容")).font(.footnote).frame(minHeight: 44).contentShape(Rectangle()) }.accessibilityIdentifier("reportContent")
+    /// Licence codes from the pipeline, in words a reader understands.
+    private var licenseText: String {
+        switch item.source.license {
+        // X posts are the author's own work, whichever way they were collected.
+        case "X-API-Terms", "Source-author-rights": String(localized: "版权归原作者")
+        case "CC0-1.0": "CC0"
+        default: item.source.license
+        }
+    }
+    /// Only licenses a reader recognises at a glance; the full terms stay inside.
+    private var shortLicense: String? {
+        return item.source.license.hasPrefix("CC") ? item.source.license.replacingOccurrences(of: "-1.0", with: "") : nil
+    }
+    /// Who and under what terms, in one quiet line; everything else waits inside.
+    private var moreInformationLabel: some View {
+        HStack(spacing: 8) {
+            if !informationExpanded {
+                if let creator = item.creator { CreatorAvatar(creator: creator, size: 20) }
+                Text([item.creator?.displayName ?? item.source.author ?? item.source.name, shortLicense].compactMap { $0 }.joined(separator: " · "))
+                    .lineLimit(1)
             }
+            Spacer(minLength: 8)
+            Text(informationExpanded ? String(localized: "收起") : String(localized: "更多信息"))
+        }.font(.footnote).foregroundStyle(Palette.muted).frame(minHeight: 44)
+            .accessibilityElement(children: .combine)
+    }
+    private func infoRow(_ label: String, _ value: String, mono: Bool = false) -> some View {
+        HStack(spacing: 12) {
+            Text(label).foregroundStyle(Palette.muted)
+            Spacer(minLength: 8)
+            Text(value).font(mono ? Typography.meta(size: 12) : .subheadline).foregroundStyle(Palette.ink).lineLimit(1)
+        }.font(.subheadline).frame(minHeight: 44)
+            .overlay(alignment: .bottom) { Rectangle().fill(Palette.line).frame(height: 0.5) }
+            .accessibilityElement(children: .combine)
     }
     private var readingActions: some View {
-        ReadingActionBar(isSkill: item.isSkill, collapsed: actionsCollapsed, copied: copied,
-                         edit: openEditor, copy: { UIPasteboard.general.string = content.prompt; library.recommendations.record(.use, prompt: item); copied = true },
-                         use: openUseSheet)
+        ReadingActionBar(collapsed: actionsCollapsed, copied: copied, edit: openEditor, copy: copyShown)
     }
-    private func openUseSheet() {
-        let prepared = library.draft(for: item, language: effectiveLanguage)
-        guard !prepared.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { openEditor(); return }
-        useContext = UseContext(item: item, text: prepared, title: content.title, language: effectiveLanguage)
+    private func copyShown() {
+        UIPasteboard.general.string = shownText
+        library.recommendations.record(.use, prompt: item)
+        copied = true
     }
-    private var sourceAuthor: some View {
-        Text(item.source.author ?? item.source.name).font(.footnote.weight(.medium))
+    /// 原版 first, then the reader's own versions in the order they were made,
+    /// and last a way to start another from what is shown.
+    private var versionPicker: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 2) {
+                versionChip(String(localized: "原版"), id: nil)
+                ForEach(versions) { version in
+                    versionChip(PromptVersion.title(of: version, in: versions), id: version.id)
+                }
+                Button { editorContext = EditorContext(item: item, version: nil, text: shownText) } label: {
+                    PrompixIcon.plus.image(size: 16).foregroundStyle(Palette.muted)
+                        .frame(width: 44, height: 44).contentShape(Rectangle())
+                }.buttonStyle(.plain).accessibilityLabel(String(localized: "新建版本")).accessibilityIdentifier("newVersion")
+            }
+        }.scrollClipDisabled().accessibilityIdentifier("promptVersions")
     }
-    private var sourceKind: some View {
-        Text(item.source.name == "Prompix Studio" ? String(localized: "原创内容") : String(localized: "社区收录"))
-            .font(.footnote).foregroundStyle(Palette.muted)
+    /// A chosen version's own actions take the language menu's place.
+    private func versionMenu(_ version: PromptVersion) -> some View {
+        Menu {
+            Button { versionName = version.name ?? ""; renamingVersion = version } label: { Label(String(localized: "重命名"), systemImage: "pencil") }
+                .accessibilityIdentifier("renameVersion")
+            Button(role: .destructive) { deletingVersion = version } label: { Label(String(localized: "删除这个版本"), systemImage: "trash") }
+                .accessibilityIdentifier("deleteVersion")
+        } label: {
+            PrompixIcon.more.image(size: 18).foregroundStyle(Palette.muted)
+                .frame(minWidth: 44, minHeight: 44).contentShape(Rectangle())
+        }.accessibilityLabel(PromptVersion.title(of: version, in: versions)).accessibilityIdentifier("versionActions")
+    }
+    private func versionChip(_ title: String, id: String?) -> some View {
+        let selected = selectedVersion == id
+        return Button { selectedVersion = id } label: {
+            Text(title).font(.subheadline.weight(selected ? .semibold : .regular))
+                .foregroundStyle(selected ? Palette.paper : Palette.muted)
+                .padding(.horizontal, 12).frame(height: 30)
+                .background(selected ? Palette.ink : .clear, in: Capsule())
+                .frame(minHeight: 44).contentShape(Rectangle())
+        }.buttonStyle(.plain).accessibilityAddTraits(selected ? .isSelected : [])
+            .accessibilityIdentifier(id.map { "version-\($0)" } ?? "version-original")
     }
     private var languagePicker: some View {
         VStack(alignment: .leading, spacing: 10) {
-            ViewThatFits(in: .horizontal) {
-                HStack(alignment: .center, spacing: 12) { languageSummary; Spacer(minLength: 4); languageMenu }
-                VStack(alignment: .leading, spacing: 10) { languageSummary; languageMenu }
-            }
+            // One height for the original and every version, whatever sits on the right.
+            HStack {
+                Text(verbatim: "PROMPT").font(Typography.meta(size: 11)).tracking(1.4).foregroundStyle(Palette.muted)
+                    .accessibilityAddTraits(.isHeader)
+                Spacer(minLength: 4)
+                if let shownVersion { versionMenu(shownVersion) } else { languageMenu }
+            }.frame(minHeight: 44)
             if library.isRemoved(item) {
                 Text(String(localized: "这条内容已被移除，无法再保存。你仍可复制当前文字。"))
                     .font(.footnote).foregroundStyle(Palette.muted).fixedSize(horizontal: false, vertical: true)
@@ -278,10 +354,6 @@ struct PromptDetail: View {
             }
         }
     }
-    private var languageSummary: some View {
-        Text(displaysOriginalContent ? String(localized: "当前显示原文") : String(localized: "AI 译文"))
-            .font(.caption).foregroundStyle(Palette.muted)
-    }
     @ViewBuilder private var languageMenu: some View {
             if !library.isRemoved(item), !library.advertisedLanguages(for: item).isEmpty {
                 Menu {
@@ -298,14 +370,18 @@ struct PromptDetail: View {
                             .accessibilityHint(item.availableLanguages.contains(code) ? "" : String(localized: "下载后切换到此语言"))
                     }
                 } label: {
-                    Label(effectiveLanguage.map(ContentLanguage.name) ?? String(localized: "原文"), systemImage: "globe")
-                        .font(.subheadline).frame(minHeight: 44)
-                }.accessibilityIdentifier("contentLanguage")
+                    HStack(spacing: 4) {
+                        Text(effectiveLanguage.map(ContentLanguage.name) ?? String(localized: "原文"))
+                        PrompixIcon.chevronDown.image(size: 12)
+                    }.font(Typography.meta(size: 11)).tracking(1.2).foregroundStyle(Palette.muted)
+                        .frame(minWidth: 44, minHeight: 44).contentShape(Rectangle())
+                }.accessibilityLabel(String(localized: "语言")).accessibilityValue(effectiveLanguage.map(ContentLanguage.name) ?? String(localized: "原文"))
+                    .accessibilityIdentifier("contentLanguage")
             }
     }
     private func openEditor() {
-        // Capture both together: a catalog or locale install must not change an open editor's baseline.
-        editorContext = EditorContext(item: item, language: effectiveLanguage)
+        // Capture the starting text now: a catalog or locale install must not change an open editor's baseline.
+        editorContext = EditorContext(item: item, version: selectedVersion, text: shownText)
     }
     private func cancelLanguageSelection() {
         languageRequestID = nil
@@ -330,12 +406,6 @@ struct PromptDetail: View {
             else { failedLanguage = code }
         }
     }
-    private var hero: some View {
-        PromptDetailArtwork(preview: ContentPreview(item))
-            .promptTransitionSource(id: "image-\(item.id)", in: imageTransition)
-            .padding(.horizontal, 12).padding(.top, 8)
-    }
-
 }
 
 private struct StablePromptEditor: View {
@@ -349,195 +419,98 @@ private struct StablePromptEditor: View {
     }
 }
 
+/// The reader's own version of a prompt. Edits save as they are typed; starting
+/// from the original or another version makes a new version on the first change.
 struct PromptEditor: View {
     let item: Prompt
-    let language: String?
-    private let initialText: String?
-    private let readingPreview: Bool
-    private var isUnchangedReadingPreview: Bool { readingPreview && text == initialText }
-    private let onSave: ((String) -> Bool)?
+    private let onSaved: (String?) -> Void
+    private let baseline: String
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
-    @Environment(\.dynamicTypeSize) private var typeSize
     @Environment(Library.self) private var library
+    @State private var version: String?
     @State private var text: String
     @State private var copied = false
-    @State private var initialized = false
-    @State private var saved = true
     @State private var saveError: String?
-    @State private var restorePresented = false
-    @State private var usePresented = false
     @State private var leavePresented = false
-    @State private var leavingWithoutSaving = false
-    @State private var variablesPresented = false
-    @State private var headerHeight: CGFloat?
+    @State private var discarded = false
     @FocusState private var editorFocused: Bool
-    init(item: Prompt, language: String? = nil, initialText: String? = nil, readingPreview: Bool = false, onSave: ((String) -> Bool)? = nil) {
-        self.item = item; self.language = language; self.initialText = initialText; self.readingPreview = readingPreview; self.onSave = onSave
-        _text = State(initialValue: initialText ?? item.content(in: language).prompt)
+    init(item: Prompt, version: String?, text: String, onSaved: @escaping (String?) -> Void = { _ in }) {
+        self.item = item; self.onSaved = onSaved; baseline = text
+        _version = State(initialValue: version); _text = State(initialValue: text)
+    }
+    private var isEmpty: Bool { text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    private var title: String {
+        let versions = library.versions(of: item)
+        return versions.first { $0.id == version }.map { PromptVersion.title(of: $0, in: versions) } ?? String(localized: "新版本")
+    }
+    private var unsaved: Bool {
+        guard let version else { return text != baseline }
+        return library.versions(of: item).first { $0.id == version }?.text != text
     }
     var body: some View {
         NavigationStack {
-            GeometryReader { geometry in
-                VStack(alignment: .leading, spacing: 12) {
-                    ScrollView {
-                        editorHeader.onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
-                            if height > 0 { headerHeight = height }
-                        }
-                    }
-                    .frame(height: min(headerHeight ?? geometry.size.height * 0.45, max(0, geometry.size.height * 0.45)))
-                    .accessibilityIdentifier("draftStatusScroll")
-                    StablePromptEditor(text: $text, focused: $editorFocused)
-                        .font(.body).scrollContentBackground(.hidden).padding(.horizontal, 16)
-                        .frame(maxHeight: .infinity).accessibilityIdentifier("promptEditor")
+            VStack(alignment: .leading, spacing: 8) {
+                if let saveError {
+                    Text(saveError).font(.footnote).foregroundStyle(Palette.muted)
+                        .fixedSize(horizontal: false, vertical: true).padding(.horizontal, 20)
+                        .accessibilityIdentifier("draftSaveError")
                 }
-            }.paperScreen().navigationTitle(String(localized: "编辑 Prompt")).navigationBarTitleDisplayMode(.inline)
+                StablePromptEditor(text: $text, focused: $editorFocused)
+                    .font(Typography.prompt(size: 17)).lineSpacing(5)
+                    .scrollContentBackground(.hidden).padding(.horizontal, 16)
+                    .frame(maxHeight: .infinity).accessibilityIdentifier("promptEditor")
+            }.paperScreen()
+                .navigationTitle(title)
+                .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
-                    if #available(iOS 27.1, *) {
-                        ToolbarItem(placement: .primaryAction) {
-                            Button(action: copyEdits) {
-                                Label(copied ? String(localized: "已复制修改后的 Prompt") : String(localized: "复制修改后的 Prompt"),
-                                      systemImage: copied ? "checkmark" : "doc.on.doc")
-                            }.accessibilityIdentifier("copyEditedPrompt")
-                                .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                                .sensoryFeedback(.success, trigger: copied)
-                        }
-                    }
                     ToolbarItem(placement: .cancellationAction) {
-                        Button(String(localized: "完成")) { if save() { dismiss() } }.accessibilityIdentifier("finishPromptEditing")
+                        Button(String(localized: "完成")) { if save() { dismiss() } else { leavePresented = true } }
+                            .accessibilityIdentifier("finishPromptEditing")
                     }
                     ToolbarItem(placement: .primaryAction) {
-                        Menu {
-                            ShareLink(item: text) { Label(String(localized: "分享"), systemImage: "square.and.arrow.up") }
-                                .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                            Button(language == nil ? String(localized: "恢复原始 Prompt") : String(localized: "恢复当前语言的内容"), systemImage: "arrow.counterclockwise", role: .destructive) { restorePresented = true }
-                                .disabled(text == item.content(in: language).prompt)
-                        } label: { Label(String(localized: "编辑选项"), systemImage: "ellipsis.circle") }
+                        Button(action: copy) {
+                            Label(copied ? String(localized: "已复制") : String(localized: "复制"), systemImage: copied ? "checkmark" : "doc.on.doc")
+                        }.disabled(isEmpty).accessibilityIdentifier("copyEditedPrompt").sensoryFeedback(.success, trigger: copied)
                     }
                 }
-                .toolbar {
-                    ToolbarItem(placement: .primaryAction) {
-                        if onSave == nil {
-                            Button { usePresented = true } label: { Label(String(localized: "使用"), systemImage: "arrow.up.right") }
-                                .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty).accessibilityIdentifier("useEditedPrompt")
-                        }
-                    }
-                }
-                .sheet(isPresented: $usePresented) {
-                    PromptUseSheet(item: item, text: text, sourceText: item.content(in: language).prompt, title: item.content(in: language).title, language: language, onEdit: { prepared in
-                        // An explicit return to editing carries unsaved variable input too.
-                        text = prepared; saved = prepared == library.draft(for: item, language: language)
-                        usePresented = false
-                    }, onPrepared: { prepared in
-                        // Keep failed child edits out of this editor's autosave buffer.
-                        let committed = library.saveDraft(prepared, for: item, language: language)
-                        if committed { text = prepared; saved = true; saveError = nil }
-                        else { library.dismissError() }
-                        return committed
-                    })
-                }
-                .sheet(isPresented: $variablesPresented) {
-                    PromptVariablesSheet(template: PromptTemplate(text, enabled: !item.isSkill)) { prepared in
-                        text = prepared; save()
-                    }
-                }
-                .promptActionBar {
-                    if #unavailable(iOS 27.1) {
-                        Button(action: copyEdits) {
-                            PrimaryActionLabel(title: copied ? String(localized: "已复制修改后的 Prompt") : String(localized: "复制修改后的 Prompt"),
-                                compactTitle: copied ? String(localized: "已复制") : String(localized: "复制"), symbol: copied ? "checkmark" : "doc.on.doc")
-                        }.buttonStyle(.plain).accessibilityIdentifier("copyEditedPrompt")
-                            .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                            .padding().background(Palette.paper).sensoryFeedback(.success, trigger: copied)
-                    }
-                }
-                .onAppear {
-                    guard !initialized else { return }
-                    text = initialText ?? library.draft(for: item, language: language)
-                    saved = text == library.draft(for: item, language: language); initialized = true
-                }
-                .onChange(of: text) { _, _ in copied = false; saved = text == library.draft(for: item, language: language); saveError = nil }
+                .onAppear { editorFocused = true }
+                .onChange(of: text) { _, _ in copied = false; saveError = nil }
                 .task(id: text) {
-                    guard initialized else { return }
                     do { try await Task.sleep(for: .milliseconds(400)) } catch { return }
                     save()
                 }
-                .onDisappear { if initialized { save() } }
-                .onChange(of: scenePhase) { _, phase in
-                    if phase != .active, initialized { save() }
-                }
-                .confirmationDialog(language == nil ? String(localized: "恢复原始 Prompt？") : String(localized: "恢复当前语言的内容？"), isPresented: $restorePresented, titleVisibility: .visible) {
-                    Button(language == nil ? String(localized: "恢复原文") : String(localized: "恢复译文"), role: .destructive) { text = item.content(in: language).prompt; save() }
-                    Button(String(localized: "取消"), role: .cancel) {}
-                } message: { Text(String(localized: "这会替换你在此设备上保存的修改。")) }
+                .onDisappear { if !discarded { save() } }
+                .onChange(of: scenePhase) { _, phase in if phase != .active { save() } }
                 .alert(String(localized: "本次修改尚未保存"), isPresented: $leavePresented) {
-                    Button(String(localized: "复制并退出")) {
-                        UIPasteboard.general.string = text
-                        leaveWithoutSaving()
-                    }.accessibilityIdentifier("copyDraftAndLeave")
-                    Button(String(localized: "放弃本次修改并退出"), role: .destructive) { leaveWithoutSaving() }
+                    Button(String(localized: "复制并退出")) { UIPasteboard.general.string = text; discarded = true; dismiss() }
+                        .accessibilityIdentifier("copyDraftAndLeave")
+                    Button(String(localized: "放弃本次修改并退出"), role: .destructive) { discarded = true; dismiss() }
                         .accessibilityIdentifier("discardDraftAndLeave")
                     Button(String(localized: "继续编辑"), role: .cancel) {}
                 }
         }
         .promptSheet()
-        .interactiveDismissDisabled(!isUnchangedReadingPreview && (!saved || text != library.draft(for: item, language: language)))
+        .interactiveDismissDisabled(unsaved)
     }
-    private var editorHeader: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            if let saveError {
-                ViewThatFits(in: .horizontal) {
-                    HStack { saveRecoveryActions }
-                    VStack(alignment: .leading) { saveRecoveryActions }
-                }
-                Text(saveError).font(.footnote).foregroundStyle(Palette.muted)
-                    .fixedSize(horizontal: false, vertical: true).accessibilityIdentifier("draftSaveError")
-            }
-            if let language { Text(ContentLanguage.name(language)).font(.footnote.weight(.medium)).foregroundStyle(Palette.accent) }
-            Text(typeSize.isAccessibilitySize ? String(localized: "原文会保留。") : String(localized: "修改会保存到此设备，原始 Prompt 会保留。"))
-                .font(.footnote).foregroundStyle(Palette.muted).fixedSize(horizontal: false, vertical: true)
-            HStack {
-                Label(isUnchangedReadingPreview ? String(localized: "version.reading", table: "UsePrompt") : saved ? String(localized: "已保存到此设备") : saveError != nil ? String(localized: "尚未保存，可先复制保留") : String(localized: "正在保存…"), systemImage: saved ? "checkmark.circle" : "circle.dotted")
-                    .font(.footnote).foregroundStyle(Palette.muted).fixedSize(horizontal: false, vertical: true).accessibilityIdentifier("draftStatus")
-                if !typeSize.isAccessibilitySize {
-                    Spacer()
-                    Text(String(localized: "\(text.count) 字符")).font(.footnote.monospacedDigit()).foregroundStyle(Palette.muted)
-                }
-            }
-            if !PromptTemplate(text, enabled: !item.isSkill).fields.isEmpty {
-                Button(String(localized: "填写变量"), systemImage: "square.and.pencil") { variablesPresented = true }
-                    .frame(minHeight: 44).accessibilityIdentifier("editPromptVariables")
-            }
-        }.padding(.horizontal, 20).padding(.top, 14)
-            .frame(maxWidth: .infinity, alignment: .leading).fixedSize(horizontal: false, vertical: true)
-    }
-    private var saveRecoveryActions: some View {
-        Group {
-            Button(String(localized: "重试保存")) { save() }.accessibilityIdentifier("retryDraftSave")
-            Button(String(localized: "退出编辑")) {
-                editorFocused = false
-                leavePresented = true
-            }.accessibilityIdentifier("leaveUnsavedDraft")
-        }.buttonStyle(.bordered).controlSize(.large)
-    }
-    private func copyEdits() {
+    private func copy() {
         UIPasteboard.general.string = text
         library.recommendations.record(.use, prompt: item)
         copied = true
         save()
     }
+    /// Nothing is stored until the text differs from where it started, or is empty.
     @discardableResult private func save() -> Bool {
-        guard !leavingWithoutSaving else { return false }
-        saved = onSave?(text) ?? library.saveDraft(text, for: item, language: language)
-        saveError = saved ? nil : library.error ?? String(localized: "尚未保存，可先复制保留")
-        // Present draft failures here: a root alert can dismiss this editor sheet.
-        if !saved { library.dismissError() }
-        return saved
-    }
-    private func leaveWithoutSaving() {
-        // Explicitly abandoning edits must also stop pending lifecycle saves.
-        leavingWithoutSaving = true
-        dismiss()
+        guard !discarded, unsaved else { return true }
+        guard !isEmpty else { return version == nil }
+        guard let saved = library.saveVersion(text, id: version, for: item) else {
+            saveError = library.error ?? String(localized: "尚未保存，可先复制保留")
+            library.dismissError()
+            return false
+        }
+        if version == nil { version = saved }
+        onSaved(saved)
+        return true
     }
 }
 
@@ -649,11 +622,15 @@ struct MovieView: View {
 struct ImageViewer: View {
     let name: String
     let urls: [URL]
-    @State private var selection = 0
+    @State private var selection: Int
     @State private var zoomedPages: Set<Int> = []
     @State private var dragOffset: CGFloat = 0
     @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    init(name: String, urls: [URL], selection: Int = 0) {
+        self.name = name; self.urls = urls
+        _selection = State(initialValue: min(max(0, selection), max(0, urls.count - 1)))
+    }
     private var count: Int { max(1, urls.count) }
     private var isZoomed: Bool { zoomedPages.contains(selection) }
     private var usesNativeTransition: Bool {
@@ -667,38 +644,18 @@ struct ImageViewer: View {
                 .offset(y: reduceMotion ? 0 : dragOffset)
                 .scaleEffect(reduceMotion ? 1 : 1 - min(dragOffset / 1800, 0.12))
                 .opacity(reduceMotion ? 1 - min(dragOffset / 600, 0.3) : 1)
+            // Swipe between images, pull down to close; the system dots say where you are.
             VStack {
                 HStack {
-                    if count > 1 {
-                        Text("\(selection + 1) / \(count)")
-                            .font(.subheadline.monospacedDigit()).foregroundStyle(.white)
-                            .padding(.horizontal, 16).padding(.vertical, 10)
-                            .background(.black.opacity(0.45), in: Capsule())
-                            .accessibilityIdentifier("imagePageCounter")
-                    }
                     Spacer()
                     Button { dismiss() } label: {
-                        Image(systemName: "xmark").font(.body.weight(.semibold))
+                        PrompixIcon.close.image(size: 20)
                             .foregroundStyle(.white).frame(width: 44, height: 44)
                             .background(.ultraThinMaterial, in: Circle())
                     }.buttonStyle(.plain).accessibilityLabel(String(localized: "完成"))
                         .accessibilityIdentifier("closeImageViewer")
                 }
                 Spacer()
-                if count > 1 {
-                    HStack(spacing: 28) {
-                        Button { selection -= 1 } label: {
-                            Image(systemName: "chevron.left").frame(width: 44, height: 44)
-                        }.disabled(selection == 0)
-                            .accessibilityLabel(String(localized: "上一张")).accessibilityIdentifier("previousImage")
-                        Button { selection += 1 } label: {
-                            Image(systemName: "chevron.right").frame(width: 44, height: 44)
-                        }.disabled(selection == count - 1)
-                            .accessibilityLabel(String(localized: "下一张")).accessibilityIdentifier("nextImage")
-                    }.font(.body.weight(.medium)).buttonStyle(.plain)
-                        .foregroundStyle(.white).padding(.horizontal, 8)
-                        .background(.ultraThinMaterial, in: Capsule())
-                }
             }.padding(.horizontal, 18).padding(.vertical, 12)
                 .opacity(1 - min(dragOffset / 150, 0.8))
         }
@@ -720,7 +677,9 @@ struct ImageViewer: View {
                     else { zoomedPages.remove(index) }
                 }.tag(index)
             }
-        }.tabViewStyle(.page(indexDisplayMode: .never))
+        }.tabViewStyle(.page(indexDisplayMode: count > 1 ? .always : .never))
+            .accessibilityValue(count > 1 ? "\(selection + 1) / \(count)" : "")
+            .accessibilityIdentifier("imagePages")
     }
     // iOS 18 supplies the interactive return to the source image. Older systems
     // and Reduce Motion retain the same downward exit gesture without that zoom.
@@ -871,5 +830,62 @@ struct ZoomImage: UIViewRepresentable {
                 scroll.zoom(to: CGRect(x: point.x - scroll.bounds.width / 4, y: point.y - scroll.bounds.height / 4, width: scroll.bounds.width / 2, height: scroll.bounds.height / 2), animated: !UIAccessibility.isReduceMotionEnabled)
             }
         }
+    }
+}
+
+/// The prompt itself, folded to about seven lines until the reader asks for all of it.
+private struct FoldedPrompt: View {
+    let text: String
+    @State private var expanded = false
+    @State private var fullHeight: CGFloat = 0
+    @ScaledMetric(relativeTo: .body) private var foldHeight = 188.0
+    var body: some View {
+        let folds = !expanded && fullHeight > foldHeight + 40
+        VStack(alignment: .leading, spacing: 2) {
+            PromptMarkdown(text)
+                .fixedSize(horizontal: false, vertical: true)
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { fullHeight = $0 }
+                .frame(maxHeight: folds ? foldHeight : nil, alignment: .top)
+                .clipped()
+                .overlay(alignment: .bottom) {
+                    if folds {
+                        LinearGradient(colors: [Palette.paper.opacity(0), Palette.paper], startPoint: .top, endPoint: .bottom)
+                            .frame(height: 52).allowsHitTesting(false).accessibilityHidden(true)
+                    }
+                }
+            if folds {
+                Button(String(localized: "展开全文")) { expanded = true }
+                    .font(.subheadline.weight(.medium)).foregroundStyle(Palette.ink).frame(minHeight: 36)
+                    .accessibilityIdentifier("expandPrompt")
+            }
+        }.onChange(of: text) { _, _ in expanded = false }
+    }
+}
+
+/// Multi-shot video prompts, one shot per row with its time range.
+private struct PromptShots: View {
+    let shots: [Prompt.Shot]
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            ForEach(shots, id: \.index) { shot in
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(label(shot)).font(Typography.meta(size: 11)).tracking(1).foregroundStyle(Palette.muted)
+                    Text(shot.text).font(Typography.prompt(size: 16)).lineSpacing(4).textSelection(.enabled)
+                }
+            }
+        }.accessibilityIdentifier("promptShots")
+    }
+    private func label(_ shot: Prompt.Shot) -> String {
+        let number = String(format: "%02d", shot.index)
+        guard let start = shot.startSec, let end = shot.endSec else { return number }
+        return "\(number) ▸ \(start.formatted(.number.precision(.fractionLength(0...1))))–\(end.formatted(.number.precision(.fractionLength(0...1))))s"
+    }
+}
+
+private extension View {
+    @ViewBuilder func tracksTitle(_ shown: Binding<Bool>, after offset: CGFloat) -> some View {
+        if #available(iOS 18, *) {
+            onScrollGeometryChange(for: Bool.self) { $0.contentOffset.y + $0.contentInsets.top > offset } action: { _, value in shown.wrappedValue = value }
+        } else { self }
     }
 }

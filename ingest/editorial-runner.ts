@@ -10,6 +10,7 @@ import { skillSources } from "./skills.ts";
 import { clawHubReviewEligibility, isClawHubItem } from "./clawhub.ts";
 import { applyEditorialReviews, editorialMetadataSchema, type Reviews } from "./editorial.ts";
 import { isNativeXDraft, nativeXSourceIssue, nativeXSourceDigest } from "./x-source.ts";
+import { maximumPromptLength } from "./library.ts";
 import { appendReviewAttempt, replaceReviewAttempt, reviewLedgerSchema, reviewRequestLimit } from "./review-budget.ts";
 
 export const editorialVersion = 1;
@@ -104,6 +105,7 @@ export function automaticReviewEligibility(item: Candidate): string | undefined 
   if (item.kind === "image" && !item.media?.imageURL) return "A real source image is required";
   if (item.kind === "video" && !(item.media?.imageURL && item.media.videoURL)) return "A real source poster and clip are required";
   if (item.kind === "web" && !(item.media?.imageURL && item.media.demoURL)) return "A real webpage preview and demo are required";
+  if (item.prompt.length > maximumPromptLength) return "Prompt exceeds the publishable length";
   if (JSON.stringify([editorialInput(item)]).length > 36000) return "Complete source exceeds the bounded review input; manual review required";
 }
 

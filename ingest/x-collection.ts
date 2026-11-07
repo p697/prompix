@@ -28,6 +28,16 @@ export function currentXSearchPlan(now: Date): XSearchPlan {
 export const officialSupplementFeeds = xFeeds.flatMap(feed => feed.id === "video" ? [] : [xFeeds[1], feed]);
 
 /** Explicit routing mode. Both acquisition and maintenance retain the actual provider. */
+/** Daily X growth, released over the four UTC windows. About half the fetched posts become
+ * publishable visual works, so 200 fetches support the 100-a-day target; each costs $0.00015. */
+const bounded = (value: string | undefined, fallback: number, max: number) => {
+  const parsed = Number(value ?? fallback);
+  if (!Number.isInteger(parsed) || parsed < 0 || parsed > max) throw new Error("Invalid X growth limit");
+  return parsed;
+};
+export const xAcquisitionsPerDay = (env: NodeJS.ProcessEnv) => bounded(env.PROMPIX_X_ACQUISITIONS_PER_DAY, 200, 400);
+export const xSearchRequestsPerDay = (env: NodeJS.ProcessEnv) => bounded(env.PROMPIX_X_SEARCH_REQUESTS_PER_DAY, 80, 200);
+
 export async function collectXDiscovery(root: string, options: {
   enabled: boolean; bearer?: string; environment?: NodeJS.ProcessEnv; now?: () => Date;
   search?: TwitterAPIClient["search"]; lookup?: Parameters<typeof admitXSearchLeads>[3]["lookup"];
@@ -45,7 +55,7 @@ export async function collectXDiscovery(root: string, options: {
   const plan = searchPlanSchema.parse(await json<XSearchPlan>(join(directory, "plan.json"), currentXSearchPlan(at)));
   const ledger = ledgerSchema.parse(await json(path, []));
   const spent = ledger.reduce((sum, attempt) => sum + (attempt.used ?? attempt.allowance), 0);
-  const allowance = Math.max(0, windowBudget(40, at) - spent);
+  const allowance = Math.max(0, windowBudget(xSearchRequestsPerDay(env), at) - spent);
   let search: { status: string; requestsThisRun?: number; unique?: number; returned?: number; retryAfter?: string };
   const cooldownPath = join(root, "x-search-cooldown.json");
   const cooldown = z.object({ until: z.iso.datetime().optional() }).strict().parse(await json(cooldownPath, {}));
@@ -73,7 +83,7 @@ export async function collectXDiscovery(root: string, options: {
   try {
     await syncLiveXLeadQueue(root, at.toISOString());
     admission = await acquireXLeadQueue(root, { enabled: options.enabled, bearer: options.bearer,
-      maxPosts: windowBudget(40, at), now: at.toISOString(), lookup: options.lookup, environment: env });
+      maxPosts: windowBudget(xAcquisitionsPerDay(env), at), now: at.toISOString(), lookup: options.lookup, environment: env });
   } catch { admission = { status: "failed", requests: 0, acquired: 0, unavailable: 0, known: 0, pending: 0, needsInspection: 0 }; }
   const supplement = mode === "third-party" ? await collectXFeeds(root, { enabled: true, bearer: "third-party", provider: "twitterapi", now,
     search: thirdPartyFeedSearch(root, env, options.search, undefined, options.sleep), sleep: options.sleep,

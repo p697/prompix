@@ -40,42 +40,23 @@ import XCTest
         XCTAssertEqual(try paths.first?.query.validated(), paths.first?.query)
     }
 
-    func testForegroundRefreshUpdatesFirstPageAndLeavesUnchangedPublicationAlone() async throws {
-        let source = try source(), server = FeedRepositoryServer()
-        let library = Library(directory: directory, catalogURL: source, feedService: server)
-        let feed = try XCTUnwrap(library.feed), now = Date()
-        await library.refresh(now: now)
-        await feed.discovery.load(FeedQuery(sort: "latest"))
-        let nextRelease = "feed-" + String(repeating: "f", count: 64)
-        await server.setRelease(nextRelease)
-        await library.refresh(now: now.addingTimeInterval(301))
-        XCTAssertEqual(feed.discovery.release, nextRelease)
-        let refreshed = await server.latestCalls()
-        XCTAssertEqual(refreshed, 2)
-        await library.refresh(now: now.addingTimeInterval(602))
-        let unchanged = await server.latestCalls()
-        XCTAssertEqual(unchanged, 2)
-    }
-
-    func testForegroundKeepsPagedSnapshotUntilExplicitFirstPageRefresh() async throws {
+    func testForegroundRefreshNeverReplacesTheWorksBeingRead() async throws {
         let source = try source(), server = FeedRepositoryServer()
         let library = Library(directory: directory, catalogURL: source, feedService: server)
         let feed = try XCTUnwrap(library.feed), now = Date(), query = FeedQuery(sort: "latest")
-        await server.setPaging(true)
         await library.refresh(now: now)
         await feed.discovery.load(query)
-        await feed.discovery.loadMore()
-        XCTAssertTrue(feed.discovery.hasLoadedAdditionalPages)
+        let shown = feed.discovery.items.map(\.id)
         let nextRelease = "feed-" + String(repeating: "f", count: 64)
         await server.setRelease(nextRelease)
+        // Opening the app again after a new publication.
         await library.refresh(now: now.addingTimeInterval(301))
+        XCTAssertEqual(feed.discovery.items.map(\.id), shown)
         XCTAssertEqual(feed.discovery.release, FeedFixture.release)
-        XCTAssertEqual(feed.discovery.items.count, 2)
-        await library.refresh(force: true)
+        let calls = await server.latestCalls()
+        XCTAssertEqual(calls, 1, "Only the publication state is checked")
         await feed.discovery.load(query, force: true)
-        XCTAssertEqual(feed.discovery.release, nextRelease)
-        XCTAssertEqual(feed.discovery.items.count, 1)
-        XCTAssertFalse(feed.discovery.hasLoadedAdditionalPages)
+        XCTAssertEqual(feed.discovery.release, nextRelease, "A pull refresh brings the new publication")
     }
 
     func testPagedRefreshDoesNotDeleteUnloadedFavoritesOrDrafts() async throws {

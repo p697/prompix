@@ -17,7 +17,7 @@ test("global browse facets and collection pages share definitions and respect vi
       title: `Synthetic ${i}`, summary: "Synthetic collection", prompt: "Original body", example: "Example",
       tags: i % 2 ? ["肖像", "写作"] : ["好玩一点"], model: i < 10 ? "Popular model" : `Model ${i}`,
       artwork: "test", previewLabel: "Preview", media: null, toolURL: null,
-      source: { name: "Synthetic", url: null, license: "CC0", method: "test" } };
+      source: { name: "Synthetic", url: null, license: "CC0", method: "test" }, presentation: "general" };
     item.localization = { sourceLanguage: "en", sourceFingerprint: translationFingerprint(item), translations: {
       "zh-Hans": { title: `测试 ${i}`, summary: "摘要", prompt: "正文", example: "示例", previewLabel: "预览" },
     } };
@@ -30,7 +30,7 @@ test("global browse facets and collection pages share definitions and respect vi
   await stagePublication(writer, { schemaVersion: 1, version: "private", prompts: [{ ...prompts[0], title: "Unpublished", localization: undefined }] });
   const browse = await getBrowse(reader, "zh-Hans");
   assert.equal(browse.release, release);
-  assert.equal(browse.collections.length, 10);
+  assert.equal(browse.collections.length, 9);
   assert.equal(browse.modelCount, 54);
   assert.equal(browse.models.length, 50);
   assert.deepEqual(browse.models[0], { name: "Popular model", count: 10 });

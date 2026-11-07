@@ -6,21 +6,22 @@ struct Artwork: View {
     // Feed previews fill their reserved frame; full-image reading remains fitted.
     var fillsFrame = false
     var showsVideoBadge = true
+    /// Crops tall pictures from the bottom, keeping faces near the top.
+    var anchorsTop = false
     init(item: Prompt, compact: Bool = false, fillsFrame: Bool = false) {
         self.item = ContentPreview(item); self.compact = compact; self.fillsFrame = fillsFrame
     }
-    init(preview: ContentPreview, compact: Bool = false, fillsFrame: Bool = false, showsVideoBadge: Bool = true) {
-        item = preview; self.compact = compact; self.fillsFrame = fillsFrame; self.showsVideoBadge = showsVideoBadge
+    init(preview: ContentPreview, compact: Bool = false, fillsFrame: Bool = false, showsVideoBadge: Bool = true, anchorsTop: Bool = false) {
+        item = preview; self.compact = compact; self.fillsFrame = fillsFrame; self.showsVideoBadge = showsVideoBadge; self.anchorsTop = anchorsTop
     }
     var body: some View {
         GeometryReader { proxy in
             ZStack {
                 if item.usesTextArtwork { noteArtwork(size: proxy.size) }
                 else if let name = item.media?.image, UIImage(named: name) != nil { photo(name, size: proxy.size) }
-                else if let url = item.media?.imageURL { RemoteImage(url: url, contentMode: compact || fillsFrame ? .fill : .fit).frame(width: proxy.size.width, height: proxy.size.height).clipped() }
-                else if item.kind == .web, UIImage(named: "web-\(item.id)") != nil {
-                    Image("web-\(item.id)").resizable().scaledToFill().frame(width: proxy.size.width, height: proxy.size.height, alignment: .top).clipped()
-                }
+                else if let url = item.media?.imageURL { RemoteImage(url: url, contentMode: compact || fillsFrame ? .fill : .fit)
+                    // A web page reads from its top-left corner; never crop away its left edge.
+                    .frame(width: proxy.size.width, height: proxy.size.height, alignment: anchorsTop ? .top : .center).clipped() }
                 else if let cover = item.cover { editorialCover(cover, size: proxy.size) }
                 else if item.artwork == "text-editorial" || item.artwork == "web-editorial" { communityArtwork(size: proxy.size) }
                 else if item.kind == .video, UIImage(named: item.id) != nil { photo(item.id, size: proxy.size) } else {
@@ -34,10 +35,10 @@ struct Artwork: View {
                 }
                 if item.kind == .video && showsVideoBadge {
                     VStack { Spacer(); HStack {
-                        Label(item.media?.videoURL == nil ? "0:06" : String(localized: "播放"), systemImage: "play.fill").font(.system(size: 11, weight: .medium, design: .monospaced))
-                            .foregroundStyle(.white).padding(.horizontal, 9).padding(.vertical, 6).background(.black.opacity(0.28), in: Capsule())
+                        Text(item.durationLabel.map { "▶ " + $0 } ?? "▶").font(Typography.meta(size: 10)).tracking(0.6)
+                            .foregroundStyle(.white).padding(.horizontal, 8).padding(.vertical, 5).background(.black.opacity(0.45), in: Capsule())
                         Spacer()
-                    }.padding(12) }
+                    }.padding(8) }
                 }
             }.frame(width: proxy.size.width, height: proxy.size.height).clipped().accessibilityHidden(true)
         }.accessibilityElement(children: .ignore).accessibilityHidden(true)
@@ -46,7 +47,7 @@ struct Artwork: View {
         ZStack {
             Palette.soft
             VStack(alignment: .leading, spacing: 16) {
-                Image(systemName: item.kind == .web ? "curlybraces" : "quote.opening").font(.system(size: 28, weight: .ultraLight))
+                Image(systemName: "quote.opening").font(.system(size: 28, weight: .ultraLight))
                 Text(item.displayTitle).font(.system(size: min(size.width * 0.12, 28), weight: .regular, design: .default)).lineLimit(5).minimumScaleFactor(0.75)
                 Spacer(minLength: 0)
                 Text(item.displayKind).font(.system(size: 11, weight: .medium))
@@ -79,43 +80,34 @@ struct Artwork: View {
             }.foregroundStyle(palette.1).padding(size.width * 0.12)
         }
     }
+    /// Text cards are the words themselves on a quiet sheet, sized to them.
+    /// Words as a card: the model in mono, the title, then what it does, in the
+    /// proportions `PromptCardGeometry.textCardRatio` reserves for them.
     private func noteArtwork(size: CGSize) -> some View {
-        ZStack {
-            noteColor
-            VStack(alignment: .leading, spacing: compact ? 6 : 12) {
-                HStack(spacing: 6) {
-                    Image(systemName: item.isSkill ? "square.stack.3d.up" : "text.quote")
-                    if !compact { Text(item.displayKind) }
-                    Spacer(minLength: 0)
-                }.font(.system(size: compact ? 12 : 10, weight: .medium))
-                    .foregroundStyle(Palette.muted)
-                Text(item.displayTitle)
-                    .font(.system(size: min(size.width * (compact ? 0.14 : 0.108), 23), weight: .regular, design: .default))
-                    .lineSpacing(3).lineLimit(4).fixedSize(horizontal: false, vertical: true).layoutPriority(1)
-                if !compact {
-                    Text(noteExcerpt).font(.system(size: max(11, min(size.width * 0.068, 13))))
-                        .lineSpacing(4).lineLimit(3)
-                        .foregroundStyle(Palette.muted)
-                }
-                Spacer(minLength: 0)
-            }.foregroundStyle(Palette.ink).padding(size.width * 0.10)
-        }
-    }
-    private var noteExcerpt: String {
-        let text = item.excerpt
-        return text.replacingOccurrences(of: "\n", with: " ").trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-    private var noteColor: Color {
-        if item.isSkill { return Palette.soft }
-        switch item.cover?.tone ?? item.artwork {
-        case "sage", "tarot": return Palette.noteMint
-        case "clay", "letter": return Palette.noteRose
-        case "sky", "learn": return Palette.noteLavender
-        default: return Palette.soft
-        }
+        let words = item.displayTitle
+        let note = PromptCardGeometry.textNote(item)
+        return ZStack(alignment: .topLeading) {
+            Palette.surface
+            if compact {
+                Text(words).font(Typography.prompt(size: min(size.width * 0.13, 16), for: words))
+                    .lineSpacing(2).lineLimit(4).foregroundStyle(Palette.ink).padding(8)
+            } else {
+                VStack(alignment: .leading, spacing: 8) {
+                    if !note.lead.isEmpty {
+                        Text(verbatim: note.lead).font(Typography.meta(size: 10)).tracking(1.2).foregroundStyle(Palette.muted).lineLimit(1)
+                    }
+                    Text(words).font(Typography.prompt(size: 16, for: words)).lineSpacing(4).lineLimit(3)
+                        .foregroundStyle(Palette.ink)
+                    if !note.summary.isEmpty {
+                        Text(note.summary).font(.system(size: 13)).lineSpacing(3).lineLimit(3)
+                            .foregroundStyle(Palette.muted)
+                    }
+                }.padding(14)
+            }
+        }.overlay { RoundedRectangle(cornerRadius: PromptCardGeometry.cornerRadius, style: .continuous).strokeBorder(Palette.line, lineWidth: 0.5) }
     }
     private func photo(_ name: String, size: CGSize) -> some View {
-        Image(name).resizable().scaledToFill().frame(width: size.width, height: size.height).clipped()
+        Image(name).resizable().scaledToFill().frame(width: size.width, height: size.height, alignment: anchorsTop ? .top : .center).clipped()
     }
     private func abstractArtwork(size: CGSize) -> some View {
         ZStack {

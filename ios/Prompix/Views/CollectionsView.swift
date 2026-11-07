@@ -16,7 +16,6 @@ struct Collection: Identifiable {
         .init(id: "learning", title: String(localized: "学习与思考"), subtitle: String(localized: "语言练习、知识解释与思路梳理")),
         .init(id: "daily", title: String(localized: "工作与生活"), subtitle: String(localized: "邮件、面试、旅行与日常安排")),
         .init(id: "video", title: String(localized: "视频创作"), subtitle: String(localized: "运镜、转场与动态场景的实际案例")),
-        .init(id: "web", title: String(localized: "网页与小工具"), subtitle: String(localized: "作品集、网站与可以操作的工具"))
     ]
     @MainActor func count(in library: Library) -> Int {
         if let feed = library.feed { return feed.browse.value?.collections.first { $0.id == id }?.count ?? 0 }
@@ -38,7 +37,7 @@ struct Collection: Identifiable {
         var seen = Set<String>()
         let visual = items.filter {
             $0.kind != .text && !$0.isSkill &&
-                ($0.media?.image != nil || $0.media?.imageURL != nil || WebsiteExamples.files[$0.id] != nil) &&
+                ($0.media?.image != nil || $0.media?.imageURL != nil) &&
                 seen.insert($0.id).inserted
         }
         // Visual topics use full-bleed previews. Text-only topics keep one
@@ -61,7 +60,7 @@ struct CollectionsDirectory: View {
                     NavigationLink { CollectionDetail(collection: collection) } label: {
                         VStack(alignment: .leading, spacing: 12) {
                             HStack(spacing: 4) {
-                                ForEach(collection.previews(in: library).prefix(2)) { item in
+                                ForEach(collection.previews(in: library).sorted { !$0.usesTextArtwork && $1.usesTextArtwork }.prefix(2)) { item in
                                     Artwork(preview: item, compact: true).frame(maxWidth: .infinity).clipped()
                                 }
                             }.aspectRatio(1, contentMode: .fit)
@@ -75,12 +74,12 @@ struct CollectionsDirectory: View {
                                     Text(collection.subtitle).font(.subheadline).foregroundStyle(Palette.muted)
                                         .fixedSize(horizontal: false, vertical: true)
                                 }
-                                Text(String(localized: "\(count) 个 Prompt")).font(.caption).foregroundStyle(Palette.muted)
+                                Text(String(localized: "\(count) 条")).font(.footnote).monospacedDigit().foregroundStyle(Palette.muted)
                             }.padding(.horizontal, 2)
                         }.foregroundStyle(Palette.ink).multilineTextAlignment(.leading)
                             .contentShape(Rectangle())
-                    }.buttonStyle(.plain)
-                        .accessibilityLabel("\(collection.title) \(collection.subtitle) \(String(localized: "\(count) 个 Prompt"))")
+                    }.buttonStyle(.cardPress)
+                        .accessibilityLabel("\(collection.title) \(collection.subtitle) \(String(localized: "\(count) 条"))")
                         .accessibilityIdentifier("collection-\(collection.id)")
                 }
             }.padding(.horizontal, 16).padding(.top, 12).padding(.bottom, 28)
@@ -101,7 +100,7 @@ enum HomeCoverSelection {
             let image = candidate.media?.imageURL?.absoluteString ?? candidate.media?.image
             return !ids.contains(candidate.id) && (image.map { !images.contains($0) } ?? true)
         }
-        let visual = distinct.filter { $0.hasSourceImage || WebsiteExamples.files[$0.id] != nil }
+        let visual = distinct.filter { $0.hasSourceImage }
         // A single readable text cover is preferable to narrow text columns;
         // never mix a typographic Skill into an available visual composition.
         let pool = visual.isEmpty ? Array(distinct.prefix(1)) : visual
@@ -123,7 +122,7 @@ struct CollectionRail: View {
     @Environment(\.dynamicTypeSize) private var typeSize
     @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
     private var collections: [Collection] {
-        ["portraits", "play", "graphics", "web", "video"].compactMap { id in Collection.all.first { $0.id == id } }
+        ["portraits", "play", "graphics", "video"].compactMap { id in Collection.all.first { $0.id == id } }
     }
     private var waiting: Bool {
         guard let feed = library.feed else { return false }
@@ -152,14 +151,8 @@ struct CollectionRail: View {
     var body: some View {
         let selected = covers
         VStack(alignment: .leading, spacing: 2) {
-            HStack(alignment: .firstTextBaseline) {
-                Text(String(localized: "按用途探索")).font(Typography.editorial(.title3))
-                    .foregroundStyle(Palette.ink).accessibilityAddTraits(.isHeader)
-                Spacer(minLength: 12)
-                NavigationLink { CollectionsDirectory() } label: {
-                    Text(String(localized: "查看全部")).font(.footnote).foregroundStyle(Palette.muted).frame(minHeight: 44)
-                }.accessibilityIdentifier("allCollections")
-            }.padding(.horizontal, 20)
+            SectionHeader(title: String(localized: "按用途"), linkID: "allCollections") { CollectionsDirectory() }
+                .padding(.horizontal, 20)
             if typeSize.isAccessibilitySize || voiceOverEnabled {
                 VStack(spacing: 12) { ForEach(collections.prefix(1)) { collection in
                     NavigationLink { CollectionDetail(collection: collection) } label: {
@@ -168,10 +161,10 @@ struct CollectionRail: View {
                                 Text(collection.title).font(Typography.editorial(.title3))
                                 Text(collection.subtitle).font(.subheadline).foregroundStyle(Palette.muted)
                             }
-                            Spacer(); Image(systemName: "chevron.right").font(.caption).foregroundStyle(Palette.muted)
+                            Spacer(); PrompixIcon.chevronRight.image(size: 14).foregroundStyle(Palette.muted)
                         }.multilineTextAlignment(.leading).frame(minHeight: 44)
                             .padding(16).background(Palette.soft, in: RoundedRectangle(cornerRadius: 14))
-                    }.buttonStyle(.plain)
+                    }.buttonStyle(.cardPress)
                 } }.padding(.horizontal, 20)
             } else {
                 ScrollView(.horizontal, showsIndicators: false) {
@@ -209,7 +202,7 @@ struct CollectionRail: View {
                                     }.frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 2)
                                 }.frame(width: 246)
                                     .foregroundStyle(Palette.ink).multilineTextAlignment(.leading).contentShape(Rectangle())
-                            }.buttonStyle(.plain).accessibilityIdentifier("home-collection-\(collection.id)")
+                            }.buttonStyle(.cardPress).accessibilityIdentifier("home-collection-\(collection.id)")
                         }
                     }.padding(.horizontal, 20)
                 }
@@ -223,70 +216,61 @@ struct CollectionDetail: View {
     @Environment(Library.self) private var library
     var body: some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: 20) {
-                Text(collection.title).font(Typography.editorial(.largeTitle)).foregroundStyle(Palette.ink).fixedSize(horizontal: false, vertical: true)
+            LazyVStack(alignment: .leading, spacing: 16) {
                 Text(collection.subtitle).font(.subheadline).foregroundStyle(Palette.muted).fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 20)
                 let items = collection.items(in: library)
+                // The grids carry the feed's own 16 pt inset, the same as every other page.
                 if let feed = library.feed {
                     OwnedFeedResults(repository: feed, query: FeedQuery(collection: collection.id, sort: "recommended"), fallback: items)
                 } else if items.isEmpty {
-                    ContentUnavailableView(String(localized: "暂无匹配内容"), systemImage: "sparkle", description: Text(String(localized: "试试其他分类，或清除筛选条件。")))
-                } else { PromptGrid(items: items) }
-            }.padding(20)
-        }.background(Palette.paper).navigationTitle(String(localized: "专题")).navigationBarTitleDisplayMode(.inline)
+                    ContentUnavailableView(String(localized: "暂无匹配内容"), systemImage: "sparkle")
+                } else { PromptGrid(items: items).padding(.horizontal, PromptGridLayout.inset) }
+            }.padding(.top, 4).padding(.bottom, 24)
+        }.background(Palette.paper).navigationTitle(collection.title).navigationBarTitleDisplayMode(.large)
     }
 }
+/// Only rows you can act on; the policies behind them live on the linked pages.
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(Library.self) private var library
     @State private var cleared = false
     @State private var showOnboarding = false
+    private var version: String {
+        "\(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—") (\(Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "—"))"
+    }
     var body: some View {
         NavigationStack {
             List {
                 Section {
-                    HStack(spacing: 10) {
-                        SpectralPages(compact: true).frame(width: 40, height: 40)
-                        Text("Prompix").font(.largeTitle.weight(.medium)).tracking(-1)
-                    }.foregroundStyle(Palette.ink).padding(.top, 12).padding(.bottom, 20)
-                        .listRowSeparator(.hidden)
-                    LabeledContent(String(localized: "版本")) { Text("\(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—") (\(Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "—"))").foregroundStyle(Palette.muted) }
-                    Link(String(localized: "App 语言与系统设置"), destination: URL(string: UIApplication.openSettingsURLString)!)
+                    NavigationLink { RecommendationPreferences() } label: {
+                        Text(RecommendationCopy.text("interests.title"))
+                    }.accessibilityIdentifier("recommendationPreferences")
                     Button(String(localized: "onboarding.replay", table: "Onboarding")) { showOnboarding = true }
                         .accessibilityIdentifier("replayOnboarding")
-                    Text(String(localized: "内容优先显示 App 语言的译文，可在详情中切回原文。作者名、代码和模型参数保持不变。")).font(.footnote).foregroundStyle(Palette.muted).listRowSeparator(.hidden)
-                    if let updated = library.updatedAt { LabeledContent(String(localized: "最近更新")) { Text(updated, style: .date).foregroundStyle(Palette.muted) } }
-                    Button(library.isRefreshing ? String(localized: "正在更新…") : String(localized: "检查内容更新")) { Task { await library.refresh(force: true) } }.disabled(library.isRefreshing)
-                    if let message = library.syncMessage { Text(message).font(.footnote).foregroundStyle(Palette.muted) }
-                }.listRowBackground(Color.clear)
+                    Link(String(localized: "App 语言与系统设置"), destination: URL(string: UIApplication.openSettingsURLString)!)
+                }
                 Section {
-                    NavigationLink { RecommendationPreferences() } label: {
-                        Label(RecommendationCopy.text("interests.title"), systemImage: "slider.horizontal.3")
-                    }.accessibilityIdentifier("recommendationPreferences")
-                }.listRowBackground(Color.clear)
-                Section {
+                    Button { Task { await library.refresh(force: true) } } label: {
+                        LabeledContent(library.isRefreshing ? String(localized: "正在更新…") : String(localized: "检查内容更新")) {
+                            if let updated = library.updatedAt { Text(updated, style: .date).foregroundStyle(Palette.muted) }
+                        }
+                    }.disabled(library.isRefreshing)
                     Button(cleared ? String(localized: "图片缓存已清理") : String(localized: "清理图片缓存")) { ImageStore.shared.clear(); cleared = true }
-                    Text(String(localized: "清理浏览缓存，保留收藏缩略图、Prompt 文字和编辑草稿。")).font(.footnote).foregroundStyle(Palette.muted).listRowSeparator(.hidden)
-                    Text(String(localized: "收藏和草稿保存在本机，不上传编辑内容。搜索词会发送到内容服务以查询结果，不用于广告或用户画像。没有广告与分析 SDK。删除 App 会清除本地数据。"))
-                        .font(.footnote).foregroundStyle(Palette.muted).listRowSeparator(.hidden)
-                    Text(String(localized: "视频仅在你点开时播放，离开播放器或切到后台后暂停。内置内容可离线浏览；外部工具需要网络。"))
-                        .font(.footnote).foregroundStyle(Palette.muted).listRowSeparator(.hidden)
-                } header: { Text(String(localized: "本地数据")).font(.footnote.weight(.semibold)).foregroundStyle(Palette.muted) }.listRowBackground(Color.clear)
-                Section {
-                    Text(String(localized: "内容来自 Prompix 原创与开放社区，每条保留作者和原始来源。每天收集新内容，打开 App 时检查更新；也可以在发现页下拉刷新。不同模型的实际生成结果可能不同。"))
-                        .font(.footnote).foregroundStyle(Palette.muted).listRowSeparator(.hidden)
-                } header: { Text(String(localized: "内容与更新")).font(.footnote.weight(.semibold)).foregroundStyle(Palette.muted) }.listRowBackground(Color.clear)
+                } footer: {
+                    if let message = library.syncMessage { Text(message) }
+                }
                 Section {
                     Link(String(localized: "帮助与反馈"), destination: SupportLinks.url(.support)).accessibilityIdentifier("supportWebsite")
                     Link(String(localized: "隐私说明"), destination: SupportLinks.url(.privacy)).accessibilityIdentifier("privacyPolicy")
                     Link(String(localized: "内容来源与说明"), destination: SupportLinks.url(.content)).accessibilityIdentifier("contentPolicy")
-                    Link(String(localized: "Prompix 官网"), destination: SupportLinks.url(.home))
                     Link(String(localized: "开源项目"), destination: URL(string: "https://github.com/p697/prompix")!)
-                } header: { Text(String(localized: "帮助与信息")).font(.footnote.weight(.semibold)).foregroundStyle(Palette.muted) }.listRowBackground(Color.clear)
-            }.listStyle(.plain).contentMargins(.horizontal, 20)
-                .scrollContentBackground(.hidden).background(Palette.paper)
-                .tint(Palette.accent)
-                .navigationTitle(String(localized: "关于与设置")).navigationBarTitleDisplayMode(.inline)
+                } footer: {
+                    Text(verbatim: "Prompix \(version)").font(Typography.meta(size: 11)).frame(maxWidth: .infinity).padding(.top, 12)
+                }
+            }.scrollContentBackground(.hidden).background(Palette.paper)
+                .foregroundStyle(Palette.ink).tint(Palette.ink)
+                .navigationTitle(String(localized: "设置")).navigationBarTitleDisplayMode(.inline)
                 .toolbar { ToolbarItem(placement: .confirmationAction) { Button(String(localized: "完成")) { dismiss() } } }
         }.fullScreenCover(isPresented: $showOnboarding) { PrompixOnboarding { showOnboarding = false } }
     }

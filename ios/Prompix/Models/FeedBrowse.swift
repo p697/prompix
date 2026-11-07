@@ -1,6 +1,26 @@
 import Foundation
 import Observation
 
+/// Facet names from packages/schema/facets.json, the one vocabulary shared with the service.
+enum FacetCatalog {
+    struct Facet: Decodable { let id: String; let zh: String; let en: String }
+    static let names: [String: (zh: String, en: String)] = {
+        guard let url = Bundle.main.url(forResource: "facets", withExtension: "json"),
+              let data = try? Data(contentsOf: url),
+              let groups = try? JSONDecoder().decode([String: [Facet]].self, from: data) else { return [:] }
+        return Dictionary(groups.values.joined().map { ($0.id, ($0.zh, $0.en)) }, uniquingKeysWith: { first, _ in first })
+    }()
+    static func name(_ id: String) -> String? {
+        guard let value = names[id] else { return nil }
+        return Locale.preferredLanguages.first?.hasPrefix("zh") == true ? value.zh : value.en
+    }
+    /// Model families as people name them. "other" is mostly unnamed models, so it is never offered.
+    static let modelFamilies: [String: String] = [
+        "gpt-image": "GPT Image", "nano-banana": "Nano Banana", "midjourney": "Midjourney", "seedance": "Seedance",
+        "veo": "Veo", "kling": "Kling", "flux": "Flux", "claude": "Claude", "gpt": "GPT", "gemini": "Gemini",
+    ]
+}
+
 enum FeedCollections {
     struct Definition: Decodable { let tags: [String]; let kind: String? }
     static let definitions: [String: Definition] = {
@@ -22,11 +42,23 @@ struct FeedBrowse: Codable, Sendable {
         let count: Int
         var id: String { name }
     }
+    /// A vocabulary id with its count, for facets and model families.
+    struct Count: Codable, Identifiable, Hashable, Sendable {
+        let id: String
+        let count: Int
+    }
+    struct FacetCounts: Codable, Hashable, Sendable {
+        let useCase: [Count]
+        let style: [Count]
+        let subject: [Count]
+    }
     let schemaVersion: Int
     let release: String
     let collections: [Topic]
     let models: [Model]
     let modelCount: Int
+    var facets: FacetCounts? = nil
+    var modelFamilies: [Count]? = nil
     func validated(locale: String) throws -> Self {
         guard schemaVersion == 3, FeedValidation.release(release), collections.count <= 50,
               Set(collections.map(\.id)).count == collections.count,
@@ -38,7 +70,15 @@ struct FeedBrowse: Codable, Sendable {
             for card in topic.covers { _ = try card.validated(locale: locale) }
         }
         guard models.allSatisfy({ FeedValidation.text($0.name, max: 200) && (1...100000).contains($0.count) }) else { throw FeedError.invalidResponse }
-        return self
+        // Optional 2.0 counts are dropped when malformed instead of failing browse.
+        func valid(_ counts: [Count]) -> Bool {
+            counts.count <= 100 && Set(counts.map(\.id)).count == counts.count
+                && counts.allSatisfy { FeedValidation.text($0.id, max: 40) && (0...100000).contains($0.count) }
+        }
+        var value = self
+        if let facets, ![facets.useCase, facets.style, facets.subject].allSatisfy(valid) { value.facets = nil }
+        if let modelFamilies, !valid(modelFamilies) { value.modelFamilies = nil }
+        return value
     }
 }
 
@@ -48,7 +88,6 @@ struct FeedBrowse: Codable, Sendable {
     private(set) var isLoading = false
     private(set) var isCached = false
     private(set) var retryAt: Date?
-    private var loadedAt: Date?
     private var locale: String?
     private var owner: UUID?
     private let service: any FeedServing
@@ -56,7 +95,9 @@ struct FeedBrowse: Codable, Sendable {
     init(service: any FeedServing, cache: FeedCache) { self.service = service; self.cache = cache }
     func load(locale: String = ContentLanguage.preferred, force: Bool = false, now: Date = Date()) async {
         guard !Task.isCancelled, !isLoading, retryAt == nil || now >= retryAt! else { return }
-        if !force, self.locale == locale, let loadedAt, now.timeIntervalSince(loadedAt) < 300 { return }
+        // Collections already on screen are never swapped while reading; a pull
+        // refresh or another language brings fresh ones.
+        if !force, self.locale == locale, value != nil, !isCached { return }
         let token = UUID(); owner = token; isLoading = true; failure = nil
         defer { if owner == token { isLoading = false } }
         if self.locale != locale {
@@ -66,7 +107,7 @@ struct FeedBrowse: Codable, Sendable {
             let value = try await service.browse(locale: locale).validated(locale: locale)
             try Task.checkCancellation()
             guard owner == token else { return }
-            self.value = value; self.loadedAt = now; isCached = false; retryAt = nil
+            self.value = value; isCached = false; retryAt = nil
             try? await cache.store(value, locale: locale)
         } catch {
             guard owner == token, !(error is CancellationError), (error as? URLError)?.code != .cancelled else { return }

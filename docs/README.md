@@ -1,3 +1,9 @@
+**2.0.0（48）已装到 owner 的 iPhone Air**：暗房 · 白配色与新图标；发现页只有作品、创作者与用途横条移进信息流、2.0 筛选（用途／模型族／参考图）；长按预览；详情页参数行、衬线正文、「你需要」、分镜；详情大图通栏铺满、多图原地滑动；收藏卡组与「我的改写」；搜索首页与结果标题；两步引导；设置里的「显示成人内容」。未做：今日一组、榜单与匿名统计（等服务端）、填空就地编辑、按颜色与以图搜图、分享卡。见[设计语言](design-language.md)。
+
+**2.0 条目字段**：presentation、inputs、generation、variables、facets、英文卡片、palette、shots、rights 进入 schema（全部可选），配固定 facets 词表；一次模型调用产出除 palette（本地计算）和 sourceMetrics 外的全部字段。见[字段与合并审核](catalog-enrichment-2.0.md)。
+
+**Prompix 2.0 · 暗房 · 白**：界面只用黑、灰、白，作品是唯一的颜色；新配色、黑底三张白卡的 App Icon 与单色品牌标记先行落地，页面结构按设计稿分步还原。见[设计语言](design-language.md)。
+
 **混合语言说明恢复**：中文元数据不能直接复用时进入正常翻译；队列故障按真实阶段报告，未知请求不重放。见[恢复说明](backfill-campaign.md#mixed-language-metadata-recovery)。
 
 **队列提交查回**：领取任务的 COMMIT 应答丢失时，按唯一 token 在数据库锁后核对预约，只执行已确认且仍独占的任务；发布与采集采用同一组来源时效证据。见[运行说明](backfill-campaign.md#database-transient-recovery)。
@@ -31,6 +37,8 @@
 **Current backfill scope: 1,000 additional qualified items.** The latest user direction replaces automatic expansion to 10,000. Preserve the frozen starting count, existing queues and quality gates; review the result at the increment milestone. See [campaign operations](backfill-campaign.md#next-stage-1000-additional-qualified-items).
 
 # Prompix 文档
+
+**数据管线 v2**：模型调用抽象成插件（Codex／Claude Code／Kimi 订阅，Kimi／DeepSeek／OpenAI／Anthropic API），任意 agent 用 `npm run pipeline` 查看和改变管线状态；见[设计与命令](data-pipeline-v2.md)。
 
 **补库期间日常复查预算**：新增仅用于已有来源复查的限时补库授权，仍使用共享累计账本；普通增长月限额和每日限额不变，到期回归普通限制。见[补库运行说明](backfill-campaign.md#补库期间保护日常复查)。
 

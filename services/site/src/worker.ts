@@ -1,5 +1,5 @@
 import { FeedFailure, type Env } from "./feed.ts";
-import { kindFromSlug, resolveLocale, type LegalPage, type Locale } from "./i18n.ts";
+import { kindFromSlug, localePath, resolveLocale, retiredKindSlugs, type LegalPage, type Locale } from "./i18n.ts";
 import { explore, parseExplore } from "./pages/explore.ts";
 import { home } from "./pages/home.ts";
 import { prompt, promptID } from "./pages/prompt.ts";
@@ -44,6 +44,7 @@ async function route(url: URL, env: Env, ctx: ExecutionContext, client: string |
   const segments = path.split("/").filter(Boolean);
   if (segments[0] === "explore" && segments.length <= 2) {
     const kind = segments[1] ? kindFromSlug(segments[1]) : undefined;
+    if (segments[1] && retiredKindSlugs.includes(segments[1])) return redirect(localePath(locale, "/explore"), 301);
     if (segments[1] && !kind) return { body: notFound(locale, path), status: 404, ttl: 600, locale };
     const result = await explore(locale, parseExplore(searchParams, kind), env, ctx, client);
     if (typeof result !== "string") return redirect(result.redirect, 302);

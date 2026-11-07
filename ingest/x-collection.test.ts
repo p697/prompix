@@ -33,7 +33,7 @@ test("hybrid routing keeps one durable daily search and acquisition budget acros
     calls++; const raw = { tweets: [], has_next_page: true, next_cursor: `next-${calls}` };
     await capture?.(raw); return { raw, result: parseTwitterAPI(raw, { search: true }) };
   };
-  const options = { enabled: true, bearer: "fixture", environment: environment(root), now: () => time, search, sleep: async () => {},
+  const options = { enabled: true, bearer: "fixture", environment: { ...environment(root), PROMPIX_X_SEARCH_REQUESTS_PER_DAY: "40" }, now: () => time, search, sleep: async () => {},
     officialSearch: async (_bearer: string, request: Parameters<NonNullable<Parameters<typeof collectXDiscovery>[1]["officialSearch"]>>[1]) => {
       official++; assert.equal(request.limit, 10);
       return { ...parseXSearchResponse({ meta: { result_count: 0 } }, request.since, request.limit), request };

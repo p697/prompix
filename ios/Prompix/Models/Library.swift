@@ -12,6 +12,18 @@ enum CatalogSyncState: Equatable, Sendable {
     }
 }
 
+/// One of the reader's own versions of a work's prompt.
+struct PromptVersion: Identifiable, Hashable {
+    let id: String
+    let text: String
+    let created: Date?
+    /// The reader's name for it; unnamed versions are numbered by age.
+    var name: String? = nil
+    static func title(of version: PromptVersion, in versions: [PromptVersion]) -> String {
+        version.name ?? String(localized: "我的 \((versions.firstIndex(of: version) ?? 0) + 1)")
+    }
+}
+
 @MainActor @Observable final class Library {
     private(set) var prompts: [Prompt] = []
     private(set) var favorites: [Prompt] = []
@@ -37,12 +49,26 @@ enum CatalogSyncState: Equatable, Sendable {
     private var languagePackBase: LanguagePackCatalog.Base?
     private(set) var feed: FeedRepository?
     private var databaseFeedRequested = false
+    private let feedService: (any FeedServing)?
     let recommendations: LocalRecommendations
+    let decks: DeckStore
     private let directory: URL
     private let installFileWriter: (Data, URL) throws -> Void
     private var storageRecoveryPending = false
     private var languageCache: LanguagePackCache { LanguagePackCache(directory: directory) }
     var savedIDs: Set<String> { Set(favorites.map(\.id)) }
+    /// Works with a saved draft in any language.
+    var draftedIDs: Set<String> { Set(drafts.keys.map { String($0.components(separatedBy: "::")[0]) }) }
+    private static let snapshotKey = "work"
+    /// A version's name sits beside it as `<version id>::name`.
+    private static let nameKey = "name"
+    /// The works the reader has written versions of, from the copy kept beside them.
+    var versionedWorks: [Prompt] {
+        drafts.compactMap { key, value -> Prompt? in
+            guard key.hasSuffix("::" + Self.snapshotKey) else { return nil }
+            return try? JSONDecoder().decode(Prompt.self, from: Data(value.utf8))
+        }
+    }
     var savedImageURLs: Set<URL>? {
         guard favoritesReadable, savedCreatorsReadable, !storageRecoveryPending else { return nil }
         return Set(favorites.compactMap { $0.media?.imageURL } + favorites.compactMap { $0.creator?.avatarURL } + savedCreators.compactMap(\.avatarURL))
@@ -53,8 +79,10 @@ enum CatalogSyncState: Equatable, Sendable {
          installFileWriter: @escaping (Data, URL) throws -> Void = { try $0.write(to: $1, options: .atomic) }) {
         self.directory = directory ?? URL.applicationSupportDirectory.appending(path: "Prompix", directoryHint: .isDirectory)
         self.recommendations = LocalRecommendations(directory: self.directory)
+        self.decks = DeckStore(directory: self.directory)
         self.installFileWriter = installFileWriter
         databaseFeedRequested = feedService != nil
+        self.feedService = feedService
         var checkpoint = FeedCheckpoint()
         do {
             try FileManager.default.createDirectory(at: self.directory, withIntermediateDirectories: true)
@@ -122,14 +150,34 @@ enum CatalogSyncState: Equatable, Sendable {
             let aliases = Self.creatorAliases(from: favorites, to: loadedCatalog.prompts)
             try applyCatalog(loadedCatalog, data: nil, aliases: aliases, availability: languagePackBase?.availableLanguages)
         } catch { self.error = String(localized: "灵感暂时没有加载成功。你仍然可以查看已保存的收藏。") }
-        if let feedService {
+        if feedService != nil {
             checkpoint.removedIDs = removedIDs.sorted()
-            feed = FeedRepository(service: feedService, cache: FeedCache(directory: self.directory.appending(path: "feed-cache")),
-                                  checkpoint: checkpoint, recommendations: recommendations) { [weak self] value in
-                guard let self else { throw CancellationError() }
-                try self.commitFeedRemovals(value)
-            }
+            feed = makeFeed(checkpoint: checkpoint)
         }
+    }
+
+    private func makeFeed(checkpoint: FeedCheckpoint) -> FeedRepository? {
+        guard let feedService else { return nil }
+        let suggestive = recommendations.showsSuggestive
+        let cache = FeedCache(directory: directory.appending(path: suggestive ? "feed-cache-suggestive" : "feed-cache"))
+        return FeedRepository(service: feedService.presenting(suggestive: suggestive), cache: cache,
+                              checkpoint: checkpoint, recommendations: recommendations) { [weak self] value in
+            guard let self else { throw CancellationError() }
+            try self.commitFeedRemovals(value)
+        }
+    }
+
+    /// Suggestive works are a separate audience on the service, so lists, cursors
+    /// and their cache are rebuilt for it rather than filtered in place.
+    func setShowsSuggestive(_ value: Bool) async {
+        guard value != recommendations.showsSuggestive, recommendations.setShowsSuggestive(value) else { return }
+        guard let previous = feed, let next = makeFeed(checkpoint: previous.checkpoint) else { return }
+        feed = next
+        if let query = previous.discovery.query { await next.discovery.load(query, force: true) }
+        if let query = previous.search.query { await next.search.load(query, force: true) }
+        if previous.browse.value != nil || previous.browse.failure != nil { await next.browse.load(force: true) }
+        if let query = previous.creatorDiscovery.query { await next.creatorDiscovery.load(query, force: true) }
+        if let query = previous.creators.query { await next.creators.load(query, force: true) }
     }
 
     private static func parseDate(_ value: String) -> Date? {
@@ -224,6 +272,81 @@ enum CatalogSyncState: Equatable, Sendable {
     private func draftID(for item: Prompt, language: String?) -> String {
         language.map { item.id + "::" + ContentLanguage.canonical($0) } ?? item.id
     }
+    /// The reader's own versions of a work, oldest first. Each lives in the drafts
+    /// file under `<item id>::v<milliseconds>`, so removals reconcile them as before;
+    /// a draft saved before versions existed appears as the oldest one.
+    func versions(of item: Prompt) -> [PromptVersion] {
+        drafts.compactMap { key, text -> PromptVersion? in
+            let parts = key.components(separatedBy: "::")
+            guard parts[0] == item.id, parts.count <= 2, parts.count < 2 || parts[1] != Self.snapshotKey else { return nil }
+            let stamp = parts.count > 1 && parts[1].hasPrefix("v") ? Double(parts[1].dropFirst()) : nil
+            return PromptVersion(id: key, text: text, created: stamp.map { Date(timeIntervalSince1970: $0 / 1000) },
+                                 name: drafts[key + "::" + Self.nameKey])
+        }.sorted { ($0.created ?? .distantPast) < ($1.created ?? .distantPast) }
+    }
+    /// Names a version; an empty name returns it to its number.
+    @discardableResult func renameVersion(_ id: String, to name: String) -> Bool {
+        guard draftsReadable, !storageRecoveryPending, drafts[id] != nil else { return false }
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        var updated = drafts
+        updated[id + "::" + Self.nameKey] = trimmed.isEmpty ? nil : String(trimmed.prefix(40))
+        guard updated != drafts else { return true }
+        do {
+            try JSONEncoder().encode(updated).write(to: draftFile, options: .atomic)
+            drafts = updated
+            return true
+        } catch {
+            self.error = String(localized: "草稿未能保存，请检查设备存储空间。你仍可以复制本次修改。")
+            return false
+        }
+    }
+    /// Saves into an existing version, or starts a new one when `id` is nil.
+    /// Returns the version's id, or nil when nothing could be saved.
+    @discardableResult func saveVersion(_ text: String, id: String?, for item: Prompt, now: Date = Date()) -> String? {
+        guard !isRemoved(item) else {
+            error = String(localized: "这条内容已被移除，无法再保存。你仍可复制当前文字。")
+            return nil
+        }
+        guard draftsReadable, !storageRecoveryPending else {
+            error = String(localized: "已有草稿暂时无法读取，修改未保存。你可以先复制内容。")
+            return nil
+        }
+        let key = id ?? item.id + "::v" + String(Int64(now.timeIntervalSince1970 * 1000))
+        guard key.components(separatedBy: "::")[0] == item.id else { return nil }
+        var updated = drafts
+        updated[key] = text
+        // Keep the work beside its versions, so 我的版本 can list it without a catalog or saved copy.
+        let snapshot = item.id + "::" + Self.snapshotKey
+        if updated[snapshot] == nil, let data = try? JSONEncoder().encode(item) { updated[snapshot] = String(decoding: data, as: UTF8.self) }
+        guard updated != drafts else { return key }
+        do {
+            try JSONEncoder().encode(updated).write(to: draftFile, options: .atomic)
+            drafts = updated
+            return key
+        } catch {
+            self.error = String(localized: "草稿未能保存，请检查设备存储空间。你仍可以复制本次修改。")
+            return nil
+        }
+    }
+    @discardableResult func deleteVersion(_ id: String) -> Bool {
+        guard draftsReadable, !storageRecoveryPending, drafts[id] != nil else { return false }
+        var updated = drafts
+        updated[id] = nil
+        updated[id + "::" + Self.nameKey] = nil
+        let itemID = id.components(separatedBy: "::")[0], snapshot = itemID + "::" + Self.snapshotKey
+        if !updated.keys.contains(where: {
+            let parts = $0.components(separatedBy: "::")
+            return $0 != snapshot && parts.count <= 2 && parts[0] == itemID
+        }) { updated[snapshot] = nil }
+        do {
+            try JSONEncoder().encode(updated).write(to: draftFile, options: .atomic)
+            drafts = updated
+            return true
+        } catch {
+            self.error = String(localized: "草稿未能保存，请检查设备存储空间。你仍可以复制本次修改。")
+            return false
+        }
+    }
     func draft(for item: Prompt, language: String? = nil) -> String {
         drafts[draftID(for: item, language: language)] ?? item.content(in: language).prompt
     }
@@ -262,20 +385,20 @@ enum CatalogSyncState: Equatable, Sendable {
             isRefreshing = true; syncState = .checking; syncMessage = nil; lastAttempt = now
             defer { isRefreshing = false }
             do {
-                let previousRelease = feed.state?.release
                 try await feed.refresh()
                 try Task.checkCancellation()
                 version = feed.state?.release ?? version
                 updatedAt = feed.state?.publishedAt.flatMap(Self.parseDate)
                 syncState = .current
-                // Revalidate the visible first page after a new publication. An
-                // already paged session keeps its snapshot until pull-to-refresh.
-                if !force, let query = feed.discovery.query, !feed.discovery.isLoading,
-                   !feed.discovery.hasLoadedAdditionalPages, feed.discovery.release != feed.state?.release {
-                    await feed.discovery.load(query, force: true)
+                // A new publication never replaces works the reader is looking at:
+                // it arrives with the next page, a pull refresh or another query.
+                // Only an empty feed is fetched again here.
+                if !force, let query = feed.discovery.query, !feed.discovery.isLoading, feed.discovery.items.isEmpty {
+                    await feed.discovery.load(query)
                 }
-                let releaseChanged = previousRelease != nil && previousRelease != feed.state?.release
-                if force || releaseChanged {
+                // The rails inside the feed follow the same rule as its works: a
+                // new publication waits for a pull refresh instead of moving them.
+                if force {
                     if feed.browse.value != nil || feed.browse.failure != nil { await feed.browse.load(force: true) }
                     if feed.creatorDiscovery.query != nil { await feed.creatorDiscovery.load(CreatorQuery(), force: true) }
                     if feed.creators.query != nil { await feed.creators.load("", force: true) }
@@ -609,7 +732,7 @@ enum CatalogSyncState: Equatable, Sendable {
             if let available = availability?[item.id] { translations = translations.filter { available.contains($0.key) } }
             if let metadata = item.localization ?? snapshot.localization {
                 updated.localization = Prompt.Localization(sourceLanguage: metadata.sourceLanguage,
-                    sourceFingerprint: item.localization?.sourceFingerprint ?? metadata.sourceFingerprint, translations: translations)
+                    sourceFingerprint: item.localization?.sourceFingerprint ?? metadata.sourceFingerprint, translations: translations, en: metadata.en)
             }
             return updated
         }
@@ -643,7 +766,9 @@ enum CatalogSyncState: Equatable, Sendable {
             let data = try JSONEncoder().encode(updated)
             try data.write(to: directory.appending(path: "favorites.json"), options: .atomic)
             favorites = updated
-            recommendations.record(updated.contains { $0.id == item.id } ? .save : .unsave, prompt: item)
+            let saved = updated.contains { $0.id == item.id }
+            if !saved { decks.removeEverywhere([item.id]) }
+            recommendations.record(saved ? .save : .unsave, prompt: item)
             return true
         } catch { self.error = String(localized: "未能保存收藏，请检查设备存储空间后重试。"); return false }
     }
@@ -651,5 +776,95 @@ enum CatalogSyncState: Equatable, Sendable {
     func reportContentFailure(_ failure: any Error) {
         if failure as? FeedError == .removed { error = String(localized: "这条内容已被移除，无法再保存。你仍可复制当前文字。") }
         else { error = String(localized: "内容暂时无法加载，请稍后重试。") }
+    }
+}
+
+
+/// A user-made deck of saved works, newest first. "全部收藏" is every favorite
+/// and is never stored as a deck.
+struct Deck: Codable, Identifiable, Equatable {
+    let id: String
+    var name: String
+    var itemIDs: [String]
+    var updatedAt: Date
+}
+
+/// Decks live in their own file beside favorites.json, so a damaged deck file
+/// never puts saved works at risk. An unreadable file is kept and not overwritten.
+@MainActor @Observable final class DeckStore {
+    static let fileName = "decks.json"
+    static let maximumDecks = 100
+    static let maximumItems = 5000
+    static let maximumNameLength = 40
+    private(set) var decks: [Deck] = []
+    private(set) var readable = true
+    private let file: URL?
+
+    init(directory: URL? = nil) {
+        file = directory?.appending(path: Self.fileName)
+        guard let file, FileManager.default.fileExists(atPath: file.path) else { return }
+        do {
+            let attributes = try file.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey])
+            guard attributes.isRegularFile == true, attributes.isSymbolicLink != true, (attributes.fileSize ?? .max) <= 4_000_000 else { throw FeedError.invalidResponse }
+            let value = try JSONDecoder().decode([Deck].self, from: Data(contentsOf: file))
+            guard Self.valid(value) else { throw FeedError.invalidResponse }
+            decks = value
+        } catch { readable = false }
+    }
+
+    static func valid(_ decks: [Deck]) -> Bool {
+        decks.count <= maximumDecks && Set(decks.map(\.id)).count == decks.count && decks.allSatisfy { deck in
+            !deck.id.isEmpty && deck.id.utf8.count <= 64 && cleanName(deck.name) == deck.name
+                && deck.itemIDs.count <= maximumItems && Set(deck.itemIDs).count == deck.itemIDs.count
+                && deck.itemIDs.allSatisfy(FeedValidation.id) && deck.updatedAt.timeIntervalSince1970.isFinite
+        }
+    }
+    /// Trimmed, single-line and bounded; nil when nothing usable remains.
+    static func cleanName(_ name: String) -> String? {
+        let value = name.split(whereSeparator: \.isNewline).joined(separator: " ").trimmingCharacters(in: .whitespaces)
+        guard !value.isEmpty else { return nil }
+        return String(value.prefix(maximumNameLength))
+    }
+
+    func decks(containing itemID: String) -> [Deck] { decks.filter { $0.itemIDs.contains(itemID) } }
+
+    @discardableResult func create(named name: String, now: Date = Date()) -> Deck? {
+        guard let name = Self.cleanName(name), decks.count < Self.maximumDecks else { return nil }
+        let deck = Deck(id: UUID().uuidString.lowercased(), name: name, itemIDs: [], updatedAt: now)
+        return commit([deck] + decks) ? deck : nil
+    }
+    @discardableResult func rename(_ id: String, to name: String, now: Date = Date()) -> Bool {
+        guard let name = Self.cleanName(name), let index = decks.firstIndex(where: { $0.id == id }) else { return false }
+        var next = decks; next[index].name = name; next[index].updatedAt = now
+        return commit(next)
+    }
+    @discardableResult func delete(_ id: String) -> Bool {
+        guard decks.contains(where: { $0.id == id }) else { return false }
+        return commit(decks.filter { $0.id != id })
+    }
+    @discardableResult func set(_ itemID: String, in deckID: String, member: Bool, now: Date = Date()) -> Bool {
+        guard FeedValidation.id(itemID), let index = decks.firstIndex(where: { $0.id == deckID }) else { return false }
+        guard decks[index].itemIDs.contains(itemID) != member else { return true }
+        var next = decks
+        if member {
+            guard next[index].itemIDs.count < Self.maximumItems else { return false }
+            next[index].itemIDs.insert(itemID, at: 0)
+        } else { next[index].itemIDs.removeAll { $0 == itemID } }
+        next[index].updatedAt = now
+        return commit(next)
+    }
+    /// Unsaving a work takes it out of every deck as well.
+    @discardableResult func removeEverywhere(_ itemIDs: Set<String>) -> Bool {
+        guard decks.contains(where: { !$0.itemIDs.allSatisfy { !itemIDs.contains($0) } }) else { return true }
+        return commit(decks.map { deck in var deck = deck; deck.itemIDs.removeAll { itemIDs.contains($0) }; return deck })
+    }
+
+    private func commit(_ next: [Deck]) -> Bool {
+        guard readable, Self.valid(next) else { return false }
+        if let file {
+            do { try JSONEncoder().encode(next).write(to: file, options: .atomic) } catch { return false }
+        }
+        decks = next
+        return true
     }
 }

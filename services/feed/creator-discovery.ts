@@ -1,9 +1,9 @@
 import { creatorFiltersSchema, type CreatorFilters } from "./creator-filters.ts";
-import { type FeedCard } from "../../packages/schema/feed.ts";
+import { allowedPresentations, publicCard, type FeedCard } from "../../packages/schema/feed.ts";
 import type { Prompt } from "../../packages/schema/catalog.ts";
 import { decodeDiscoveryCursor, encodeDiscoveryCursor, cursorLifetimeSeconds } from "./cursor.ts";
 import { FeedError, type Database } from "./database.ts";
-import { getState } from "./queries.ts";
+import { getState, presentationCondition } from "./queries.ts";
 
 /** Sort immutable release metadata before applying live takedowns, so paging
  * remains stable across midnight, new publications and removals. Read one small
@@ -43,6 +43,7 @@ export async function getCreatorDiscovery(db: Database,
       from prompix.release_entries e join prompix.revisions v on v.id=e.revision_id
       join prompix.content c on c.id=e.content_id
       where e.release_id=$1 and c.removed_at is null and v.creator_id is not null
+        and ${presentationCondition("v.card", "$9")}
         and ($2::text is null or ($2='skill' and v.content_type='skill') or (v.kind=$2 and v.content_type<>'skill'))
     ), live as (
       select creator_id,count(*)::integer as count,bool_or(visual) as visual from visible group by creator_id
@@ -57,9 +58,9 @@ export async function getCreatorDiscovery(db: Database,
       order by m.visual desc,m.latest_position limit 1
     ) cover on true
     left join prompix.revisions v on v.id=cover.revision_id
-    order by p.key,p.creator_id collate "C"`, [release, filters.kind ?? null, day, patterns, key, after, query.limit + 1, filters.sort])).rows;
+    order by p.key,p.creator_id collate "C"`, [release, filters.kind ?? null, day, patterns, key, after, query.limit + 1, filters.sort, allowedPresentations(filters.presentation)])).rows;
   const page = rows.slice(0, query.limit), last = page.at(-1);
-  return { schemaVersion: 3 as const, release, items: page.map(({ creator, count, preview }) => ({ creator, count, preview })),
+  return { schemaVersion: 3 as const, release, items: page.map(({ creator, count, preview }) => ({ creator, count, preview: preview && publicCard(preview, "original") })),
     nextCursor: rows.length > query.limit && last ? encodeDiscoveryCursor({ v: 2, scope: "creator-discovery", release,
       key: last.key, after: last.creator_id, day, filters, expires }, secret) : null };
 }

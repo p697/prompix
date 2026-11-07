@@ -7,7 +7,8 @@ import type { Catalog, Prompt } from "../packages/schema/catalog.ts";
 import { preservePublicationInput } from "../services/feed/publication.ts";
 import { atomic, json } from "./publication.ts";
 import { attachTranslations, inheritPreviousTranslations, translationLocales } from "./translation.ts";
-import { codexTranslationProvider, openAITranslationProvider } from "./translation-provider.ts";
+import { codexTranslationProvider, modelTranslationProvider, openAITranslationProvider } from "./translation-provider.ts";
+import { routedProvider } from "./model-routes.ts";
 import { runTranslations, type TranslationRunReport } from "./translation-runner.ts";
 
 export type DailyTranslationStatus = { status: "cached" | "running" | "updated" | "busy" | "failed" | "partial"; model?: string; error?: string;
@@ -27,9 +28,11 @@ export async function prepareDailyTranslations(items: readonly Prompt[], root: s
   let status: DailyTranslationStatus["status"] = "cached", error: string | undefined;
   let report: TranslationRunReport | undefined;
   const providerName = allowModelCalls ? environment.PROMPIX_TRANSLATION_PROVIDER : undefined;
-  const model = providerName === "openai" ? "gpt-6.1-sol" : (environment.PROMPIX_TRANSLATION_MODEL ?? "gpt-6-luna");
+  // "pipeline" uses the translate route of the pipeline config instead of a fixed model.
+  const routed = providerName === "pipeline" ? await routedProvider("translate", "translation:daily") : undefined;
+  const model = routed ? routed.provider.model : providerName === "openai" ? "gpt-6.1-sol" : (environment.PROMPIX_TRANSLATION_MODEL ?? "gpt-6-luna");
   if (providerName) {
-    if (!["codex", "openai"].includes(providerName)) { status = "failed"; error = "Unknown translation provider"; }
+    if (!["codex", "openai", "pipeline"].includes(providerName)) { status = "failed"; error = "Unknown translation provider"; }
     else {
       await mkdir(directory, { recursive: true });
       let locked = false;
@@ -53,7 +56,8 @@ export async function prepareDailyTranslations(items: readonly Prompt[], root: s
             [...translationLocales.slice(offset), ...translationLocales.slice(0, offset)];
           const prior = await json<TranslationRunReport | undefined>(ledgerPath, undefined);
           const maxOutputTokens = 24000;
-          const provider = providerName === "codex" ? codexTranslationProvider(environment.PROMPIX_CODEX ?? "codex", maxOutputTokens, model) : openAITranslationProvider(environment.OPENAI_API_KEY ?? "", maxOutputTokens);
+          const provider = routed ? modelTranslationProvider(routed.provider, maxOutputTokens, routed.record)
+            : providerName === "codex" ? codexTranslationProvider(environment.PROMPIX_CODEX ?? "codex", maxOutputTokens, model) : openAITranslationProvider(environment.OPENAI_API_KEY ?? "", maxOutputTokens);
           report = await runTranslations({ items: prepared, cache, provider, providerName, model, locales, fairLocales: true,
             maxRequests: Number(environment.PROMPIX_TRANSLATION_MAX_REQUESTS ?? "36"), maxUSD: Number(environment.PROMPIX_TRANSLATION_MAX_USD ?? "2"), maxOutputTokens,
             persist: async (state, progress) => { await atomic(cachePath, state); await atomic(ledgerPath, { ...progress, day, model, updatedAt: new Date().toISOString() }); }, prior, reviews });

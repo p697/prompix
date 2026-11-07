@@ -2,7 +2,7 @@ import { historyAllowanceIDs, type HistoryAllowance } from "./history-allowance.
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { catalogSchema, localizationLanguages, type Prompt } from "../../packages/schema/catalog.ts";
-import { contentID, feedCardSchema, detailResponseByteLimit, type FeedCard, type FeedLocale } from "../../packages/schema/feed.ts";
+import { contentID, storedCardSchema, detailResponseByteLimit, type StoredCard, type FeedLocale } from "../../packages/schema/feed.ts";
 import { canonicalArtifact, validateArtifact } from "../../ingest/language-packs.ts";
 import { translationFingerprint } from "../../ingest/translation.ts";
 import { FeedError, type Database, type TransactionalDatabase } from "./database.ts";
@@ -21,9 +21,9 @@ export function preservePublicationInput(input: PublicationInput): PublicationIn
 }
 const hash = (value: unknown) => createHash("sha256").update(JSON.stringify(canonicalArtifact(value))).digest("hex");
 
-function cardFor(item: Prompt, revision: string, locale: FeedLocale, languages: string[]): FeedCard {
+function cardFor(item: Prompt, revision: string, locale: FeedLocale, languages: string[]): StoredCard {
   const translated = locale === "original" ? undefined : item.localization?.translations[locale];
-  const card = feedCardSchema.parse({
+  const card = storedCardSchema.parse({
     id: item.id, revision, kind: item.kind, contentType: item.contentType ?? "prompt",
     title: translated?.title ?? item.title, summary: translated?.summary ?? item.summary,
     tags: item.tags, model: item.model, artwork: item.artwork,
@@ -31,6 +31,8 @@ function cardFor(item: Prompt, revision: string, locale: FeedLocale, languages: 
     creator: item.creator, media: item.media, presentation: item.presentation,
     cover: item.cover ? { ...item.cover, ...(translated?.cover ?? {}) } : undefined,
     language: translated ? locale : "original", availableLanguages: languages,
+    facets: item.facets, generation: item.generation, palette: item.palette, rights: item.rights,
+    ...(locale === "original" && item.localization?.en ? { en: item.localization.en } : {}),
   });
   // Fifty cards plus cursor and envelope must always fit the public byte budget.
   if (Buffer.byteLength(JSON.stringify(card)) > 18000) throw new Error(`Feed card exceeds byte limit: ${item.id}`);
@@ -156,15 +158,7 @@ export async function activatePublication(db: TransactionalDatabase, id: string,
       "select count(*)::integer as count from prompix.release_entries where release_id=$1", [id])).rows[0].count;
     if (count !== release.item_count) throw new FeedError("conflict", 409);
     const historicalIDs = historyAllowanceIDs(historical);
-    // The state row lock serializes the daily ceiling across concurrent writers and rollback.
-    if (state.active_release) {
-      const quota = (await tx.query<{ used: number; incoming: number }>(`select
-        (select count(*)::integer from prompix.content where counts_toward_daily_limit
-          and first_published_at >= (date_trunc('day',now() at time zone 'UTC') at time zone 'UTC')) as used,
-        (select count(*)::integer from prompix.release_entries e join prompix.content c on c.id=e.content_id
-          where e.release_id=$1 and c.first_published_at is null and c.removed_at is null and not(c.id=any($2::text[]))) as incoming`, [id, historicalIDs])).rows[0];
-      if (quota.used + quota.incoming > 100) throw new Error("Daily new-publication ceiling exceeded");
-    }
+    // No daily ceiling since 2026-11-07; first publications are still recorded for the text ratio.
     await tx.query(`update prompix.content c set first_published_at=now(),counts_toward_daily_limit=($2 and not(c.id=any($3::text[])))
       from prompix.release_entries e where e.release_id=$1 and e.content_id=c.id and c.first_published_at is null and c.removed_at is null`,
       [id, !!state.active_release, historicalIDs]);

@@ -1299,120 +1299,120 @@
         }
       }
     },
-    "comfort.title": {
+    "suggestive.title": {
       "extractionState": "manual",
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "推荐画面更克制"
+            "value": "显示成人内容"
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Less revealing recommendations"
+            "value": "Show mature content"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "推薦畫面更克制"
+            "value": "顯示成人內容"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "露出の少ないおすすめ"
+            "value": "成人向けコンテンツを表示"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "노출이 적은 추천"
+            "value": "성인 콘텐츠 표시"
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Recomendaciones menos reveladoras"
+            "value": "Mostrar contenido para adultos"
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Recomendações menos reveladoras"
+            "value": "Mostrar conteúdo adulto"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Des suggestions plus sobres"
+            "value": "Afficher le contenu pour adultes"
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Weniger freizügige Empfehlungen"
+            "value": "Inhalte für Erwachsene anzeigen"
           }
         }
       }
     },
-    "comfort.description": {
+    "suggestive.description": {
       "extractionState": "manual",
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "减少泳装、内衣及明显性感的画面；人像和时尚仍可正常推荐。"
+            "value": "包括泳装、内衣和性感姿态的画面。露骨内容不会收录。"
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Reduce swimwear, underwear and overtly suggestive imagery. Portraits and fashion can still be recommended."
+            "value": "Includes swimwear, underwear and suggestive poses. Explicit content is never published."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "減少泳裝、內衣及明顯性感的畫面；人像和時尚仍可正常推薦。"
+            "value": "包括泳裝、內衣和性感姿態的畫面。露骨內容不會收錄。"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "水着・下着・性的な演出のある画像を減らします。ポートレートやファッションは引き続きおすすめします。"
+            "value": "水着・下着・性的なポーズの画像を含みます。露骨なコンテンツは掲載しません。"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "수영복, 속옷, 성적 연출이 두드러진 이미지를 줄입니다. 인물과 패션은 계속 추천할 수 있어요."
+            "value": "수영복, 속옷, 선정적인 포즈의 이미지가 포함됩니다. 노골적인 콘텐츠는 게시하지 않습니다."
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Reduce las imágenes de bañadores, ropa interior o poses claramente sugerentes. Los retratos y la moda siguen disponibles."
+            "value": "Incluye imágenes con bañadores, ropa interior o poses sugerentes. El contenido explícito nunca se publica."
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Reduz imagens de roupas de banho, roupas íntimas ou poses claramente sugestivas. Retratos e moda continuam nas recomendações."
+            "value": "Inclui imagens com roupas de banho, roupas íntimas ou poses sugestivas. Conteúdo explícito nunca é publicado."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Réduit les images de maillots, de sous-vêtements ou aux poses suggestives. Les portraits et la mode restent recommandés."
+            "value": "Inclut des images de maillots, de sous-vêtements ou aux poses suggestives. Le contenu explicite n'est jamais publié."
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Reduziert Bilder mit Badebekleidung, Unterwäsche oder deutlich anzüglicher Inszenierung. Porträts und Mode werden weiterhin empfohlen."
+            "value": "Enthält Bilder mit Badebekleidung, Unterwäsche oder anzüglichen Posen. Explizite Inhalte werden nie veröffentlicht."
           }
         }
       }

@@ -1,4 +1,4 @@
-import { avatar, cardMedia, cover, dimensions, formatCount, promptPath, tile } from "../components.ts";
+import { avatar, dimensions, formatCount, promptPath, tile } from "../components.ts";
 import { coverImage, feed, isMedia, kindOf, listable, localize, preferFitting, type Card, type CreatorEntry, type Env, type Item, type Page } from "../feed.ts";
 import { html, raw } from "../html.ts";
 import { kindSlugs, localePath, type Kind, type Locale } from "../i18n.ts";
@@ -16,19 +16,17 @@ const settle = async <T>(promise: Promise<T>) => { try { return await promise; }
 
 async function load(locale: Locale, get: Load) {
   const q = (params: string) => `/v3/feed?locale=${locale.feed}&${params}`;
-  const [state, wall, latest, videos, texts, webs, skills, creators, languages] = await Promise.all([
+  const [state, wall, latest, videos, texts, creators, languages] = await Promise.all([
     settle(get<{ count: number }>("/v3/state", 600)),
     settle(get<Page>(q("kind=image&sort=latest&limit=50"), 600)),
     settle(get<Page>(q("sort=discovery&limit=40"), 600)),
     settle(get<Page>(q("kind=video&sort=latest&limit=20"), 900)),
     settle(get<Page>(q("kind=text&sort=latest&limit=20"), 900)),
-    settle(get<Page>(q("kind=web&limit=10"), 3600)),
-    settle(get<Page>(q("kind=skill&sort=latest&limit=20"), 900)),
     settle(get<{ items: CreatorEntry[] }>("/v3/creators?sort=recommended&limit=40", 1800)),
     Promise.all(readingLanguages.map(([language]) =>
       settle(get<{ item: Item }>(`/v3/contents/${showcaseID}?locale=${language}`, 86400)))),
   ]);
-  return { state, wall, latest, videos, texts, webs, skills, creators, languages };
+  return { state, wall, latest, videos, texts, creators, languages };
 }
 
 const pick = (page: Page | undefined, locale: Locale, test: (card: Card) => boolean = () => true) =>
@@ -66,7 +64,7 @@ function bentoCopy(locale: Locale, kind: Kind) {
   return html`<div class="bento-copy"><p class="eyebrow">${m.kinds.names[kind]}</p><h3>${m.kinds.lines[kind]}</h3><span class="link">${m.kinds.browse}${icons.chevron}</span></div>`;
 }
 
-function kinds(locale: Locale, data: { images: Card[]; video?: Card; texts: Card[]; web?: Card; skill?: Card }) {
+function kinds(locale: Locale, data: { images: Card[]; video?: Card; texts: Card[] }) {
   const m = locale.messages;
   const href = (kind: Kind) => localePath(locale, `/explore/${kindSlugs[kind]}`);
   const mosaic = data.images.slice(0, 6);
@@ -82,14 +80,6 @@ ${video && isMedia(video.media?.videoURL) ? html`<video muted loop playsinline p
 ${bentoCopy(locale, "video")}</a>
 <a class="bento-tile bento-text" href="${href("text")}">${bentoCopy(locale, "text")}
 ${data.texts.length ? html`<div class="quotes" aria-hidden="true">${data.texts.slice(0, 2).reverse().map(text => html`<blockquote class="quote"><p class="quote-title">${text.title}</p><p>${text.summary}</p></blockquote>`)}</div>` : ""}</a>
-<a class="bento-tile bento-web" href="${href("web")}">${bentoCopy(locale, "web")}
-${data.web ? html`<div class="browser" aria-hidden="true"><div class="browser-bar"><i></i><i></i><i></i></div><div class="browser-page">${coverImage(data.web) ? cardMedia(data.web, locale) : cover(data.web, m.kinds.names.web, "large")}</div></div>` : ""}</a>
-<a class="bento-tile bento-skill dark" href="${href("skill")}">${bentoCopy(locale, "skill")}
-${data.skill ? html`<pre class="skill-file" aria-hidden="true"><span class="skill-file-name">SKILL.md</span>
-<span class="dim">---</span>
-<span class="key">name:</span> ${data.skill.title}
-<span class="key">description:</span> ${data.skill.summary}
-<span class="dim">---</span></pre>` : ""}</a>
 </div></div></section>`;
 }
 
@@ -167,8 +157,6 @@ ${kinds(locale, {
     images: mosaic,
     video: fitting(data.videos, card => isMedia(card.media?.videoURL) && !!coverImage(card) && !used.has(card.id)),
     texts: pick(data.texts, locale, card => kindOf(card) === "text" && locale.fits(card.title)),
-    web: fitting(data.webs),
-    skill: fitting(data.skills),
   })}
 ${stats(locale, data.state?.count)}
 ${creators(locale, featuredCreators)}

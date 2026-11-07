@@ -159,8 +159,7 @@ button { font: inherit; letter-spacing: inherit; }
 .bento-tile:hover .link { text-decoration: underline; text-underline-offset: 3px; }
 .bento-image { grid-column: span 4; }
 .bento-video { grid-column: span 2; }
-.bento-text, .bento-web { grid-column: span 3; min-height: 500px; }
-.bento-skill { grid-column: span 6; display: grid; grid-template-columns: 5fr 7fr; align-items: center; gap: 40px; min-height: 420px; }
+.bento-text { grid-column: span 6; display: grid; grid-template-columns: 5fr 7fr; align-items: center; gap: 40px; min-height: 420px; }
 .dark { background: var(--dark); color: var(--dark-ink); }
 .dark .eyebrow { color: var(--dark-muted); }
 .dark .link { color: var(--dark-accent); }
@@ -177,17 +176,6 @@ button { font: inherit; letter-spacing: inherit; }
 .quote { padding: 26px 28px; border-radius: 22px; background: #fff; box-shadow: 0 1px 2px rgba(31, 28, 41, 0.04), 0 18px 40px rgba(31, 28, 41, 0.06); }
 .quote p { display: -webkit-box; overflow: hidden; color: var(--muted); font-size: 15px; line-height: 1.5; -webkit-line-clamp: 3; -webkit-box-orient: vertical; }
 .quote .quote-title { margin-bottom: 8px; color: var(--ink); font-size: 19px; font-weight: 600; line-height: 1.3; -webkit-line-clamp: 2; }
-.browser { margin: auto -12% -18% 6%; overflow: hidden; border-radius: 18px 18px 0 0; background: #fff; box-shadow: 0 24px 60px rgba(31, 28, 41, 0.12), 0 0 0 1px rgba(39, 36, 51, 0.06); }
-.browser-bar { display: flex; gap: 7px; padding: 14px 16px; border-bottom: 1px solid var(--line); }
-.browser-bar i { width: 10px; height: 10px; border-radius: 50%; background: #e3e1ea; }
-.browser-page { height: 260px; }
-.browser-page img { width: 100%; height: 100%; object-fit: cover; }
-.bento-skill { background: radial-gradient(ellipse 50% 70% at 85% 10%, rgba(138, 120, 229, 0.26), transparent 70%), radial-gradient(ellipse 40% 60% at 100% 100%, rgba(72, 86, 239, 0.18), transparent 70%), var(--dark); }
-.skill-file { position: relative; z-index: 2; padding: 26px 28px; overflow: hidden; border: 1px solid rgba(255, 255, 255, 0.09); border-radius: 22px; background: rgba(255, 255, 255, 0.04); color: #dcd9ea; font-family: var(--mono); font-size: 14px; line-height: 1.75; letter-spacing: 0; white-space: pre-wrap; word-break: break-word; }
-.skill-file-name { display: inline-block; margin-bottom: 10px; padding: 3px 10px; border-radius: 8px; background: rgba(255, 255, 255, 0.08); color: var(--dark-muted); font-size: 12px; }
-.skill-file .key { color: var(--dark-accent); }
-.skill-file .dim { color: #6f6a86; }
-.skill-file-large { display: flex; flex-direction: column; justify-content: center; aspect-ratio: 4 / 5; padding: clamp(24px, 3vw, 40px); background: radial-gradient(ellipse 70% 50% at 80% 0%, rgba(138, 120, 229, 0.3), transparent 70%), var(--dark); font-size: 15px; }
 
 /* Stats */
 .stats { background: radial-gradient(ellipse 55% 45% at 50% 28%, rgba(138, 120, 229, 0.22), transparent 70%), var(--dark); }
@@ -357,8 +345,8 @@ video.media-main { background: #000; }
 
 @media (max-width: 1068px) {
   .bento { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .bento-image, .bento-web, .bento-skill { grid-column: span 2; }
-  .bento-video, .bento-text { grid-column: span 1; }
+  .bento-image, .bento-text { grid-column: span 2; }
+  .bento-video { grid-column: span 1; }
   .creators { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .creators li:nth-child(n + 7) { display: none; }
 }
@@ -376,8 +364,8 @@ video.media-main { background: #000; }
   .tile a { border-radius: 24px; }
   .tile h3 { font-size: 20px; }
   .bento { grid-template-columns: minmax(0, 1fr); gap: 14px; margin-top: 44px; }
-  .bento-tile, .bento-image, .bento-video, .bento-text, .bento-web, .bento-skill { grid-column: auto; min-height: 460px; border-radius: 26px; }
-  .bento-skill { grid-template-columns: minmax(0, 1fr); gap: 28px; min-height: 0; }
+  .bento-tile, .bento-image, .bento-video, .bento-text { grid-column: auto; min-height: 460px; border-radius: 26px; }
+  .bento-text { grid-template-columns: minmax(0, 1fr); gap: 28px; min-height: 0; }
   .mosaic { top: auto; bottom: -30%; right: -8%; width: 78%; transform: rotate(-8deg); }
   .bento-image .bento-copy { max-width: none; }
   .bento-image { min-height: 560px; }

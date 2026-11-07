@@ -467,8 +467,12 @@ export function attachTranslations<T extends Prompt>(items: readonly T[], cache:
     }
     // Mixed source/editorial languages are common. Do not mislabel the whole record English.
     const sourceLanguage = /[\p{Script=Hiragana}\p{Script=Katakana}]/u.test(item.prompt) ? "ja" : /\p{Script=Hangul}/u.test(item.prompt) ? "ko" : /\p{Script=Han}/u.test(item.prompt) ? "zh" : (item.prompt.match(/\b(the|you|your|with|will|that|this)\b/gi)?.length ?? 0) >= 3 ? "en" : "und";
-    const { localization: _old, ...original } = item as T & { localization?: Localization };
-    return { ...original, ...(Object.keys(translations).length ? { localization: { sourceLanguage, sourceFingerprint: translationFingerprint(item), translations } } : {}) } as T;
+    const { localization: old, ...original } = item as T & { localization?: Localization };
+    // The 2.0 English card is reviewed metadata, not a translation; it survives a rebuild.
+    const en = old?.en;
+    if (!Object.keys(translations).length && !en) return original as T;
+    return { ...original, localization: { sourceLanguage: Object.keys(translations).length || !old ? sourceLanguage : old.sourceLanguage,
+      sourceFingerprint: translationFingerprint(item), translations, ...(en ? { en } : {}) } } as T;
   });
 }
 /** Retain verified published text across rebuilds, only while original source bytes match. */
@@ -485,6 +489,8 @@ export function inheritPreviousTranslations<T extends Prompt>(items: readonly T[
         if (text && validLocalizedText(item, locale, text)) translations[locale] = text;
       }
     }
-    return { ...item, localization: { ...prior.localization, translations } } as T;
+    // The item's own 2.0 English card is newer than any earlier artifact's.
+    const en = item.localization?.en ?? prior.localization.en;
+    return { ...item, localization: { ...prior.localization, translations, ...(en ? { en } : {}) } } as T;
   });
 }

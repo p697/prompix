@@ -1,58 +1,137 @@
 import SwiftUI
 
 enum Palette {
+    private static func rgb(_ value: UInt) -> Color {
+        Color(red: Double((value >> 16) & 255) / 255, green: Double((value >> 8) & 255) / 255,
+              blue: Double(value & 255) / 255)
+    }
     private static func adaptive(_ light: UInt, _ dark: UInt) -> Color {
         Color(uiColor: UIColor { traits in
-            let rgb = traits.userInterfaceStyle == .dark ? dark : light
-            return UIColor(red: CGFloat((rgb >> 16) & 255) / 255,
-                           green: CGFloat((rgb >> 8) & 255) / 255,
-                           blue: CGFloat(rgb & 255) / 255, alpha: 1)
+            let value = traits.userInterfaceStyle == .dark ? dark : light
+            return UIColor(red: CGFloat((value >> 16) & 255) / 255,
+                           green: CGFloat((value >> 8) & 255) / 255,
+                           blue: CGFloat(value & 255) / 255, alpha: 1)
         })
     }
 
-    // Neutral reading surfaces; the user's FIELD reference supplies the spectrum.
-    static let paper = adaptive(0xF9F9FC, 0x17161F)
-    static let surface = adaptive(0xFFFFFF, 0x24222F)
-    static let soft = adaptive(0xEEEDF7, 0x302C40)
-    static let ink = adaptive(0x272433, 0xF1EFFA)
-    static let muted = adaptive(0x6C687C, 0xB8B2CA)
-    static let accent = adaptive(0x4B3FD3, 0xC4BCFF)
-    static let highlight = adaptive(0xE4DFFD, 0xA79BE9)
-    static let highlightInk = Color(red: 0.20, green: 0.15, blue: 0.42)
-    static let noteMint = adaptive(0xE8EEFC, 0x252E46)
-    static let noteRose = adaptive(0xF5E8F4, 0x3A2941)
-    static let noteLavender = adaptive(0xEDE9FC, 0x312B49)
-    static let line = adaptive(0xDEDBEA, 0x484157)
+    // Darkroom in dark mode, photographic paper in light mode. The interface is
+    // black, grey and white only; artwork supplies every other color.
+    static let paper = adaptive(0xF4F3EF, 0x0B0B0C)
+    static let surface = adaptive(0xFBFAF7, 0x18181A)
+    static let soft = adaptive(0xE8E7E2, 0x1E1E20)
+    static let ink = adaptive(0x141415, 0xF5F5F2)
+    static let muted = adaptive(0x6B6B67, 0x9A9A97)
+    static let accent = ink
+    static let line = adaptive(0xDAD9D3, 0x2A2A2C)
 
-    // Decorative pigments never encode a state or carry body text by themselves.
-    static let spectrumBlue = Color(red: 0.282, green: 0.337, blue: 0.937)
-    static let spectrumIris = Color(red: 0.541, green: 0.471, blue: 0.898)
-    static let spectrumRose = Color(red: 0.804, green: 0.549, blue: 0.894)
-    static let spectrumIce = Color(red: 0.702, green: 0.816, blue: 0.984)
-    static let spectrumPetal = Color(red: 0.933, green: 0.769, blue: 0.906)
+    // Liquid Glass tints are resolved from the page appearance, because material
+    // snapshots can carry temporary UIKit traits during an interactive zoom.
+    static func glassAccent(for scheme: ColorScheme) -> Color { rgb(scheme == .dark ? 0xF5F5F2 : 0x141415) }
+    static func onGlassAccent(for scheme: ColorScheme) -> Color { rgb(scheme == .dark ? 0x0B0B0C : 0xF4F3EF) }
+}
 
-    // The icon's icy top, violet body and blue base stay continuous across all seven pages.
-    static func onboardingGlass(at fraction: Double) -> LinearGradient {
-        let t = min(1, max(0, fraction))
-        func blend(_ start: (Double, Double, Double), _ end: (Double, Double, Double)) -> Color {
-            Color(red: start.0 + (end.0 - start.0) * t,
-                  green: start.1 + (end.1 - start.1) * t,
-                  blue: start.2 + (end.2 - start.2) * t)
+/// A row of quiet choices with one filled capsule: kinds on a deck, a creator, results.
+struct ChipRow<Value: Hashable>: View {
+    let values: [Value]
+    @Binding var selection: Value
+    let title: (Value) -> String
+    var identifier: (Value) -> String = { _ in "" }
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 2) {
+                ForEach(values, id: \.self) { value in
+                    let selected = value == selection
+                    Button { selection = value } label: {
+                        Text(title(value)).font(.subheadline.weight(selected ? .semibold : .regular))
+                            .foregroundStyle(selected ? Palette.paper : Palette.muted)
+                            .padding(.horizontal, 12).frame(height: 32)
+                            .background(selected ? Palette.ink : .clear, in: Capsule())
+                            .frame(minHeight: 44).contentShape(Rectangle())
+                    }.buttonStyle(.plain).accessibilityAddTraits(selected ? .isSelected : [])
+                        .accessibilityIdentifier(identifier(value))
+                }
+            }.padding(.horizontal, 16)
         }
-        return LinearGradient(stops: [
-            .init(color: blend((0.88, 0.95, 0.98), (0.91, 0.92, 0.97)), location: 0),
-            .init(color: blend((0.68, 0.81, 0.97), (0.88, 0.70, 0.83)), location: 0.35),
-            .init(color: blend((0.49, 0.65, 0.96), (0.65, 0.58, 0.87)), location: 0.75),
-            .init(color: blend((0.36, 0.52, 0.93), (0.34, 0.39, 0.71)), location: 1)
-        ], startPoint: .topLeading, endPoint: .bottomTrailing)
     }
+}
 
+/// Every section heading in the app: 15 pt semibold, with an optional quiet link.
+struct SectionHeader<Destination: View>: View {
+    let title: String
+    var linkID = ""
+    @ViewBuilder var destination: () -> Destination
+    var body: some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text(title).font(.subheadline.weight(.semibold)).foregroundStyle(Palette.ink).accessibilityAddTraits(.isHeader)
+            Spacer(minLength: 12)
+            if Destination.self != EmptyView.self {
+                NavigationLink(destination: destination) {
+                    Text(String(localized: "查看全部")).font(.footnote).foregroundStyle(Palette.muted).frame(minHeight: 44)
+                }.accessibilityIdentifier(linkID)
+            }
+        }.frame(minHeight: 44)
+    }
+}
+extension SectionHeader where Destination == EmptyView {
+    init(title: String) { self.init(title: title) { EmptyView() } }
+}
+
+/// An empty place says one plain sentence and, at most, one more; no illustration.
+struct QuietEmpty: View {
+    let title: String
+    var message: String? = nil
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title).font(.title3.weight(.semibold)).foregroundStyle(Palette.ink)
+            if let message { Text(message).font(.subheadline).foregroundStyle(Palette.muted).fixedSize(horizontal: false, vertical: true) }
+        }.frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 20).padding(.vertical, 28)
+            .accessibilityElement(children: .combine)
+    }
+}
+
+enum Motion {
+    /// Chrome that yields to scrolling: the reading actions and root headers.
+    static let chrome = Animation.spring(response: 0.38, dampingFraction: 0.86)
+    static let press = Animation.spring(response: 0.22, dampingFraction: 0.78)
+}
+
+/// Cards answer the finger at once and spring back on release. System glass,
+/// menus and pickers keep their own native feedback.
+struct CardPressStyle: ButtonStyle {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed && !reduceMotion ? 0.97 : 1)
+            .opacity(configuration.isPressed && reduceMotion ? 0.8 : 1)
+            .animation(reduceMotion ? nil : Motion.press, value: configuration.isPressed)
+    }
+}
+
+extension ButtonStyle where Self == CardPressStyle {
+    static var cardPress: CardPressStyle { CardPressStyle() }
 }
 
 enum Typography {
     static func editorial(_ style: Font.TextStyle) -> Font {
         .system(style, design: .default, weight: .regular)
     }
+    /// Prompt text reads like print: New York.
+    static func prompt(size: CGFloat) -> Font { .system(size: size, weight: .regular, design: .serif) }
+    /// New York only for Latin prompts. Chinese, Japanese and Korean text stays in
+    /// the system face throughout, so Latin words inside it never switch to serif.
+    static func prompt(size: CGFloat, for text: String) -> Font {
+        usesSerif(text) ? prompt(size: size) : .system(size: size)
+    }
+    static func usesSerif(_ text: String) -> Bool {
+        var letters = 0, cjk = 0
+        for scalar in text.unicodeScalars.prefix(600) where scalar.properties.isAlphabetic {
+            letters += 1
+            if (0x3040...0x30FF).contains(scalar.value) || (0x3400...0x9FFF).contains(scalar.value) || (0xAC00...0xD7AF).contains(scalar.value) { cjk += 1 }
+        }
+        return cjk * 5 < letters
+    }
+    /// Parameters such as kind, model and ratio read like film-edge printing: SF Mono.
+    static func meta(size: CGFloat) -> Font { .system(size: size, weight: .regular, design: .monospaced) }
 }
 
 extension View {
@@ -66,9 +145,107 @@ extension View {
 
     func paperScreen() -> some View { modifier(PaperScreen()) }
 
-    @ViewBuilder func plainTopEdge() -> some View {
-        if #available(iOS 26, *) { scrollEdgeEffectHidden(true, for: .top) }
+    /// Root pages: a large title row and a pinned bar (the kind tabs). Scrolling
+    /// down slides the whole header away; scrolling back up returns it.
+    func rootHeader<Trailing: View, Bar: View>(title: String, titleID: String = "", @ViewBuilder trailing: () -> Trailing, @ViewBuilder bar: () -> Bar) -> some View {
+        modifier(RootHeader(title: title, titleID: titleID, trailing: trailing(), bar: bar()))
+    }
+
+    @ViewBuilder func minimizesTabBarOnScroll() -> some View {
+        if #available(iOS 26, *) { tabBarMinimizeBehavior(.onScrollDown) }
         else { self }
+    }
+}
+
+/// The header keeps its inset while hidden, so the content never moves; only
+/// the header does. Shown over work, it sits on paper that fades out below it;
+/// hidden, only a soft edge stays behind the status bar.
+private struct RootHeader<Trailing: View, Bar: View>: ViewModifier {
+    let title: String
+    let titleID: String
+    let trailing: Trailing
+    let bar: Bar
+    @State private var collapsed = false
+    @State private var covered = false
+    @State private var height: CGFloat = 0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    func body(content: Content) -> some View {
+        content
+            .toolbar(.hidden, for: .navigationBar)
+            .readingChrome($collapsed)
+            .tracksCover($covered)
+            .topBar { header }
+    }
+    private var header: some View {
+        let shift = collapsed ? -height : 0
+        return VStack(spacing: 4) {
+            HStack {
+                Text(title).font(.largeTitle.bold()).accessibilityAddTraits(.isHeader).accessibilityIdentifier(titleID)
+                Spacer()
+                trailing.font(.title3).buttonStyle(.plain).readingGlass()
+            }.padding(.leading, 20).padding(.trailing, 16).padding(.vertical, 6)
+            bar
+        }.foregroundStyle(Palette.ink).padding(.bottom, 4)
+            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height = $0 }
+            .offset(y: shift).opacity(collapsed ? 0 : 1)
+            .allowsHitTesting(!collapsed).accessibilityHidden(collapsed)
+            .background(alignment: .top) {
+                ZStack(alignment: .top) {
+                    EdgeVeil(hold: height, fade: 12).offset(y: shift).opacity(covered && !collapsed ? 1 : 0)
+                    EdgeVeil().opacity(collapsed ? 1 : 0)
+                }
+            }
+            .animation(reduceMotion ? nil : Motion.chrome, value: collapsed)
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: covered)
+    }
+}
+
+/// The top edge over moving work, after Cosmos: a light wash of paper and
+/// blur behind the status bar only, gone `fade` points below it. With `hold`,
+/// paper stays solid that much further down, behind a bar's own controls.
+struct EdgeVeil: View {
+    var hold: CGFloat = 0
+    var fade: CGFloat = 10
+    var body: some View {
+        let top = Self.statusBarHeight + hold
+        let height = top + fade
+        let solid = hold > 0 ? top / height : 0.45
+        ZStack {
+            Rectangle().fill(.ultraThinMaterial)
+                .mask(LinearGradient(stops: [.init(color: .black.opacity(hold > 0 ? 1 : 0.7), location: 0), .init(color: .black.opacity(hold > 0 ? 1 : 0.4), location: solid), .init(color: .clear, location: 1)], startPoint: .top, endPoint: .bottom))
+            LinearGradient(stops: [.init(color: Palette.paper.opacity(hold > 0 ? 0.94 : 0.8), location: 0),
+                                   .init(color: Palette.paper.opacity(hold > 0 ? 0.94 : 0.5), location: solid),
+                                   .init(color: Palette.paper.opacity(0), location: 1)], startPoint: .top, endPoint: .bottom)
+        }.frame(height: height).frame(maxWidth: .infinity)
+            .ignoresSafeArea(edges: .top).allowsHitTesting(false).accessibilityHidden(true)
+    }
+    /// Read from the window: a view that ignores the safe area reports none.
+    @MainActor static var statusBarHeight: CGFloat {
+        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+        return scenes.lazy.compactMap(\.keyWindow).first?.safeAreaInsets.top ?? scenes.first?.windows.first?.safeAreaInsets.top ?? 0
+    }
+}
+
+extension View {
+    /// Hides the system's blur under the top bar, for screens that draw their own edge.
+    @ViewBuilder func hidesTopEdgeEffect() -> some View {
+        if #available(iOS 26, *) { scrollEdgeEffectHidden(true, for: .top) } else { self }
+    }
+}
+
+private extension View {
+    /// True once any content has scrolled beneath the top inset.
+    @ViewBuilder func tracksCover(_ covered: Binding<Bool>) -> some View {
+        if #available(iOS 18, *) {
+            onScrollGeometryChange(for: Bool.self) { $0.contentOffset.y + $0.contentInsets.top > 2 } action: { _, value in covered.wrappedValue = value }
+        } else { self }
+    }
+    @ViewBuilder func topBar<Bar: View>(@ViewBuilder _ bar: () -> Bar) -> some View {
+        if #available(iOS 26, *) {
+            safeAreaBar(edge: .top, spacing: 0, content: bar).scrollEdgeEffectHidden(true, for: .top)
+        } else {
+            safeAreaInset(edge: .top, spacing: 0, content: bar)
+        }
     }
 }
 
@@ -85,53 +262,51 @@ private struct PaperScreen: ViewModifier {
 
 struct KindPicker: View {
     @Binding var selection: PromptKind?
-    @Binding var skillsOnly: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Namespace private var selectionLine
-    private var onSelect: ((PromptKind?, Bool) -> Void)?
-    init(selection: Binding<PromptKind?>, skillsOnly: Binding<Bool> = .constant(false), onSelect: ((PromptKind?, Bool) -> Void)? = nil) {
+    @State private var picks = 0
+    private var onSelect: ((PromptKind?) -> Void)?
+    init(selection: Binding<PromptKind?>, onSelect: ((PromptKind?) -> Void)? = nil) {
         _selection = selection
-        _skillsOnly = skillsOnly
         self.onSelect = onSelect
     }
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 18) {
+            HStack(spacing: 2) {
                 choice(nil, title: String(localized: "全部"))
-                ForEach(PromptKind.allCases) { choice($0, title: $0.title) }
-                Button { select(nil, skills: true) } label: {
-                    choiceLabel("Skills", selected: skillsOnly)
-                }.buttonStyle(.plain).accessibilityAddTraits(skillsOnly ? .isSelected : [])
-                    .accessibilityIdentifier("kind-skill")
+                // The work people come for leads: images, then video and text.
+                ForEach([PromptKind.image, .video, .text]) { choice($0, title: $0.title) }
             }.padding(.horizontal, 16)
         }
         .accessibilityIdentifier("kindPicker")
+        .sensoryFeedback(.selection, trigger: picks)
         .animation(reduceMotion ? nil : .snappy(duration: 0.24), value: selection)
-        .animation(reduceMotion ? nil : .snappy(duration: 0.24), value: skillsOnly)
     }
-    private func select(_ kind: PromptKind?, skills: Bool) {
-        guard selection != kind || skillsOnly != skills else { return }
-        if let onSelect { onSelect(kind, skills) }
-        else { selection = kind; skillsOnly = skills }
+    private func select(_ kind: PromptKind?) {
+        guard selection != kind else { return }
+        picks &+= 1
+        if let onSelect { onSelect(kind) }
+        else { selection = kind }
     }
     private func choice(_ kind: PromptKind?, title: String) -> some View {
-        let selected = selection == kind && !skillsOnly
-        return Button { select(kind, skills: false) } label: {
+        let selected = selection == kind
+        return Button { select(kind) } label: {
             choiceLabel(title, selected: selected)
         }.buttonStyle(.plain)
             .accessibilityAddTraits(selected ? .isSelected : [])
             .accessibilityIdentifier("kind-\(kind?.rawValue ?? "all")")
     }
+    // The selected kind is a solid capsule; the others are plain text.
     private func choiceLabel(_ title: String, selected: Bool) -> some View {
         Text(title).font(.subheadline.weight(selected ? .semibold : .regular))
-            .foregroundStyle(selected ? Palette.accent : Palette.muted)
-            .padding(.horizontal, 2).frame(minWidth: 44, minHeight: 48)
-            .overlay(alignment: .bottom) {
+            .foregroundStyle(selected ? Palette.paper : Palette.muted)
+            .padding(.horizontal, 14).frame(minHeight: 34)
+            .background {
                 if selected {
-                    Capsule().fill(Palette.accent).frame(height: 2)
-                        .matchedGeometryEffect(id: "kind-selection", in: selectionLine)
+                    Capsule().fill(Palette.accent).matchedGeometryEffect(id: "kind-selection", in: selectionLine)
                 }
-            }.contentShape(Rectangle())
+            }
+            .frame(minWidth: 44, minHeight: 48).contentShape(Rectangle())
     }
 }
 
@@ -185,5 +360,11 @@ extension View {
         } else {
             safeAreaInset(edge: .bottom, spacing: 0, content: content)
         }
+    }
+
+    // Reading text softens beneath floating actions instead of colliding with them.
+    @ViewBuilder func readingBottomEdge() -> some View {
+        if #available(iOS 26, *) { scrollEdgeEffectStyle(.soft, for: .bottom) }
+        else { self }
     }
 }

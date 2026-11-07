@@ -20,7 +20,7 @@ import CryptoKit
         app.launchArguments = ["-AppleLanguages", "(\(language))", "-AppleLocale", language]
         if !online { app.launchArguments.insert("--cached-only", at: 0) }
         app.launchPrompix()
-        XCTAssertTrue(app.buttons["discoverySettings"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["discoveryFilters"].waitForExistence(timeout: 10))
     }
 
     private func capture(_ name: String) {
@@ -34,7 +34,7 @@ import CryptoKit
 
     private func reveal(_ element: XCUIElement, attempts: Int = 8) {
         for _ in 0..<attempts {
-            if ["copyPrompt", "editPromptAction", "usePrompt"].contains(element.identifier), element.isHittable { return }
+            if ["copyPrompt", "editPromptAction", "copyPrompt"].contains(element.identifier), element.isHittable { return }
             // Search presents a centered sheet on iPad. Whole-display gestures
             // can start on its fixed action bar instead of scrolling the content.
             var viewport: XCUIElement = app
@@ -55,21 +55,6 @@ import CryptoKit
             start.press(forDuration: 0.05, thenDragTo: end)
         }
         XCTAssertTrue(element.isHittable)
-    }
-
-    private func selectSkill() {
-        let skill = app.buttons["kind-skill"]
-        let picker = app.scrollViews["kindPicker"]
-        for _ in 0..<5 {
-            let visible = skill.frame.intersection(picker.frame)
-            // iOS 27 can throw instead of returning false when an offscreen
-            // accessibility button has no activation point.
-            if !visible.isNull && visible.width >= min(44, skill.frame.width) && skill.isHittable { break }
-            picker.swipeLeft()
-        }
-        XCTAssertTrue(skill.isHittable)
-        skill.tap()
-        XCTAssertTrue(skill.isSelected)
     }
 
     // Decode only the fields needed for acceptance. Fixture files stay outside
@@ -113,9 +98,9 @@ import CryptoKit
             drag(0.78, 0.32)
             capture("feed-02-scroll-\(index)")
         }
-        XCTAssertFalse(app.buttons["discoverySettings"].isHittable)
+        XCTAssertFalse(app.buttons["discoveryFilters"].isHittable)
         drag(0.42, 0.58)
-        XCTAssertTrue(app.buttons["discoverySettings"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["discoveryFilters"].waitForExistence(timeout: 3))
         capture("feed-03-header-return")
         app.selectPrompixTab("搜索")
         let field = app.searchFields.firstMatch
@@ -140,53 +125,6 @@ import CryptoKit
         app.selectPrompixTab("发现")
     }
 
-    func testImmersiveLiveSkillAndCreatorSearch() throws {
-        guard ProcessInfo.processInfo.environment["PROMPIX_IMMERSIVE_ACCEPTANCE"] == "1" else {
-            throw XCTSkip("Use a backed-up dedicated simulator with the published catalog.")
-        }
-        let directory = try acceptanceDirectory()
-        let data = try Data(contentsOf: directory.appendingPathComponent("catalog.json"))
-        let catalog = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
-        let items = try XCTUnwrap(catalog["prompts"] as? [[String: Any]])
-        XCTAssertGreaterThan(items.count, 100)
-        let item = try XCTUnwrap(items.first { $0["id"] as? String == "skill-anthropic-webapp-testing" })
-        let title = try XCTUnwrap(item["title"] as? String)
-        let localization = item["localization"] as? [String: Any]
-        let translations = localization?["translations"] as? [String: [String: Any]]
-        let expected = try XCTUnwrap(translations?["zh-Hans"]?["prompt"] as? String ?? item["prompt"] as? String)
-        XCTAssertGreaterThan(expected.count, 1100)
-        launch(online: true)
-        XCTAssertTrue(app.otherElements["catalogUpdateStatus"].waitForNonExistence(timeout: 30))
-        capture("immersive-live-home")
-        app.selectPrompixTab("搜索")
-        let field = app.searchFields.firstMatch
-        XCTAssertTrue(field.waitForExistence(timeout: 5))
-        field.tap(); field.typeText("Anthropic\n")
-        let creator = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'creator-' AND label == 'Anthropic'")).firstMatch
-        XCTAssertTrue(creator.waitForExistence(timeout: 5)); creator.tap()
-        capture("immersive-live-creator")
-        app.goBackInPrompix()
-        XCTAssertEqual(field.value as? String, "Anthropic")
-        field.tap(); field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 9) + title + "\n")
-        let card = app.buttons["prompt-skill-anthropic-webapp-testing"]
-        XCTAssertTrue(card.waitForExistence(timeout: 5)); card.tap()
-        XCTAssertTrue(app.buttons["copyPrompt"].waitForExistence(timeout: 3))
-        capture("immersive-live-skill-heading")
-        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.75))
-            .press(forDuration: 0.01, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.35)))
-        capture("immersive-live-markdown")
-        app.buttons["copyPrompt"].tap()
-        XCTAssertEqual(app.buttons["copyPrompt"].label, "已复制")
-        app.buttons["editPromptAction"].tap()
-        XCTAssertTrue(app.textViews["promptEditor"].waitForExistence(timeout: 3))
-        XCTAssertEqual(app.textViews["promptEditor"].value as? String, expected)
-        app.buttons["完成"].tap()
-        app.expandPromptInformation()
-        XCTAssertTrue(app.buttons["skillFiles"].waitForExistence(timeout: 3))
-        capture("immersive-live-skill-information")
-        let body = XCTAttachment(string: expected)
-        body.name = "immersive-expected-clipboard"; body.lifetime = .keepAlways; add(body)
-    }
 
     func testProductionLanguageDownloadAndCachedRelaunch() throws {
         guard ProcessInfo.processInfo.environment["PROMPIX_LANGUAGE_PACK_ACCEPTANCE"] == "1" else {
@@ -322,6 +260,7 @@ import CryptoKit
             app.launchArguments = ["--legacy-feed", "--simulate-network-failure", "-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh-Hans"]
             app.launchPrompix()
             XCTAssertFalse(app.otherElements["catalogUpdateStatus"].exists)
+            app.revealDiscoveryRails()
             XCTAssertTrue(app.buttons["allCreators"].exists)
         }
         func openOriginalEditor() {
@@ -367,22 +306,23 @@ import CryptoKit
         // Retry now reaches the real production manifest and language artifacts.
         try FileManager.default.createDirectory(at: recoveryURL(current).deletingLastPathComponent(), withIntermediateDirectories: true)
         try Data("restored".utf8).write(to: recoveryURL(current), options: .atomic)
-        app.buttons["discoverySettings"].tap()
+        app.openPrompixSettings()
         let check = app.buttons["检查内容更新"]
         reveal(check); check.tap()
         XCTAssertTrue(check.waitForExistence(timeout: 90))
         XCTAssertTrue(check.isEnabled)
         XCTAssertFalse(app.staticTexts["内容更新未完成"].exists)
         app.buttons["完成"].tap()
-        XCTAssertTrue(app.buttons["discoverySettings"].isHittable)
+        app.selectPrompixTab("发现")
+        XCTAssertTrue(app.buttons["discoveryFilters"].isHittable)
         capture("network-04-live-retry-completed")
         openOriginalEditor()
         XCTAssertEqual(editor.value as? String, edited)
         app.navigationBars.buttons["完成"].tap()
         // Detail copy follows the displayed source. The use panel transfers the
         // saved language-specific draft, which is the edited-content contract.
-        app.buttons["usePrompt"].tap()
-        let handoffCopy = app.buttons["handoffCopy"]
+        app.buttons["copyPrompt"].tap()
+        let handoffCopy = app.buttons["copyPrompt"]
         XCTAssertTrue(handoffCopy.waitForExistence(timeout: 5)); handoffCopy.tap()
         XCTAssertTrue(handoffCopy.label.contains("已复制"))
         capture("network-05-edited-content-after-recovery")
@@ -446,7 +386,7 @@ import CryptoKit
         if FileManager.default.fileExists(atPath: cache.path) { try FileManager.default.removeItem(at: cache) }
         app.launchArguments = ["--cached-only", "--simulate-network-failure", "--simulate-slow-image-failure", "-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh-Hans"]
         app.launchPrompix()
-        XCTAssertTrue(app.buttons["discoverySettings"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["discoveryFilters"].waitForExistence(timeout: 10))
         openTarget()
         preview().tap()
         let retry = app.buttons["loadFullImage"]
@@ -455,10 +395,10 @@ import CryptoKit
         XCTAssertTrue(retry.waitForExistence(timeout: 10))
         XCTAssertTrue(app.descendants(matching: .any)["loadedImage-0"].exists)
         capture("image-recovery-01-retained-preview")
-        app.buttons["nextImage"].tap()
+        app.descendants(matching: .any)["loadedImage-0"].swipeLeft()
         XCTAssertTrue(app.buttons["retryImage"].waitForExistence(timeout: 10))
         capture("image-recovery-02-uncached-page-failure")
-        app.buttons["完成"].tap()
+        app.buttons["closeImageViewer"].tap()
         app.buttons["copyPrompt"].tap()
         XCTAssertTrue(app.buttons["copyPrompt"].label.contains("已复制"))
         capture("image-recovery-03-prompt-still-usable")
@@ -531,6 +471,7 @@ import CryptoKit
         directoryHistory.append("After cached launch: \(directory.path)")
         XCTAssertEqual(try readSnapshot(CatalogSnapshot.self, from: directory, file: "catalog.json").version, oldCatalog.version,
                        "The app launched by XCTest must use the staged legacy catalog.")
+        app.revealDiscoveryRails()
         XCTAssertTrue(app.staticTexts["68"].exists)
         XCTAssertTrue(app.buttons["allCreators"].isHittable)
         XCTAssertTrue(app.buttons["loadCreators"].isHittable)
@@ -602,6 +543,7 @@ import CryptoKit
         XCTAssertFalse(creatorIDs.isEmpty)
         XCTAssertTrue(favorites.allSatisfy { saved in catalog.prompts.contains { $0.id == saved.id } },
                       "The acceptance seeds must still be published; restage if they were intentionally removed.")
+        app.revealDiscoveryRails()
         XCTAssertTrue(app.staticTexts[catalog.prompts.count.formatted()].exists)
         XCTAssertFalse(app.buttons["loadCreators"].exists)
         XCTAssertTrue(app.buttons["allCreators"].isHittable)
@@ -641,6 +583,7 @@ import CryptoKit
             throw XCTSkip("Stage the legacy creatorless catalog in a dedicated simulator before this test.")
         }
         launch()
+        app.revealDiscoveryRails()
         XCTAssertTrue(app.staticTexts["68"].exists)
         XCTAssertTrue(app.buttons["allCreators"].isHittable)
         XCTAssertTrue(app.buttons["loadCreators"].isHittable)
@@ -705,6 +648,7 @@ import CryptoKit
 
     func testSavedHeaderAndCreatorEntryAtLargeText() throws {
         launch()
+        app.revealDiscoveryRails()
         let allCreators = app.buttons["allCreators"]
         XCTAssertTrue(allCreators.isHittable)
         capture("feedback-large-home")
@@ -790,462 +734,8 @@ import CryptoKit
         }
     }
 
-    func testIndependentProductionContentAndNewSkill() throws {
-        guard ProcessInfo.processInfo.environment["PROMPIX_INDEPENDENT_ACCEPTANCE"] == "1" else {
-            throw XCTSkip("This journey verifies the live independent-source edition on the dedicated simulator.")
-        }
-        let before = try acceptanceDirectory()
-        let drafts = try? Data(contentsOf: before.appendingPathComponent("drafts.json"))
-        launch(online: true)
-        let downloaded = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
-            guard let directory = try? self.acceptanceDirectory(),
-                  let catalog = try? self.readSnapshot(CatalogSnapshot.self, from: directory, file: "catalog.json") else { return false }
-            return catalog.prompts.count >= 387 && catalog.prompts.contains { $0.id == "skill-openai-transcribe" }
-        }, object: nil)
-        XCTAssertEqual(XCTWaiter.wait(for: [downloaded], timeout: 90), .completed)
-        XCTAssertEqual(try? Data(contentsOf: try acceptanceDirectory().appendingPathComponent("drafts.json")), drafts)
-        XCTAssertTrue(app.buttons["allCreators"].exists)
-        capture("independent-01-refreshed-discovery")
-        app.selectPrompixTab("搜索")
-        let search = app.searchFields.firstMatch
-        XCTAssertTrue(search.waitForExistence(timeout: 5))
-        search.tap(); search.typeText("transcribe")
-        let card = app.buttons["prompt-skill-openai-transcribe"]
-        reveal(card); card.tap()
-        XCTAssertTrue(app.buttons["usePrompt"].waitForExistence(timeout: 5))
-        capture("independent-02-new-official-skill")
-        app.buttons["usePrompt"].tap()
-        XCTAssertTrue(app.buttons["copyInstallCommand"].waitForExistence(timeout: 5))
-        capture("independent-03-new-skill-use")
-        app.buttons["copyInstallCommand"].tap()
-    }
 
-    func testWebsitePrefillHandoff() throws {
-        guard ProcessInfo.processInfo.environment["PROMPIX_MOBILE_HANDOFF_ACCEPTANCE"] == "1" else {
-            throw XCTSkip("Dedicated simulator verifies the public website Prompt handoff.")
-        }
-        let directory = try acceptanceDirectory()
-        let drafts = try? Data(contentsOf: directory.appendingPathComponent("drafts.json"))
-        let saved = try readSnapshot([String: String].self, from: directory, file: "drafts.json")
-        XCTAssertFalse(saved.keys.contains { $0 == "quiet-portfolio" || $0.hasPrefix("quiet-portfolio::") }, "Use an original public Prompt, never a personal draft, for external handoff acceptance.")
-        launch()
-        app.buttons["kind-web"].tap()
-        let card = app.buttons["prompt-quiet-portfolio"]
-        reveal(card); card.tap()
-        let language = app.buttons["contentLanguage"]
-        if language.exists {
-            language.tap()
-            app.buttons["contentLanguage-original"].tap()
-        }
-        app.buttons["usePrompt"].tap()
-        let choice = app.buttons["destination-lovable"]
-        reveal(choice); choice.tap()
-        XCTAssertTrue(choice.isSelected)
-        let open = app.buttons["handoffOpen"]
-        XCTAssertTrue(open.label.contains("打开并填入"))
-        capture("mobile-01-website-prefill-choice")
-        open.tap()
-        app.activate()
-        XCTAssertFalse(app.staticTexts["handoffOpenError"].exists)
-        XCTAssertEqual(try? Data(contentsOf: try acceptanceDirectory().appendingPathComponent("drafts.json")), drafts)
-        capture("mobile-02-return-with-full-copy")
-    }
 
-    func testSkillMobileCodeHandoff() throws {
-        guard ProcessInfo.processInfo.environment["PROMPIX_MOBILE_HANDOFF_ACCEPTANCE"] == "1" else {
-            throw XCTSkip("Dedicated simulator verifies the official Skill's Code composer handoff.")
-        }
-        let directory = try acceptanceDirectory()
-        let drafts = try? Data(contentsOf: directory.appendingPathComponent("drafts.json"))
-        launch()
-        app.selectPrompixTab("搜索")
-        let search = app.searchFields.firstMatch
-        XCTAssertTrue(search.waitForExistence(timeout: 5)); search.tap(); search.typeText("Supabase")
-        let card = app.scrollViews["searchResults"].buttons["prompt-skill-publisher-supabase-supabase"]
-        reveal(card); card.tap()
-        app.buttons["usePrompt"].tap()
-        let code = app.buttons["skillCodeOpen"]
-        XCTAssertTrue(code.waitForExistence(timeout: 5))
-        XCTAssertTrue(app.staticTexts["skillCodeGuidance"].exists)
-        XCTAssertTrue(app.buttons["copyInstallCommand"].exists)
-        capture("mobile-03-skill-code-and-copy")
-        code.tap()
-        app.activate()
-        XCTAssertFalse(app.staticTexts["handoffOpenError"].exists)
-        XCTAssertEqual(try? Data(contentsOf: try acceptanceDirectory().appendingPathComponent("drafts.json")), drafts)
-    }
-
-    private func openHandoffCard(_ id: String, query: String, locale: String) throws {
-        launch(locale)
-        let card: XCUIElement
-        if id == "quiet-portfolio" {
-            let kind = app.buttons["kind-web"]
-            let picker = app.scrollViews["kindPicker"]
-            for _ in 0..<6 {
-                let visible = kind.frame.intersection(picker.frame)
-                if !visible.isNull && visible.width >= min(44, kind.frame.width) && kind.isHittable { break }
-                picker.swipeLeft()
-            }
-            kind.tap()
-            card = app.buttons["prompt-\(id)"]
-        } else {
-            app.selectPrompixTab(["de": "Suchen", "ja": "検索"][locale] ?? "搜索")
-            let search = app.searchFields.firstMatch
-            XCTAssertTrue(search.waitForExistence(timeout: 5))
-            search.tap(); search.typeText(query + "\n")
-            card = app.scrollViews["searchResults"].buttons["prompt-\(id)"]
-        }
-        if !card.waitForExistence(timeout: 5) {
-            capture("missing-handoff-source-card")
-            let hierarchy = XCTAttachment(string: app.debugDescription)
-            hierarchy.name = "missing-handoff-source-card"
-            hierarchy.lifetime = .keepAlways; add(hierarchy)
-        }
-        XCTAssertTrue(card.exists)
-        if !card.isHittable { reveal(card) }
-        if id != "quiet-portfolio" { capture("handoff-search-\(locale)") }
-        card.tap()
-        let use = app.buttons["usePrompt"]
-        XCTAssertTrue(use.waitForExistence(timeout: 5)); use.tap()
-        XCTAssertTrue(app.buttons[id == "quiet-portfolio" ? "handoffOpen" : "copyInstallCommand"].waitForExistence(timeout: 5))
-    }
-
-    private func revealHandoff(_ element: XCUIElement) {
-        // Target the use sheet, never the detail ScrollView behind the sheet.
-        let handoff = app.scrollViews["handoffScroll"]
-        let form = app.collectionViews.firstMatch
-        let viewport: XCUIElement = handoff.exists ? handoff : form.exists ? form : app.scrollViews.firstMatch
-        XCTAssertTrue(viewport.exists)
-        for _ in 0..<20 {
-            let fixed = ["handoffOpen", "copyInstallCommand"].map { app.buttons[$0] }.first { $0.exists }
-            let frame = viewport.frame
-            let window = app.windows.containing(.any, identifier: fixed?.identifier ?? element.identifier).firstMatch
-            let bounds = window.exists ? frame.intersection(window.frame) : frame
-            // Forms extend under translucent navigation bars. Use the actual
-            // bar boundary rather than mistaking the Form's origin for it.
-            let navigationBottom = app.navigationBars.allElementsBoundByIndex.map(\.frame)
-                .filter { $0.intersection(bounds).width > bounds.width / 2 && $0.minY < bounds.midY }
-                .map(\.maxY).max() ?? bounds.minY
-            let top = max(bounds.minY, navigationBottom) + 8
-            let bottom = min(bounds.maxY, fixed?.frame.minY ?? bounds.maxY) - 8
-            let height = bottom - top
-            guard height > 40 else { break }
-            let step = min(CGFloat(140), height * 0.35)
-            var distance = -step // Materialize a still-lazy row by moving down.
-            if element.exists {
-                let target = element.frame
-                guard target.height <= height else { break }
-                if target.minY >= top && target.maxY <= bottom {
-                    if target.minX >= bounds.minX && target.maxX <= bounds.maxX && element.isHittable { return }
-                    break // Scrolling cannot fix a fully visible but blocked control.
-                }
-                let margin = min(CGFloat(8), (height - target.height) / 2)
-                distance = target.minY < top
-                    ? min(step, max(12, top + margin - target.minY))
-                    : -min(step, max(12, target.maxY - bottom + margin))
-            }
-            let center = (top + bottom) / 2
-            let start = viewport.coordinate(withNormalizedOffset: CGVector(
-                dx: (bounds.midX - frame.minX) / frame.width, dy: (center - distance / 2 - frame.minY) / frame.height))
-            let end = viewport.coordinate(withNormalizedOffset: CGVector(
-                dx: (bounds.midX - frame.minX) / frame.width, dy: (center + distance / 2 - frame.minY) / frame.height))
-            // A short, slow drag plus an end hold avoids inertial overshoot and
-            // the previous above/below oscillation with a half-Form swipe.
-            start.press(forDuration: 0.05, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 0.1)
-        }
-        capture("handoff-control-unreachable")
-        let layout = XCTAttachment(string: "Viewport: \(viewport.frame); target: \(element.frame)\n\(app.debugDescription)")
-        layout.name = "Handoff scroll geometry"; layout.lifetime = .keepAlways; add(layout)
-        XCTFail("Handoff control must be reachable inside its scroll area and clear of the action bar.")
-    }
-
-    func testHandoffLargestTextAccessibility() throws {
-        guard ProcessInfo.processInfo.environment["PROMPIX_HANDOFF_ACCESSIBILITY"] == "1" else {
-            throw XCTSkip("Run on the backed-up production simulator with the largest accessibility text size.")
-        }
-        XCTAssertEqual(UIApplication.shared.preferredContentSizeCategory, .accessibilityExtraExtraExtraLarge)
-        let personal = try handoffPersonalState()
-        for locale in ["zh-Hans", "de", "ja"] {
-            for skill in [false, true] {
-                try openHandoffCard(skill ? "skill-publisher-supabase-supabase" : "quiet-portfolio",
-                                    query: skill ? "Supabase" : "quiet", locale: locale)
-                let primary = app.buttons[skill ? "copyInstallCommand" : "handoffOpen"]
-                XCTAssertTrue(primary.isHittable)
-                if skill {
-                    revealHandoff(app.buttons["skillCodeOpen"])
-                } else {
-                    let target = app.buttons["destination-claude-code"]
-                    revealHandoff(target); target.tap()
-                    XCTAssertTrue(target.isSelected)
-                }
-                capture("handoff-largest-\(locale)-\(skill ? "skill" : "website")")
-                try app.performAccessibilityAudit(for: [.hitRegion, .sufficientElementDescription])
-                let preview = app.buttons["handoffPreview"]
-                revealHandoff(preview); preview.tap()
-                // Scope the expanded payload to the use sheet, excluding the detail below.
-                let bodies = app.scrollViews["handoffScroll"].staticTexts.matching(identifier: "handoffText")
-                var body: XCUIElement?
-                for _ in 0..<8 {
-                    body = bodies.allElementsBoundByIndex.first { $0.label.count > 80 }
-                    if body != nil { break }
-                    app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.65))
-                        .press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.4)))
-                }
-                if body == nil {
-                    capture("missing-handoff-body")
-                    let hierarchy = XCTAttachment(string: app.debugDescription)
-                    hierarchy.name = "missing-handoff-body"
-                    hierarchy.lifetime = .keepAlways; add(hierarchy)
-                }
-                XCTAssertNotNil(body)
-                XCTAssertFalse(try XCTUnwrap(body).label.isEmpty)
-                XCTAssertFalse(app.staticTexts["handoffExcerpt"].exists, "Expanded reading should not repeat the excerpt above the full text.")
-                capture("handoff-largest-\(locale)-\(skill ? "skill" : "website")-expanded")
-                app.terminate()
-            }
-        }
-        XCTAssertEqual(try handoffPersonalState(), personal)
-    }
-
-    func testSkillHandoffVoiceOverTraversal() throws {
-        guard ProcessInfo.processInfo.environment["PROMPIX_HANDOFF_ACCESSIBILITY"] == "1" else {
-            throw XCTSkip("Dedicated simulator only; traverse the actual unsent Skill handoff with VoiceOver.")
-        }
-        #if compiler(>=6.4)
-        guard #available(iOS 27.0, *) else { throw XCTSkip("Requires the native VoiceOver test service.") }
-        let personal = try performancePersonalState()
-        try openHandoffCard("skill-publisher-supabase-supabase", query: "Supabase", locale: "zh-Hans")
-        let service = XCUIDevice.shared.voiceOverService
-        var speech: [String] = []
-        defer {
-            do { try service.disable() }
-            catch { XCTFail("Could not restore VoiceOver after handoff traversal: \(error)") }
-            let evidence = XCTAttachment(string: speech.joined(separator: "\n"))
-            evidence.name = "skill-handoff-actual-voiceover"
-            evidence.lifetime = .keepAlways; add(evidence)
-        }
-        if service.isEnabled { try service.disable() }
-        try service.enable()
-        speech.append(try service.currentSpeech().utterance)
-        func isCodeAction(_ value: String) -> Bool { value.contains("Claude Code") && value.contains("安装") && value.contains("按钮") }
-        func isCopyAction(_ value: String) -> Bool { value.contains("复制安装命令") && value.contains("按钮") }
-        let deadline = Date().addingTimeInterval(55)
-        for _ in 0..<45 {
-            if speech.contains(where: isCodeAction) && speech.contains(where: isCopyAction) { break }
-            if Date() >= deadline { break }
-            speech.append(try service.moveForward().utterance)
-        }
-        XCTAssertTrue(speech.contains(where: isCodeAction))
-        XCTAssertTrue(speech.contains(where: isCopyAction))
-        capture("skill-handoff-voiceover")
-        XCTAssertEqual(try performancePersonalState(), personal)
-        #else
-        throw XCTSkip("Requires the iOS 27 SDK.")
-        #endif
-    }
-
-    /// Host supplies IDs from the reviewed release; third-party text stays outside Git.
-    func testPromptVariablePreparation() throws {
-        guard ProcessInfo.processInfo.environment["PROMPIX_VARIABLE_ACCEPTANCE"] == "1" else {
-            throw XCTSkip("Requires the backed-up production simulator and a travel Prompt without a personal draft.")
-        }
-        let id = "pc-f404f3161372c6cf4986"
-        let directory = try acceptanceDirectory()
-        let before = try readSnapshot([String: String].self, from: directory, file: "drafts.json")
-        XCTAssertFalse(before.keys.contains { $0 == id || $0.hasPrefix(id + "::") })
-        let catalog = try readSnapshot(CatalogSnapshot.self, from: directory, file: "catalog.json")
-        let original = try XCTUnwrap(catalog.prompts.first { $0.id == id }?.localization?.translations["zh-Hans"]?.prompt)
-        launch()
-        app.selectPrompixTab("搜索")
-        let search = app.searchFields.firstMatch
-        XCTAssertTrue(search.waitForExistence(timeout: 5)); search.tap(); search.typeText("旅行想法")
-        let card = app.scrollViews["searchResults"].buttons["prompt-\(id)"]
-        reveal(card); card.tap()
-        app.buttons["usePrompt"].tap()
-        let prepare = app.buttons["preparePromptVariables"]
-        reveal(prepare); prepare.tap()
-        let apply = app.buttons["applyPromptVariables"]
-        XCTAssertTrue(apply.waitForExistence(timeout: 5)); XCTAssertFalse(apply.isEnabled)
-        func input(_ index: Int) -> XCUIElement {
-            let id = "promptVariable-\(index)"
-            return app.textFields[id].exists ? app.textFields[id] : app.textViews[id]
-        }
-        let first = input(0)
-        XCTAssertTrue(first.waitForExistence(timeout: 5)); first.tap(); first.typeText("Discard this")
-        app.buttons["cancelPromptVariables"].tap()
-        XCTAssertEqual(try readSnapshot([String: String].self, from: try acceptanceDirectory(), file: "drafts.json"), before)
-        reveal(prepare); prepare.tap()
-        capture("variables-01-empty-form")
-        let values = ["Kyoto & Uji", "2026-11-01", "500 USD", "Bookshops\nQuiet cafes", "Relaxed", "Public transport"]
-        for (index, value) in values.enumerated() {
-            let field = input(index)
-            // Form is a collection view; keep gestures above the keyboard and fixed action.
-            for _ in 0..<8 {
-                if field.exists && field.isHittable && field.frame.height > 0 && field.frame.minY > 110 && field.frame.maxY < apply.frame.minY - 20 { break }
-                let bottom = apply.frame.minY - 20
-                let top = app.buttons["cancelPromptVariables"].frame.maxY + 40
-                let origin = app.coordinate(withNormalizedOffset: .zero)
-                origin.withOffset(CGVector(dx: app.frame.midX, dy: bottom)).press(forDuration: 0.05,
-                    thenDragTo: origin.withOffset(CGVector(dx: app.frame.midX, dy: top)))
-            }
-            XCTAssertTrue(field.isHittable); field.tap(); field.typeText(value)
-            if index < values.count - 1 {
-                let done = app.buttons["dismissVariableKeyboard"]
-                XCTAssertTrue(done.waitForExistence(timeout: 5)); done.tap()
-                XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: 5))
-            }
-        }
-        XCTAssertTrue(apply.isEnabled)
-        capture("variables-02-filled-with-keyboard")
-        apply.tap()
-        XCTAssertTrue(app.buttons["handoffOpen"].waitForExistence(timeout: 5))
-        var expected = zip(["${city}", "${dates}", "${budget}", "${interests}", "${pace}", "${constraints}"], values).reduce(original) {
-            $0.replacingOccurrences(of: $1.0, with: $1.1)
-        }
-        var expectedDrafts = before; expectedDrafts[id + "::zh-Hans"] = expected
-        XCTAssertEqual(try readSnapshot([String: String].self, from: try acceptanceDirectory(), file: "drafts.json"), expectedDrafts)
-        // Fully substituted content must remain editable without leaving the use flow.
-        XCTAssertTrue(app.buttons["preparePromptVariables"].waitForNonExistence(timeout: 5))
-        let editPrepared = app.buttons["editPreparedPrompt"]
-        revealHandoff(editPrepared); editPrepared.tap()
-        let preparedEditor = app.textViews["promptEditor"]
-        XCTAssertTrue(preparedEditor.waitForExistence(timeout: 5))
-        XCTAssertEqual(preparedEditor.value as? String, expected)
-        XCTAssertFalse(app.buttons["useEditedPrompt"].exists, "Do not nest another use flow inside its editor.")
-        let note = " Add a rainy-day alternative."
-        preparedEditor.tap(); preparedEditor.typeText(note)
-        let revised = try XCTUnwrap(preparedEditor.value as? String)
-        XCTAssertEqual(revised.replacingOccurrences(of: note, with: ""), expected)
-        expected = revised; expectedDrafts[id + "::zh-Hans"] = expected
-        capture("variables-03-edit-within-use")
-        app.buttons["finishPromptEditing"].tap()
-        XCTAssertTrue(app.buttons["handoffOpen"].waitForExistence(timeout: 5))
-        XCTAssertEqual(try readSnapshot([String: String].self, from: try acceptanceDirectory(), file: "drafts.json"), expectedDrafts)
-        let copy = app.buttons["handoffCopy"]
-        revealHandoff(copy); copy.tap(); XCTAssertTrue(copy.label.contains("已复制"))
-        capture("variables-03-ready-to-use")
-        let evidence = XCTAttachment(string: expected); evidence.name = "variables-expected-clipboard"
-        evidence.lifetime = .keepAlways; add(evidence)
-        app.terminate(); launch()
-        app.selectPrompixTab("搜索")
-        let restoredSearch = app.searchFields.firstMatch
-        XCTAssertTrue(restoredSearch.waitForExistence(timeout: 5)); restoredSearch.tap(); restoredSearch.typeText("旅行想法")
-        reveal(card); card.tap()
-        let edit = app.buttons["editPromptAction"]
-        reveal(edit); edit.tap()
-        let editor = app.textViews["promptEditor"]
-        XCTAssertTrue(editor.waitForExistence(timeout: 5)); XCTAssertTrue(editor.value as? String == expected)
-        capture("variables-04-restored-editor")
-        XCTAssertEqual(try readSnapshot([String: String].self, from: try acceptanceDirectory(), file: "drafts.json"), expectedDrafts)
-    }
-
-    func testPreparedVariablesSurviveFailedSaveAndReturnToEditor() throws {
-        try checkPreparedVariableRecovery(exit: .editor)
-    }
-
-    func testPreparedVariablesRequireExplicitDiscardAfterFailedSave() throws {
-        try checkPreparedVariableRecovery(exit: .discard)
-    }
-
-    func testPreparedVariablesCopyCompleteTextBeforeLeavingAfterFailedSave() throws {
-        try checkPreparedVariableRecovery(exit: .copy)
-    }
-
-    private enum PreparedExit { case editor, copy, discard }
-
-    private func checkPreparedVariableRecovery(exit: PreparedExit) throws {
-        guard ProcessInfo.processInfo.environment["PROMPIX_VARIABLE_ACCEPTANCE"] == "1" else {
-            throw XCTSkip("Requires the backed-up production simulator and explicit variable acceptance opt-in.")
-        }
-        launch()
-        let id = "pc-f404f3161372c6cf4986"
-        let directory = try acceptanceDirectory()
-        let file = directory.appendingPathComponent("drafts.json")
-        let before = try Data(contentsOf: file)
-        let drafts = try JSONDecoder().decode([String: String].self, from: before)
-        XCTAssertNil(drafts[id + "::zh-Hans"])
-        let catalog = try readSnapshot(CatalogSnapshot.self, from: directory, file: "catalog.json")
-        let original = try XCTUnwrap(catalog.prompts.first { $0.id == id }?.localization?.translations["zh-Hans"]?.prompt)
-        let marker = "Kyoto recovery acceptance"
-        let expected = original.replacingOccurrences(of: "${city}", with: marker)
-        XCTAssertNotEqual(expected, original)
-        addTeardownBlock { @MainActor in
-            self.app.terminate()
-            if FileManager.default.fileExists(atPath: file.path) { try FileManager.default.removeItem(at: file) }
-            try before.write(to: file, options: .atomic)
-            XCTAssertEqual(try Data(contentsOf: file), before)
-        }
-        app.selectPrompixTab("搜索")
-        let search = app.searchFields.firstMatch
-        XCTAssertTrue(search.waitForExistence(timeout: 5)); search.tap(); search.typeText("旅行想法")
-        let card = app.scrollViews["searchResults"].buttons["prompt-\(id)"]
-        reveal(card); card.tap()
-        app.buttons["编辑后使用"].tap()
-        let editor = app.textViews["promptEditor"]
-        XCTAssertTrue(editor.waitForExistence(timeout: 5))
-        app.buttons["useEditedPrompt"].tap()
-        let prepare = app.buttons["preparePromptVariables"]
-        revealHandoff(prepare); prepare.tap()
-        let field = app.textFields["promptVariable-0"].exists ? app.textFields["promptVariable-0"] : app.textViews["promptVariable-0"]
-        XCTAssertTrue(field.waitForExistence(timeout: 5)); field.tap(); field.typeText(marker)
-        try FileManager.default.removeItem(at: file)
-        try FileManager.default.createDirectory(at: file, withIntermediateDirectories: false)
-        app.buttons["applyPromptVariables"].tap()
-        let failure = app.staticTexts["preparedPromptSaveError"]
-        XCTAssertTrue(failure.waitForExistence(timeout: 5))
-        let finish = app.buttons["finishPromptUse"]
-        XCTAssertTrue(finish.waitForExistence(timeout: 5))
-        finish.tap()
-        let alert = app.alerts["本次修改尚未保存"]
-        XCTAssertTrue(alert.waitForExistence(timeout: 5))
-        capture("prepared-save-failure-exit-choice")
-        let copyExit = app.buttons["copyPreparedPromptAndLeave"].firstMatch
-        let discardExit = app.buttons["discardPreparedPromptAndLeave"].firstMatch
-        XCTAssertTrue(copyExit.waitForExistence(timeout: 5) && copyExit.isHittable)
-        XCTAssertTrue(discardExit.isHittable)
-        alert.buttons["继续编辑"].tap()
-        XCTAssertTrue(alert.waitForNonExistence(timeout: 5))
-        // Attempt the native sheet dismissal from its navigation bar.
-        finish.coordinate(withNormalizedOffset: CGVector(dx: 0, dy: 0))
-            .press(forDuration: 0.1, thenDragTo: finish.coordinate(withNormalizedOffset: CGVector(dx: 0, dy: 0)).withOffset(CGVector(dx: 0, dy: 380)))
-        XCTAssertTrue(finish.isHittable, "A failed save must prevent swipe dismissal.")
-        if exit != .editor {
-            finish.tap()
-            XCTAssertTrue(alert.waitForExistence(timeout: 5))
-            if exit == .copy {
-                let attachment = XCTAttachment(data: Data(expected.utf8), uniformTypeIdentifier: "public.utf8-plain-text")
-                attachment.name = "prepared-copy-exit-expected"; attachment.lifetime = .keepAlways; add(attachment)
-                copyExit.tap()
-            } else {
-                discardExit.tap()
-            }
-            XCTAssertTrue(finish.waitForNonExistence(timeout: 5))
-            XCTAssertEqual(editor.value as? String, original, "Explicit exit must leave the parent and its saved draft unchanged.")
-            try FileManager.default.removeItem(at: file)
-            try before.write(to: file, options: .atomic)
-            XCTAssertEqual(try Data(contentsOf: file), before)
-            capture("prepared-save-failure-explicit-exit")
-            return
-        }
-        let edit = app.buttons["editPreparedPrompt"]
-        revealHandoff(edit); edit.tap()
-        XCTAssertTrue(app.buttons["handoffOpen"].waitForNonExistence(timeout: 5))
-        XCTAssertEqual(app.textViews.matching(identifier: "promptEditor").count, 1)
-        XCTAssertEqual(editor.value as? String, expected, "Explicitly returning to the same editor must retain the unsaved variables.")
-        let retry = app.buttons["retryDraftSave"]
-        XCTAssertTrue(retry.waitForExistence(timeout: 5))
-        capture("prepared-save-failure-retains-editor-buffer")
-        try FileManager.default.removeItem(at: file)
-        try before.write(to: file, options: .atomic)
-        retry.tap()
-        XCTAssertTrue(retry.waitForNonExistence(timeout: 5))
-        var saved = drafts; saved[id + "::zh-Hans"] = expected
-        XCTAssertEqual(try readSnapshot([String: String].self, from: directory, file: "drafts.json"), saved)
-        app.buttons["finishPromptEditing"].tap()
-        app.buttons["编辑后使用"].tap()
-        XCTAssertTrue(editor.waitForExistence(timeout: 5)); XCTAssertEqual(editor.value as? String, expected)
-        capture("prepared-save-recovery-restores-exact-draft")
-    }
 
     func testPublishedTranslationCatchUp() throws {
         let environment = ProcessInfo.processInfo.environment
@@ -1375,7 +865,7 @@ import CryptoKit
             search.tap(); search.typeText(title)
             let card = app.scrollViews["searchResults"].buttons["prompt-\(id)"]
             reveal(card); card.tap()
-            XCTAssertTrue(app.buttons["usePrompt"].waitForExistence(timeout: 5))
+            XCTAssertTrue(app.buttons["copyPrompt"].waitForExistence(timeout: 5))
             capture("editorial-batch-\(id)-detail")
             if item["contentType"] as? String == "skill" {
                 let skill = try XCTUnwrap(item["skill"] as? [String: Any])
@@ -1387,8 +877,8 @@ import CryptoKit
                 reveal(app.staticTexts[try XCTUnwrap(files.last)])
                 XCTAssertTrue(app.descendants(matching: .any)["skillSource"].exists)
                 capture("editorial-batch-\(id)-files")
-                app.buttons["usePrompt"].tap()
-                let copy = app.buttons["copyInstallCommand"]
+                app.buttons["copyPrompt"].tap()
+                let copy = app.buttons["copyPrompt"]
                 XCTAssertTrue(copy.waitForExistence(timeout: 5)); copy.tap()
                 XCTAssertTrue(copy.label.contains("已复制"))
                 let settledAt = Date().addingTimeInterval(0.7)
@@ -1397,9 +887,8 @@ import CryptoKit
             } else {
                 let copy = app.buttons["copyPrompt"]
                 copy.tap(); XCTAssertTrue(copy.label.contains("已复制"))
-                app.buttons["usePrompt"].tap()
-                XCTAssertTrue(app.buttons["handoffOpen"].waitForExistence(timeout: 5))
-                XCTAssertTrue(app.buttons["handoffCopy"].exists)
+                app.buttons["copyPrompt"].tap()
+                XCTAssertTrue(app.buttons["copyPrompt"].exists)
                 capture("editorial-batch-\(id)-use")
             }
         }
@@ -1436,7 +925,7 @@ import CryptoKit
             XCTAssertTrue(search.waitForExistence(timeout: 5)); search.tap(); search.typeText(title)
             let card = app.scrollViews["searchResults"].buttons["prompt-\(id)"]
             reveal(card); card.tap()
-            XCTAssertTrue(app.buttons["usePrompt"].waitForExistence(timeout: 5))
+            XCTAssertTrue(app.buttons["copyPrompt"].waitForExistence(timeout: 5))
             capture("publisher-\(id)-detail")
             app.expandPromptInformation()
             let inventory = app.buttons["skillFiles"]
@@ -1445,8 +934,8 @@ import CryptoKit
             XCTAssertTrue(app.staticTexts["SKILL.md"].exists)
             XCTAssertTrue(app.descendants(matching: .any)["skillSource"].exists)
             capture("publisher-\(id)-files")
-            app.buttons["usePrompt"].tap()
-            let copy = app.buttons["copyInstallCommand"]
+            app.buttons["copyPrompt"].tap()
+            let copy = app.buttons["copyPrompt"]
             XCTAssertTrue(copy.waitForExistence(timeout: 5)); copy.tap()
             XCTAssertTrue(copy.label.contains("已复制"))
             let settledAt = Date().addingTimeInterval(0.7)
@@ -1487,7 +976,7 @@ import CryptoKit
             XCTAssertTrue(search.waitForExistence(timeout: 5)); search.tap(); search.typeText(title)
             let card = app.scrollViews["searchResults"].buttons["prompt-\(id)"]
             reveal(card); card.tap()
-            XCTAssertTrue(app.buttons["usePrompt"].waitForExistence(timeout: 5))
+            XCTAssertTrue(app.buttons["copyPrompt"].waitForExistence(timeout: 5))
             capture("native-x-\(kind)-detail")
             app.buttons["previewButton"].tap()
             let preview = app.descendants(matching: .any)[kind == "video" ? "playingVideo" : "loadedImage-0"]
@@ -1496,6 +985,7 @@ import CryptoKit
             capture("native-x-\(kind)-loaded-preview")
             app.buttons["完成"].tap()
             let byline = app.buttons["creatorByline"]
+            if !byline.exists { app.expandPromptInformation() }
             reveal(byline); byline.tap()
             XCTAssertTrue(app.buttons["saveCreator"].waitForExistence(timeout: 5))
             XCTAssertTrue(app.links["creatorExternalProfile"].exists || app.buttons["creatorExternalProfile"].exists)
@@ -1504,12 +994,9 @@ import CryptoKit
             let original = app.buttons["originalXPost"]
             reveal(original); original.tap()
             capture("native-x-\(kind)-original-post")
-            app.buttons["usePrompt"].tap()
-            XCTAssertTrue(app.buttons["handoffOpen"].waitForExistence(timeout: 5))
+            app.buttons["copyPrompt"].tap()
             XCTAssertGreaterThan(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'destination-' ")).count, 0)
             capture("native-x-\(kind)-tool-destination")
-            app.buttons["handoffOpen"].tap(); app.activate()
-            XCTAssertFalse(app.staticTexts["handoffOpenError"].exists)
             app.navigationBars.buttons["完成"].tap()
             launch()
         }
@@ -1543,7 +1030,7 @@ import CryptoKit
         XCTAssertTrue(search.waitForExistence(timeout: 5)); search.tap(); search.typeText(title)
         let card = app.scrollViews["searchResults"].buttons["prompt-\(id)"]
         reveal(card); card.tap()
-        XCTAssertTrue(app.buttons["usePrompt"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["copyPrompt"].waitForExistence(timeout: 5))
         capture("thread-01-workflow-detail")
         app.buttons["previewButton"].tap()
         XCTAssertTrue(app.descendants(matching: .any)["playingVideo"].waitForExistence(timeout: 35))
@@ -1556,9 +1043,8 @@ import CryptoKit
         XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in Date() >= sourceSettledAt }, object: nil)], timeout: 3), .completed)
         capture("thread-03-separate-original-context")
         original.tap()
-        app.buttons["usePrompt"].tap()
+        app.buttons["copyPrompt"].tap()
         XCTAssertTrue(app.staticTexts["desktopWorkflowGuidance"].waitForExistence(timeout: 5))
-        XCTAssertFalse(app.buttons["handoffOpen"].exists)
         let copy = app.buttons["copyDesktopWorkflow"]
         XCTAssertTrue(copy.exists); copy.tap()
         XCTAssertTrue(copy.label.contains("已复制"))
@@ -1570,41 +1056,9 @@ import CryptoKit
         XCTAssertEqual(try? Data(contentsOf: try acceptanceDirectory().appendingPathComponent("drafts.json")), drafts)
     }
 
-    func testPromptAndSkillHandoff() {
+    func testCreatorJourney() {
         launch()
-        app.buttons["kind-text"].tap()
-        let prompt = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'prompt-' ")).firstMatch
-        reveal(prompt); prompt.tap()
-        let use = app.buttons["usePrompt"]
-        XCTAssertTrue(use.waitForExistence(timeout: 5)); use.tap()
-        XCTAssertTrue(app.buttons["handoffOpen"].waitForExistence(timeout: 5))
-        let alternative = app.buttons["destination-claude"]
-        if alternative.exists { alternative.tap(); XCTAssertTrue(alternative.isSelected) }
-        app.buttons["handoffCopy"].tap()
-        XCTAssertTrue(app.buttons["handoffCopy"].label.contains("已复制"))
-        capture("handoff-01-tool-choice")
-        app.navigationBars.buttons["完成"].tap()
-        use.tap()
-        if alternative.exists { XCTAssertTrue(alternative.isSelected) }
-        app.buttons["handoffOpen"].tap()
-        app.activate()
-        XCTAssertFalse(app.staticTexts["handoffOpenError"].exists)
-        capture("handoff-02-return-after-opening-tool")
-        app.navigationBars.buttons["完成"].tap()
-        app.goBackInPrompix()
-        selectSkill()
-        let skill = app.buttons["prompt-skill-openai-pdf"]
-        reveal(skill); skill.tap()
-        app.buttons["usePrompt"].tap()
-        XCTAssertTrue(app.buttons["copyInstallCommand"].waitForExistence(timeout: 5))
-        app.buttons["copyInstallCommand"].tap()
-        XCTAssertTrue(app.buttons["copyInstallCommand"].label.contains("已复制"))
-        app.buttons["handoffPreview"].tap()
-        capture("handoff-03-pinned-skill-installation")
-    }
-
-    func testCreatorAndSkillJourney() {
-        launch()
+        app.revealDiscoveryRails()
         XCTAssertTrue(app.buttons["allCreators"].waitForExistence(timeout: 10), "Stage the creator/Skill candidate catalog before running this journey.")
         capture("01-home-creators-and-collections")
         let creator = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'creator-' ")).firstMatch
@@ -1620,6 +1074,7 @@ import CryptoKit
         reveal(item)
         item.tap()
         XCTAssertTrue(app.buttons["copyPrompt"].waitForExistence(timeout: 5))
+        if !app.buttons["creatorByline"].exists { app.expandPromptInformation() }
         reveal(app.buttons["creatorByline"])
         capture("03-work-with-creator-attribution")
         app.buttons["creatorByline"].tap()
@@ -1632,20 +1087,6 @@ import CryptoKit
         app.segmentedControls["savedContentType"].buttons["创作者"].tap()
         XCTAssertTrue(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'saved-creator-' ")).firstMatch.waitForExistence(timeout: 5))
         capture("04-saved-creator-after-relaunch")
-        app.selectPrompixTab("发现")
-        selectSkill()
-        XCTAssertFalse(app.buttons["allCreators"].exists, "Filtering should put results before discovery rails.")
-        capture("05-skills-channel")
-        let skill = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'prompt-skill-' ")).firstMatch
-        reveal(skill)
-        skill.tap()
-        XCTAssertTrue(app.buttons["copyPrompt"].waitForExistence(timeout: 5))
-        let source = app.descendants(matching: .any).matching(identifier: "skillSource").firstMatch
-        reveal(source)
-        capture("06-skill-source-and-files")
-        app.buttons["copyPrompt"].tap()
-        XCTAssertTrue(app.buttons["copyPrompt"].label.contains("已复制"))
-        app.buttons["detailFavorite"].tap()
     }
 
     func testNineInterfaceLanguages() {
@@ -1654,6 +1095,7 @@ import CryptoKit
                          ("pt-BR", "Português (Brasil)"), ("fr", "Français"), ("de", "Deutsch")]
         for (language, contentLanguage) in languages {
             launch(language)
+            app.revealDiscoveryRails()
             XCTAssertTrue(app.buttons["allCreators"].waitForExistence(timeout: 5))
             capture("language-\(language)-home")
             app.buttons["allCreators"].tap()
@@ -1691,23 +1133,6 @@ import CryptoKit
         }
     }
 
-    private func handoffPersonalState() throws -> [String: Data] {
-        var state = try performancePersonalState()
-        if let data = state["favorites.json"] {
-            var favorites = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [[String: Any]])
-            for index in favorites.indices {
-                if var localization = favorites[index]["localization"] as? [String: Any] {
-                    // Switching interface languages refreshes derived translations.
-                    // Preserve strict checks for order, identity, original content,
-                    // source fingerprint and every other saved field, plus draft bytes.
-                    localization.removeValue(forKey: "translations")
-                    favorites[index]["localization"] = localization
-                }
-            }
-            state["favorites.json"] = try JSONSerialization.data(withJSONObject: favorites, options: [.sortedKeys])
-        }
-        return state
-    }
 
     private func performancePersonalState() throws -> [String: Data] {
         let directory = try acceptanceDirectory()
@@ -1750,6 +1175,7 @@ import CryptoKit
         measure(metrics: [XCTApplicationLaunchMetric(waitUntilResponsive: true)], options: options) {
             app.terminate()
             launch(locale)
+            app.revealDiscoveryRails()
             XCTAssertTrue(app.staticTexts[catalog.prompts.count.formatted()].exists)
             XCTAssertTrue(app.buttons["allCreators"].exists)
             XCTAssertTrue(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'creator-' ")).firstMatch.exists)
@@ -1796,7 +1222,7 @@ import CryptoKit
             visitedIDs.formUnion(after)
             for _ in 0..<5 { scrollFeed(forward: false) }
         }
-        XCTAssertTrue(app.buttons["discoverySettings"].exists)
+        XCTAssertTrue(app.buttons["discoveryFilters"].exists)
         XCTAssertGreaterThan(visitedIDs.count, initialIDs.count)
         let directory = try acceptanceDirectory()
         XCTAssertEqual(try readSnapshot(CatalogSnapshot.self, from: directory, file: "catalog.json").version, catalog.version)
@@ -1897,6 +1323,7 @@ import CryptoKit
         reveal(card); card.tap()
         XCTAssertTrue(app.buttons["copyPrompt"].waitForExistence(timeout: 5))
         let byline = app.buttons["creatorByline"]
+        if !byline.exists { app.expandPromptInformation() }
         reveal(byline); byline.tap()
         XCTAssertTrue(app.buttons["saveCreator"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons.matching(identifier: "saveCreator").allElementsBoundByIndex.contains { $0.isHittable })
@@ -1930,8 +1357,8 @@ import CryptoKit
         XCTAssertTrue(app.buttons["saveCreator"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.tabBars.buttons["收藏"].isHittable)
         app.goBackInPrompix()
-        XCTAssertTrue(app.buttons["discoverySettings"].waitForExistence(timeout: 5))
-        app.buttons["discoverySettings"].tap()
+        XCTAssertTrue(app.buttons["discoveryFilters"].waitForExistence(timeout: 5))
+        app.openPrompixSettings()
         XCTAssertTrue(app.buttons["replayOnboarding"].waitForExistence(timeout: 5))
         capture("refinement-live-settings")
         app.buttons["完成"].tap()
@@ -2025,13 +1452,15 @@ extension XCUIApplication {
         }
         if buttons["kind-all"].isHittable { buttons["kind-all"].tap() }
         let all = buttons["allCollections"]
-        for _ in 0..<5 { if all.isHittable { break }; swipeDown() }
+        revealDiscoveryRails()
+        for _ in 0..<3 { if all.isHittable { break }; scrollViews["discoveryScroll"].swipeUp(velocity: .slow) }
         XCTAssertTrue(all.isHittable); all.tap()
     }
     @MainActor func expandPromptInformation() {
         let information = buttons["promptInformation"]
         for _ in 0..<40 {
-            if information.isHittable { break }
+            // Stop above the floating reading actions, which sit over the scroll content.
+            if information.isHittable && information.frame.maxY < frame.height * 0.8 { break }
             coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.72))
                 .press(forDuration: 0.01, thenDragTo: coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.32)))
         }
@@ -2044,5 +1473,21 @@ extension XCUIApplication {
         let target = tab.exists ? tab : buttons.matching(NSPredicate(format: "label == %@", title)).firstMatch
         XCTAssertTrue(target.waitForExistence(timeout: 5))
         target.tap()
+    }
+    /// Creators and uses sit a screen or two into the discover feed.
+    @MainActor func revealDiscoveryRails() {
+        let rail = buttons["allCreators"], scroll = scrollViews["discoveryScroll"]
+        for _ in 0..<10 {
+            if rail.exists && rail.isHittable { return }
+            scroll.swipeUp(velocity: .slow)
+        }
+        XCTAssertTrue(rail.isHittable, "The creator rail must be reachable inside the feed")
+    }
+    /// Settings live in the Saved tab's header.
+    @MainActor func openPrompixSettings() {
+        selectPrompixTab("收藏")
+        let settings = buttons["savedSettings"]
+        XCTAssertTrue(settings.waitForExistence(timeout: 5))
+        settings.tap()
     }
 }
