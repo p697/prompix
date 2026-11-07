@@ -442,6 +442,11 @@ test("hosting tool names do not conflict with specific output models or website 
   }
   const question = extractMarkedXPrompt({ ...post("123", "ChatGPT\nPrompt:\nAnalyze this ultra-realistic portrait and explain the lighting in one paragraph."), attachments: { media_keys: [photo.media_key] } }, [photo]);
   assert.ok("body" in question); assert.equal(question.kind, "text", "Questions about an attached photo stay text");
+  for (const [context, scene] of [["Seedance 2.0", "Vertical 9:16, 4K cinematic scene of an elderly couple dancing on a seaside deck at golden hour."],
+    ["ChatGPT", "Cinematic 3D animated video, 9:16, 4K: a woman dancing on a sunny street in front of a vintage car."]]) {
+    const clip = extractMarkedXPrompt({ ...post("123", `${context}\nPrompt:\n${scene}`), attachments: { media_keys: [photo.media_key, movie.media_key] } }, [photo, movie]);
+    assert.ok("body" in clip, context); assert.equal(clip.kind, "video", "A scene description never outweighs a video model or a video request");
+  }
 });
 
 
