@@ -52,6 +52,18 @@ test("competing runs leave the owner's persisted status untouched", async () => 
   } finally { await unlock(); await f.cleanup(); }
 });
 
+test("a lock whose recorded owner has exited is taken over at once", async () => {
+  const f = await fixture();
+  try {
+    const { mkdir, writeFile } = await import("node:fs/promises");
+    const { join } = await import("node:path");
+    await mkdir(join(f.root, "daily.lock"));
+    await writeFile(join(f.root, "daily.lock", "owner.json"), JSON.stringify({ pid: 2 ** 22 + 12345 }));
+    const unlock = await lockContent(f.root);
+    await unlock();
+  } finally { await f.cleanup(); }
+});
+
 test("initial write failure invalidates stale success and prevents all work", async () => {
   const f = await fixture();
   try {
