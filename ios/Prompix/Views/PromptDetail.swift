@@ -861,9 +861,13 @@ private struct FoldedPrompt: View {
                     }
                 }
             if folds {
-                Button(String(localized: "展开全文")) { expanded = true }
-                    .font(.subheadline.weight(.medium)).foregroundStyle(Palette.ink).frame(minHeight: 36)
-                    .accessibilityIdentifier("expandPrompt")
+                // A 44 pt target that still takes 36 pt of the layout.
+                Color.clear.frame(height: 36).overlay(alignment: .leading) {
+                    Button { expanded = true } label: {
+                        Text(String(localized: "展开全文")).frame(minHeight: 44).contentShape(Rectangle())
+                    }.font(.subheadline.weight(.medium)).foregroundStyle(Palette.ink)
+                        .accessibilityIdentifier("expandPrompt")
+                }
             }
         }.onChange(of: text) { _, _ in expanded = false }
     }

@@ -1,0 +1,9 @@
+# Six UI tests run on main; UI changes are checked by screenshot and on device
+
+`ios/PrompixUITests` never ran in CI, so redesigns left it stale: on 2026-11-07, 17 of the tests a home change touched already failed on main, and telling old failures from new ones cost every app change a 20-minute baseline run. Repairing all of them showed the cost of keeping about a hundred journeys current, many of them opt-in and tied to production content that keeps changing. The owner chose a small suite instead ("可以，按照你推荐的改。希望以后效率高一点").
+
+- The UI suite is six offline tests on the bundled catalog: `SmokeTests` (mandatory onboarding, the home long-press preview, copy / save / edit / search across a relaunch, search into a detail and back, a version surviving relaunch) and `AccessibilityAuditTests` (hit regions and element descriptions across the main screens). Each test gets its own data directory (`--ui-test-data <uuid>`), so runs never share saved works, versions or decks.
+- They run in `ios-tests` after every merge to `main`. The required `content` and `ios` checks are unchanged, and pull requests run no UI tests.
+- Every other UI test was deleted, including the long journeys, the live-service and staged-catalog checks, VoiceOver round trips and performance measures. The simulator-only fixtures that only they used went with them: the database feed fixture service, network-failure and image-prefetch interceptors, and the `--cached-only` / `--legacy-feed` launch modes.
+- UI changes are verified with the affected unit tests, before-and-after simulator screenshots and the owner checking on device (see `AGENTS.md`).
+- The audit found three real gaps while the suite was repaired, fixed without changing the layout: "展开全文" and search's "清除" only had their text's height to tap (the 44 pt frame sat on the button, not its label), and "检查内容更新" in settings had no name for VoiceOver.

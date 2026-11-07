@@ -253,11 +253,15 @@ struct SettingsView: View {
                     Link(String(localized: "App 语言与系统设置"), destination: URL(string: UIApplication.openSettingsURLString)!)
                 }
                 Section {
+                    let refreshTitle = library.isRefreshing ? String(localized: "正在更新…") : String(localized: "检查内容更新")
                     Button { Task { await library.refresh(force: true) } } label: {
-                        LabeledContent(library.isRefreshing ? String(localized: "正在更新…") : String(localized: "检查内容更新")) {
+                        LabeledContent(refreshTitle) {
                             if let updated = library.updatedAt { Text(updated, style: .date).foregroundStyle(Palette.muted) }
                         }
                     }.disabled(library.isRefreshing)
+                        // A button around LabeledContent reaches VoiceOver without a name.
+                        .accessibilityLabel(refreshTitle)
+                        .accessibilityValue(library.updatedAt?.formatted(date: .long, time: .omitted) ?? "")
                     Button(cleared ? String(localized: "图片缓存已清理") : String(localized: "清理图片缓存")) { ImageStore.shared.clear(); cleared = true }
                 } footer: {
                     if let message = library.syncMessage { Text(message) }

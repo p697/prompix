@@ -120,10 +120,13 @@ struct SearchView: View {
                 Text(String(localized: "最近")).font(.subheadline.weight(.semibold)).foregroundStyle(Palette.ink)
                     .accessibilityAddTraits(.isHeader)
                 Spacer()
-                Button(String(localized: "清除")) {
+                Button {
                     recent = []
                     UserDefaults.standard.removeObject(forKey: "recentSearches")
-                }.font(.footnote).foregroundStyle(Palette.muted).frame(minHeight: 44).accessibilityIdentifier("clearRecentSearches")
+                } label: {
+                    // The label carries the 44 pt target; a frame on the button would not.
+                    Text(String(localized: "清除")).frame(minHeight: 44).contentShape(Rectangle())
+                }.font(.footnote).foregroundStyle(Palette.muted).accessibilityIdentifier("clearRecentSearches")
             }.padding(.horizontal, 20)
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
