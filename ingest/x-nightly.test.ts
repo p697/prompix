@@ -3,7 +3,7 @@ import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { collectNightlyX, nightlyDays } from "./x-nightly.ts";
+import { collectNightlyX, importTrialPosts, nightlyDays } from "./x-nightly.ts";
 import type { ModelProvider } from "./models/types.ts";
 
 const at = (iso: string) => Date.parse(iso);
@@ -48,4 +48,20 @@ test("a night writes intake snapshots, locates unmarked prompts and moves the cu
   assert.ok(JSON.parse(await readFile(join(root, "x-excerpt-reviews.json"), "utf8"))["102"]);
   assert.deepEqual(JSON.parse(await readFile(join(root, "x-nightly", "cursor.json"), "utf8")), { searchedThrough: "2026-11-05" });
   assert.equal((await collectNightlyX(root, { enabled: true, env: {}, now: at("2026-11-06T20:00:00Z"), search, creators: [], known: new Set() })).status, "up-to-date");
+});
+
+test("a trial's posts enter intake as they were captured, and their prompts are located", async t => {
+  const root = await mkdtemp(join(tmpdir(), "prompix-import-")); t.after(() => rm(root, { recursive: true, force: true }));
+  const { atomic } = await import("./publication.ts");
+  const trial = "2026-11-07T06-27-06-637Z";
+  await atomic(join(root, "trials", trial, "x-discovery", "trial-001.json"), { provider: "twitterapi", capturedAt: "2026-11-07T06:30:00.000Z", creators: [],
+    posts: [{ id: "201", author_id: "9", text: "A paper boat sailing across a city puddle at dusk, cinematic", attachments: { media_keys: ["m1"] } }],
+    media: [{ media_key: "m1", type: "photo", url: "https://pbs.twimg.com/media/201.jpg" }] });
+  const provider = { id: "fixture", model: "fixture", capabilities: { images: true }, complete: async () =>
+    ({ provider: "fixture", model: "fixture", usage: {}, output: { items: [{ id: "201", prompt: "A paper boat sailing across a city puddle at dusk, cinematic" }] } }) } as unknown as ModelProvider;
+  const report = await importTrialPosts(root, [trial], { locate: { provider }, now: at("2026-11-07T08:00:00Z") });
+  assert.deepEqual(report, [{ trial, posts: 1, located: 1, unlocated: 0 }]);
+  const [name] = await readdir(join(root, "x-discovery"));
+  assert.equal(JSON.parse(await readFile(join(root, "x-discovery", name), "utf8")).capturedAt, "2026-11-07T06:30:00.000Z", "availability comes from the trial's capture");
+  await assert.rejects(importTrialPosts(root, ["../escape"]), /Invalid trial id/);
 });

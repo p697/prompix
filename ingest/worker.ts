@@ -22,7 +22,7 @@ export type JobResult = string | { summary: string; published?: number; details?
  * maintenance ignores it). `onGiveUp` hears about the last failed attempt of a day. */
 export type Job = { name: string; at: number; enabled?: (config: PipelineConfig) => boolean;
   /** On-demand jobs replace the nightly slot with their own readiness check. */
-  ready?: (last: NonNullable<WorkerStatus["jobs"]>[string] | undefined) => Promise<boolean>;
+  ready?: (last: NonNullable<WorkerStatus["jobs"]>[string] | undefined, now: number) => Promise<boolean>;
   run: (attempt: number) => Promise<JobResult>; onGiveUp?: (message: string) => Promise<void> };
 type Clock = { now: () => number };
 
@@ -52,7 +52,7 @@ export async function tick(root: string, startedAt: string, jobs: Job[], clock: 
   let job: Job | undefined;
   for (const candidate of jobs) {
     if (!(candidate.enabled?.(config) ?? true)) continue;
-    if (candidate.ready ? await candidate.ready(base.jobs?.[candidate.name]) : jobDue(candidate, base, clock.now())) { job = candidate; break; }
+    if (candidate.ready ? await candidate.ready(base.jobs?.[candidate.name], clock.now()) : jobDue(candidate, base, clock.now())) { job = candidate; break; }
   }
   if (!job) return;
   const prior = base.jobs?.[job.name];
@@ -113,8 +113,20 @@ export function reportJob(env: NodeJS.ProcessEnv, root = pipelineRoot(), send = 
  * translate route; history campaigns are not drained here, since their items have no 2.0 review.
  * Runs nightly while the desired state is running. The content directory lives on the external
  * drive: a missing drive is reported at once, and the third failed attempt sends an alert. */
-export function intakeJob(env: NodeJS.ProcessEnv, spawnDaily = runDaily, alert = sendAlert, root = contentRoot): Job {
+export const intakeRequestFile = "intake-request.json";
+/** The nightly intake, or an extra run the owner asked for (`npm run pipeline -- intake`). An
+ * extra run does not use up the night's slot, which starts later. */
+export function intakeJob(env: NodeJS.ProcessEnv, spawnDaily = runDaily, alert = sendAlert, root = contentRoot, control = pipelineRoot()): Job {
+  const requested = async (last: NonNullable<WorkerStatus["jobs"]>[string] | undefined) => {
+    const request = await json<{ at?: string; importTrials?: string[] } | null>(join(control, intakeRequestFile), null);
+    return request?.at && (!last || Date.parse(last.startedAt) < Date.parse(request.at)) ? request : undefined;
+  };
+  let extra: { importTrials?: string[] } | undefined;
   return { name: "intake", at: nightly.intake, enabled: config => config.desired === "running" && config.dailyTarget > 0,
+    ready: async (last, now) => {
+      extra = await requested(last);
+      return !!extra || jobDue({ name: "intake", at: nightly.intake }, last ? { jobs: { intake: last } } as unknown as WorkerStatus : undefined, now);
+    },
     onGiveUp: message => alert(`每日采集发布今天连续 ${maxAttempts} 次失败，今天不会再重试。最后一次的错误：${message}`, env),
     run: async attempt => {
       if (!await access(root).then(() => true, () => false)) {
@@ -123,7 +135,8 @@ export function intakeJob(env: NodeJS.ProcessEnv, spawnDaily = runDaily, alert =
         throw new Error(message);
       }
       const { PROMPIX_HISTORY_CAMPAIGN: _, ...rest } = env;
-      const code = await spawnDaily({ ...rest, PROMPIX_TRANSLATION_PROVIDER: "pipeline" });
+      const trials = (extra?.importTrials ?? []).filter(trial => /^[\w-]+$/.test(trial));
+      const code = await spawnDaily({ ...rest, PROMPIX_TRANSLATION_PROVIDER: "pipeline", ...(trials.length ? { PROMPIX_IMPORT_TRIALS: trials.join(",") } : {}) });
       const report = await json<IntakeReport>(join(root, "status.json"), {});
       if (code !== 0) throw new Error(report.error ?? `daily exited with ${code}`);
       const added = report.changes?.added?.total ?? 0, enrichment = report.sources?.enrichment;
@@ -206,7 +219,7 @@ async function main() {
   if (!release) { console.log(JSON.stringify({ event: "worker_already_running" })); return; }
   const env = { ...await pipelineEnvironment(), ...await childCertificates(root) };
   // Maintenance first: it keeps the verifications every publication requires current.
-  const startedAt = new Date().toISOString(), jobs = [maintenanceJob(env), reportJob(env, root), intakeJob(env), trialJob(env, root)];
+  const startedAt = new Date().toISOString(), jobs = [maintenanceJob(env), reportJob(env, root), intakeJob(env, runDaily, sendAlert, contentRoot, root), trialJob(env, root)];
   let stopping = false, sleeping: (() => void) | undefined;
   const stop = () => { stopping = true; sleeping?.(); };
   process.on("SIGTERM", stop); process.on("SIGINT", stop);

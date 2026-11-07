@@ -21,7 +21,7 @@ import {
 } from "./sources.ts";
 import { download } from "./network.ts";
 import { discoverX } from "./x-discovery.ts";
-import { collectNightlyX } from "./x-nightly.ts";
+import { collectNightlyX, importTrialPosts } from "./x-nightly.ts";
 import { reviewDailyX } from "./review-daily.ts";
 import { isNativeXDraft } from "./x-source.ts";
 import { readAllXIntake as readXIntake } from "./x-thread-intake.ts";
@@ -177,8 +177,11 @@ async function run() {
     } else {
       // Since 2026-11-07: the approved search rules, two Japan days late; prompts without a heading are located by the review route.
       const routed = publishing ? await routedProvider("review", "x-nightly:locate") : undefined;
-      report.sources.x = await collectNightlyX(root, { enabled: publishing, env: process.env,
-        ...(routed ? { locate: { provider: routed.provider, effort: routed.effort, record: routed.record } } : {}) });
+      const locate = routed ? { provider: routed.provider, effort: routed.effort, record: routed.record } : undefined;
+      // Posts searched by trials, when the owner asked for them to be published (`pipeline -- intake --import-trial`).
+      const trials = process.env.PROMPIX_IMPORT_TRIALS?.split(",").filter(Boolean) ?? [];
+      if (publishing && trials.length) report.sources["x-trial-import"] = await importTrialPosts(root, trials, { locate });
+      report.sources.x = await collectNightlyX(root, { enabled: publishing, env: process.env, ...(locate ? { locate } : {}) });
     }
     // Cached discoveries still enter intake when today's paid search is disabled.
     // Marked source bodies are drafts; incomplete posts keep an explicit reason.

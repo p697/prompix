@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { z } from "zod";
 import type { CreatorCache } from "./creators.ts";
@@ -34,6 +35,8 @@ export function nightlyDays(searchedThrough: string | undefined, now: number): s
   return days.slice(-maximumCatchUpDays);
 }
 
+type Locate = { provider: ModelProvider; effort?: Effort; record?: (summary: ModelCallSummary) => Promise<void> };
+
 export type NightlyXReport = { status: "ok" | "failed" | "up-to-date" | "dry-run"; days: { day: string; requests: number; returned: number; admitted: number;
   located?: number; unlocated?: number; error?: string }[] };
 
@@ -41,7 +44,7 @@ export type NightlyXReport = { status: "ok" | "failed" | "up-to-date" | "dry-run
  * admitted posts as intake snapshots, and let the review route find prompts without a heading.
  * Each finished day moves the cursor, so a failure retries only the days it did not finish. */
 export async function collectNightlyX(root: string, options: { enabled: boolean; env: NodeJS.ProcessEnv; now?: number;
-  locate?: { provider: ModelProvider; effort?: Effort; record?: (summary: ModelCallSummary) => Promise<void> };
+  locate?: Locate;
   search?: Pick<TwitterAPIClient, "search">; creators?: string[]; known?: Set<string> }): Promise<NightlyXReport> {
   if (!options.enabled) return { status: "dry-run", days: [] };
   const env = options.env, now = options.now ?? Date.now(), cursorPath = join(root, "x-nightly", "cursor.json");
@@ -66,18 +69,37 @@ export async function collectNightlyX(root: string, options: { enabled: boolean;
     const failed = search.stats.filter(rule => rule.error);
     // A search that mostly failed is retried on the next run instead of being marked done.
     if (failed.length > search.stats.length / 2) { entry.error = failed[0].error; report.status = "failed"; break; }
-    const snapshots = xDaySnapshots(search, capturedAt).map((data, index) =>
-      ({ name: `${capturedAt.slice(0, 10)}-feed-${String(index + 1).padStart(3, "0")}-${randomUUID()}.json`, data }));
-    for (const { name, data } of snapshots) await atomic(join(root, "x-discovery", name), data);
     for (const post of search.admitted.keys()) known.add(post);
-    const pending = unmarkedPosts(snapshots, creatorCache);
-    if (pending.length && options.locate) {
-      const located = await locatePrompts(options.locate.provider, pending, { effort: options.locate.effort, record: options.locate.record, now: new Date(now) });
-      // Read again right before writing: the excerpt store is shared with the source checks.
-      await atomic(join(root, "x-excerpt-reviews.json"), { ...await readXExcerptReviews(root), ...located.excerpts });
-      entry.located = located.located; entry.unlocated = located.none + located.unmatched + located.failed;
-    }
+    Object.assign(entry, await admitSnapshots(root, xDaySnapshots(search, capturedAt), creatorCache, options.locate, now));
     await atomic(cursorPath, { searchedThrough: day });
+  }
+  return report;
+}
+
+/** Writes snapshots into intake and locates the prompts of posts without a heading. */
+async function admitSnapshots(root: string, snapshots: readonly unknown[], creators: CreatorCache, locate: Locate | undefined, now: number) {
+  const named = snapshots.map((data, index) => ({ name: `${new Date(now).toISOString().slice(0, 10)}-feed-${String(index + 1).padStart(3, "0")}-${randomUUID()}.json`, data }));
+  for (const { name, data } of named) await atomic(join(root, "x-discovery", name), data);
+  const pending = unmarkedPosts(named, creators);
+  if (!pending.length || !locate) return {};
+  const located = await locatePrompts(locate.provider, pending, { effort: locate.effort, record: locate.record, now: new Date(now) });
+  // Read again right before writing: the excerpt store is shared with the source checks.
+  await atomic(join(root, "x-excerpt-reviews.json"), { ...await readXExcerptReviews(root), ...located.excerpts });
+  return { located: located.located, unlocated: located.none + located.unmatched + located.failed };
+}
+
+/** Posts a trial searched, admitted like a night's search so they can be published (owner,
+ * 2026-11-07). Their availability comes from the trial's capture, so this must run within half
+ * a day of the trial; later, source maintenance has to recheck them first. */
+export async function importTrialPosts(root: string, trials: readonly string[], options: { locate?: Locate; now?: number } = {}) {
+  const creators = await json<CreatorCache>(join(root, "creators.json"), {}), report: { trial: string; posts: number; located?: number; unlocated?: number }[] = [];
+  for (const trial of trials) {
+    if (!/^[\w-]+$/.test(trial)) throw new Error(`Invalid trial id: ${trial}`);
+    const directory = join(root, "trials", trial, "x-discovery");
+    const snapshots = await Promise.all((await readdir(directory)).filter(name => name.endsWith(".json")).sort()
+      .map(async name => JSON.parse(await readFile(join(directory, name), "utf8")) as { posts?: unknown[] }));
+    report.push({ trial, posts: snapshots.reduce((sum, data) => sum + (data.posts?.length ?? 0), 0),
+      ...await admitSnapshots(root, snapshots, creators, options.locate, options.now ?? Date.now()) });
   }
   return report;
 }
