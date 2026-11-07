@@ -179,7 +179,6 @@
 - **分工**：研发负责人主导设计、实现、模拟器测试和安装交付准备；用户给 brief、选择设计和真机验收。可使用当前电脑资源；签名交付仍需实际 Apple 账号／团队与设备条件。
 - **替代**：D-07 的视觉定稿。设计确认成为路线图 M0；后续是可运行版本、真机验收、上架。
 
-
 ## D-25：确认「轻盈发现」，启动原生实现（2026-10-11）
 
 用户明确选择小红书的双列浏览结构与 Cosmos 的克制、有品位感，授权开始落地。D-24 的设计确认关口已通过。原生 iOS 与尽量使用系统组件是硬要求；App Store 编辑推荐的质量是打磨目标，不是保证推荐的承诺。
@@ -191,7 +190,6 @@
 0.1.0 使用内置原创内容，不依赖线上服务。图像实际输出、文本编辑示例、程序视频与网页封面均明确标注。允许在独立预览页用 WebKit 打开仓库内自制网页作品；不承载 App 主界面、不执行采集来的网页代码，禁用 JavaScript。
 
 轻量采集首个适配器读取 prompts.chat 的公开 CC0 CSV，并在仓库外保留草稿、作者与版本；发布命令目前仅生成本地版本化候选，不宣称已有线上发布／客户端远程刷新。M1/M2 尚需真实视频与更多网页案例、编辑后的多来源内容、线上更新与发布准备。
-
 
 ## D-27：从设计预览转入真实内容闭环（2026-10-11）
 
@@ -214,7 +212,6 @@
 ## D-31 文本编辑与预览对应关系
 
 增加 12 条具有具体输入、用途和示例的原创文本 Prompt。社区角色提示词先留在候选库，只有经过编辑的标题、示例和封面才进入发布；编辑记录保存在仓库外并绑定来源正文指纹。网页社区条目还需要实际作品与预览图。图片支持编辑指定与正文对应的预览，不把同帖任意首图默认为该 Prompt 的结果。线上版本排除内置程序视频和占位图，离线原创展示仍如实标注。
-
 
 ## D-32 内容回滚保留下架记录并暂停自动发布
 
@@ -262,7 +259,6 @@
 
 本轮沿用 v1 的 1,000 条和 10 MB 兼容边界，超量明确失败保留线上旧版；后续在触及容量前扩展协议。每日状态区分新增内容与相同目录重跑。
 
-
 ## D-42：国际化、创作者和 Skill 进入下一阶段完整交付范围（2026-10-12）
 
 负责人明确认为现有版本只达到勉强及格，要求持续推进更完整的产品，而非继续围绕初版数量和口号修补。本阶段覆盖完整创作者链路、Prompt 原文与可切换译文、九个 locale 的界面、Skill 及更多来源。此决定替代此前「Skill 后置、日语后续扩展」的本轮范围限制，不改变原生 iOS、轻盈发现、无复杂运营 Agent 的方向。
@@ -289,7 +285,6 @@
 ## D-44：精确语义修正与完整离线语言包（2026-10-12）
 
 语义审核发现的译文错误按源内容、语言、字段和输出哈希精确失效；受保护片段改变后，同一个错误不能从旧缓存或上一版目录复活。精确修正单独记录为代理审核来源，不冒充原批处理模型结果。每日处理继承外部已完成目录时，仍检查源指纹和全部字段，损坏目录阻止发布。30条原创内容的九语言记录随`studio-005`离线包交付；第三方内容和翻译只在外部存储。
-
 
 ## D-45：以 Granola 的纸张式设计语言重做界面，旧内容更新过程必须可见（2026-10-12）
 
@@ -404,26 +399,21 @@ ClawHub 使用公开 API，并从三个作者／名称组合的白名单开始�
 
 用户明确纠正：借鉴 YouMind 的技术和形态不代表直接使用其聚合数据。定时主链停止 OpenLab 仓库和归档增量，历史内容保留原署名与收藏身份；新供给优先 X 官方 API、作者 GitHub Skill 和允许接入的直接来源。独立主题搜索共享预算但不共享游标。Skill 的完整目录与 Prompt 的复制交接分开处理；原生新增使用面板，目标 App 的预填、打开和生成不混为一谈。此决定取代旧方案以 OpenLab 导出为主的供给路径，完成范围及待办见 independent-pipeline.md。
 
-
 ### 2026-10-13：独立 X 发布与使用入口
 
 X 原始数据通过官方 API 自采，保留原帖、作者、附件关联和时间；完整性、编辑与预览审核均通过才进入目录。审批绑定来源版本，定期复查明确不可用的帖子并加入移除清单。每 6 小时运行调度，搜索、翻译和审核保持 UTC 日共享预算，复查另限 2 请求/200 帖。客户端增加原帖展开与视频官方工具入口，不宣称自动填入或自动生成。该决定扩展此前仅保留 X 草稿的实现，不恢复 OpenLab 新增采集。
-
 
 ### 2026-10-13：视频预览审核只声明可观测的范围
 
 实跑发现旧规则要求六张采样帧证明完整运镜、动作时间和音频，使画面相关的普通视频持续暂缓。审核目标明确为原帖视频的画面相关性：主体、场景、风格、可见叙事顺序；不承诺逐条复现 Prompt。若内容的主要价值依赖方言、口型同步或精确动作而采样不能证明，仍暂缓。相关但带普通音乐/运镜要求的场景不因此一律拒绝。视频审批身份加入策略版本，保留旧证据与付费记录，重新审核；图片审批身份保持兼容。上线另验真实 MP4 播放，不将播放成功当成音频语义核验。
 
-
 ## 2026-10-13：原帖字段必须纳入客户端共享协议验收
 
 405条生产模拟器升级发现：`Prompt.Source`已经能解码原帖，但v2严格白名单遗漏`source.post`，导致0.4.1仍保留旧缓存并显示更新失败。0.4.2补齐字段、数字ID／正文容量／时间戳与未知字段校验，并把合成原帖加入TypeScript生成的共享fixture。旧开发安装包需要升级客户端才能读取带原帖的新目录，不能靠重复服务器发布修复；当前没有公开商店用户。本轮只安装专用模拟器。以后新增目录字段必须先通过两端共享fixture和真实在线升级，再认定客户端可用。
 
-
 ## 2026-10-13：从真实漏收样本修复正文识别
 
 352条已抓取帖子重放发现：向下箭头／分号标题和“GPT Image on ChatGPT”工具宿主名称导致完整正文漏收。只接受明确占据一行的标题装饰和有限模型前缀，正文不生成、不改写；营销中的“评论领取”或“回复里有Prompt”不当成指令。ChatGPT／Claude名称作为弱证据，具体输出模型与实际正文优先；真实的图片与视频冲突仍暂缓。修复在同一批快照上从37增至62个完整草稿，原37个正文指纹和来源版本不变。新增25个是待审核草稿，不能当成已发布内容。
-
 
 ## 2026-10-13：原生X文案编辑保持来源版本绑定
 
@@ -438,7 +428,6 @@ X 原始数据通过官方 API 自采，保留原帖、作者、附件关联和�
 新增按公开Prompt回复线索跟进的会话搜索，查询约束账号，但以返回的数字作者ID、conversation_id、逐级父帖引用及时间再次核验。普通主题与回复恢复交替使用同一个请求账本；失败预约仍阻断当日，不另建隐性额度。按页保存原始响应；分页未完成、父帖缺失、循环、换作者、正文冲突均不能成为完整来源。帖子不拼接，不把作品主帖的正文伪造成回复正文。
 
 回复链快照暂存于独立目录，不进入当前单帖发布协议；后续需同时完成多帖来源展示、逐帖可用性复查、编辑与预览审核后发布。不能把抓到回复或验证父子关系宣传为新增可用Prompt。
-
 
 ### 2026-10-13：回复正文与作品原帖分开署名和复查
 
@@ -458,7 +447,6 @@ X 原始数据通过官方 API 自采，保留原帖、作者、附件关联和�
 
 真实目录验收发现 Supabase 官方 Skill 被正文提及它的 Expo 内容压后。搜索采用可解释的本地字段优先级，保留同级顺序和全部匹配项；不引入远程语义搜索或个性化推荐。大字和实际 VoiceOver 验收保留可复核证据，不只依据默认字号截图。
 
-
 ### 2026-10-13：以作者原始包补齐非开发 Skill 用途
 
 供给扩展优先补充写作、内容制作与营销等日常任务，直接纳入 Corey Haines 作者仓库的公开 Skill 包。沿用已有固定版本采集、审核和预算，不从聚合站二次搬运，也不按仓库总包数宣传上线数量。安装交接与采集使用同一明确根目录。
@@ -474,7 +462,6 @@ X 原始数据通过官方 API 自采，保留原帖、作者、附件关联和�
 ### 2026-10-13：变量填写只修改当前语言的个人草稿
 
 原生使用面板和完整编辑器提供可选的本地变量表单，显示变量所在原句和完整结果；取消不写入，留空保留原 token，重复 token 同步替换，用户填入的字符不再次解析。按当前语言保存草稿，复制、分享和工具交接使用同一份准备后正文。Skill、结构化文档、代码块、链接和明显章节标签不生成表单；超大或过多字段回到完整编辑器。识别保持保守，不声称覆盖任意提示词语法；不上传填写内容、不改来源或翻译记录。
-
 
 ### 2026-10-13：研发主线回到连续使用体验
 
@@ -496,13 +483,11 @@ Duo 实跑发现内外屏切换会丢失系统默认管理的选区。iOS 18 起
 
 随后发现外屏横向加软件键盘时，固定复制栏挤掉可见输入行。iOS 27.1 的编辑复制改用带文字和图标的系统 bottomBar 项，交由系统竖排及溢出；旧系统保留原操作栏。真实键盘输入、溢出菜单复制与剪贴板一致性已复验。UI 布局断言按编辑器、窗口与键盘的实际交集衡量，不能用复制按钮的 Y 坐标假设底栏位置。
 
-
 ### 2026-10-13：按组合输入实证收窄选区修复
 
 替代上方 TextSelection binding 的实现决定，保留其失败与调查记录。最大字号、简体拼音键盘的完整输入检查发现新增选区绑定会丢失中间字符；只移除 selection 参数、保留同一编辑子视图及 FocusState 后，两段全文断言恢复。进一步用屏幕键盘验证了所选单词经外屏→展开→半折→旋转→展开后被准确替换，以及尚未提交的拼音经收起后仍能选词提交。最终采用 StablePromptEditor 的系统默认 TextEditor 与 FocusState，由系统管理选区和 marked input；无需新增 UIKit 桥接、不强制结束输入法组合、不监听姿态抢焦点，最低系统仍为 iOS17。
 
 Duo UI 测试必须将触摸和坐标绑定到目标元素所在 Window。实际失败记录中 App 根坐标发往 display0，原生退出弹窗却位于 display3；该路由错误与产品行为分开记录。截图遍历所有 XCUIScreen，标明屏幕序号并人工确认活动屏，避免将关闭外屏的黑图当作展开界面证据。
-
 
 ### 2026-10-13：复制必须在软件键盘显示时可达
 
@@ -532,18 +517,15 @@ Duo UI 测试必须将触摸和坐标绑定到目标元素所在 Window。实际
 
 14点自然采集在写终态时遇到内盘空间不足，根状态仍显示上一轮成功。存储已迁SSD，但迁移不能修复这一错误呈现。沿用原内容锁和日志，在锁内先持久化新运行身份，再执行采集；开始写失败不调用外部服务，结束写失败不掩盖原始异常。保持发布、预算和恢复协议不变，不新增监控服务。磁盘不可写且不能删除时仍可能留旧文件，强杀进程也可能留运行中状态；明确要求结合进程、日志和排程退出判断，不保证无法持久化时仍有可靠的磁盘状态。
 
-
 ## 2026-10-13：发现页辅助操作的最小改进与证据边界
 
 发现页原生工具栏位于独立的可访问性容器，平面遍历可达但操作较长。保留现有导航、工具栏、视觉和数据层，仅给现有Prompix标题增加九语搜索／设置自定义辅助操作，两者复用原来的弹层状态。依据是Apple的 [accessibilityAction](https://developer.apple.com/documentation/swiftui/view/accessibilityaction(named:_:)) 与 [WWDC19辅助功能讲座](https://developer.apple.com/videos/play/wwdc2019/250/)，不通过全局排序或重写导航来解决。
 
 真实朗读／选动作、AX调用打开页面、模拟注入手势分别留证。展开和收起的注入双击以及键盘激活未通过，不把它们改写成通过或推断为Apple已确认缺陷；公开AX动作调用已打开实际页面。版本构建号增为19，保留18的签名候选及历史证据，避免仅凭相同营销版本混同二进制。
 
-
 ### 2026-10-13：商店草稿与公开发行分开验收
 
 沿用原Bundle ID创建Prompix的App Store Connect记录，主语言采用英语（美国），分类采用图形和设计／效率；先保存中英文已审文案、无需登录的审核说明和手动发布设置。账号中已有的交易商状态只记录观察，不根据免费或开源推断法律身份。真实联系人、版权、地区、年龄与隐私问卷及最终素材仍分别核对；保存草稿不等于用户认可当前产品、上传二进制或提交审核。构建20的本地签名包单独保留，不重装用户手机或替换可操作的Duo验收现场。
-
 
 ### 2026-10-13：商店本地化依据实际保存与回读
 
@@ -567,7 +549,6 @@ Duo UI 测试必须将触摸和坐标绑定到目标元素所在 Window。实际
 
 变量填写后的保存失败只把新正文留在使用面板内；直接完成或下滑关闭会丢失这份唯一副本。最小修正是在保存失败期间禁止交互式关闭，完成时沿用已有原生复制／放弃／继续三项确认。不新增存储层，不让失败正文进入父编辑器的自动保存缓存，也不改变正常保存和工具跳转。当前用户Duo验收现场保持不变，改动在独立普通手机模拟器测试后进入下一候选。
 
-
 ## 2026-10-14：先完善普通 iPhone，Cosmos 取长补短
 
 用户明确将普通 iPhone 体验置于折叠屏专项之前，授权使用 WebDriverAgent 操作其已安装的 Cosmos。完成设备端 XCTest 授权及用户自行登录后，按真实截图和录像研究引导、发现、详情、收藏和搜索；所有第三方媒体、账号资料及录屏留在仓库外，不移入产品资源。
@@ -575,7 +556,6 @@ Duo UI 测试必须将触摸和坐标绑定到目标元素所在 Window。实际
 新视觉沿用绿色，改用系统无衬线、浅底、细下划线分类和更轻的作品卡。首次三页引导介绍发现、收藏及工具交接，用户可跳过、完成后不再自动出现、在设置重放。视图呈现状态独立于持久化完成标志，避免偏好读取覆盖使关闭动作失效；不重置收藏、草稿或缓存。现有 SwiftUI 导航、图库、作者身份与使用逻辑继续复用。
 
 用户进一步指出 Cosmos 底部弹窗不够好，不能机械照搬。Prompix 使用系统大尺寸 Sheet、原生圆角／拖动指示和键盘避让；使用面板的标题与说明合为无分隔线信息块，工具选择和准备动作保持原生列表，底部只有一项主要操作。保存失败时仍保留已有禁止误关闭和显式退出保护。视觉相似、主观评价与旧测试不能代替本轮真实验收，也不承诺获得编辑推荐。
-
 
 ## 2026-10-14：按真机反馈恢复连续内容流与图片原位返回
 
@@ -585,7 +565,6 @@ Duo UI 测试必须将触摸和坐标绑定到目标元素所在 Window。实际
 
 图片预览复用已有缩放和分页。根据 [Apple WWDC24 系统转场讲座](https://developer.apple.com/videos/play/wwdc2024/10145/)，iOS 18+ 使用全屏封面与来源图片的原生 zoom 交互返回；拟合尺寸下把单指拖动交给分页和转场，放大后保留图片平移并禁止误关闭。iOS 17／减少动态效果使用向下关闭回退。保留可访问的关闭按钮与分页操作，不把正常缩放、轻拖取消和完成关闭混为同一种手势。
 
-
 ## 2026-10-14：专题归入发现，搜索与阅读采用各自的原生状态
 
 根据用户反馈，专题列表不再占用独立 Tab；发现页用途栏仍为完整入口。搜索覆盖已发布目录中的全部类型、Skill 和作者，复用现有联网版本更新与本机索引匹配，不新增实时全网代理或服务器搜索。依照 Apple 2026 搜索设计讲座，iOS 27 使用原生 prominent 独立按钮，旧系统分级回退；收藏自己的局部搜索与全局搜索各自拥有控件，避免切换时丢失输入。
@@ -594,7 +573,6 @@ Duo UI 测试必须将触摸和坐标绑定到目标元素所在 Window。实际
 
 参考真实 Cosmos 详情的收起行为，保留 Prompix 编辑、复制、使用三个直接操作；借助原生 GlassEffectContainer 与 glassEffectID 缩合，VoiceOver 不收起、减少动态效果不形变。来源、许可、示例和 Skill 文件移入明确的披露组，保留原有能力。详见[实现与验收](immersive-reading-0.6.0.md)。
 
-
 ## 2026-10-14：0.6.1 的界面精简与连续导航
 
 - 用户验收要求优先：发现页移除重复搜索入口，独立 Search Tab 是全局搜索入口。瀑布流移除可见书签按钮；详情与原生长按菜单保留收藏，九语言空态说明同步调整。
@@ -602,18 +580,15 @@ Duo UI 测试必须将触摸和坐标绑定到目标元素所在 Window。实际
 - 原生交互式 zoom 返回保留。玻璃主按钮的 tint 从 SwiftUI 页面 colorScheme 解析为固定 RGB 后交给材质，避免 UIColor 动态提供器在材质转场快照中切换强调色。保留 Liquid Glass 交互与滚动收缩；对应文字也按同一页面外观解析。依据：[Apple Liquid Glass](https://developer.apple.com/documentation/SwiftUI/Applying-Liquid-Glass-to-custom-views)。用户截图亮色与深色强调色相符，具体 UIKit 内部触发机制未声称得到系统级证明。
 - 设置页使用原生 plain List、统一纸色背景和分组留白，去掉嵌套白卡片；操作、缓存保护、来源与隐私入口保留。
 
-
 ## 2026-10-14：0.6.2 按高度分配瀑布流
 
 用户在 Heather Green 创作者页发现右列大面积空白。根因是 `PromptGrid` 以索引取模轮流分列，与卡片高度无关。改用稳定的最短列优先分配，预览高度复用卡片的同一比例约束，标题按当前字号、列宽和两行限制测算，计入标题间距与卡片间距。保持 LazyVStack 惰性渲染；不依赖异步图片尺寸或在显示后反复测量重排。追加内容不改变已有卡片所属列，列宽或字号变化时重新分配。发现、专题、收藏、搜索、创作者、相关内容共用修正。VoiceOver 与辅助大字体继续使用原顺序单列。
 
 标准贪心布局保留内容先后顺序和每张图的比例，末尾允许不足一张卡片的自然高度差，不通过裁切图片或打乱既有排序强制两列等高。复用现有两/四列和不对称区域宽度计算；不扩展折叠屏范围。
 
-
 ## 2026-10-14：0.6.3 纠正详情页 Tab Bar 行为
 
 用户明确：Prompt/Skill 详情阅读时隐藏 Tab Bar，返回列表时恢复。此项取代0.6.1关于详情页保持 Tab 可见的决定；创作者作品列表仍保留导航 Tab。使用系统 toolbar 可见性随 NavigationStack 返回恢复，不使用 onAppear/onDisappear 全局切换。保留独立搜索、玻璃操作条、转场配色及瀑布流修正。验收覆盖手势取消仍停在详情且无 Tab、手势完成返回搜索且 Tab 可点击、创作者→详情→按钮返回恢复 Tab。
-
 
 ### 2026-10-14：详情覆盖根 Tab，保留交互返回的背景
 
@@ -652,7 +627,6 @@ Duo UI 测试必须将触摸和坐标绑定到目标元素所在 Window。实际
 - 在线搜索词会传给 API 完成当前查询，不能沿用“所有搜索均本地”的旧说明。正式 Feed 日志禁用自动请求记录并脱敏查询参数，数据库不保存搜索历史，官网和 App 隐私说明同步更新。
 - 采集依然由维护 Mac 的 launchd 排程执行，具备持久锁、预算和失败恢复，但不冒充高可用云调度；云端数据库/API 可独立提供已发布内容。账户、订阅、团队和个人云同步不属于此次已实现范围。
 
-
 ## 2026-10-15：分页详情从已有卡片渐进呈现
 
 详情首帧必须复用列表的 ContentPreview 和已解码图片，沿用原生 zoom 转场；禁止用全屏居中进度条替代已知内容。正文未到达时只显示局部静态骨架，不构造可保存/复制的假 Prompt。正文完成前不开放相关操作，失败原位重试；只有版本与语言满足要求的完整缓存可直接呈现。iOS 18+ 使用系统 ScrollPosition 维持阶段切换位置，不重写分页或导航架构。见[实现与验收](progressive-detail-0.7.1.md)。
@@ -660,7 +634,6 @@ Duo UI 测试必须将触摸和坐标绑定到目标元素所在 Window。实际
 ## 2026-10-15 — X 优先的新来源发现、首次发布与独立故障监控
 
 按用户确认，将发现及审核资源优先分配给 X 和图片、视频、写作、网页、创意 Skill；不再仅刷新固定来源。X 外链指向的公开 GitHub 仓库按独立许可证、固定版本及完整包文件校验接入；发现权限不自动赋予发布资格。每日新增目标 50–100，数据库事务强制最多 100；不降低质量标准补足数量。按首次成功发布建立最新流，旧内容补译不算新增。云端监控独立检测 Mac 漏跑并发送邮件，故障去重、恢复通知和投递重试都有持久状态。方案及验收证据见 [本轮记录](fresh-discovery.md)。
-
 
 ## 2026-10-15：额度放在质量门禁后，监控区分发布与新增
 
@@ -680,11 +653,9 @@ Duo UI 测试必须将触摸和坐标绑定到目标元素所在 Window。实际
 
 详情末尾提供同用途、同模型、同作者的查询路径，使用现有目录 API 与独立分页状态；不宣称是个性化或视觉相似推荐。新交互不增加首页模块、底部 Tab 或卡片图标。私人项目收藏集、最近使用和系统级快捷复用作为后续产品实验，不在本轮扩大实现范围。来源、调研方式与验证边界见 [0.8.2 记录](discovery-polish-0.8.2.md)。
 
-
 ## 2026-10-15：恢复首页滚动顶栏且保留刷新布局
 
 0.8.1 调整原生刷新时移除了首页 `readingChrome`，导致0.8.2仍固定展示顶栏。本轮复用已有方向阈值、回弹抑制、VoiceOver与减少动态效果处理，不改详情滚动状态机。首页保留恒定高度的透明安全区用于原生刷新，顶栏独立叠放并滑出；内容可绘制到其后方，避免以改变安全区高度的方式制造偏移和跳动。新增回归测试同时验证收起、反向展开、真实点击设置、分类重置，并保留原生下拉刷新测试。
-
 
 ## 2026-10-15：以展开卡片建立原生光谱视觉语言
 
@@ -718,11 +689,9 @@ Duo UI 测试必须将触摸和坐标绑定到目标元素所在 Window。实际
 
 用户确认移动端以图片为重心，推翻0.8.1默认严格最新导致整批纯文字占据前几屏的行为。默认信息流在服务端按4条视觉/1条文字穿插，两类内部保留新鲜度；筛选菜单保留严格最新。独立双游标保持快照分页，不在客户端对有限页重排。X搜索与编辑审核向视觉内容倾斜，标准日常发布要求新无图文字每天最多10条且不超过20%；来源和质量门禁不降低，已发布文字和收藏继续保留。详见visual-feed-0.11.0.md。
 
-
 ## 2026-10-16：以球体粒子和连续光谱统一局部反馈（0.12.0）
 
 采用用户本次指定的 FIELD 蓝／紫／浅粉色板，替代 0.9.1 的石墨绿主操作色；保留中性阅读面、当前 icon 和原生 Liquid Glass。球体阵列中的光、位移与体积按连续波变化，作为实际请求中的局部 activity，不增加全屏等待或伪进度。失败使用静止形态和紧凑恢复行；首屏失败直接呈现可用离线内容，重试期间不撤掉这些内容。复用现有 store、缓存、限流和请求生命周期，不为视觉升级重构服务架构。后续 UI 工作必须阅读 [当前设计语言](design-language.md)，该入口同步加入 AGENTS.md。验证边界见 [本轮记录](quantum-feedback-0.12.0.md)。
-
 
 ## 2026-10-17：以轻翻页取代圆圈粒子
 
@@ -738,11 +707,9 @@ Duo UI 测试必须将触摸和坐标绑定到目标元素所在 Window。实际
 
 现有官方维护链路跳过未曾通过审核的精确版本拒绝／暂缓候选；保留已审核来源的检查，并按最近一次实际核验时间排序。十二小时内完整独立原帖发现结果复用原始核验时间，不能延长有效期或覆盖较新的撤回状态；回复链及其祖先仍联合复查。第三方缺失 ID 不作为删除证明。生产服务商保持不变，真实注册、样本对照、多轮可靠性、分页配额和出处语义是切换前置条件。详见 [X provider pilot](x-provider-pilot.md)。
 
-
 ## 2026-10-17：X 第三方实测以检索覆盖作为切换关口
 
 TwitterAPI.io 已完成免费账户注册和真实读取测试。45 个已知帖子对应的39条内容，来源字段和实际 Prompt 提取均匹配；日期窗口改为 UTC 秒后，80条历史结果全部命中指定月份。但相同窗口的图片、视频、网页搜索分别只覆盖官方首批结果的11/20、15/20、2/4，漏掉的15个不同帖子又都能按ID查回。因此不把低单价或完整正文查询等同于发现能力合格，本轮不切换生产来源。旧内容复查的拒绝项跳过、新鲜来源复用与优先级优化可独立部署；来源时效和下架门槛不放宽。后续混合读取方案须单独验证召回、来源获取凭证和全路径费用上限，详见 `x-provider-pilot.md`。
-
 
 ## 2026-10-17：官方 X 读取也接入统一美元预算
 
@@ -751,7 +718,6 @@ TwitterAPI.io 已完成免费账户注册和真实读取测试。45 个已知帖
 ## 2026-10-17 — Separate low-cost X verification from acquisition
 
 Use an explicit, budgeted hybrid option for existing standalone X sources: exact extractor/revision/attribution matches can refresh availability using TwitterAPI.io; missing or changed sources are withheld and sent to official verification. Only official unavailable responses persist removal. Reply chains stay on joint official lookups. Preserve original official acquisition files and store third-party verification evidence separately. Keep the 12-hour maintenance target and 24-hour publication gate. Search remains official while third-party recall gaps are unresolved; do not represent this maintenance change as a complete $10–20/month migration. See [implementation and evidence](x-hybrid-maintenance.md).
-
 
 ## 2026-10-17：低价多路发现与官方获取分离
 
@@ -829,7 +795,6 @@ Evaluate TweetAPI's documented 200-ID, one-unit lookup as an isolated read pilot
 - Keep regional withholding and not-authorized results distinct from explicit resource-not-found. Withhold without a persistent deletion marker; only fresh valid evidence can restore availability, and operator holds still require explicit review.
 - Validate response counts/cursors before filtering restricted discovery results, and retain existing global request budgets when the added fields change request fingerprints.
 
-
 ## 2026-10-18：付费周期请求额度与日历月现金账本分别保护
 
 - RapidAPI Basic 的请求额度按核实的订阅起止时间计算，不能借日历月切换补出额外1,000次；首月试用、失败、未决请求全部计入，现金仍统一进入既有月度账本。
@@ -847,7 +812,6 @@ Evaluate TweetAPI's documented 200-ID, one-unit lookup as an isolated read pilot
 
 - 已知回复链及根帖不能用近期第三方单帖观察推迟官方整链复查，完整回复也不能借用单帖的有效状态。
 - 仍遵守现有官方每日额度；额度恢复后核验，成功前暂缓展示，不修改旧时间戳、质量暂缓记录或付费历史来恢复内容。
-
 
 ## 2026-10-18：全第三方获取及500条历史样本验收
 
@@ -885,7 +849,6 @@ Evaluate TweetAPI's documented 200-ID, one-unit lookup as an isolated read pilot
 完整提示词可以包含用户需填写的日期、城市、文字或需自行上传的人像／产品参考图，不因这些正常输入未提供而暂缓。必须仍有完整创作方法和真实来源预览，并在使用建议中说明输入；依赖缺失的特定前序分镜、原文或不可访问说明仍暂缓。旧审核及请求账本保留，不批量重置或自动放行。
 
 同一轮真实JSON模板还暴露渲染引擎配置被要求翻译成中文的问题。`render_engine`、`renderEngine`和`renderer`按与`model`相同的技术参数规则原样保留，邻近场景说明仍翻译；不放宽整段自然语言的目标文字校验。
-
 
 ### 2026-10-18：在翻译阶段执行显示长度与画面文字约束
 
@@ -926,7 +889,6 @@ A common transport outage must stop historical searching instead of draining all
 ## 2026-10-18 — Original + Chinese and independent ingest stages
 
 New history queue ingestion requires original content plus validated Simplified Chinese. Other locales are separate revision-bound requests; missing optional languages do not block acceptance, and rejected optional outputs remain unavailable. Collection, exact-source/full-media review, Chinese translation and independent semantic review use durable private Postgres jobs with fenced leases, global concurrency and retained attempts. Unknown external results require reconciliation rather than automatic replay. Test existing data with cold Chinese/model checks before approving any 10,000-item run; keep daily publication limits and the paused original cohort intact.
-
 
 ## 2026-10-19：历史补库按独立队列恢复
 
@@ -972,7 +934,6 @@ Seed freshness rechecks use an additive availability overlay. Preserve frozen so
 
 补库owner暂缓记录可先写入campaign独立锁保护的quality-holds，再与共享暂缓取并集排除计数，避免公开日任务持锁期间无法及时剔除已知问题。共享记录仍需在其锁释放后同步，不清除任一范围的暂缓。
 
-
 ### 2026-10-19: Consume qualified history independently of collection
 
 Add a publication consumer for fully verified independent-queue outputs, preserving original
@@ -980,7 +941,6 @@ and Chinese without invoking the nine-language pipeline. Daily publication can p
 queue after source maintenance. Share existing public limits and immutable-release recovery;
 do not reinterpret the +1,000 collection target as permission to bulk-publish. Persist live
 campaign quality-hold scopes so daily recovery cannot bypass a newer private owner finding.
-
 
 ### 2026-10-19: Bound publisher transfer and reuse immutable content
 
@@ -990,7 +950,6 @@ while reading live removals, and avoid resending existing immutable revision bod
 staging another release. This addresses observed publisher transfer stalls without changing
 public API pagination or publication quotas.
 
-
 For historical publication, availability adoption uses the exact raw source candidate rather
 than its mirrored presentation. Persist selected original snapshots into the ordinary maintenance
 intake before activation so the published IDs remain eligible for scheduled source rechecks.
@@ -998,7 +957,6 @@ intake before activation so the published IDs remain eligible for scheduled sour
 ## 2026-10-19: Separate historical inventory publication from daily discovery cadence
 
 The owner explicitly authorized publishing all eligible reviewed historical inventory. The 100/day discovery ceiling must not delay this inventory. A private, expiring authorization freezes the allowed content IDs; selection and transaction activation both honor that same set. Unlisted first publications retain the ordinary cap, and historical activations do not consume normal discovery slots. Existing timestamps, failed attempts, quality holds, source checks and review artifacts remain intact. Seed and independent-queue outputs are revalidated against their original editorial, media and translation evidence; verified third-party availability overlays refresh timestamps only in memory. Missing or changed sources remain withheld. No new collection/model spend is implied by bulk publication.
-
 
 ### 2026-10-19: Bound emoji heading parsing without dropping source content
 
@@ -1016,11 +974,9 @@ Historical translation now makes one attempt per segment batch when the provider
 
 A completed model result must not be discarded solely because an earlier lease heartbeat timed out. Revalidate the same unexpired lease token before completion. When completion acknowledgement fails, read back both job and attempt and require identical output, attempt number, identity and token before considering the completion confirmed. Otherwise retain reconciliation; never replay the model handler or blindly retry an uncertain transaction. This addresses transport ambiguity without extending leases after expiry or weakening the global worker bound.
 
-
 ## 2026-10-19 — Check localized prose completeness separately from semantic fidelity
 
 The per-item semantic audit must also check ordinary untranslated words and malformed mixed-language prose in all localized fields, including unchanged generated metadata. This uses the existing bounded gpt-6.1-sol call and exact source/translation evidence, preserving names, units, code, placeholders and explicitly required lettering/dialogue. Existing artifacts and owner holds remain immutable; this policy affects new review identities and does not retroactively approve held content.
-
 
 ## 2026-10-19 — 收拢补库，保留可重复的按量阶段
 
@@ -1033,7 +989,6 @@ The daily retention pass only read its shared visual cache; historical batch dec
 ### 2026-10-19：四屏视觉引导与强制三项兴趣
 
 用户要求提高引导的视觉表现，并明确取消跳过、必须选三项。0.14.0 采用随包原创作品、七色玻璃展开、轻浮动和逐层入场；不新增远端媒体依赖。第三屏把复杂试用面板收敛为复制完整 Prompt 并打开 ChatGPT，明确需粘贴；详情的完整编辑和工具选择能力保留。首次和设置重放都在兴趣成功持久化后完成，已有完成标记不失效，设置兴趣仍不限数量。隐私说明移回设置，不改本机推荐存储边界。首次引导作为根画面直接显示，避免首页先闪出再覆盖，也避免提前记录曝光。动态遵守减少动态效果、低电量、前后台及离屏限制；不会声称达到苹果编辑推荐的客观门槛。
-
 
 ### 2026-10-19：引导与 App Icon 同源，收敛常规字号验收
 
@@ -1082,11 +1037,9 @@ A transient database timeout stopped both campaign queue claiming and inventory 
 
 A second timeout occurred at COMMIT, requiring outcome lookup rather than blind retry. Claim reservations now retain a token outside the transaction and reconcile it behind the control lock before any handler starts. Publication eligibility shares the campaign's merged freshness evidence, fixing a qualified item deferred solely by an older shared source version.
 
-
 ### 2026-10-21 — Chinese metadata reuse is optional
 
 Do not abort historical batches when approved Chinese metadata contains untranslated bracket guidance. Skip only the cache-seeding optimization and require normal translation and semantic review. Report unrelated queue failures by stage; preserve unknown attempts, fees and review circuit limits.
-
 
 ### 2026-10-21 — One complete source per historical visual request
 
@@ -1218,7 +1171,6 @@ The first screen of discovery is now all work. The creator rail and the use rail
 
 About 700 collected, reviewed and translated history items never went live because the independent semantic review held their Simplified Chinese text. They are translated again with each item's findings attached to the quoted segment, then reviewed again in a separate call; everything else (editorial and visual evidence, source checks, deduplication, holds, quota) still passes through the history publisher. The Codex gpt-6 models used by the original translation and semantic stages were unavailable on the subscription, and the owner prefers the metered Anthropic API for this bulk round, so both stages run through the provider layer with the unchanged instructions and validators. New items carry people flags from the combined review; a possible real identifiable person or minor waits for a person instead of being published.
 
-
 ### 2026-11-06 — The pipeline decides every item; no manual review queue
 
 The owner removed the manual review step: every item is decided by the pipeline. Cases that used to wait for a person now fail closed. Model refusals, unclear presentation, insufficient source evidence and any item where minors appear in a sexualized, revealing or swappable-model context are excluded automatically, with the item ID, stage, reason and model logged. An item whose age cannot be judged and that involves a person's presentation is also excluded. Real people are handled by the existing automated rules. An excluded item may be judged again when it is collected or rechecked later. Safety standards do not change; only the human step is gone.
@@ -1319,3 +1271,7 @@ The owner set the default X acquisition to 300 posts a day instead of 600. Trial
 ### 2026-11-07 — The nightly run searches two days back and reviews new X posts once
 
 The nightly run now searches X under the approved rules for the whole Japan day two days earlier: by then likes have settled, deleted posts are gone and authors have posted their reply prompts. The owner chose two days over one or three. A cursor catches up missed nights, at most three days. New X posts are judged by the single review pass alone, replacing the editorial, visual and 2.0 reviews for them; prompts.chat and live items keep the old gates until they are moved too. The old search plan, lead queue and official supplement no longer run nightly.
+
+### 2026-11-07 — Home leads with uses; kind moves beside sort
+
+The owner wanted the home bar to show what Prompix is for, not media types. The bar now scrolls through the uses that hold the most work, nine of them, after 全部; 更多 opens a sheet with every use. The app gives each use its own short name in all nine languages: two or three characters in Chinese and usually one word elsewhere. `facets.json` keeps the full names, and the app falls back to them for a use it does not know. Of the two places the owner offered for image, video and text, the kind went to a 类型 menu beside 推荐 above the feed rather than into the filter button. Video is a large share of the library, and that row is one tap away. The filter button now holds only models, so each choice has one entry point. A kind change clears models, which differ by kind, but keeps the use. Search keeps its kind tabs.

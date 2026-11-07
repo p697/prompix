@@ -41,10 +41,9 @@ import XCTest
         if voiceOver.isEnabled { try voiceOver.disable() }
         app.launchArguments = ["--cached-only", "-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh-Hans"]
         app.launchPrompix()
-        let filter = app.buttons["kind-text"]
-        XCTAssertTrue(filter.waitForExistence(timeout: 10))
-        filter.tap()
-        XCTAssertTrue(filter.isSelected)
+        XCTAssertTrue(app.buttons["discoveryKind"].waitForExistence(timeout: 10))
+        app.chooseKind("kind-text")
+        XCTAssertTrue(app.isKind("kind-text"))
 
         try voiceOver.enable()
         let heading = app.staticTexts["discoveryHeading"]
@@ -72,7 +71,7 @@ import XCTest
         }
         capture("heading-actions-announced")
         try voiceOver.disable()
-        XCTAssertTrue(filter.isSelected, "Selecting an accessibility action must retain the discovery filter.")
+        XCTAssertTrue(app.isKind("kind-text"), "Selecting an accessibility action must retain the discovery filter.")
         let current = try acceptanceDirectory()
         for snapshot in personal {
             XCTAssertTrue(try readPersonalFile(snapshot.name, in: current) == snapshot.data,

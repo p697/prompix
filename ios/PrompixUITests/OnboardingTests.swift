@@ -8,6 +8,20 @@ extension XCUIApplication {
         }
         launch()
     }
+    /// Discovery's kind is a menu in the row above the feed; search keeps its own bar.
+    @MainActor func chooseKind(_ id: String) {
+        let choice = buttons[id]
+        if choice.exists && choice.isHittable { choice.tap(); return }
+        let menu = buttons["discoveryKind"]
+        for _ in 0..<5 { if menu.exists && menu.isHittable { break }; swipeDown() }
+        menu.tap()
+        XCTAssertTrue(choice.waitForExistence(timeout: 3)); choice.tap()
+    }
+    @MainActor func isKind(_ id: String) -> Bool {
+        if buttons[id].exists { return buttons[id].isSelected }
+        let titles = ["kind-all": "全部", "kind-image": "图片", "kind-video": "视频", "kind-text": "文本"]
+        return buttons["discoveryKind"].value as? String == titles[id]
+    }
 }
 
 @MainActor final class OnboardingTests: XCTestCase {

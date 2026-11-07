@@ -138,7 +138,7 @@ import CryptoKit
         let draftsBefore = try? Data(contentsOf: draftsURL)
 
         launch()
-        app.buttons["kind-text"].tap()
+        app.chooseKind("kind-text")
         let card = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'prompt-' ")).firstMatch
         reveal(card)
         let id = String(card.identifier.dropFirst("prompt-".count))
@@ -183,7 +183,7 @@ import CryptoKit
         // No automatic refresh on this relaunch. The Japanese pack remains on
         // disk while startup loads only the preferred Simplified Chinese pack.
         launch()
-        app.buttons["kind-text"].tap()
+        app.chooseKind("kind-text")
         let sameCard = app.buttons["prompt-\(id)"]
         reveal(sameCard)
         sameCard.tap()
@@ -264,7 +264,7 @@ import CryptoKit
             XCTAssertTrue(app.buttons["allCreators"].exists)
         }
         func openOriginalEditor() {
-            app.buttons["kind-text"].tap()
+            app.chooseKind("kind-text")
             let card = app.buttons["prompt-gentle-tarot"]
             reveal(card); card.tap()
             XCTAssertTrue(app.buttons["copyPrompt"].waitForExistence(timeout: 5))
@@ -615,9 +615,9 @@ import CryptoKit
         XCTAssertTrue(firstCard.isHittable, "Discovery still shows real content on the first screen.")
         for index in 0..<4 {
             app.swipeUp()
-            XCTAssertTrue(app.buttons["kind-all"].isHittable)
+            XCTAssertTrue(app.buttons["use-all"].isHittable)
             if index > 0 {
-                let top = app.scrollViews["kindPicker"].frame.maxY + 8
+                let top = app.scrollViews["usePicker"].frame.maxY + 8
                 let bottom = app.frame.maxY - 100
                 let cards = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'prompt-' ")).allElementsBoundByIndex.map(\.frame)
                 for right in [false, true] {
@@ -677,12 +677,12 @@ import CryptoKit
         app.goBackInPrompix()
 
         app.swipeUp(); app.swipeUp()
-        let textChannel = app.buttons["kind-text"]
+        let channels = app.buttons["use-all"]
         app.swipeDown()
-        XCTAssertTrue(textChannel.isHittable, "Content channels return when browsing upward.")
+        XCTAssertTrue(channels.isHittable, "Use channels return when browsing upward.")
         capture("polish-03-pinned-channels")
-        textChannel.tap()
-        XCTAssertTrue(textChannel.isSelected)
+        app.chooseKind("kind-text")
+        XCTAssertTrue(app.isKind("kind-text"))
         let firstNote = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'prompt-' ")).firstMatch
         XCTAssertTrue(firstNote.isHittable, "Changing channel returns to its first result.")
         capture("polish-04-text")
@@ -702,14 +702,14 @@ import CryptoKit
         capture("polish-07-editor")
         app.buttons["完成"].tap()
         app.goBackInPrompix()
-        XCTAssertTrue(app.buttons["kind-text"].isSelected)
+        XCTAssertTrue(app.isKind("kind-text"))
         app.openPrompixCollections()
         capture("polish-08-collections")
         app.goBackInPrompix()
         app.selectPrompixTab("收藏")
         capture("polish-09-saved")
         app.selectPrompixTab("发现")
-        app.buttons["kind-all"].tap()
+        app.chooseKind("kind-all")
         capture("polish-10-home-return")
     }
 
@@ -1374,10 +1374,10 @@ import CryptoKit
             XCTAssertTrue(app.buttons["saveCreator"].waitForExistence(timeout: 5))
             app.goBackInPrompix()
             let kind = iteration.isMultiple(of: 2) ? "kind-text" : "kind-image"
-            app.buttons[kind].tap()
+            app.chooseKind(kind)
             XCTAssertFalse(app.buttons["allCreators"].exists)
             XCTAssertTrue(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'prompt-' ")).firstMatch.exists)
-            app.buttons["kind-all"].tap()
+            app.chooseKind("kind-all")
             XCTAssertTrue(app.buttons["allCreators"].exists)
         }
         capture("after-twenty-creator-and-type-round-trips")
@@ -1385,7 +1385,7 @@ import CryptoKit
 
     func testTranslatedPromptCopyAndDraftIsolation() {
         launch()
-        app.buttons["kind-text"].tap()
+        app.chooseKind("kind-text")
         let prompt = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'prompt-' ")).firstMatch
         reveal(prompt)
         prompt.tap()
@@ -1447,10 +1447,11 @@ extension XCUIApplication {
     @MainActor func openPrompixCollections() {
         selectPrompixTab("发现")
         for _ in 0..<5 {
-            if buttons["kind-all"].isHittable { break }
+            if buttons["use-all"].isHittable { break }
             swipeDown()
         }
-        if buttons["kind-all"].isHittable { buttons["kind-all"].tap() }
+        if buttons["use-all"].isHittable { buttons["use-all"].tap() }
+        if !isKind("kind-all") { chooseKind("kind-all") }
         let all = buttons["allCollections"]
         revealDiscoveryRails()
         for _ in 0..<3 { if all.isHittable { break }; scrollViews["discoveryScroll"].swipeUp(velocity: .slow) }
