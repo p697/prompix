@@ -262,42 +262,35 @@ private struct PaperScreen: ViewModifier {
 
 struct KindPicker: View {
     @Binding var selection: PromptKind?
-    @Binding var skillsOnly: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Namespace private var selectionLine
     @State private var picks = 0
-    private var onSelect: ((PromptKind?, Bool) -> Void)?
-    init(selection: Binding<PromptKind?>, skillsOnly: Binding<Bool> = .constant(false), onSelect: ((PromptKind?, Bool) -> Void)? = nil) {
+    private var onSelect: ((PromptKind?) -> Void)?
+    init(selection: Binding<PromptKind?>, onSelect: ((PromptKind?) -> Void)? = nil) {
         _selection = selection
-        _skillsOnly = skillsOnly
         self.onSelect = onSelect
     }
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 2) {
                 choice(nil, title: String(localized: "全部"))
-                // The work people come for leads: images, then video, text and web.
-                ForEach([PromptKind.image, .video, .text, .web]) { choice($0, title: $0.title) }
-                Button { select(nil, skills: true) } label: {
-                    choiceLabel("Skills", selected: skillsOnly)
-                }.buttonStyle(.plain).accessibilityAddTraits(skillsOnly ? .isSelected : [])
-                    .accessibilityIdentifier("kind-skill")
+                // The work people come for leads: images, then video and text.
+                ForEach([PromptKind.image, .video, .text]) { choice($0, title: $0.title) }
             }.padding(.horizontal, 16)
         }
         .accessibilityIdentifier("kindPicker")
         .sensoryFeedback(.selection, trigger: picks)
         .animation(reduceMotion ? nil : .snappy(duration: 0.24), value: selection)
-        .animation(reduceMotion ? nil : .snappy(duration: 0.24), value: skillsOnly)
     }
-    private func select(_ kind: PromptKind?, skills: Bool) {
-        guard selection != kind || skillsOnly != skills else { return }
+    private func select(_ kind: PromptKind?) {
+        guard selection != kind else { return }
         picks &+= 1
-        if let onSelect { onSelect(kind, skills) }
-        else { selection = kind; skillsOnly = skills }
+        if let onSelect { onSelect(kind) }
+        else { selection = kind }
     }
     private func choice(_ kind: PromptKind?, title: String) -> some View {
-        let selected = selection == kind && !skillsOnly
-        return Button { select(kind, skills: false) } label: {
+        let selected = selection == kind
+        return Button { select(kind) } label: {
             choiceLabel(title, selected: selected)
         }.buttonStyle(.plain)
             .accessibilityAddTraits(selected ? .isSelected : [])

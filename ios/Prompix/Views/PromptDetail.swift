@@ -17,7 +17,6 @@ struct PromptDetail: View {
     @Namespace private var imageTransition
     @State private var playerPresented = false
     @State private var copied = false
-    @State private var webPresented = false
     @State private var language: String?
     @State private var hasChosenLanguage = false
     @State private var pendingLanguage: String?
@@ -135,20 +134,16 @@ struct PromptDetail: View {
             ImageViewer(name: item.media?.image ?? item.artwork, urls: item.media?.galleryURLs ?? [], selection: imagePage)
                 .promptTransitionDestination(id: "image-\(item.id)", in: imageTransition)
         }
-        .sheet(isPresented: $webPresented) {
-            if let filename = WebsiteExamples.files[item.id] { WebExample(filename: filename) }
-        }
         .sheet(isPresented: $playerPresented) { MovieView(filename: item.media?.video, remoteURL: item.media?.videoURL, caption: content.previewLabel) }
     }
     private var hasMediaPreview: Bool {
-        WebsiteExamples.files[item.id] != nil || item.kind == .video || item.media?.image != nil || item.media?.imageURL != nil
+        item.kind == .video || item.media?.image != nil || item.media?.imageURL != nil
     }
     private var previewTitle: String {
-        WebsiteExamples.files[item.id] != nil ? String(localized: "打开网页作品") : item.kind == .video ? String(localized: "播放视频") : String(localized: "放大图片")
+        item.kind == .video ? String(localized: "播放视频") : String(localized: "放大图片")
     }
     private func openPreview(page: Int = 0) {
-        if WebsiteExamples.files[item.id] != nil { webPresented = true }
-        else if item.kind == .video { playerPresented = true }
+        if item.kind == .video { playerPresented = true }
         else { imagePage = page; imagePresented = true }
     }
     @ViewBuilder private var detailLayout: some View {
@@ -184,7 +179,7 @@ struct PromptDetail: View {
             HStack(spacing: 14) {
                 Artwork(item: item).frame(width: 76, height: 86).clipped()
                     .clipShape(RoundedRectangle(cornerRadius: 10)).accessibilityHidden(true)
-                Label(previewTitle, systemImage: item.kind == .video ? "play.circle" : WebsiteExamples.files[item.id] != nil ? "safari" : "arrow.up.left.and.arrow.down.right")
+                Label(previewTitle, systemImage: item.kind == .video ? "play.circle" : "arrow.up.left.and.arrow.down.right")
                     .font(.subheadline.weight(.medium)).multilineTextAlignment(.leading)
                 Spacer(minLength: 0)
             }.padding(10).background(Palette.surface, in: RoundedRectangle(cornerRadius: 14))
@@ -197,11 +192,7 @@ struct PromptDetail: View {
                 .accessibilityIdentifier("previewButton")
                 .promptTransitionSource(id: "image-\(item.id)", in: imageTransition)
                 .overlay(alignment: .bottomTrailing) {
-                    if WebsiteExamples.files[item.id] != nil {
-                        Label(String(localized: "打开作品"), systemImage: "safari").font(.subheadline.weight(.medium))
-                            .padding(.horizontal, 16).padding(.vertical, 12).background(.regularMaterial, in: Capsule()).padding(16)
-                            .allowsHitTesting(false).accessibilityHidden(true)
-                    } else if item.kind == .video {
+                    if item.kind == .video {
                         PrompixIcon.play.image(size: 20).padding(14).background(.regularMaterial, in: Circle()).padding(16)
                             .allowsHitTesting(false).accessibilityHidden(true)
                     }
@@ -232,15 +223,6 @@ struct PromptDetail: View {
                         .accessibilityLabel(String(localized: "内容许可：\(spokenLicense)"))
                     if let date = item.source.post?.date {
                         infoRow(String(localized: "发布"), date.formatted(.dateTime.year().month().day()), mono: true)
-                    }
-                    if let skill = item.skill { SkillInformation(skill: skill).padding(.top, 16) }
-                    if WebsiteExamples.files[item.id] != nil {
-                        Button { webPresented = true } label: {
-                            Text(String(localized: "打开原创网页示例")).font(.subheadline).frame(minHeight: 44)
-                        }.accessibilityIdentifier("webExample")
-                    }
-                    if let demo = item.media?.demoURL {
-                        Link(String(localized: "打开网页示例"), destination: demo).font(.subheadline).frame(minHeight: 44)
                     }
                     Link(destination: SupportLinks.url(.report, contentID: item.id)) {
                         Text(String(localized: "报告问题或申请下架")).font(.footnote).foregroundStyle(Palette.muted).frame(minHeight: 44)
@@ -294,12 +276,10 @@ struct PromptDetail: View {
             .accessibilityElement(children: .combine)
     }
     private var readingActions: some View {
-        ReadingActionBar(isSkill: item.isSkill, collapsed: actionsCollapsed, copied: copied,
-                         copyTitle: item.isSkill && SkillInstall.command(for: item) != nil ? String(localized: "复制安装命令") : nil,
-                         canEdit: !item.isSkill, edit: openEditor, copy: copyShown)
+        ReadingActionBar(collapsed: actionsCollapsed, copied: copied, edit: openEditor, copy: copyShown)
     }
     private func copyShown() {
-        UIPasteboard.general.string = item.isSkill && selectedVersion == nil ? SkillInstall.command(for: item) ?? shownText : shownText
+        UIPasteboard.general.string = shownText
         library.recommendations.record(.use, prompt: item)
         copied = true
     }

@@ -18,7 +18,7 @@ struct InterestSelection: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: typeSize.isAccessibilitySize ? 1 : 2), spacing: 10) {
-                ForEach(InterestCatalog.topics) { topic in
+                ForEach(InterestCatalog.offered) { topic in
                     let selected = library.recommendations.interests.contains(topic.id)
                     Button {
                         var values = library.recommendations.interests

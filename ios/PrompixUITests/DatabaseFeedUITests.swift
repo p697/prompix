@@ -299,7 +299,7 @@ import UIKit
         app.buttons["allCreators"].tap()
         let filter = app.buttons["creatorDirectoryFilter"], sort = app.buttons["creatorDirectorySort"]
         XCTAssertTrue(filter.waitForExistence(timeout: 10)); XCTAssertTrue(filter.isHittable); XCTAssertTrue(sort.isHittable)
-        filter.tap(); app.buttons["网页"].tap()
+        filter.tap(); app.buttons["视频"].tap()
         sort.tap(); app.buttons["作品数量"].tap()
         XCTAssertTrue(app.buttons["creator-fixture-author-0"].waitForExistence(timeout: 10))
         capture("creator-directory-largest-text-dark")

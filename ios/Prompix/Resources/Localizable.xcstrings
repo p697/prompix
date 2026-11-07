@@ -16577,61 +16577,61 @@
         }
       }
     },
-    "搜索 Prompt、Skills 或创作者": {
+    "搜索 Prompt 或创作者": {
       "extractionState": "manual",
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "搜索 Prompt、Skills 或创作者"
+            "value": "搜索 Prompt 或创作者"
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Search prompts, skills or creators"
+            "value": "Search prompts or creators"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "搜尋 Prompt、Skills 或創作者"
+            "value": "搜尋 Prompt 或創作者"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "プロンプト、スキル、クリエイターを検索"
+            "value": "プロンプトやクリエイターを検索"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "프롬프트, 스킬 또는 크리에이터 검색"
+            "value": "프롬프트 또는 크리에이터 검색"
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Buscar prompts, skills o creadores"
+            "value": "Buscar prompts o creadores"
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Buscar prompts, skills ou criadores"
+            "value": "Buscar prompts ou criadores"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Rechercher des prompts, skills ou créateurs"
+            "value": "Rechercher des prompts ou des créateurs"
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Prompts, Skills oder Kreative suchen"
+            "value": "Prompts oder Kreative suchen"
           }
         }
       }

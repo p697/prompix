@@ -4,7 +4,7 @@ import XCTest
 @MainActor final class FeedBrowseTests: XCTestCase {
     func testBundledCollectionsMatchSharedContractAndQueryRejectsUnknownIDs() throws {
         XCTAssertEqual(Set(FeedCollections.definitions.keys), Set(Collection.all.map(\.id)))
-        XCTAssertEqual(FeedCollections.definitions.count, 10)
+        XCTAssertEqual(FeedCollections.definitions.count, 9)
         for collection in Collection.all {
             XCTAssertEqual(try FeedQuery(collection: collection.id).validated().collection, collection.id)
         }

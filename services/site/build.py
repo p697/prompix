@@ -96,11 +96,9 @@ def home(lang):
     c = copy[lang]
     cards = []
     citrus_alt = '阳光下石台上的一颗橘子' if lang == 'zh' else 'An orange on a sunlit stone plinth'
-    web_alt = '原创个人网站作品，标题为 Less, but more you' if lang == 'zh' else 'Original portfolio website headed Less, but more you'
     for i, (kind, artwork, item_id) in enumerate([
         ('image', f'<img src="/assets/citrus.jpg" width="800" height="1000" alt="{citrus_alt}">', 'summer-citrus'),
         ('text', f'<div class="text-art" aria-hidden="true"><span class="spark">✦</span><strong>{c["art"]}</strong><small>{c["kinds"][0]}</small></div>', 'gentle-tarot'),
-        ('web', f'<img src="/assets/portfolio.png" width="800" height="1500" alt="{web_alt}">', 'quiet-portfolio')
     ]):
         cards.append(f'<button class="idea {kind}" data-example="{item_id}" aria-haspopup="dialog"><figure>{artwork}</figure><div><h3>{c["titles"][i]}</h3><div class="meta"><span>{c["small"][i]}</span><span aria-hidden="true">↗</span></div></div></button>')
     def example_text(item_id):
@@ -108,7 +106,7 @@ def home(lang):
         language = 'zh-Hans' if lang == 'zh' else 'en'
         translated = item.get('localization', {}).get('translations', {}).get(language, {})
         return translated.get('prompt', item['prompt'])
-    templates = ''.join(f'<template id="{item_id}"><pre>{e(example_text(item_id))}</pre></template>' for item_id in ['summer-citrus', 'gentle-tarot', 'quiet-portfolio'])
+    templates = ''.join(f'<template id="{item_id}"><pre>{e(example_text(item_id))}</pre></template>' for item_id in ['summer-citrus', 'gentle-tarot'])
     steps = ''.join(f'<li><span class="num">0{i+1}</span><div><h3>{a}</h3><p>{b}</p></div></li>' for i,(a,b) in enumerate(c['steps']))
     return f'''<section class="hero"><div><p class="eyebrow">PROMPIX · iOS</p><h1>{c['headline']}</h1></div><aside><p>{c['intro']}</p><div class="status">{c['status']}</div></aside></section><section aria-label="{'原创灵感示例' if lang == 'zh' else 'Original prompt examples'}"><div class="kinds"><span>{c['edit']}</span>{''.join(f'<span>{k}</span>' for k in c['kinds'])}</div><div class="gallery">{''.join(cards)}</div><p class="gallery-note">{c['note']}</p><noscript><p class="nojs">{'启用 JavaScript 可查看示例 Prompt。帮助与隐私页面无需脚本。' if lang == 'zh' else 'Enable JavaScript to open example prompts. Support and privacy pages work without it.'}</p></noscript></section><section class="story"><div><h2>{c['statement']}</h2><p>{c['story']}</p></div><ol class="steps">{steps}</ol></section><section class="release"><div><h2>{c['release']}</h2><p>{c['release_body']}</p></div><a class="button secondary" href="https://github.com/p697/prompix">{c['project']} ↗</a></section>{templates}<dialog class="dialog" aria-labelledby="example-title"><div class="dialog-head"><h2 id="example-title"></h2><button class="close" aria-label="{c['close']}">×</button></div><p>{c['modal_note']}</p><pre tabindex="0"></pre><div class="dialog-actions"><button class="button" data-copy>{c['prompt']}</button><span class="eyebrow">{c['original']}</span></div><p role="status" aria-live="polite"></p></dialog>'''
 

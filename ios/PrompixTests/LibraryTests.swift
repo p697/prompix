@@ -41,9 +41,6 @@ import AVKit
         let products = try XCTUnwrap(Collection.all.first { $0.id == "products" })
         XCTAssertTrue(products.items(in: library).contains { $0.id == "object-poster" })
         XCTAssertFalse(products.items(in: library).contains { $0.id == "tiny-island" })
-        let websites = try XCTUnwrap(Collection.all.first { $0.id == "web" })
-        XCTAssertEqual(websites.items(in: library).count, 6)
-        XCTAssertTrue(websites.items(in: library).allSatisfy { $0.kind == .web })
         let play = try XCTUnwrap(Collection.all.first { $0.id == "play" })
         XCTAssertTrue(play.items(in: library).contains { $0.id == "gentle-tarot" })
         XCTAssertTrue(play.items(in: library).allSatisfy { $0.kind == .text })
@@ -446,12 +443,12 @@ import AVKit
     func testBundledFallbackAndSearchIntersection() throws {
         let library = Library(directory: directory)
         XCTAssertEqual(library.version, "studio-005")
-        XCTAssertEqual(library.prompts.count, 30)
-        XCTAssertEqual(Set(library.prompts.map(\.kind)), Set([PromptKind.text, .image, .web]))
-        for kind in [PromptKind.text, .image, .web] { XCTAssertGreaterThanOrEqual(library.prompts.filter { $0.kind == kind }.count, 6) }
+        XCTAssertEqual(library.prompts.count, 24)
+        XCTAssertEqual(Set(library.prompts.map(\.kind)), Set([PromptKind.text, .image]))
+        for kind in [PromptKind.text, .image] { XCTAssertGreaterThanOrEqual(library.prompts.filter { $0.kind == kind }.count, 6) }
         let query = PromptQuery(text: "塔罗", kind: .text)
         XCTAssertEqual(library.prompts.filter(query.matches).map(\.id), ["gentle-tarot"])
-        XCTAssertTrue(library.prompts.filter(PromptQuery(text: "塔罗", kind: .web).matches).isEmpty)
+        XCTAssertTrue(library.prompts.filter(PromptQuery(text: "塔罗", kind: .image).matches).isEmpty)
         XCTAssertTrue(library.prompts.filter(PromptQuery(text: "  ").matches).count == library.prompts.count)
     }
 
@@ -536,10 +533,7 @@ import AVKit
         XCTAssertNotNil(Bundle(for: LibraryTests.self).url(forResource: "playback-fixture", withExtension: "mp4"))
         XCTAssertNil(Bundle.main.url(forResource: "playback-fixture", withExtension: "mp4"))
         XCTAssertTrue((Bundle.main.urls(forResourcesWithExtension: "mp4", subdirectory: nil) ?? []).isEmpty)
-        for (id, filename) in WebsiteExamples.files {
-            XCTAssertNotNil(Bundle.main.url(forResource: filename, withExtension: "html", subdirectory: "WebExamples"), filename)
-            XCTAssertNotNil(UIImage(named: "web-\(id)"), id)
-        }
+        XCTAssertFalse(library.prompts.contains { $0.kind == .web || $0.isSkill }, "Prompix ships images, video and words only")
     }
     func testCachedVideoEditionAndSavedSnapshotSurviveFallbackRetirement() throws {
         let library = Library(directory: directory)

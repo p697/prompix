@@ -18,6 +18,9 @@ enum InterestCatalog {
         return value
     }()
     static let ids = Set(topics.map(\.id))
+    /// Prompix keeps images, video and words; the shared schema still knows
+    /// the retired web and Skill topics, but nobody is offered them.
+    static let offered = topics.filter { !["web", "skills"].contains($0.id) }
     static func classify(tags: [String], kind: String, isSkill: Bool) -> [String] {
         let normalized = tags.map { $0.precomposedStringWithCompatibilityMapping.lowercased() }
         return topics.filter { topic in

@@ -295,11 +295,8 @@ import CryptoKit
 
         XCTAssertEqual(items.filter(PromptQuery().matches).map(\.id), items.map(\.id))
         XCTAssertEqual(items.filter(PromptQuery(kind: .text).matches).map(\.id), [text.id])
-        XCTAssertEqual(items.filter(PromptQuery(skillsOnly: true).matches).map(\.id), [firstSkill.id, secondSkill.id])
-        XCTAssertEqual(items.filter(PromptQuery(skillsOnly: true, creatorID: first.id).matches).map(\.id), [firstSkill.id])
         XCTAssertEqual(items.filter(PromptQuery(kind: .image, creatorID: first.id).matches).map(\.id), [image.id])
         XCTAssertTrue(items.filter(PromptQuery(kind: .image, creatorID: second.id).matches).isEmpty)
-        XCTAssertEqual(items.filter(PromptQuery(text: "ALEX-ONE", skillsOnly: true).matches).map(\.id), [firstSkill.id])
     }
 
     func testSearchFindsSourceAndUnlinkedAuthorWithoutMatchingPromptText() {

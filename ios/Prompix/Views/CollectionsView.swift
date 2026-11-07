@@ -16,7 +16,6 @@ struct Collection: Identifiable {
         .init(id: "learning", title: String(localized: "学习与思考"), subtitle: String(localized: "语言练习、知识解释与思路梳理")),
         .init(id: "daily", title: String(localized: "工作与生活"), subtitle: String(localized: "邮件、面试、旅行与日常安排")),
         .init(id: "video", title: String(localized: "视频创作"), subtitle: String(localized: "运镜、转场与动态场景的实际案例")),
-        .init(id: "web", title: String(localized: "网页与小工具"), subtitle: String(localized: "作品集、网站与可以操作的工具"))
     ]
     @MainActor func count(in library: Library) -> Int {
         if let feed = library.feed { return feed.browse.value?.collections.first { $0.id == id }?.count ?? 0 }
@@ -38,7 +37,7 @@ struct Collection: Identifiable {
         var seen = Set<String>()
         let visual = items.filter {
             $0.kind != .text && !$0.isSkill &&
-                ($0.media?.image != nil || $0.media?.imageURL != nil || WebsiteExamples.files[$0.id] != nil) &&
+                ($0.media?.image != nil || $0.media?.imageURL != nil) &&
                 seen.insert($0.id).inserted
         }
         // Visual topics use full-bleed previews. Text-only topics keep one
@@ -101,7 +100,7 @@ enum HomeCoverSelection {
             let image = candidate.media?.imageURL?.absoluteString ?? candidate.media?.image
             return !ids.contains(candidate.id) && (image.map { !images.contains($0) } ?? true)
         }
-        let visual = distinct.filter { $0.hasSourceImage || WebsiteExamples.files[$0.id] != nil }
+        let visual = distinct.filter { $0.hasSourceImage }
         // A single readable text cover is preferable to narrow text columns;
         // never mix a typographic Skill into an available visual composition.
         let pool = visual.isEmpty ? Array(distinct.prefix(1)) : visual
@@ -123,7 +122,7 @@ struct CollectionRail: View {
     @Environment(\.dynamicTypeSize) private var typeSize
     @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
     private var collections: [Collection] {
-        ["portraits", "play", "graphics", "web", "video"].compactMap { id in Collection.all.first { $0.id == id } }
+        ["portraits", "play", "graphics", "video"].compactMap { id in Collection.all.first { $0.id == id } }
     }
     private var waiting: Bool {
         guard let feed = library.feed else { return false }

@@ -66,7 +66,6 @@ struct RootView: View {
 struct DiscoverView: View {
     @Environment(Library.self) private var library
     @State private var kind: PromptKind?
-    @State private var skillsOnly = false
     @State private var topic: String?
     @State private var feedSort = "recommended"
     @Environment(\.recommendationSurfaceVisible) private var recommendationSurfaceVisible
@@ -80,18 +79,18 @@ struct DiscoverView: View {
     private let topics = ["好玩一点", "创作灵感", "日常有用"]
     private var items: [Prompt] {
         library.prompts.filter {
-            PromptQuery(kind: kind, topic: topic, model: model, skillsOnly: skillsOnly).matches($0) &&
+            PromptQuery(kind: kind, topic: topic, model: model).matches($0) &&
                 (feedSort != "recommended" || library.recommendations.allowsRecommended($0))
         }
     }
     private var feedQuery: FeedQuery {
-        FeedQuery(kind: skillsOnly ? "skill" : kind?.rawValue, tag: topic, model: model, sort: feedSort, facet: facet, modelFamily: modelFamily)
+        FeedQuery(kind: kind?.rawValue, tag: topic, model: model, sort: feedSort, facet: facet, modelFamily: modelFamily)
     }
     private var models: [String] {
         if let feed = library.feed { return feed.browse.value?.models.map(\.name) ?? [] }
-        return Array(Set(library.prompts.filter { PromptQuery(kind: kind, skillsOnly: skillsOnly).matches($0) }.map(\.model))).sorted()
+        return Array(Set(library.prompts.filter { PromptQuery(kind: kind).matches($0) }.map(\.model))).sorted()
     }
-    private var isFiltered: Bool { kind != nil || skillsOnly || refined }
+    private var isFiltered: Bool { kind != nil || refined }
     private var refined: Bool { topic != nil || model != nil || facet != nil || modelFamily != nil }
     private var needsFirstVideoUpdate: Bool {
         kind == .video && library.version.hasPrefix("studio-") && !library.prompts.contains { $0.kind == .video }
@@ -115,7 +114,7 @@ struct DiscoverView: View {
                                         Button(library.isRefreshing ? String(localized: "正在更新…") : String(localized: "检查内容更新")) {
                                             Task { await library.refresh(force: true) }
                                         }.buttonStyle(.borderedProminent).foregroundStyle(Palette.paper).disabled(library.isRefreshing).accessibilityIdentifier("loadVideoExamples")
-                                        Button(String(localized: "查看其他内容")) { kind = nil; skillsOnly = false; topic = nil; model = nil }
+                                        Button(String(localized: "查看其他内容")) { kind = nil; topic = nil; model = nil }
                                             .buttonStyle(.bordered).accessibilityIdentifier("browseOtherIdeas")
                                     }
                                 } else {
@@ -137,7 +136,7 @@ struct DiscoverView: View {
                 .scrollClipDisabled()
                 .background(Palette.paper).foregroundStyle(Palette.ink)
                 .rootHeader(title: String(localized: "发现"), titleID: "discoveryHeading") { filterMenu } bar: {
-                    KindPicker(selection: $kind, skillsOnly: $skillsOnly, onSelect: selectKind).padding(.bottom, 6)
+                    KindPicker(selection: $kind, onSelect: selectKind).padding(.bottom, 6)
                 }
                 .pageRefreshable {
                     // SwiftUI can cancel the refresh action when lazy sections
@@ -179,8 +178,8 @@ struct DiscoverView: View {
             CollectionRail(query: feedQuery)
         })
     }
-    private func selectKind(_ next: PromptKind?, _ skills: Bool) {
-        kind = next; skillsOnly = skills; topic = nil; model = nil; facet = nil; modelFamily = nil
+    private func selectKind(_ next: PromptKind?) {
+        kind = next; topic = nil; model = nil; facet = nil; modelFamily = nil
         library.feed?.discovery.select(feedQuery)
     }
     private var discoveryContext: some View {
@@ -210,7 +209,7 @@ struct DiscoverView: View {
                 servedFilters(uses: uses, families: browse.modelFamilies ?? [])
             } else { catalogFilters }
             if refined {
-                Button(String(localized: "清除筛选"), role: .destructive) { selectKind(kind, skillsOnly) }
+                Button(String(localized: "清除筛选"), role: .destructive) { selectKind(kind) }
                     .accessibilityIdentifier("clearFilters")
             }
         } label: {
@@ -432,7 +431,7 @@ enum PromptCardGeometry {
         if item.usesTextArtwork { return textCardRatio(item) }
         // Retain common portrait and widescreen shapes. Only extreme ratios crop.
         if let ratio = item.media?.aspectRatio { return max(0.65, min(1.8, ratio)) }
-        return switch item.kind { case .text: 0.95; case .image: item.artwork == "lake" ? 1.02 : 0.76; case .video: 0.94; case .web: WebsiteExamples.files[item.id] != nil ? 0.62 : 0.87 }
+        return switch item.kind { case .text: 0.95; case .image: item.artwork == "lake" ? 1.02 : 0.76; case .video: 0.94; case .web: 0.87 }
     }
     /// Cards carry only the work, so a card is exactly its preview; search results
     /// add one line of title beneath visual works.
@@ -480,7 +479,7 @@ struct PromptCard: View {
                     Button {
                         UIPasteboard.general.string = item.displayContent.prompt
                         copiedFeedback.toggle()
-                    } label: { Label { Text(item.isSkill ? String(localized: "复制 Skill") : String(localized: "复制 Prompt")) } icon: { PrompixIcon.copy.image } }
+                    } label: { Label { Text(String(localized: "复制 Prompt")) } icon: { PrompixIcon.copy.image } }
                     Button {
                         if library.toggle(item) { savedFeedback.toggle() }
                     } label: { Label(library.isSaved(item) ? String(localized: "取消收藏") : String(localized: "收藏 Prompt"), systemImage: library.isSaved(item) ? "bookmark.slash" : "bookmark") }
@@ -513,7 +512,7 @@ struct PromptCard: View {
                 .promptTransitionDestination(id: item.id, in: transition)
         }
     }
-    private var titleIsInArtwork: Bool { item.isSkill || item.kind == .text }
+    private var titleIsInArtwork: Bool { item.kind == .text }
     private var ratio: CGFloat { PromptCardGeometry.aspectRatio(for: item) }
 
 }
@@ -700,7 +699,7 @@ private struct DeckDetail: View {
     @State private var kind: PromptKind?
     @State private var images = ImageStore.shared
     private var kinds: [(PromptKind, Int)] {
-        [PromptKind.image, .video, .text, .web].compactMap { value in
+        [PromptKind.image, .video, .text].compactMap { value in
             let count = items.filter { $0.kind == value }.count
             return count > 0 ? (value, count) : nil
         }
