@@ -32,6 +32,8 @@ test("one review decides, labels and names the model with a single spelling", ()
   assert.equal(reviewed.prompt, item().prompt, "the prompt is never rewritten");
   assert.equal(reviewed.inputs, undefined);
   assert.equal(reviewed.localization?.sourceFingerprint, translationFingerprint(reviewed));
+  const mislabelled = validateReviewItem(candidate(), answer({ generation: { ...answer().generation, mode: "text" } }));
+  assert.ok(mislabelled.ok && mislabelled.fields.generation.mode === "t2i", "a mode from another kind falls back to the item's plain mode");
   assert.equal(canonicalModelName("other"), "Unspecified");
   assert.equal(canonicalModelName("midjourney", "v7"), "Midjourney v7");
 });
