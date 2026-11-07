@@ -86,3 +86,10 @@ export function ruleQuotas(rules: readonly XSearchRule[], dailyPosts: number): M
   }
   return quotas;
 }
+
+/** The 24 hours of one Japan day, so a trial can replay a day the pipeline never searched. */
+export function japanDay(day: string): { since: number; until: number } {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || Number.isNaN(Date.parse(`${day}T00:00:00+09:00`))) throw new Error(`Invalid trial day: ${day}`);
+  const since = Date.parse(`${day}T00:00:00+09:00`) / 1000;
+  return { since, until: since + 86400 };
+}

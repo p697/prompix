@@ -1307,6 +1307,11 @@ About 49 of 2,947 published prompts (1.7%) are a whole JSON object, and 43 of th
 ### 2026-11-07 — Portraits may fill half of a day
 
 In the replay trial 16 reviewed items waited only because portraits and people passed 35% of the day. The owner raised the share to 50% so that volume can reach 100 a day; items over the share are deferred.
+
 ### 2026-11-07 — An uncertain age alone no longer blocks
 
 In the replay trial "may be under 18" blocked seven ordinary adult fashion, cosplay and poster items, which the owner judged plainly fine. Review now says uncertain only on a concrete sign of a minor (a childlike face or body, a school uniform, a stated age, words such as child or kid), and an uncertain age blocks only together with suggestive styling. A judgment that a minor is sexualized still blocks, as do explicit content and real people.
+
+### 2026-11-07 — 300 X posts a day, and trials can replay a past day
+
+The owner set the default X acquisition to 300 posts a day instead of 600. Trials take `--day YYYY-MM-DD` to search one whole Japan day, so a past day the pipeline never searched (1–3 November) can be run as an ordinary day without repeating posts.

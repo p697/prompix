@@ -12,6 +12,7 @@ import { installWorker, restartWorker, uninstallWorker, workerPlistPath } from "
 import { pipelineEnvironment, runMaintenance } from "./worker-maintenance.ts";
 import { collectDailyReport, reportWindowMs, sendDailyReport } from "./daily-report.ts";
 import { nightly, slotStart, trialRequestFile } from "./worker.ts";
+import { japanDay } from "./x-search-rules.ts";
 import { collectItemStates, readFunnelSnapshot, saveFunnelSnapshot, summarizeFunnel, type FunnelSummary, type ItemState, type ItemStatus } from "./item-state.ts";
 
 const usage = `用法：npm run pipeline -- <命令> [参数]
@@ -37,7 +38,7 @@ const usage = `用法：npm run pipeline -- <命令> [参数]
 后台进程（launchd 保活，开机自启；每天凌晨 2:45 来源维护复查，3:00 采集发布，8:30 发日报，均为日本时间）
   worker install | uninstall | restart   安装、卸载，或在更新代码后重启
   maintenance                            立刻做一次来源维护复查（X、ClawHub），确认已删的来源自动下架
-  trial [--replay <试跑编号>]            请后台进程按新策略试跑一轮（真实搜索、审核、翻译，不发布）；--replay 用那次搜到的帖子重审，不再搜索
+  trial [--replay <试跑编号>] [--day <日期>]  请后台进程按新策略试跑一轮（真实搜索、审核、翻译，不发布）；--replay 用那次搜到的帖子重审，不再搜索；--day 搜日本时间那一整天
   report [--since 时间] [--send]          生成日报（默认最近一次 08:30 之前的 24 小时；--since 到现在），--send 发到监控邮箱
 
 环节：${pipelineStages.join(", ")}
@@ -147,7 +148,7 @@ async function testProvider(id: string, model: string | undefined, imagePath: st
 export async function main(argv = process.argv.slice(2)) {
   const { values, positionals } = parseArgs({ args: argv, allowPositionals: true, options: {
     json: { type: "boolean" }, brief: { type: "boolean" }, by: { type: "string" }, reason: { type: "string" },
-    model: { type: "string" }, effort: { type: "string" }, fallback: { type: "string" }, "fallback-model": { type: "string" }, "fallback-effort": { type: "string" }, image: { type: "string" }, tail: { type: "string" }, send: { type: "boolean" }, since: { type: "string" }, replay: { type: "string" }, help: { type: "boolean", short: "h" } } });
+    model: { type: "string" }, effort: { type: "string" }, fallback: { type: "string" }, "fallback-model": { type: "string" }, "fallback-effort": { type: "string" }, image: { type: "string" }, tail: { type: "string" }, send: { type: "boolean" }, since: { type: "string" }, replay: { type: "string" }, day: { type: "string" }, help: { type: "boolean", short: "h" } } });
   const [command, ...rest] = positionals;
   const root = pipelineRoot();
   switch (command) {
@@ -253,8 +254,10 @@ export async function main(argv = process.argv.slice(2)) {
     case "trial": {
       const actor = actorOf(values);
       if (values.replay && !/^[\w-]+$/.test(values.replay)) throw new Error("--replay 需要 trials/ 下的试跑编号");
-      await atomic(join(root, trialRequestFile), { at: new Date().toISOString(), by: actor, ...(values.replay ? { replay: values.replay } : {}) });
-      await appendEvent(root, actor, "trial.requested", values.replay ? { replay: values.replay } : {});
+      if (values.day) japanDay(values.day);
+      const request = { ...(values.replay ? { replay: values.replay } : {}), ...(values.day ? { day: values.day } : {}) };
+      await atomic(join(root, trialRequestFile), { at: new Date().toISOString(), by: actor, ...request });
+      await appendEvent(root, actor, "trial.requested", request);
       console.log("已请求试跑；后台进程会在当前任务结束后开始，结果在内容目录的 trials/ 下");
       return;
     }

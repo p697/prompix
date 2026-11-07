@@ -4,7 +4,7 @@ import { promptSchema, type Prompt } from "../packages/schema/catalog.ts";
 import { canonicalModelName } from "../packages/schema/enrichment.ts";
 import { applyReview, reviewBlocker, validateReviewItem } from "./review-pass.ts";
 import { translationFingerprint } from "./translation.ts";
-import { ruleQuery, ruleQuotas, xSearchRules } from "./x-search-rules.ts";
+import { japanDay, ruleQuery, ruleQuotas, xSearchRules } from "./x-search-rules.ts";
 
 const media = "https://api.prompix.dev/media/" + "a".repeat(64) + ".jpg";
 const item = (overrides: Partial<Prompt> = {}) => promptSchema.parse({
@@ -61,4 +61,9 @@ test("search rules split the day's posts by lane and media, and every query is b
   assert.match(query, /-sora/);
   assert.ok(!xSearchRules.some(rule => /sora/i.test(rule.terms)));
   assert.match(ruleQuery({ id: "c", lane: "creator", kind: "video", label: "", terms: "" }, 1, 2, ["alice", "bob"]), /\(from:alice OR from:bob\) has:videos/);
+});
+
+test("a trial day is the whole Japan day", () => {
+  assert.deepEqual(japanDay("2026-11-02"), { since: Date.parse("2026-11-01T15:00:00Z") / 1000, until: Date.parse("2026-11-02T15:00:00Z") / 1000 });
+  assert.throws(() => japanDay("2026-11-2"));
 });
