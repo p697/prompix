@@ -120,7 +120,7 @@ struct DetailHero: View {
                     Spacer(minLength: 0)
                     // A short, eased fade: the work meets the page without a veil over it.
                     LinearGradient(stops: [.init(color: Palette.paper.opacity(0), location: 0), .init(color: Palette.paper.opacity(0.35), location: 0.5),
-                                           .init(color: Palette.paper, location: 1)], startPoint: .top, endPoint: .bottom).frame(height: 40)
+                                           .init(color: Palette.paper, location: 1)], startPoint: .top, endPoint: .bottom).frame(height: 28)
                 }.allowsHitTesting(false).accessibilityHidden(true)
             }
             .overlay(alignment: .bottomTrailing) {
