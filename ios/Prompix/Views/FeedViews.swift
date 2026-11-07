@@ -81,7 +81,7 @@ struct FeedResults: View {
         ContentRecoveryRow(message: message, retryAt: store.retryAt, retryID: "retryFeed") {
             Task {
                 if !store.failedFirstPage, store.nextCursor != nil, !store.isCached, store.failure as? FeedError != .snapshotExpired { await store.loadMore() }
-                else { await store.load(query, force: true) }
+                else { await store.load(query) } // keeps any cards already read
             }
         }.padding(.horizontal, 16)
     }

@@ -7,7 +7,6 @@ import Observation
     private(set) var query: Source.Query?
     private(set) var release: String?
     private(set) var nextCursor: String?
-    private(set) var hasLoadedAdditionalPages = false
     private(set) var firstPageGeneration = 0
     private(set) var failedFirstPage = false
     private(set) var isLoading = false
@@ -53,7 +52,7 @@ import Observation
         guard let normalized = try? Source.validate(value), normalized != query else { return }
         cancel()
         query = normalized; failedFirstPage = false; cacheWriteFailed = false
-        hasLoadedAdditionalPages = false; retainedIDs = []
+        retainedIDs = []
         if retryAt == nil || now >= retryAt! { failure = nil; retryAt = nil }
         if let page = snapshots[normalized] {
             items = page.items; release = page.release; loadedAt = page.loadedAt; transportQuery = page.transportQuery
@@ -111,9 +110,10 @@ import Observation
                 guard self.owns(owner) else { return }
                 try Source.validate(page, query: normalized, release: nil)
                 page = Source.ranked(page, query: normalized, recommendations: recommendations, now: now)
-                // Cards already on screen stay where they are; the served page
-                // continues below them. A pull refresh or a new release replaces.
-                let keeps = !force && self.isCached && !self.items.isEmpty && self.release == page.release
+                // Cards already on screen stay where they are, from the disk cache,
+                // an aged snapshot or an older release; the served page continues
+                // below them. Only a pull refresh or another query replaces them.
+                let keeps = !force && !self.items.isEmpty
                 let kept = keeps ? self.items : []
                 let retained = Set(kept.map(\.id))
                 self.transportQuery = requestQuery
@@ -121,7 +121,7 @@ import Observation
                 self.retainedIDs = retained
                 self.release = page.release; self.nextCursor = page.nextCursor
                 self.isCached = false; self.loadedAt = now; self.failure = nil
-                self.hasLoadedAdditionalPages = false; self.failedFirstPage = false
+                self.failedFirstPage = false
                 self.remember(page, query: normalized, now: now)
                 if keeps { self.snapshots[normalized]?.items = self.items }
                 if let cache {
@@ -154,12 +154,17 @@ import Observation
                 guard page.nextCursor != cursor, !page.items.contains(where: { served.contains($0.id) }) else { throw FeedError.invalidResponse }
                 page = Source.ranked(page, query: query, recommendations: recommendations, now: now)
                 self.items.append(contentsOf: page.items.filter { !self.retainedIDs.contains($0.id) }); self.nextCursor = page.nextCursor
-                self.hasLoadedAdditionalPages = true
             } catch { self.record(error, owner: owner, now: now) }
             self.finish(owner)
         }
         pending = task
         await withTaskCancellationHandler { await task.value } onCancel: { task.cancel() }
+        // A publication retired this session's cursor: continue from a fresh
+        // first page beneath the cards already read instead of stopping.
+        if !Task.isCancelled, failure as? FeedError == .snapshotExpired, self.query == query {
+            failure = nil; loadedAt = nil
+            await load(query, now: now)
+        }
     }
     func cancel() {
         pending?.cancel(); pending = nil; requestID = nil; isLoading = false
