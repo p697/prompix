@@ -68,6 +68,10 @@ extension XCUIApplication {
         revealDiscoveryRails()
         for _ in 0..<3 { if all.isHittable { break }; scrollViews["discoveryScroll"].swipeUp(velocity: .slow) }
         XCTAssertTrue(all.isHittable); all.tap()
+        // A tap while the feed is still gliding only stops it; tap again once it rests.
+        let collection = buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'collection-'")).firstMatch
+        if !collection.waitForExistence(timeout: 3), all.isHittable { all.tap() }
+        XCTAssertTrue(collection.waitForExistence(timeout: 5), "The collections directory must open")
     }
     @MainActor func expandPromptInformation() {
         let information = buttons["promptInformation"]
