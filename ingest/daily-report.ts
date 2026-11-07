@@ -26,12 +26,12 @@ export function buildDailyReport(input: ReportInput): DailyReport {
   const runs = events.filter(event => (event.type === "job.finished" || event.type === "job.failed") && event.job !== "report");
   const problems: string[] = [], notes: string[] = [];
   const done: string[] = [];
-  let total = 0, excluded = 0, held = 0, editorial = 0, visual = 0;
+  let total = 0, untimed = 0, excluded = 0, held = 0, editorial = 0, visual = 0;
   for (const name of [...new Set(runs.map(event => String(event.job)))]) {
     const own = runs.filter(event => event.job === name), failed = own.filter(event => event.type === "job.failed");
-    const spent = own.reduce((sum, event) => sum + Number(event.durationMs ?? 0), 0);
-    total += spent;
-    done.push(`- ${jobNames[name] ?? name}：${own.length} 次（成功 ${own.length - failed.length}，失败 ${failed.length}），用时 ${duration(spent)}`);
+    const timed = own.filter(event => typeof event.durationMs === "number"), spent = timed.reduce((sum, event) => sum + Number(event.durationMs), 0);
+    total += spent; untimed += own.length - timed.length;
+    done.push(`- ${jobNames[name] ?? name}：${own.length} 次（成功 ${own.length - failed.length}，失败 ${failed.length}），用时 ${duration(spent)}${timed.length < own.length ? `（${own.length - timed.length} 次没有记录用时）` : ""}`);
     for (const event of own) done.push(`  · ${clock(event.at)} ${event.type === "job.failed" ? `失败：${String(event.error).slice(0, 160)}` : event.summary}`);
     if (own.at(-1)?.type === "job.failed") problems.push(`${jobNames[name] ?? name}最近一次失败`);
     else if (failed.length) notes.push(`${jobNames[name] ?? name}曾失败 ${failed.length} 次，之后已自动恢复`);
@@ -40,14 +40,21 @@ export function buildDailyReport(input: ReportInput): DailyReport {
       editorial += Number(event.editorialRequests ?? 0); visual += Number(event.visualRequests ?? 0);
     }
   }
-  if (input.desired === "running" && !runs.some(event => event.job === "intake" && event.type === "job.finished")) problems.push("这一天没有成功完成的每日采集发布");
+  const intakes = runs.filter(event => event.job === "intake" && event.type === "job.finished");
+  // Older events carry the count only in their summary.
+  const published = intakes.reduce((sum, event) => sum + Number(event.published ?? /新发布 (\d+) 条/.exec(String(event.summary))?.[1] ?? 0), 0);
+  if (input.desired === "running" && !intakes.length) problems.push("这一天没有成功完成的每日采集发布");
+  else if (input.desired === "running" && !published) problems.push("每日流程这一天没有发布新内容");
   if (input.databaseError) problems.push(`读取线上数据失败：${input.databaseError.slice(0, 160)}`);
 
   // Metered calls are priced; subscription calls are counted by stage.
+  // Calls routed by the daily pipeline are logged as "pipeline"; anything else is other work, such as a backfill.
   const metered = new Map<string, { calls: number; usd: number }>(), subscription = new Map<string, number>();
+  let otherUSD = 0, otherCalls = 0;
   for (const event of events.filter(event => event.type === "model.call")) {
     const model = String(event.model), stage = stageLabels[event.stage as PipelineStage] ?? String(event.stage);
     const cost = estimateUSD(model, event.usage as ModelUsage | undefined);
+    if (event.actor !== "pipeline") { otherUSD += cost; otherCalls++; continue; }
     if (event.provider === "codex-cli" || event.provider === "claude-cli" || event.provider === "kimi-code") subscription.set(stage, (subscription.get(stage) ?? 0) + 1);
     else { const key = `${stage} ${model}`, entry = metered.get(key) ?? { calls: 0, usd: 0 }; entry.calls++; entry.usd += cost; metered.set(key, entry); }
   }
@@ -63,20 +70,21 @@ export function buildDailyReport(input: ReportInput): DailyReport {
     `统计时段：${local(input.start)} – ${local(input.end)}（本机时间）`,
     "",
     "线上变化",
-    input.database ? `- 新增 ${added} 条（目标 ${input.target}）${added! < input.target ? `，差 ${input.target - added!} 条` : ""}` : "- 新增：读取失败",
+    input.database ? `- 新增 ${added} 条，其中每日流程发布 ${published} 条（每日目标 ${input.target}${published < input.target ? `，差 ${input.target - published} 条` : ""}）` : `- 新增：读取失败；每日流程发布 ${published} 条`,
     ...(input.database ? [`- 下架 ${input.database.removed} 条，线上共 ${input.database.live} 条`] : []),
     `- 2.0 审核自动排除 ${excluded} 条，译文复核拦下 ${held} 处`,
     "",
     "做了哪些事",
     ...(done.length ? done : ["- 没有运行任何任务"]),
-    `- 合计用时 ${duration(total)}`,
+    `- 合计用时 ${duration(total)}${untimed ? `（另有 ${untimed} 次没有记录用时）` : ""}`,
     ...(notes.length ? ["", "备注", ...notes.map(note => `- ${note}`)] : []),
     "",
     "成本（估算）",
-    `- 模型 API：${usd(apiUSD)}${metered.size ? `（${[...metered].map(([key, entry]) => `${key} ${entry.calls} 次 ${usd(entry.usd)}`).join("；")}）` : ""}`,
+    `- 每日流程的模型 API：${usd(apiUSD)}${metered.size ? `（${[...metered].map(([key, entry]) => `${key} ${entry.calls} 次 ${usd(entry.usd)}`).join("；")}）` : ""}`,
     `- X 接口（twitterapi.io）：${usd(xUSD)}`,
     ...(subscription.size ? [`- Codex 订阅：${[...subscription].map(([stage, calls]) => `${stage} ${calls} 次`).join("，")}（订阅内，不单独计费）`] : []),
-    `- 按量付费合计：${usd(apiUSD + xUSD)}`,
+    ...(otherCalls ? [`- 其他会话的模型调用（例如补库）：${otherCalls} 次，${usd(otherUSD)}`] : []),
+    `- 按量付费合计：${usd(apiUSD + xUSD + otherUSD)}`,
   ];
   return reportSchema.parse({ date: new Date(input.start).toISOString().slice(0, 10), ok: problems.length === 0, text: lines.join("\n") });
 }

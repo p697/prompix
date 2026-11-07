@@ -332,7 +332,8 @@ async function run() {
     if (previous && publication.previous?.database) {
       const routed = publishing ? await routedProvider("translationCheck", "translation-check:daily") : undefined;
       const checked = await checkNewTranslations(prompts, previous.prompts, join(root, "translations"),
-        routed ? { provider: routed.provider, effort: routed.effort, record: routed.record } : {});
+        routed ? { provider: routed.provider, effort: routed.effort, record: routed.record,
+          maxRequests: Number(process.env.PROMPIX_TRANSLATION_CHECK_MAX_REQUESTS ?? 10) } : {});
       prompts = checked.prompts;
       report.sources["translation-check"] = checked.report;
     }
