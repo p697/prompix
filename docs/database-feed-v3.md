@@ -42,7 +42,7 @@
 
 数据库使用独立 schema；公开读角色没有 DDL/DML、草稿、任务凭据或预算写权限。输入参数受类型、长度、页大小和游标校验；所有查询参数化。每次查询/响应均有时间、行数和字节预算。正文和翻译只出现在详情接口。
 
-列表按画面尺度过滤（2026-11-06）：`/v3/feed`（含搜索、推荐和发现）、`/v3/browse`、`/v3/creators` 默认只返回 `general`；带 `presentation=suggestive` 时加上 `suggestive`，对应 App 设置里「显示成人内容」开关。`unknown` 和缺少标记的内容在复审之前不进任何列表；`explicit` 不会发布。游标绑定这个参数，开关切换后要从第一页重新取。按 ID 打开详情不过滤，收藏和分享链接照常可用。
+列表按画面尺度过滤（2026-11-06）：`/v3/feed`（含搜索、推荐和发现）、`/v3/browse`、`/v3/creators` 默认只返回 `general`；带 `presentation=suggestive` 时加上 `suggestive`，对应 App 设置里「显示敏感内容」开关。`unknown` 和缺少标记的内容在复审之前不进任何列表；`explicit` 不会发布。游标绑定这个参数，开关切换后要从第一页重新取。按 ID 打开详情不过滤，收藏和分享链接照常可用。
 
 2.0 字段（2026-11-06）：卡片带 `facets`、`generation`、`palette`、`rights`，没补字段的条目不带这些字段。`/v3/feed` 新增筛选：`facet=<词表 ID>`（三组共用一个 ID 空间）、`mode=t2i|i2i|t2v|i2v|v2v|text|web|skill`、`modelFamily=<模型族>`；还没补字段的条目不会匹配这些筛选。`/v3/browse` 新增 `facets`（按组列出每个 ID 的数量）和 `modelFamilies`。2026-11-07 起不再提供 `inputs`：卡片不带这个字段，旧版 App 发来的 `inputs=` 参数会被接受并忽略。`locale=en` 时，还没有完整英文翻译的条目改用 `localization.en` 的标题和摘要。
 

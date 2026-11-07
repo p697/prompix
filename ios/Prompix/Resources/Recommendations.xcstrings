@@ -1305,55 +1305,55 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "显示成人内容"
+            "value": "显示敏感内容"
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Show mature content"
+            "value": "Show sensitive content"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "顯示成人內容"
+            "value": "顯示敏感內容"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "成人向けコンテンツを表示"
+            "value": "センシティブな内容を表示"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "성인 콘텐츠 표시"
+            "value": "민감한 콘텐츠 표시"
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Mostrar contenido para adultos"
+            "value": "Mostrar contenido sensible"
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Mostrar conteúdo adulto"
+            "value": "Mostrar conteúdo sensível"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Afficher le contenu pour adultes"
+            "value": "Afficher le contenu sensible"
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Inhalte für Erwachsene anzeigen"
+            "value": "Sensible Inhalte anzeigen"
           }
         }
       }
