@@ -73,6 +73,8 @@ npm run pipeline -- status            # 全貌
 npm run pipeline -- status --brief    # 两三行，给指挥官定时看
 npm run pipeline -- log --tail 20
 npm run pipeline -- providers         # 哪些提供方现在能用
+npm run pipeline -- funnel            # 每个来源的条目各在什么状态，悬空的原因
+npm run pipeline -- item x-post-123   # 一条内容卡在哪一步、为什么
 npm run pipeline -- test-provider kimi-code --by codex
 npm run pipeline -- test-provider codex-cli --image /path/to/photo.jpg --by codex
 
@@ -85,6 +87,23 @@ npm run pipeline -- note "Lucy 说周末前别动安全复核" --by claude-code
 ```
 
 环节：`prefilter`（预筛）、`review`（合并审核）、`safety`（安全复核）、`translate`（翻译）、`translationCheck`（翻译检查）。默认全部走 Codex 订阅：预筛和审核用 gpt-5.6-luna，安全复核和翻译检查用 gpt-6-astra，翻译用 gpt-5.6-terra。用 ChatGPT 账号登录的 Codex 只能用它列出的模型（2026-11-06 为 gpt-6-astra、gpt-5.6-sol、gpt-5.6-terra、gpt-5.6-luna），gpt-6.1-sol 和 gpt-6-luna 会被拒绝；换模型前先 `test-provider codex-cli --model <名字>`。
+
+## 条目状态（funnel）
+
+每条采集到的内容只能处在下面一种状态，`npm run pipeline -- funnel` 按来源统计，`item <id>` 看单条：
+
+- **线上 / 已下架**：以数据库为准。
+- **已排除**：有明确的「不发布」结论，记着是哪个环节、什么原因。例如编辑审核拒绝、图片和文字对不上、画面露骨、2.0 审核排除、来源已停用（YouMind）、原帖已删。
+- **排队中**：某个自动环节之后会处理它，例如等编辑审核、等图片审核、等发布名额。
+- **悬空**：没上线、也没被排除，但没有任何环节会再处理它。这违反「每条都有结论」的规则，所以单独计数。
+
+判定按每日流程的顺序，复用流程本身的判断函数（编辑审核结果、`automaticReviewEligibility`、`libraryIssue`、`filterXAvailability`），所以和流程不会各说各话。任何环节给出的最终「不发布」都优先于可以刷新的来源复查。
+
+目前会悬空的几种情况（2026-11-07 实测 366 条）：编辑审核「暂缓」的结论被永久缓存，不会再审；原文超出审核输入上限，标着待人工，但已经没有人工环节；未上线的 X 草稿原帖复查过期，而维护复查只查已上线条目；图片审核「存疑」也被永久缓存。
+
+`status --brief` 显示最近一次统计的悬空和排队数量。每日日报（以及 `report`）会重新统计并保存快照；当天有新进入悬空的条目，日报结论会写「有问题」。
+
+还不覆盖历史补库 campaign 里尚未上线的条目，它们的状态在各 campaign 目录和数据库队列里。
 
 ## 指挥官怎么工作
 

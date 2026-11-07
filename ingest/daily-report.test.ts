@@ -52,6 +52,17 @@ test("a last failure, no successful intake or unreadable data marks the day as h
   assert.equal(buildDailyReport({ start, end, target: 100, desired: "stopped", database: { added: 0, removed: 0, live: 1 }, events: [] }).ok, true);
 });
 
+test("newly stalled items are a problem; the funnel section names the largest stalled groups", () => {
+  const funnel = { at: new Date(end).toISOString(), total: 10, counts: { live: 5, removed: 0, excluded: 1, waiting: 2, stalled: 2 }, bySource: {},
+    newlyStalled: 1, stalled: [{ reason: "编辑审核暂缓：内容类型对不上", stage: "editorial" as const, count: 2 }] };
+  const report = buildDailyReport({ start, end, target: 100, desired: "stopped", database: { added: 0, removed: 0, live: 5 }, events: [], funnel });
+  assert.equal(report.ok, false);
+  assert.match(report.text, /^结论：有问题，1 条内容新进入悬空状态/);
+  assert.match(report.text, /排队中 2 条，悬空 2 条（这一天新增 1 条）\n  · 2 条：编辑审核暂缓：内容类型对不上/);
+  assert.equal(buildDailyReport({ start, end, target: 100, desired: "stopped", database: { added: 0, removed: 0, live: 5 }, events: [],
+    funnel: { ...funnel, newlyStalled: 0 } }).ok, true);
+});
+
 test("delivery goes to the monitor's report endpoint with the shared secret and retries server errors", async () => {
   const calls: { url: string; auth: string | null }[] = [];
   let status = 503;

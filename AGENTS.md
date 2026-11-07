@@ -22,7 +22,8 @@ Prompix is built mostly by AI coding agents. These rules apply to every agent an
 
 - Operate the content pipeline only through `npm run pipeline -- <command>`; see [docs/data-pipeline-v2.md](docs/data-pipeline-v2.md). Never edit files under `~/.local/share/prompix/pipeline/` by hand.
 - Every change names its author: `--by codex`, `--by claude-code`, or the person. Add `--reason` when the owner gave one.
-- To answer "is the pipeline running and how is it going", run `status --brief`, then `log` only if something looks wrong. Do not poll more often than every two hours unless the owner asks; failures alert through the monitor.
+- To answer "is the pipeline running and how is it going", run `status --brief`, then `log` only if something looks wrong.
+- To answer why items are not online, how many are pending, or where one item is stuck, run `funnel` or `item <id>` and quote its output. Do not count by reading the content stores by hand, and label anything the command does not cover as unverified. Do not poll more often than every two hours unless the owner asks; failures alert through the monitor.
 - Model choice is routing (`route <stage> <provider>`), not code. Add a vendor as an adapter under `ingest/models/`.
 
 ## Secrets
