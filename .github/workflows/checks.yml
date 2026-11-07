@@ -96,9 +96,10 @@ jobs:
             echo "::error::Expected the iOS 27.1 simulator SDK, found $PROMPIX_SIMULATOR_SDK"
             exit 1
           fi
-      # Compiles the app and both test bundles without a simulator.
+      # Compiles the app and both test bundles without a simulator, for arm64
+      # only: a generic destination would also build x86_64 and double the time.
       - name: Build app and tests
-        run: xcodebuild -project ios/Prompix.xcodeproj -scheme Prompix -destination 'generic/platform=iOS Simulator' build-for-testing CODE_SIGNING_ALLOWED=NO COMPILER_INDEX_STORE_ENABLE=NO
+        run: xcodebuild -project ios/Prompix.xcodeproj -scheme Prompix -destination 'generic/platform=iOS Simulator' build-for-testing ARCHS=arm64 ONLY_ACTIVE_ARCH=NO CODE_SIGNING_ALLOWED=NO COMPILER_INDEX_STORE_ENABLE=NO
   ios-tests:
     needs: changes
     if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.ios == 'true') }}
@@ -106,8 +107,8 @@ jobs:
     env:
       DEVELOPER_DIR: /Applications/Xcode_27.1.app/Contents/Developer
     steps:
-      # A cold simulator takes minutes to boot; start it before anything else so
-      # the boot overlaps the checkout and the build.
+      # A cold simulator takes minutes to boot; it starts first and shares the
+      # machine with the build, so the job is still several minutes long.
       - name: Boot an iPhone simulator
         run: |
           DEVICE_ID=$(xcrun simctl list devices available -j | python3 -c 'import sys,json; phones=[(("iOS-27-1" in r), d["udid"]) for r, ds in json.load(sys.stdin)["devices"].items() for d in ds if d["name"].startswith("iPhone")]; print(max(phones)[1])')
