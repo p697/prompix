@@ -36,7 +36,10 @@ struct PendingPromptDetail: View {
             }
         }.foregroundStyle(Palette.ink)
             .overlay(alignment: .top) {
-                if preview.hasDetailMedia { GrainDissolve(edge: .top).ignoresSafeArea(edges: .top).allowsHitTesting(false).accessibilityHidden(true) }
+                if preview.hasDetailMedia {
+                    if DetailHero.isImmersive(preview) { GrainDissolve(edge: .top).ignoresSafeArea(edges: .top).allowsHitTesting(false).accessibilityHidden(true) }
+                    else { EdgeVeil() }
+                }
             }
             .onChange(of: actionsCollapsed) { _, value in position.actionsCollapsed = value }
             .promptActionBar {
@@ -98,10 +101,12 @@ struct PromptDetailHeading: View {
     }
 }
 
-/// The work edge to edge, fading into the page. Tall work is shown up to 2:3,
-/// cropped from the bottom so faces stay whole, and the title still starts on
-/// the first screen; the full frame opens on tap. Several images page sideways
-/// in place, with a counter, and every page is cropped the same way.
+/// Portrait work runs edge to edge under the status bar and dissolves into the
+/// page at both ends, shown up to 2:3 and cropped from the bottom so faces stay
+/// whole. Square and landscape work is too short to give up its edges to grain:
+/// it sits whole below the top bar, like a print laid on the page. The full frame
+/// opens on tap. Several images page sideways in place, with a counter, and every
+/// page is cropped the same way.
 struct DetailHero: View {
     let preview: ContentPreview
     var title = ""
@@ -113,23 +118,34 @@ struct DetailHero: View {
     private var ratio: Double {
         max(2.0 / 3, min(1.8, preview.media?.aspectRatio ?? 0.8))
     }
+    private var immersive: Bool { Self.isImmersive(preview) }
+    static func isImmersive(_ preview: ContentPreview) -> Bool { (preview.media?.aspectRatio ?? 0.8) <= 0.8 }
     var body: some View {
+        VStack(spacing: 0) {
+            // A print starts below the back and share buttons instead of under them.
+            if !immersive { Color.clear.frame(height: EdgeVeil.statusBarHeight + 52) }
+            picture
+        }
+    }
+    private var picture: some View {
         Color.clear.aspectRatio(ratio, contentMode: .fit)
             .overlay { pages }
             .clipped()
             .overlay(alignment: .bottom) {
                 // Paper runs 2 pt past the hero's edge: its height is rarely a whole pixel,
                 // and while the detail zooms open the picture's last row showed as a grey line.
-                VStack(spacing: 0) {
-                    GrainDissolve()
-                    Palette.paper.frame(height: 2)
-                }.padding(.bottom, -2).allowsHitTesting(false).accessibilityHidden(true)
+                if immersive {
+                    VStack(spacing: 0) {
+                        GrainDissolve()
+                        Palette.paper.frame(height: 2)
+                    }.padding(.bottom, -2).allowsHitTesting(false).accessibilityHidden(true)
+                }
             }
             .overlay(alignment: .bottomTrailing) {
                 if urls.count > 1 {
                     Text(verbatim: "\(page + 1) / \(urls.count)").font(Typography.meta(size: 11)).tracking(1).monospacedDigit()
                         .padding(.horizontal, 10).frame(height: 26).readingGlass()
-                        .padding(.trailing, 16).padding(.bottom, 44)
+                        .padding(.trailing, 16).padding(.bottom, immersive ? 44 : 12)
                         .allowsHitTesting(false).accessibilityHidden(true)
                 }
             }
