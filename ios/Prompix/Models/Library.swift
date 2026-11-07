@@ -385,7 +385,6 @@ struct PromptVersion: Identifiable, Hashable {
             isRefreshing = true; syncState = .checking; syncMessage = nil; lastAttempt = now
             defer { isRefreshing = false }
             do {
-                let previousRelease = feed.state?.release
                 try await feed.refresh()
                 try Task.checkCancellation()
                 version = feed.state?.release ?? version
@@ -397,8 +396,9 @@ struct PromptVersion: Identifiable, Hashable {
                 if !force, let query = feed.discovery.query, !feed.discovery.isLoading, feed.discovery.items.isEmpty {
                     await feed.discovery.load(query)
                 }
-                let releaseChanged = previousRelease != nil && previousRelease != feed.state?.release
-                if force || releaseChanged {
+                // The rails inside the feed follow the same rule as its works: a
+                // new publication waits for a pull refresh instead of moving them.
+                if force {
                     if feed.browse.value != nil || feed.browse.failure != nil { await feed.browse.load(force: true) }
                     if feed.creatorDiscovery.query != nil { await feed.creatorDiscovery.load(CreatorQuery(), force: true) }
                     if feed.creators.query != nil { await feed.creators.load("", force: true) }
