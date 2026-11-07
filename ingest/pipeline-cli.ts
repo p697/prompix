@@ -11,6 +11,7 @@ import { repo } from "./publication.ts";
 import { installWorker, restartWorker, uninstallWorker, workerPlistPath } from "./worker-launchd.ts";
 import { pipelineEnvironment, runMaintenance } from "./worker-maintenance.ts";
 import { collectDailyReport, reportWindowMs, sendDailyReport } from "./daily-report.ts";
+import { nightly, slotStart } from "./worker.ts";
 import { collectItemStates, readFunnelSnapshot, saveFunnelSnapshot, summarizeFunnel, type FunnelSummary, type ItemState, type ItemStatus } from "./item-state.ts";
 import { contentRoot } from "./publication.ts";
 
@@ -34,10 +35,10 @@ const usage = `用法：npm run pipeline -- <命令> [参数]
 测试
   test-provider <提供方> [--model m] [--image 图片路径]   发一次很小的结构化请求
 
-后台进程（launchd 保活，开机自启；每 12 小时做一次来源维护复查）
+后台进程（launchd 保活，开机自启；每天凌晨 2:45 来源维护复查，3:00 采集发布，8:30 发日报，均为日本时间）
   worker install | uninstall | restart   安装、卸载，或在更新代码后重启
   maintenance                            立刻做一次来源维护复查（X、ClawHub），确认已删的来源自动下架
-  report [--since 时间] [--send]          生成日报（默认上一个 UTC 日；--since 到现在），--send 发到监控邮箱
+  report [--since 时间] [--send]          生成日报（默认最近一次 08:30 之前的 24 小时；--since 到现在），--send 发到监控邮箱
 
 环节：${pipelineStages.join(", ")}
 提供方：${providerIds.join(", ")}`;
@@ -251,7 +252,7 @@ export async function main(argv = process.argv.slice(2)) {
     }
     case "report": {
       const actor = values.send ? actorOf(values) : "manual";
-      const end = values.since ? Date.now() : Math.floor(Date.now() / reportWindowMs) * reportWindowMs;
+      const end = values.since ? Date.now() : slotStart(nightly.report, Date.now());
       const start = values.since ? Date.parse(values.since) : end - reportWindowMs;
       if (!Number.isFinite(start) || start >= end) throw new Error("--since 要写一个过去的时间，例如 2026-11-06T15:00:00Z");
       const env = await pipelineEnvironment(), report = await collectDailyReport(start, end, env, root);

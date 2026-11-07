@@ -46,7 +46,7 @@ export const workerStatusSchema = z.object({
   today: z.object({ date: z.string(), published: z.number().int(), reviewed: z.number().int(), held: z.number().int(), rejected: z.number().int() }),
   lastError: z.object({ at: z.string(), message: z.string() }).optional(),
   jobs: z.record(z.string(), z.object({ startedAt: z.string(), finishedAt: z.string().optional(), ok: z.boolean().optional(),
-    summary: z.string().max(500).optional() }).strict()).optional(),
+    summary: z.string().max(500).optional(), attempts: z.number().int().min(1).optional() }).strict()).optional(),
 }).strict();
 export type WorkerStatus = z.infer<typeof workerStatusSchema>;
 
