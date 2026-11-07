@@ -11,7 +11,7 @@ import { atomic, contentRoot, repo } from "./publication.ts";
 import { installWorker, restartWorker, uninstallWorker, workerPlistPath } from "./worker-launchd.ts";
 import { pipelineEnvironment, runMaintenance } from "./worker-maintenance.ts";
 import { collectDailyReport, reportWindowMs, sendDailyReport } from "./daily-report.ts";
-import { nightly, slotStart, trialRequestFile } from "./worker.ts";
+import { intakeRequestFile, nightly, slotStart, trialRequestFile } from "./worker.ts";
 import { japanDay } from "./x-search-rules.ts";
 import { collectItemStates, readFunnelSnapshot, saveFunnelSnapshot, summarizeFunnel, type FunnelSummary, type ItemState, type ItemStatus } from "./item-state.ts";
 
@@ -39,6 +39,7 @@ const usage = `用法：npm run pipeline -- <命令> [参数]
   worker install | uninstall | restart   安装、卸载，或在更新代码后重启
   maintenance                            立刻做一次来源维护复查（X、ClawHub），确认已删的来源自动下架
   trial [--replay <试跑编号>] [--day <日期>]  请后台进程按新策略试跑一轮（真实搜索、审核、翻译，不发布）；--replay 用那次搜到的帖子重审，不再搜索；--day 搜日本时间那一整天
+  intake [--import-trial <试跑编号,…>]   请后台进程现在就跑一轮采集发布（不占当晚的那一轮）；--import-trial 把这些试跑搜到的帖子一起收录审核，要在试跑后 12 小时内
   report [--since 时间] [--send]          生成日报（默认最近一次 08:30 之前的 24 小时；--since 到现在），--send 发到监控邮箱
 
 环节：${pipelineStages.join(", ")}
@@ -148,7 +149,7 @@ async function testProvider(id: string, model: string | undefined, imagePath: st
 export async function main(argv = process.argv.slice(2)) {
   const { values, positionals } = parseArgs({ args: argv, allowPositionals: true, options: {
     json: { type: "boolean" }, brief: { type: "boolean" }, by: { type: "string" }, reason: { type: "string" },
-    model: { type: "string" }, effort: { type: "string" }, fallback: { type: "string" }, "fallback-model": { type: "string" }, "fallback-effort": { type: "string" }, image: { type: "string" }, tail: { type: "string" }, send: { type: "boolean" }, since: { type: "string" }, replay: { type: "string" }, day: { type: "string" }, help: { type: "boolean", short: "h" } } });
+    model: { type: "string" }, effort: { type: "string" }, fallback: { type: "string" }, "fallback-model": { type: "string" }, "fallback-effort": { type: "string" }, image: { type: "string" }, tail: { type: "string" }, send: { type: "boolean" }, since: { type: "string" }, replay: { type: "string" }, day: { type: "string" }, "import-trial": { type: "string" }, help: { type: "boolean", short: "h" } } });
   const [command, ...rest] = positionals;
   const root = pipelineRoot();
   switch (command) {
@@ -249,6 +250,16 @@ export async function main(argv = process.argv.slice(2)) {
       const report = await runMaintenance(await pipelineEnvironment());
       await appendEvent(root, actor, "job.finished", { job: "maintenance", summary: `手动：来源已删 ${report.removed} 条，本次下架 ${report.takenDown.length} 条`, report });
       console.log(values.json ? JSON.stringify(report) : `来源维护复查完成：来源已删 ${report.removed} 条，本次下架 ${report.takenDown.length} 条`);
+      return;
+    }
+    case "intake": {
+      const actor = actorOf(values);
+      const trials = values["import-trial"]?.split(",").map(value => value.trim()).filter(Boolean) ?? [];
+      if (trials.some(trial => !/^[\w-]+$/.test(trial))) throw new Error("--import-trial 需要 trials/ 下的试跑编号，用逗号分隔");
+      const request = trials.length ? { importTrials: trials } : {};
+      await atomic(join(root, intakeRequestFile), { at: new Date().toISOString(), by: actor, ...request });
+      await appendEvent(root, actor, "intake.requested", { ...request, ...(values.reason ? { reason: values.reason } : {}) });
+      console.log("已请求现在跑一轮采集发布；后台进程会在当前任务结束后开始");
       return;
     }
     case "trial": {

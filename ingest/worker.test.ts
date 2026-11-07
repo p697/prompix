@@ -7,7 +7,7 @@ import type { Prompt } from "../packages/schema/catalog.ts";
 import { createTestDatabase } from "../services/feed/test-database.ts";
 import { activatePublication, stagePublication } from "../services/feed/publication.ts";
 import { readEvents, readWorkerStatus, updateConfig, type WorkerStatus } from "./pipeline-control.ts";
-import { intakeJob, jobDue, nightly, reportJob, retryAfterFailureMs, slotStart, tick, trialJob, trialRequestFile, type Job } from "./worker.ts";
+import { intakeJob, intakeRequestFile, jobDue, nightly, reportJob, retryAfterFailureMs, slotStart, tick, trialJob, trialRequestFile, type Job } from "./worker.ts";
 import { runMaintenance, takedownLimit } from "./worker-maintenance.ts";
 import { workerPlist } from "./worker-launchd.ts";
 
@@ -50,7 +50,7 @@ test("the intake runs only while the pipeline is running, and a missing drive or
   let runs = 0;
   const alerts: string[] = [];
   const alert = async (text: string) => { alerts.push(text); };
-  const jobs = [intakeJob({}, async env => { runs++; assert.equal(env.PROMPIX_TRANSLATION_PROVIDER, "pipeline"); return 1; }, alert, content)];
+  const jobs = [intakeJob({}, async env => { runs++; assert.equal(env.PROMPIX_TRANSLATION_PROVIDER, "pipeline"); return 1; }, alert, content, root)];
   await tick(root, at(0), jobs, { now: () => now });
   assert.equal(runs, 0, "a stopped pipeline collects nothing");
   await updateConfig(root, "codex", undefined, config => ({ ...config, desired: "running" }));
@@ -62,6 +62,23 @@ test("the intake runs only while the pipeline is running, and a missing drive or
   await assert.rejects(missing.run(1), /外置硬盘/);
   await assert.rejects(missing.run(2), /外置硬盘/);
   assert.equal(alerts.length, 2, "a missing drive is reported on the first attempt only");
+});
+
+test("an extra intake runs once per request, can import trials, and leaves the night's slot", async () => {
+  const root = join(await mkdtemp(join(tmpdir(), "prompix-worker-")), "pipeline"), content = await mkdtemp(join(tmpdir(), "prompix-content-"));
+  const runs: (string | undefined)[] = [];
+  const jobs = [intakeJob({}, async env => { runs.push(env.PROMPIX_IMPORT_TRIALS); return 0; }, async () => {}, content, root)];
+  await updateConfig(root, "codex", undefined, config => ({ ...config, desired: "running" }));
+  const morning = Date.parse("2026-11-07T08:00:00Z");
+  await tick(root, at(0), jobs, { now: () => morning });
+  assert.deepEqual(runs, [undefined], "the first tick catches up last night's slot");
+  const { atomic } = await import("./publication.ts");
+  await atomic(join(root, intakeRequestFile), { at: new Date(morning + 60_000).toISOString(), by: "test", importTrials: ["2026-11-07T06-27-06-637Z", "../bad"] });
+  await tick(root, at(0), jobs, { now: () => morning + 120_000 });
+  await tick(root, at(0), jobs, { now: () => morning + hour });
+  assert.deepEqual(runs, [undefined, "2026-11-07T06-27-06-637Z"], "a request runs once, with only valid trial ids");
+  await tick(root, at(0), jobs, { now: () => Date.parse("2026-11-07T18:01:00Z") });
+  assert.equal(runs.length, 3, "the night's run still happens");
 });
 
 test("the 08:30 report covers the 24 hours before it, once the worker has run an intake", async () => {
