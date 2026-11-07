@@ -26,6 +26,16 @@ SHARED_ENGLISH = {
     '网站': {'de'},
     '网页': {'es', 'pt-BR', 'fr', 'de'},
     '视频': {'de'},
+    '类型': {'fr'},
+    'use.fun': {'fr'},
+    'use.illustration': {'fr'},
+    'use.marketing': {'es', 'pt-BR', 'fr', 'de'},
+    'use.portraits': {'fr'},
+    'use.short-films': {'fr'},
+    'use.social-content': {'de'},
+    'use.stickers': {'es', 'fr'},
+    'use.storyboards': {'es', 'pt-BR', 'fr', 'de'},
+    'use.websites': {'es', 'pt-BR', 'fr', 'de'},
 }
 PRINTF = re.compile(
     r"%(?:\d+\$)?[-+#0 ']*(?:\d+|\*)?(?:\.(?:\d+|\*))?"
