@@ -4,7 +4,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { convertXDiscovery } from "./x-intake.ts";
-import { maintenanceCensus, saveMaintenanceCensus } from "./x-maintenance-reserve.ts";
+import { maximumUnaccounted, maintenanceCensus, saveMaintenanceCensus } from "./x-maintenance-reserve.ts";
 import { maintenanceRunway } from "./x-spend.ts";
 import { json } from "./publication.ts";
 const now = new Date("2026-10-17T01:00:00Z");
@@ -27,10 +27,14 @@ test("census prices published roots in threads officially and deduplicates share
   assert.equal(official.plan.officialPosts, 3); assert.equal(official.plan.standalone, 0);
   assert.equal(result.plan.sourceSetSHA256, maintenanceCensus([inactive, standalone, reply, root], new Set([...ids].reverse()), new Set([inactive.id]), now, true).plan.sourceSetSHA256);
 });
-test("missing or malformed protected sources mark census incomplete instead of silently undercounting", () => {
+test("a few missing protected sources are priced at the costliest rate; many mark the census incomplete", () => {
   const item = candidate("101"), missingPost = candidate("102"); delete missingPost.source.post;
   const result = maintenanceCensus([item, missingPost], new Set([item.id, missingPost.id, "x-post-103"]), new Set(), now, true);
-  assert.equal(result.plan.complete, false); assert.deepEqual(result.missing, ["x-post-102", "x-post-103"]);
+  assert.equal(result.plan.complete, true); assert.deepEqual(result.missing, ["x-post-102", "x-post-103"]);
+  assert.equal(result.plan.unaccounted, 2);
+  assert.equal(result.runway.daily, 2 * 150 + 2 * 2 * 9 * 5000, "two official nine-post threads, twice a day");
+  const many = Array.from({ length: maximumUnaccounted + 1 }, (_, i) => `x-post-${900 + i}`);
+  assert.equal(maintenanceCensus([item], new Set([item.id, ...many]), new Set(), now, true).plan.complete, false);
 });
 test("posts a week old are reserved for one recheck in six days, newer posts for two a day", () => {
   const { plan } = maintenanceCensus([candidate("101")], new Set(["x-post-101"]), new Set(), now, true);

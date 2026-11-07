@@ -5,6 +5,8 @@ import { nativeXPostIDs } from "./x-source.ts";
 import { atomic } from "./publication.ts";
 import { configuredXSpendBudget, maintenanceReserveSchema, maintenanceRunway } from "./x-spend.ts";
 
+export const maximumUnaccounted = 50;
+
 /** Called under daily.lock before maintenance or growth. Only immutable numeric
  * identities determine the cost census; no source text enters the budget directory. */
 export function maintenanceCensus(items: readonly Candidate[], protectedIDs: ReadonlySet<string>, inactiveIDs: ReadonlySet<string>, now: Date,
@@ -22,8 +24,10 @@ export function maintenanceCensus(items: readonly Candidate[], protectedIDs: Rea
   const created = new Map(protectedItems.flatMap(item => [...(item.source.context ?? []), ...(item.source.post ? [item.source.post] : [])])
     .map(post => [post.id, Date.parse(post.createdAt)]));
   const settled = [...standalone].filter(id => now.getTime() - (created.get(id) ?? now.getTime()) >= 7 * 24 * 3600_000).length;
-  const plan = maintenanceReserveSchema.parse({ version: 1, checkedAt: now.toISOString(), complete: missing.length === 0,
-    standalone: standalone.size, officialPosts: official.size, settled,
+  // A few protected items intake no longer yields (a changed rule, an edited source) are priced at
+  // the costliest rate instead of blocking all growth; many at once still mean something is wrong.
+  const plan = maintenanceReserveSchema.parse({ version: 1, checkedAt: now.toISOString(), complete: missing.length <= maximumUnaccounted,
+    standalone: standalone.size, officialPosts: official.size, settled, ...(missing.length ? { unaccounted: missing.length } : {}),
     sourceSetSHA256: createHash("sha256").update(JSON.stringify({ expected: expected.sort(), standalone: [...standalone].sort(), official: [...official].sort() })).digest("hex") });
   return { plan, missing, runway: maintenanceRunway(plan, now) };
 }
