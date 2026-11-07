@@ -21,10 +21,7 @@ struct Artwork: View {
                 else if let name = item.media?.image, UIImage(named: name) != nil { photo(name, size: proxy.size) }
                 else if let url = item.media?.imageURL { RemoteImage(url: url, contentMode: compact || fillsFrame ? .fill : .fit)
                     // A web page reads from its top-left corner; never crop away its left edge.
-                    .frame(width: proxy.size.width, height: proxy.size.height, alignment: item.kind == .web ? .topLeading : anchorsTop ? .top : .center).clipped() }
-                else if item.kind == .web, UIImage(named: "web-\(item.id)") != nil {
-                    Image("web-\(item.id)").resizable().scaledToFill().frame(width: proxy.size.width, height: proxy.size.height, alignment: .top).clipped()
-                }
+                    .frame(width: proxy.size.width, height: proxy.size.height, alignment: anchorsTop ? .top : .center).clipped() }
                 else if let cover = item.cover { editorialCover(cover, size: proxy.size) }
                 else if item.artwork == "text-editorial" || item.artwork == "web-editorial" { communityArtwork(size: proxy.size) }
                 else if item.kind == .video, UIImage(named: item.id) != nil { photo(item.id, size: proxy.size) } else {
@@ -50,7 +47,7 @@ struct Artwork: View {
         ZStack {
             Palette.soft
             VStack(alignment: .leading, spacing: 16) {
-                Image(systemName: item.kind == .web ? "curlybraces" : "quote.opening").font(.system(size: 28, weight: .ultraLight))
+                Image(systemName: "quote.opening").font(.system(size: 28, weight: .ultraLight))
                 Text(item.displayTitle).font(.system(size: min(size.width * 0.12, 28), weight: .regular, design: .default)).lineLimit(5).minimumScaleFactor(0.75)
                 Spacer(minLength: 0)
                 Text(item.displayKind).font(.system(size: 11, weight: .medium))
@@ -83,7 +80,7 @@ struct Artwork: View {
             }.foregroundStyle(palette.1).padding(size.width * 0.12)
         }
     }
-    /// Text and Skill cards are the words themselves on a quiet sheet, sized to them.
+    /// Text cards are the words themselves on a quiet sheet, sized to them.
     /// Words as a card: the model in mono, the title, then what it does, in the
     /// proportions `PromptCardGeometry.textCardRatio` reserves for them.
     private func noteArtwork(size: CGSize) -> some View {

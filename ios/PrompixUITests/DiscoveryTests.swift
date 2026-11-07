@@ -604,27 +604,12 @@ import UIKit
         }
     }
 
-    func testImageWebAndCollections() throws {
+    func testImageAndCollections() throws {
         app.buttons["kind-image"].tap()
         app.buttons["prompt-summer-citrus"].tap()
         app.buttons["previewButton"].tap()
         XCTAssertTrue(app.buttons["完成"].waitForExistence(timeout: 5))
         capture("06-image-viewer")
-        app.buttons["完成"].tap()
-        app.goBackInPrompix()
-        app.buttons["kind-web"].tap()
-        app.buttons["prompt-quiet-portfolio"].tap()
-        XCTAssertTrue(app.buttons["copyPrompt"].waitForExistence(timeout: 5))
-        capture("08-web-detail")
-        app.swipeUp()
-        app.swipeUp()
-        app.expandPromptInformation()
-        let webExample = app.buttons["webExample"]
-        if !webExample.isHittable { app.swipeUp() }
-        webExample.tap()
-        XCTAssertTrue(app.webViews.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "Less, but")).firstMatch.waitForExistence(timeout: 10))
-        try waitForRenderingToSettle()
-        capture("08b-web-example")
         app.buttons["完成"].tap()
         app.goBackInPrompix()
         app.openPrompixCollections()
@@ -658,50 +643,6 @@ import UIKit
         XCTAssertTrue(editor.waitForExistence(timeout: 5))
         XCTAssertTrue((editor.value as? String ?? "").contains("My personal intention."))
         capture("13-persistent-draft")
-    }
-    func testOriginalWebsitesAndCaptureTheirRealPreviews() {
-        app.buttons["kind-web"].tap()
-        capture("14-web-discovery")
-        let examples = [
-            ("quiet-portfolio", "Less, but"), ("indie-studio", "Ideas take"),
-            ("sunday-recipes", "A slower"), ("travel-notes", "Go a little"),
-            ("soft-focus", "Make room"), ("little-gallery", "Objects")
-        ]
-        for (id, headline) in examples {
-            let card = app.buttons["prompt-\(id)"]
-            for _ in 0..<6 { if card.isHittable { break }; app.swipeUp() }
-            XCTAssertTrue(card.isHittable, id); card.tap()
-            app.buttons["previewButton"].tap()
-            let web = app.webViews.firstMatch
-            XCTAssertTrue(web.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", headline)).firstMatch.waitForExistence(timeout: 10), id)
-            let shot = XCTAttachment(screenshot: web.screenshot())
-            shot.name = "web-\(id)"; shot.lifetime = .keepAlways; add(shot)
-            if id == "soft-focus" {
-                let start = web.buttons["开始专注"]
-                if !start.isHittable { web.swipeUp() }
-                start.tap()
-                XCTAssertTrue(web.buttons["暂停"].waitForExistence(timeout: 3))
-                web.buttons["暂停"].tap()
-                XCTAssertTrue(web.buttons["继续"].waitForExistence(timeout: 3))
-                web.buttons["重新开始"].tap()
-                XCTAssertTrue(web.buttons["开始专注"].exists)
-            }
-            if id == "sunday-recipes" {
-                let recipe = web.buttons["打开番茄鸡蛋吐司"]
-                for _ in 0..<4 { if recipe.isHittable { break }; web.swipeUp() }
-                recipe.tap()
-                XCTAssertTrue(web.staticTexts["准备食材"].waitForExistence(timeout: 3))
-                web.buttons["关闭食谱"].tap()
-            }
-            if id == "little-gallery" {
-                let object = web.descendants(matching: .any).matching(identifier: "收藏一只不对称的花瓶").firstMatch
-                for _ in 0..<4 { if object.isHittable { break }; web.swipeUp() }
-                object.tap()
-                XCTAssertTrue(web.descendants(matching: .any).matching(identifier: "取消收藏一只不对称的花瓶").firstMatch.waitForExistence(timeout: 3))
-            }
-            app.buttons["完成"].tap()
-            app.goBackInPrompix()
-        }
     }
     func testEditorialTextDiscoveryAndDetail() {
         app.buttons["kind-text"].tap()

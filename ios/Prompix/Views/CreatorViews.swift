@@ -99,13 +99,13 @@ enum CreatorDirectory {
 
     static func browse(in items: [Prompt], query: CreatorQuery) -> [CreatorEntry] {
         let matching = items.filter { item in
-            query.kind == nil || (query.kind == "skill" ? item.isSkill : !item.isSkill && item.kind.rawValue == query.kind)
+            query.kind == nil || item.kind.rawValue == query.kind
         }
         let entries = entries(in: matching).filter { $0.creator.matchesSearch(query.q) }
         let works = Dictionary(uniqueKeysWithValues: entries.map { entry in
             (entry.id, matching.filter { $0.creator.map { Library.creatorsMatch($0, entry.creator, in: items) } ?? false })
         })
-        func visual(_ entry: CreatorEntry) -> Int { works[entry.id, default: []].filter { $0.kind != .text && !$0.isSkill }.count }
+        func visual(_ entry: CreatorEntry) -> Int { works[entry.id, default: []].filter { $0.kind != .text }.count }
         func rotation(_ id: String) -> UInt64 {
             (query.day + ":" + id).utf8.reduce(UInt64(14695981039346656037)) { ($0 ^ UInt64($1)) &* 1099511628211 }
         }
@@ -309,8 +309,8 @@ private struct CreatorWorkPreview: View {
     var body: some View {
         Artwork(preview: ContentPreview(card), compact: true, fillsFrame: true, showsVideoBadge: false)
             .overlay(alignment: .topTrailing) {
-                if card.kind == .video || card.kind == .web {
-                    Image(systemName: card.kind == .video ? "play.fill" : "globe")
+                if card.kind == .video {
+                    Image(systemName: "play.fill")
                         .font(.system(size: 10, weight: .semibold)).foregroundStyle(.white)
                         .padding(5).background(.black.opacity(0.45), in: Circle()).padding(5)
                 }
@@ -531,7 +531,7 @@ private enum CreatorIdentity {
 }
 
 private enum CreatorContentFilter: String, CaseIterable, Identifiable, Hashable {
-    case all, image, video, text, web, skill
+    case all, image, video, text
     var id: String { rawValue }
     var title: String {
         switch self {
@@ -539,15 +539,9 @@ private enum CreatorContentFilter: String, CaseIterable, Identifiable, Hashable 
         case .text: PromptKind.text.title
         case .image: PromptKind.image.title
         case .video: PromptKind.video.title
-        case .web: PromptKind.web.title
-        case .skill: "Skills"
         }
     }
     func includes(_ item: Prompt) -> Bool {
-        switch self {
-        case .all: true
-        case .skill: item.isSkill
-        default: !item.isSkill && item.kind.rawValue == rawValue
-        }
+        self == .all || item.kind.rawValue == rawValue
     }
 }

@@ -11,25 +11,24 @@ struct SearchView: View {
     @FocusState private var searchFocused: Bool
     @State private var handledActivation: Int?
     @State private var kind: PromptKind?
-    @State private var skillsOnly = false
     @State private var recent = SearchView.collapsed(UserDefaults.standard.stringArray(forKey: "recentSearches") ?? [])
     @State private var completedSearch: LocalSearchRequest?
     @State private var matchedPrompts: [Prompt] = []
     @State private var matchedCreators: [CreatorEntry] = []
 
     private var normalizedQuery: String { query.trimmingCharacters(in: .whitespacesAndNewlines) }
-    private var isBrowsing: Bool { normalizedQuery.isEmpty && kind == nil && !skillsOnly }
+    private var isBrowsing: Bool { normalizedQuery.isEmpty && kind == nil }
     private var localSearch: LocalSearchRequest? {
         guard !isBrowsing else { return nil }
         if let store = library.feed?.search {
             // Server results are primary. Scan local full text only when the
             // current request failed without a usable cached page.
-            let feedQuery = FeedQuery(kind: skillsOnly ? "skill" : kind?.rawValue, q: query)
+            let feedQuery = FeedQuery(kind: kind?.rawValue, q: query)
             guard let normalized = try? feedQuery.validated(), store.query == normalized,
                   store.failure != nil, store.items.isEmpty else { return nil }
         }
-        return LocalSearchRequest(query: PromptQuery(text: query, kind: kind, skillsOnly: skillsOnly),
-                                  catalog: library.prompts, includesCreators: library.feed == nil && kind == nil && !skillsOnly && !normalizedQuery.isEmpty)
+        return LocalSearchRequest(query: PromptQuery(text: query, kind: kind),
+                                  catalog: library.prompts, includesCreators: library.feed == nil && kind == nil && !normalizedQuery.isEmpty)
     }
     private var results: [Prompt] { completedSearch == localSearch ? matchedPrompts : [] }
     private var creators: [CreatorEntry] { completedSearch == localSearch ? matchedCreators : [] }
@@ -57,7 +56,7 @@ struct SearchView: View {
                         Section {
                             searchResults
                         } header: {
-                            KindPicker(selection: $kind, skillsOnly: $skillsOnly).padding(.bottom, 4)
+                            KindPicker(selection: $kind).padding(.bottom, 4)
                                 .background(Palette.paper)
                         }
                     }
@@ -68,12 +67,12 @@ struct SearchView: View {
             .background(Palette.paper).foregroundStyle(Palette.ink)
             .navigationTitle(String(localized: "搜索"))
             .navigationBarTitleDisplayMode(.large)
-            .searchable(text: searchText, isPresented: $searchPresented, prompt: String(localized: "搜索 Prompt、Skills 或创作者"))
+            .searchable(text: searchText, isPresented: $searchPresented, prompt: String(localized: "搜索 Prompt 或创作者"))
             .autocorrectionDisabled().textInputAutocapitalization(.never)
             .onSubmit(of: .search) { rememberQuery() }
             .pageRefreshable {
                 await library.refresh(force: true)
-                await library.feed?.search.load(FeedQuery(kind: skillsOnly ? "skill" : kind?.rawValue, q: query), force: true)
+                await library.feed?.search.load(FeedQuery(kind: kind?.rawValue, q: query), force: true)
             }
             .task { await library.refresh() })
         }
@@ -143,8 +142,8 @@ struct SearchView: View {
         if let feed = library.feed {
             // One stack, so an empty creator section adds no gap above the works.
             VStack(alignment: .leading, spacing: 0) {
-                if kind == nil && !skillsOnly && !normalizedQuery.isEmpty { FeedCreatorSearch(repository: feed, query: normalizedQuery) }
-                FeedResults(store: feed.search, query: FeedQuery(kind: skillsOnly ? "skill" : kind?.rawValue, q: query), debounce: true, fallback: results)
+                if kind == nil && !normalizedQuery.isEmpty { FeedCreatorSearch(repository: feed, query: normalizedQuery) }
+                FeedResults(store: feed.search, query: FeedQuery(kind: kind?.rawValue, q: query), debounce: true, fallback: results)
                     .environment(\.cardShowsTitle, true)
             }
         } else { legacyResults }
@@ -232,7 +231,7 @@ private struct LocalSearchRequest: Equatable {
 private struct SearchUseTiles: View {
     @Environment(Library.self) private var library
     private var collections: [Collection] {
-        ["portraits", "graphics", "video", "web"].compactMap { id in Collection.all.first { $0.id == id } }
+        ["portraits", "graphics", "video"].compactMap { id in Collection.all.first { $0.id == id } }
     }
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {

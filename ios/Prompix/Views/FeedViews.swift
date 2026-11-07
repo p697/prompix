@@ -165,7 +165,7 @@ struct FeedPromptCard: View {
             }.buttonStyle(.cardPress).accessibilityLabel(card.title).accessibilityIdentifier("prompt-\(card.id)")
                 .contextMenu {
                     Button { perform(.copy) } label: {
-                        Label { Text(card.contentType == "skill" ? String(localized: "复制 Skill") : String(localized: "复制 Prompt")) } icon: { PrompixIcon.copy.image }
+                        Label { Text(String(localized: "复制 Prompt")) } icon: { PrompixIcon.copy.image }
                     }.disabled(actionID != nil)
                     Button { perform(.save) } label: {
                         Label(library.savedIDs.contains(card.id) ? String(localized: "取消收藏") : String(localized: "收藏 Prompt"),
@@ -412,7 +412,7 @@ struct FeedRelatedResults: View {
     private var path: FeedExplorationPath {
         FeedExplorationPath.paths(for: item).first { $0.id == "topic" }
             ?? FeedExplorationPath(id: "kind", label: "", title: item.displayKind,
-                                   query: FeedQuery(kind: item.isSkill ? "skill" : item.kind.rawValue, sort: "recommended"))
+                                   query: FeedQuery(kind: item.kind.rawValue, sort: "recommended"))
     }
     var body: some View {
         let path = path

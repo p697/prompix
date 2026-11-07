@@ -73,7 +73,6 @@ final class PromptSearchTests: XCTestCase {
                             repository: URL(string: "https://example.com/repo")!, directory: "knowledge", installURL: URL(string: "https://example.com/install")!)
         XCTAssertEqual(PromptQuery(text: "image").results(in: [text, image, skill]).map(\.id), ["image"])
         XCTAssertEqual(PromptQuery(text: "SKILLS research").results(in: [image, skill, text]).map(\.id), ["skill"])
-        XCTAssertEqual(PromptQuery(text: "knowledge-capture", skillsOnly: true).results(in: [image, skill, text]).map(\.id), ["skill"])
         XCTAssertTrue(PromptQuery(text: "research", kind: .text).results(in: [skill]).isEmpty)
     }
 

@@ -96,19 +96,15 @@ private struct ReadingGlass: ViewModifier {
 /// The same geometry is mounted for a card preview and its complete content.
 /// Loading never inserts a new bottom bar or changes the reader's viewport.
 struct ReadingActionBar: View {
-    let isSkill: Bool
     var ready = true
     var collapsed = false
     var copied = false
-    /// Skills with a verified installer copy that command instead of the text.
-    var copyTitle: String? = nil
-    var canEdit = true
     var edit: () -> Void = {}
     var copy: () -> Void = {}
     @Namespace private var transition
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.colorScheme) private var colorScheme
-    private var title: String { copied ? String(localized: "已复制") : copyTitle ?? (isSkill ? String(localized: "复制 Skill") : String(localized: "复制 Prompt")) }
+    private var title: String { copied ? String(localized: "已复制") : String(localized: "复制 Prompt") }
     var body: some View {
         Group {
             if #available(iOS 26, *) { GlassEffectContainer(spacing: 12) { buttons } }
@@ -128,12 +124,10 @@ struct ReadingActionBar: View {
     }
     private var buttons: some View {
         HStack(spacing: 10) {
-            if canEdit {
             Button(action: edit) {
                 PrompixIcon.edit.image.frame(width: 50, height: 50)
             }.buttonStyle(.plain).readingGlass().actionGlassIdentity("edit", in: transition)
                 .accessibilityLabel(String(localized: "写我的版本")).accessibilityIdentifier("editPromptAction")
-            }
             Button(action: copy) {
                 HStack(spacing: 8) {
                     (copied ? PrompixIcon.check : PrompixIcon.copy).image

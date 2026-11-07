@@ -301,7 +301,6 @@ struct PromptQuery: Equatable {
     var kind: PromptKind?
     var topic: String?
     var model: String?
-    var skillsOnly = false
     var creatorID: String?
     /// Rank direct intent matches before incidental mentions in long instructions.
     /// Preserve editorial order for empty queries and equal relevance.
@@ -331,7 +330,6 @@ struct PromptQuery: Equatable {
 
     func matches(_ prompt: Prompt) -> Bool {
         if let kind, prompt.kind != kind || prompt.isSkill { return false }
-        if skillsOnly && !prompt.isSkill { return false }
         if let creatorID, prompt.creator?.id != creatorID { return false }
         if let topic, !prompt.fits(topic: topic) { return false }
         if let model, prompt.model != model { return false }

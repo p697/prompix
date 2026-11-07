@@ -57,21 +57,6 @@ import CryptoKit
         XCTAssertTrue(element.isHittable)
     }
 
-    private func selectSkill() {
-        let skill = app.buttons["kind-skill"]
-        let picker = app.scrollViews["kindPicker"]
-        for _ in 0..<5 {
-            let visible = skill.frame.intersection(picker.frame)
-            // iOS 27 can throw instead of returning false when an offscreen
-            // accessibility button has no activation point.
-            if !visible.isNull && visible.width >= min(44, skill.frame.width) && skill.isHittable { break }
-            picker.swipeLeft()
-        }
-        XCTAssertTrue(skill.isHittable)
-        skill.tap()
-        XCTAssertTrue(skill.isSelected)
-    }
-
     // Decode only the fields needed for acceptance. Fixture files stay outside
     // the repository, and assertions never print the user's full prompt/draft.
     private struct CatalogSnapshot: Decodable {
@@ -140,53 +125,6 @@ import CryptoKit
         app.selectPrompixTab("发现")
     }
 
-    func testImmersiveLiveSkillAndCreatorSearch() throws {
-        guard ProcessInfo.processInfo.environment["PROMPIX_IMMERSIVE_ACCEPTANCE"] == "1" else {
-            throw XCTSkip("Use a backed-up dedicated simulator with the published catalog.")
-        }
-        let directory = try acceptanceDirectory()
-        let data = try Data(contentsOf: directory.appendingPathComponent("catalog.json"))
-        let catalog = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
-        let items = try XCTUnwrap(catalog["prompts"] as? [[String: Any]])
-        XCTAssertGreaterThan(items.count, 100)
-        let item = try XCTUnwrap(items.first { $0["id"] as? String == "skill-anthropic-webapp-testing" })
-        let title = try XCTUnwrap(item["title"] as? String)
-        let localization = item["localization"] as? [String: Any]
-        let translations = localization?["translations"] as? [String: [String: Any]]
-        let expected = try XCTUnwrap(translations?["zh-Hans"]?["prompt"] as? String ?? item["prompt"] as? String)
-        XCTAssertGreaterThan(expected.count, 1100)
-        launch(online: true)
-        XCTAssertTrue(app.otherElements["catalogUpdateStatus"].waitForNonExistence(timeout: 30))
-        capture("immersive-live-home")
-        app.selectPrompixTab("搜索")
-        let field = app.searchFields.firstMatch
-        XCTAssertTrue(field.waitForExistence(timeout: 5))
-        field.tap(); field.typeText("Anthropic\n")
-        let creator = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'creator-' AND label == 'Anthropic'")).firstMatch
-        XCTAssertTrue(creator.waitForExistence(timeout: 5)); creator.tap()
-        capture("immersive-live-creator")
-        app.goBackInPrompix()
-        XCTAssertEqual(field.value as? String, "Anthropic")
-        field.tap(); field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 9) + title + "\n")
-        let card = app.buttons["prompt-skill-anthropic-webapp-testing"]
-        XCTAssertTrue(card.waitForExistence(timeout: 5)); card.tap()
-        XCTAssertTrue(app.buttons["copyPrompt"].waitForExistence(timeout: 3))
-        capture("immersive-live-skill-heading")
-        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.75))
-            .press(forDuration: 0.01, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.35)))
-        capture("immersive-live-markdown")
-        app.buttons["copyPrompt"].tap()
-        XCTAssertEqual(app.buttons["copyPrompt"].label, "已复制")
-        app.buttons["editPromptAction"].tap()
-        XCTAssertTrue(app.textViews["promptEditor"].waitForExistence(timeout: 3))
-        XCTAssertEqual(app.textViews["promptEditor"].value as? String, expected)
-        app.buttons["完成"].tap()
-        app.expandPromptInformation()
-        XCTAssertTrue(app.buttons["skillFiles"].waitForExistence(timeout: 3))
-        capture("immersive-live-skill-information")
-        let body = XCTAttachment(string: expected)
-        body.name = "immersive-expected-clipboard"; body.lifetime = .keepAlways; add(body)
-    }
 
     func testProductionLanguageDownloadAndCachedRelaunch() throws {
         guard ProcessInfo.processInfo.environment["PROMPIX_LANGUAGE_PACK_ACCEPTANCE"] == "1" else {
@@ -796,36 +734,6 @@ import CryptoKit
         }
     }
 
-    func testIndependentProductionContentAndNewSkill() throws {
-        guard ProcessInfo.processInfo.environment["PROMPIX_INDEPENDENT_ACCEPTANCE"] == "1" else {
-            throw XCTSkip("This journey verifies the live independent-source edition on the dedicated simulator.")
-        }
-        let before = try acceptanceDirectory()
-        let drafts = try? Data(contentsOf: before.appendingPathComponent("drafts.json"))
-        launch(online: true)
-        let downloaded = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
-            guard let directory = try? self.acceptanceDirectory(),
-                  let catalog = try? self.readSnapshot(CatalogSnapshot.self, from: directory, file: "catalog.json") else { return false }
-            return catalog.prompts.count >= 387 && catalog.prompts.contains { $0.id == "skill-openai-transcribe" }
-        }, object: nil)
-        XCTAssertEqual(XCTWaiter.wait(for: [downloaded], timeout: 90), .completed)
-        XCTAssertEqual(try? Data(contentsOf: try acceptanceDirectory().appendingPathComponent("drafts.json")), drafts)
-        app.revealDiscoveryRails()
-        XCTAssertTrue(app.buttons["allCreators"].exists)
-        capture("independent-01-refreshed-discovery")
-        app.selectPrompixTab("搜索")
-        let search = app.searchFields.firstMatch
-        XCTAssertTrue(search.waitForExistence(timeout: 5))
-        search.tap(); search.typeText("transcribe")
-        let card = app.buttons["prompt-skill-openai-transcribe"]
-        reveal(card); card.tap()
-        XCTAssertTrue(app.buttons["copyPrompt"].waitForExistence(timeout: 5))
-        capture("independent-02-new-official-skill")
-        app.buttons["copyPrompt"].tap()
-        XCTAssertTrue(app.buttons["copyPrompt"].waitForExistence(timeout: 5))
-        capture("independent-03-new-skill-use")
-        app.buttons["copyPrompt"].tap()
-    }
 
 
 
@@ -1148,7 +1056,7 @@ import CryptoKit
         XCTAssertEqual(try? Data(contentsOf: try acceptanceDirectory().appendingPathComponent("drafts.json")), drafts)
     }
 
-    func testCreatorAndSkillJourney() {
+    func testCreatorJourney() {
         launch()
         app.revealDiscoveryRails()
         XCTAssertTrue(app.buttons["allCreators"].waitForExistence(timeout: 10), "Stage the creator/Skill candidate catalog before running this journey.")
@@ -1179,20 +1087,6 @@ import CryptoKit
         app.segmentedControls["savedContentType"].buttons["创作者"].tap()
         XCTAssertTrue(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'saved-creator-' ")).firstMatch.waitForExistence(timeout: 5))
         capture("04-saved-creator-after-relaunch")
-        app.selectPrompixTab("发现")
-        selectSkill()
-        XCTAssertFalse(app.buttons["allCreators"].exists, "Filtering should put results before discovery rails.")
-        capture("05-skills-channel")
-        let skill = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'prompt-skill-' ")).firstMatch
-        reveal(skill)
-        skill.tap()
-        XCTAssertTrue(app.buttons["copyPrompt"].waitForExistence(timeout: 5))
-        let source = app.descendants(matching: .any).matching(identifier: "skillSource").firstMatch
-        reveal(source)
-        capture("06-skill-source-and-files")
-        app.buttons["copyPrompt"].tap()
-        XCTAssertTrue(app.buttons["copyPrompt"].label.contains("已复制"))
-        app.buttons["detailFavorite"].tap()
     }
 
     func testNineInterfaceLanguages() {
