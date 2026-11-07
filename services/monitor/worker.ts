@@ -52,8 +52,8 @@ function message(notice: Notice, recipient: string, label: string): string {
   const descriptions: Record<Notice["kind"], string> = {
     source_degraded: "连续两次采集出现来源或审核服务失败。内容库可能仍可访问，但新增供给受影响，请检查分阶段运行记录。",
     run_failed: "采集任务失败。安全重试已耗尽或遇到不可重试错误，请检查采集状态和日志。",
-    run_stalled: "采集任务已运行超过 2 小时，可能卡住。请检查运行中的任务。",
-    schedule_missed: "超过 8 小时没有成功完成采集。请检查电脑、外接磁盘、网络和定时任务。",
+    run_stalled: "采集任务已运行超过 3.5 小时，超过了后台进程 3 小时的上限，可能卡住。请检查运行中的任务。",
+    schedule_missed: "超过 26 小时没有成功完成采集，也就是错过了一整晚。请检查电脑、外接磁盘、网络和后台进程。",
     publication_stale: "超过 26 小时没有成功发布。请检查质量审核、发布队列和发布服务。",
     content_stale: "任务仍在运行，但超过 26 小时没有新增内容完成收录。请检查发现覆盖、质量暂缓队列和预算分配，不要降低质量标准凑数。",
     recovered: "采集已成功完成，之前的告警条件已解除。",

@@ -20,7 +20,7 @@ const reasonNames: Record<string, string> = { "incomplete-prompt": "提示词不
   "media-mismatch": "图文不符", "low-quality": "效果差", "ad-or-bait": "广告或引流", "watermark-or-collage": "水印或拼贴", "real-person": "真实人物",
   unsafe: "不安全", "minors-unsafe": "未成年人不安全", "minors-uncertain-with-suggestive": "疑似未成年加擦边", "minors-safe-with-suggestive": "未成年人加擦边",
   "presentation-explicit": "露骨", "presentation-unknown": "尺度判不准", invalid: "审核输出无效" };
-const jobNames: Record<string, string> = { intake: "每日采集发布", maintenance: "来源维护复查" };
+const jobNames: Record<string, string> = { intake: "每日采集发布", "intake-extra": "加跑的采集发布", maintenance: "来源维护复查" };
 const local = (at: number) => new Date(at).toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false });
 const clock = (at: string) => new Date(at).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", hour12: false });
 const usd = (value: number) => `$${value.toFixed(2)}`;
@@ -52,8 +52,8 @@ export function buildDailyReport(input: ReportInput): DailyReport {
     }
   }
   const intakes = runs.filter(event => event.job === "intake" && event.type === "job.finished");
-  // Older events carry the count only in their summary.
-  const published = intakes.reduce((sum, event) => sum + Number(event.published ?? /新发布 (\d+) 条/.exec(String(event.summary))?.[1] ?? 0), 0);
+  // Older events carry the count only in their summary. Extra runs publish too.
+  const published = runs.filter(event => (event.job === "intake" || event.job === "intake-extra") && event.type === "job.finished").reduce((sum, event) => sum + Number(event.published ?? /新发布 (\d+) 条/.exec(String(event.summary))?.[1] ?? 0), 0);
   if (input.desired === "running" && !intakes.length) problems.push("这一天没有成功完成的每日采集发布");
   else if (input.desired === "running" && !published) problems.push("每日流程这一天没有发布新内容");
   if (input.databaseError) problems.push(`读取线上数据失败：${input.databaseError.slice(0, 160)}`);

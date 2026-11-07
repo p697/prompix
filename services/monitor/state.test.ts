@@ -7,16 +7,12 @@ function event(start: number, state: Heartbeat["state"], published = false): Hea
   return { runID: randomUUID(), startedAt: new Date(start).toISOString(), state, published,
     ...(state !== "running" ? { finishedAt: new Date(start + 60000).toISOString() } : {}) };
 }
-test("run failure is deduplicated across retries and subsequent failed runs; only success recovers", () => {
+test("a failed run alone does not alert: the Mac retries and reports its last attempt itself", () => {
   const s = initialState(origin), failed = event(origin, "failed");
   assert.equal(acceptHeartbeat(s, failed, origin + 60000), true);
   assert.equal(acceptHeartbeat(s, failed, origin + 60000), false);
   acceptHeartbeat(s, event(origin + HOUR, "failed"), origin + 2 * HOUR);
-  const running = event(origin + 2 * HOUR, "running");
-  acceptHeartbeat(s, running, origin + 2 * HOUR);
-  assert.deepEqual(s.outbox.map(n => n.kind), ["run_failed"]);
-  acceptHeartbeat(s, { ...running, state: "succeeded", finishedAt: new Date(origin + 3 * HOUR).toISOString(), published: true }, origin + 3 * HOUR);
-  assert.deepEqual(s.outbox.map(n => n.kind), ["run_failed", "recovered"]);
+  assert.deepEqual(s.outbox, []);
   assert.equal(s.incident, undefined);
 });
 test("out-of-order starts, delayed older completions and conflicting identities cannot overwrite newer state", () => {
@@ -31,16 +27,18 @@ test("out-of-order starts, delayed older completions and conflicting identities 
 });
 test("cloud alarm detects missed schedules even without any incoming heartbeat", () => {
   const s = initialState(origin);
-  evaluate(s, origin + 8 * HOUR - 1); assert.equal(s.outbox.length, 0);
-  evaluate(s, origin + 8 * HOUR); evaluate(s, origin + 16 * HOUR);
+  // One nightly run: a day without success is a missed night.
+  evaluate(s, origin + 26 * HOUR - 1); assert.equal(s.outbox.length, 0);
+  evaluate(s, origin + 26 * HOUR); evaluate(s, origin + 30 * HOUR);
   assert.deepEqual(s.outbox.map(n => n.kind), ["schedule_missed"]);
-  assert.equal(nextAlarm(s, origin + 16 * HOUR), origin + 16 * HOUR + 1000);
+  assert.equal(nextAlarm(s, origin + 30 * HOUR), origin + 30 * HOUR + 1000);
 });
-test("a hung run alerts after two hours and a new start does not hide the incident", () => {
+test("a run past the worker's three-hour limit alerts and a new start does not hide the incident", () => {
   const s = initialState(origin);
   acceptHeartbeat(s, event(origin, "running"), origin);
-  evaluate(s, origin + 2 * HOUR); assert.equal(s.incident, "run_stalled");
-  acceptHeartbeat(s, event(origin + 3 * HOUR, "running"), origin + 3 * HOUR);
+  evaluate(s, origin + 3 * HOUR); assert.equal(s.incident, undefined, "a long translation run is normal");
+  evaluate(s, origin + 3.5 * HOUR); assert.equal(s.incident, "run_stalled");
+  acceptHeartbeat(s, event(origin + 4 * HOUR, "running"), origin + 4 * HOUR);
   assert.equal(s.incident, "run_stalled"); assert.equal(s.outbox.length, 1);
 });
 test("successful runs without publication cannot hide a stale publication", () => {
@@ -59,12 +57,12 @@ test("successful unchanged publications cannot hide a stalled discovery pipeline
 });
 test("email retries retain the notice and acknowledging it preserves concurrent recovery", () => {
   const s = initialState(origin);
-  acceptHeartbeat(s, event(origin, "failed"), origin + 60000);
+  evaluate(s, origin + 26 * HOUR);
   const id = s.outbox[0].id;
   defer(s, id, origin); assert.equal(s.outbox[0].nextAttempt, origin + 300000);
   for (let i = 0; i < 20; i++) defer(s, id, origin);
   assert.equal(s.outbox[0].nextAttempt, origin + HOUR);
-  acceptHeartbeat(s, event(origin + HOUR, "succeeded", true), origin + 2 * HOUR);
+  acceptHeartbeat(s, event(origin + 27 * HOUR, "succeeded", true), origin + 28 * HOUR);
   acknowledge(s, id); assert.deepEqual(s.outbox.map(n => n.kind), ["recovered"]);
   acknowledge(s, id); assert.equal(s.outbox.length, 1);
 });

@@ -116,42 +116,49 @@ export function reportJob(env: NodeJS.ProcessEnv, root = pipelineRoot(), send = 
  * Runs nightly while the desired state is running. The content directory lives on the external
  * drive: a missing drive is reported at once, and the third failed attempt sends an alert. */
 export const intakeRequestFile = "intake-request.json";
-/** The nightly intake, or an extra run the owner asked for (`npm run pipeline -- intake`). An
- * extra run does not use up the night's slot, which starts later. */
-export function intakeJob(env: NodeJS.ProcessEnv, spawnDaily = runDaily, alert = sendAlert, root = contentRoot, control = pipelineRoot()): Job {
-  const requested = async (last: NonNullable<WorkerStatus["jobs"]>[string] | undefined) => {
-    const request = await json<{ at?: string; importTrials?: string[]; translationRequests?: number } | null>(join(control, intakeRequestFile), null);
-    return request?.at && (!last || Date.parse(last.startedAt) < Date.parse(request.at)) ? request : undefined;
-  };
-  let extra: { importTrials?: string[]; translationRequests?: number } | undefined;
+type ExtraIntake = { importTrials?: string[]; translationRequests?: number };
+
+/** The nightly intake. Three failed attempts in a night alert the owner; a missing drive alerts at once. */
+export function intakeJob(env: NodeJS.ProcessEnv, spawnDaily = runDaily, alert = sendAlert, root = contentRoot): Job {
   return { name: "intake", at: nightly.intake, enabled: config => config.desired === "running" && config.dailyTarget > 0,
-    ready: async (last, now) => {
-      extra = await requested(last);
-      return !!extra || jobDue({ name: "intake", at: nightly.intake }, last ? { jobs: { intake: last } } as unknown as WorkerStatus : undefined, now);
+    onGiveUp: message => alert(`每晚采集发布连续 ${maxAttempts} 次失败，今晚不会再重试。最后一次的错误：${message}`, env),
+    run: attempt => runIntake(env, spawnDaily, alert, root, attempt) };
+}
+
+/** An extra run the owner asked for (`npm run pipeline -- intake`). It keeps its own status, so it
+ * never uses up the night's attempts, is not retried and does not alert; the report lists it. */
+export function extraIntakeJob(env: NodeJS.ProcessEnv, spawnDaily = runDaily, root = contentRoot, control = pipelineRoot()): Job {
+  let extra: ExtraIntake | undefined;
+  return { name: "intake-extra", at: 0, enabled: config => config.desired === "running",
+    ready: async last => {
+      const request = await json<(ExtraIntake & { at?: string }) | null>(join(control, intakeRequestFile), null);
+      extra = request?.at && (!last || Date.parse(last.startedAt) < Date.parse(request.at)) ? request : undefined;
+      return !!extra;
     },
-    onGiveUp: message => alert(`每日采集发布今天连续 ${maxAttempts} 次失败，今天不会再重试。最后一次的错误：${message}`, env),
-    run: async attempt => {
-      if (!await access(root).then(() => true, () => false)) {
-        const message = `内容目录 ${root} 读不到，外置硬盘可能没有连接`;
-        if (attempt === 1) await alert(`${message}。接上硬盘后，管线会在 30 分钟内自动重试。`, env);
-        throw new Error(message);
-      }
-      const { PROMPIX_HISTORY_CAMPAIGN: _, ...rest } = env;
-      const trials = (extra?.importTrials ?? []).filter(trial => /^[\w-]+$/.test(trial));
-      // An extra run may translate more of the library than a night does (backfill, owner 2026-11-07).
-      const translationRequests = Number.isInteger(extra?.translationRequests) && extra!.translationRequests! > 0 && extra!.translationRequests! <= 1000 ? extra!.translationRequests : undefined;
-      const code = await spawnDaily({ ...rest, PROMPIX_TRANSLATION_PROVIDER: "pipeline", ...(trials.length ? { PROMPIX_IMPORT_TRIALS: trials.join(",") } : {}),
-        ...(translationRequests ? { PROMPIX_TRANSLATION_MAX_REQUESTS: String(translationRequests) } : {}) });
-      const report = await json<IntakeReport>(join(root, "status.json"), {});
-      if (code !== 0) throw new Error(report.error ?? `daily exited with ${code}`);
-      const added = report.changes?.added?.total ?? 0, enrichment = report.sources?.enrichment, review = report.sources?.["x-review"];
-      const days = report.sources?.x?.days ?? [];
-      const searched = days.length ? `搜索日本时间 ${days.map(day => day.day.slice(5).replace("-", "/")).join("、")}：搜到 ${days.reduce((sum, day) => sum + day.returned, 0)} 条，收进 ${days.reduce((sum, day) => sum + day.admitted, 0)} 条，模型找出提示词 ${days.reduce((sum, day) => sum + (day.located ?? 0), 0)} 条；` : "";
-      return { published: added, summary: `新发布 ${added} 条；${searched}X 新帖审核通过 ${review?.approved ?? 0} 条，拒绝 ${review?.rejected ?? 0} 条，人像超比例顺延 ${review?.deferredPortraits ?? 0} 条；其他内容 2.0 审核通过 ${enrichment?.enriched ?? 0} 条，排除 ${enrichment?.excluded ?? 0} 条`,
-        // Subscription calls outside the provider layer, for the daily report.
-        details: { editorialRequests: report.editorial?.requests ?? 0, visualRequests: report.visualReview?.requests ?? 0,
-          excluded: (enrichment?.excluded ?? 0) + (review?.rejected ?? 0), ...(review?.reasons ? { rejectReasons: review.reasons } : {}) } };
-    } };
+    run: () => runIntake(env, spawnDaily, async () => {}, root, 1, extra) };
+}
+
+async function runIntake(env: NodeJS.ProcessEnv, spawnDaily: typeof runDaily, alert: typeof sendAlert, root: string, attempt: number, extra?: ExtraIntake): Promise<JobResult> {
+  if (!await access(root).then(() => true, () => false)) {
+    const message = `内容目录 ${root} 读不到，外置硬盘可能没有连接`;
+    if (attempt === 1) await alert(`${message}。接上硬盘后，管线会在 30 分钟内自动重试。`, env);
+    throw new Error(message);
+  }
+  const { PROMPIX_HISTORY_CAMPAIGN: _, ...rest } = env;
+  const trials = (extra?.importTrials ?? []).filter(trial => /^[\w-]+$/.test(trial));
+  // An extra run may translate more of the library than a night does (backfill, owner 2026-11-07).
+  const translationRequests = Number.isInteger(extra?.translationRequests) && extra!.translationRequests! > 0 && extra!.translationRequests! <= 1000 ? extra!.translationRequests : undefined;
+  const code = await spawnDaily({ ...rest, PROMPIX_TRANSLATION_PROVIDER: "pipeline", ...(trials.length ? { PROMPIX_IMPORT_TRIALS: trials.join(",") } : {}),
+    ...(translationRequests ? { PROMPIX_TRANSLATION_MAX_REQUESTS: String(translationRequests) } : {}) });
+  const report = await json<IntakeReport>(join(root, "status.json"), {});
+  if (code !== 0) throw new Error(report.error ?? `daily exited with ${code}`);
+  const added = report.changes?.added?.total ?? 0, enrichment = report.sources?.enrichment, review = report.sources?.["x-review"];
+  const days = report.sources?.x?.days ?? [];
+  const searched = days.length ? `搜索日本时间 ${days.map(day => day.day.slice(5).replace("-", "/")).join("、")}：搜到 ${days.reduce((sum, day) => sum + day.returned, 0)} 条，收进 ${days.reduce((sum, day) => sum + day.admitted, 0)} 条，模型找出提示词 ${days.reduce((sum, day) => sum + (day.located ?? 0), 0)} 条；` : "";
+  return { published: added, summary: `新发布 ${added} 条；${searched}X 新帖审核通过 ${review?.approved ?? 0} 条，拒绝 ${review?.rejected ?? 0} 条，人像超比例顺延 ${review?.deferredPortraits ?? 0} 条；其他内容 2.0 审核通过 ${enrichment?.enriched ?? 0} 条，排除 ${enrichment?.excluded ?? 0} 条`,
+    // Subscription calls outside the provider layer, for the daily report.
+    details: { editorialRequests: report.editorial?.requests ?? 0, visualRequests: report.visualReview?.requests ?? 0,
+      excluded: (enrichment?.excluded ?? 0) + (review?.rejected ?? 0), ...(review?.reasons ? { rejectReasons: review.reasons } : {}) } };
 }
 
 export const trialRequestFile = "trial-request.json";
@@ -226,7 +233,7 @@ async function main() {
   if (!release) { console.log(JSON.stringify({ event: "worker_already_running" })); return; }
   const env = { ...await pipelineEnvironment(), ...await childCertificates(root) };
   // Maintenance first: it keeps the verifications every publication requires current.
-  const startedAt = new Date().toISOString(), jobs = [maintenanceJob(env), reportJob(env, root), intakeJob(env, runDaily, sendAlert, contentRoot, root), trialJob(env, root)];
+  const startedAt = new Date().toISOString(), jobs = [maintenanceJob(env), reportJob(env, root), intakeJob(env), extraIntakeJob(env, runDaily, contentRoot, root), trialJob(env, root)];
   let stopping = false, sleeping: (() => void) | undefined;
   const stop = () => { stopping = true; sleeping?.(); };
   process.on("SIGTERM", stop); process.on("SIGINT", stop);
