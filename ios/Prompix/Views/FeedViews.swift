@@ -438,7 +438,7 @@ struct FeedRelatedResults: View {
                     PreviewMasonryGrid(items: cards, preview: ContentPreview.init) { FeedPromptCard(card: $0) }
                         .feedDetailHost().accessibilityIdentifier("relatedFeed")
                 } else if waiting {
-                    FeedLoadingGrid()
+                    FeedLoadingGrid(count: 6)
                 }
             }.padding(.horizontal, -6)
         }.task(id: path.query) { await store.load(path.query) }.onDisappear { store.cancel() }

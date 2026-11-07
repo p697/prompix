@@ -19,7 +19,7 @@ struct Artwork: View {
             ZStack {
                 if item.usesTextArtwork { noteArtwork(size: proxy.size) }
                 else if let name = item.media?.image, UIImage(named: name) != nil { photo(name, size: proxy.size) }
-                else if let url = item.media?.imageURL { RemoteImage(url: url, contentMode: compact || fillsFrame ? .fill : .fit)
+                else if let url = item.media?.imageURL { RemoteImage(url: url, contentMode: compact || fillsFrame ? .fill : .fit, tone: item.palette?.first?.color)
                     // A web page reads from its top-left corner; never crop away its left edge.
                     .frame(width: proxy.size.width, height: proxy.size.height, alignment: anchorsTop ? .top : .center).clipped() }
                 else if let cover = item.cover { editorialCover(cover, size: proxy.size) }
@@ -120,5 +120,13 @@ struct Artwork: View {
             Ellipse().fill(Color(red: 0.79, green: 0.38, blue: 0.24)).frame(width: size.width * 0.43, height: size.height * 0.45).rotationEffect(.degrees(-30)).offset(x: size.width * 0.20, y: size.height * 0.1)
             Circle().fill(Color(red: 0.98, green: 0.82, blue: 0.47)).frame(width: size.width * 0.3).offset(y: -size.height * 0.22)
         }
+    }
+}
+
+extension Prompt.Swatch {
+    /// Validated `#RRGGBB`; see `Enrichment.palette`.
+    var color: Color? {
+        guard let value = UInt32(hex.dropFirst(), radix: 16) else { return nil }
+        return Color(red: Double(value >> 16 & 0xFF) / 255, green: Double(value >> 8 & 0xFF) / 255, blue: Double(value & 0xFF) / 255)
     }
 }

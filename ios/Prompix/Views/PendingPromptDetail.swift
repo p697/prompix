@@ -62,7 +62,7 @@ struct PendingPromptDetail: View {
         }
     }
     private var reading: some View {
-        VStack(alignment: .leading, spacing: 24) {
+        VStack(alignment: .leading, spacing: 16) {
             PromptDetailHeading(preview: ContentPreview(card), title: card.title)
             if #available(iOS 27.1, *), preview.hasDetailMedia, mediaPaneVisible {
                 HStack(spacing: 14) {
@@ -172,7 +172,7 @@ struct DetailHero: View {
                         // A fixed frame, as Artwork uses: a flexible one grows to the
                         // filled image and the page centres it, cropping off the head.
                         else { GeometryReader { proxy in
-                            RemoteImage(url: urls[index], contentMode: .fill)
+                            RemoteImage(url: urls[index], contentMode: .fill, tone: preview.palette?.first?.color)
                                 .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top).clipped()
                         } }
                     }.tag(index)
@@ -253,18 +253,26 @@ extension ContentPreview {
     }
 }
 
+/// The PROMPT row and seven lines in the folded prompt's own rhythm (New York
+/// 17 with 5 pt leading), so the words take the bars' places without a jump.
 private struct PromptBodySkeleton: View {
-    @ScaledMetric(relativeTo: .body) private var lineHeight = 12.0
+    @ScaledMetric(relativeTo: .body) private var leading = 5.0
+    private static let widths: [CGFloat] = [1, 0.94, 0.97, 0.9, 0.99, 0.86, 0.58]
     var body: some View {
-        VStack(alignment: .leading, spacing: 24) {
-            ForEach(0..<2) { _ in
-                VStack(alignment: .leading, spacing: 14) {
-                    ForEach([1.0, 0.93, 0.98, 0.62], id: \.self) { fraction in
-                        GeometryReader { geometry in
-                            LoadingSurface().clipShape(RoundedRectangle(cornerRadius: 3))
-                                .frame(width: geometry.size.width * fraction)
-                        }.frame(height: lineHeight)
-                    }
+        VStack(alignment: .leading, spacing: 10) {
+            Text(verbatim: "PROMPT").font(Typography.meta(size: 11)).tracking(1.4).foregroundStyle(Palette.muted)
+                .frame(minHeight: 44)
+            VStack(alignment: .leading, spacing: leading) {
+                ForEach(Self.widths.indices, id: \.self) { index in
+                    Text(verbatim: "Ag").font(Typography.prompt(size: 17)).hidden()
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .overlay {
+                            GeometryReader { geometry in
+                                LoadingSurface().clipShape(Capsule())
+                                    .frame(width: geometry.size.width * Self.widths[index], height: 11)
+                                    .frame(maxHeight: .infinity)
+                            }
+                        }
                 }
             }
         }.frame(maxWidth: .infinity, alignment: .leading)

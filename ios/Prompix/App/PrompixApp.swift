@@ -58,6 +58,15 @@ import SwiftUI
 }
 
 #if DEBUG && targetEnvironment(simulator)
+/// Opt-in fixture for reviewing waiting states: holds each feed request and
+/// picture download for a while, so skeletons and arrivals can be watched.
+enum SimulatorSlowNetwork {
+    static func wait(seconds: Double) async {
+        guard ProcessInfo.processInfo.arguments.contains("--simulate-slow-network") else { return }
+        try? await Task.sleep(for: .seconds(seconds))
+    }
+}
+
 /// Opt-in UI acceptance fixture. A host-side test can restore networking before
 /// pressing the real retry button; ordinary and release launches never register it.
 final class SimulatorNetworkFailure: URLProtocol {

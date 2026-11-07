@@ -236,9 +236,10 @@ private struct CreatorRailCard: View {
                             .overlay(Circle().stroke(Palette.paper, lineWidth: 2)).padding(5)
                     }
                 }
-            Text(entry?.creator.displayName ?? "Creator name").font(.caption).lineLimit(1)
-                .frame(maxWidth: .infinity).frame(height: nameHeight)
-                .redacted(reason: entry == nil ? .placeholder : [])
+            Group {
+                if let entry { Text(entry.creator.displayName).font(.caption).lineLimit(1) }
+                else { LoadingLine(font: .caption, width: 64, alignment: .center) }
+            }.frame(maxWidth: .infinity).frame(height: nameHeight)
         }.frame(width: width, alignment: .top).contentShape(Rectangle())
             .accessibilityHidden(entry == nil)
     }

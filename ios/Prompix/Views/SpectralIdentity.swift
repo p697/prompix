@@ -57,10 +57,77 @@ struct PrompixWordmark: View {
     }
 }
 
-/// Every skeleton uses the same quiet surface, without an activity overlay.
+/// Every skeleton uses the same quiet surface. One faint light passes over all
+/// of them at once, like a safelight across an undeveloped sheet.
 struct LoadingSurface: View {
     var body: some View {
-        Rectangle().fill(Palette.soft).accessibilityHidden(true).allowsHitTesting(false)
+        Rectangle().fill(Palette.soft).overlay { SkeletonSweep() }
+            .accessibilityHidden(true).allowsHitTesting(false)
+    }
+}
+
+/// Each surface draws its own slice of a single diagonal band, from the shared
+/// clock and its position on screen, so the light runs on across tiles, rows,
+/// rails and the gaps between them. Static with Reduce Motion, in Low Power
+/// Mode, off screen and in the background.
+private struct SkeletonSweep: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.horizontalSizeClass) private var sizeClass
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var visible = true
+    @State private var lowPower = ProcessInfo.processInfo.isLowPowerModeEnabled
+    private var animates: Bool { visible && scenePhase == .active && !reduceMotion && !lowPower }
+    /// The band leans 15° from vertical: its position is x + slope · y.
+    private static let slope: CGFloat = 0.27, halfWidth: CGFloat = 120
+    private static let period = 2.8, travelShare = 0.7
+
+    var body: some View {
+        drawing
+            .onAppear { visible = true }
+            .onDisappear { visible = false }
+            .onReceive(NotificationCenter.default.publisher(for: .NSProcessInfoPowerStateDidChange)) { _ in
+                lowPower = ProcessInfo.processInfo.isLowPowerModeEnabled
+            }
+    }
+    @ViewBuilder private var drawing: some View {
+        if #available(iOS 18, *) {
+            timeline.onScrollVisibilityChange(threshold: 0.01) { visible = $0 }
+        } else { timeline }
+    }
+    private var timeline: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 30, paused: !animates)) { clock in
+            GeometryReader { proxy in
+                let origin = proxy.frame(in: .global).origin
+                let center = animates ? bandCenter(at: clock.date) : nil
+                Canvas { context, size in
+                    guard let center else { return }
+                    // Where this surface's top-left corner sits along the band's axis.
+                    let local = center - origin.x - Self.slope * origin.y
+                    let reach = size.width + Self.slope * size.height
+                    guard local + Self.halfWidth > 0, local - Self.halfWidth < reach else { return }
+                    // Moving one point along the unit axis advances the band by `length`.
+                    let length = (1 + Self.slope * Self.slope).squareRoot()
+                    let axis = CGPoint(x: 1 / length, y: Self.slope / length)
+                    let from = (local - Self.halfWidth) / length, to = (local + Self.halfWidth) / length
+                    let light = Color.white.opacity(colorScheme == .dark ? 0.055 : 0.55)
+                    context.fill(Path(CGRect(origin: .zero, size: size)),
+                                 with: .linearGradient(Gradient(colors: [light.opacity(0), light, light.opacity(0)]),
+                                                       startPoint: CGPoint(x: axis.x * from, y: axis.y * from),
+                                                       endPoint: CGPoint(x: axis.x * to, y: axis.y * to)))
+                }
+            }
+        }
+    }
+    /// The band crosses the screen in 70% of each period, easing in and out,
+    /// then rests off screen. The clock is shared, so every surface agrees.
+    private func bandCenter(at date: Date) -> CGFloat? {
+        let progress = date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: Self.period) / Self.period
+        guard progress < Self.travelShare else { return nil }
+        let t = CGFloat(progress / Self.travelShare)
+        let eased = t * t * (3 - 2 * t)
+        let far: CGFloat = sizeClass == .regular ? 1_800 : 950
+        return -Self.halfWidth + eased * (far + 2 * Self.halfWidth)
     }
 }
 
