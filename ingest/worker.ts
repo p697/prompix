@@ -21,6 +21,8 @@ export type JobResult = string | { summary: string; published?: number; details?
 /** A daily job: `at` is its time after 00:00 UTC. `enabled` gates it on the desired state (source
  * maintenance ignores it). `onGiveUp` hears about the last failed attempt of a day. */
 export type Job = { name: string; at: number; enabled?: (config: PipelineConfig) => boolean;
+  /** On-demand jobs replace the nightly slot with their own readiness check. */
+  ready?: (last: NonNullable<WorkerStatus["jobs"]>[string] | undefined) => Promise<boolean>;
   run: (attempt: number) => Promise<JobResult>; onGiveUp?: (message: string) => Promise<void> };
 type Clock = { now: () => number };
 
@@ -47,7 +49,11 @@ export async function tick(root: string, startedAt: string, jobs: Job[], clock: 
     today: previous?.today.date === at.slice(0, 10) ? previous.today : { date: at.slice(0, 10), published: 0, reviewed: 0, held: 0, rejected: 0 },
     ...(previous?.jobs ? { jobs: previous.jobs } : {}), ...(previous?.lastError ? { lastError: previous.lastError } : {}) };
   await writeWorkerStatus(root, base);
-  const job = jobs.find(candidate => (candidate.enabled?.(config) ?? true) && jobDue(candidate, base, clock.now()));
+  let job: Job | undefined;
+  for (const candidate of jobs) {
+    if (!(candidate.enabled?.(config) ?? true)) continue;
+    if (candidate.ready ? await candidate.ready(base.jobs?.[candidate.name]) : jobDue(candidate, base, clock.now())) { job = candidate; break; }
+  }
   if (!job) return;
   const prior = base.jobs?.[job.name];
   const attempts = prior?.ok === false && Date.parse(prior.startedAt) >= slotStart(job.at, clock.now()) ? (prior.attempts ?? 1) + 1 : 1;
@@ -128,9 +134,30 @@ export function intakeJob(env: NodeJS.ProcessEnv, spawnDaily = runDaily, alert =
     } };
 }
 
+export const trialRequestFile = "trial-request.json";
+/** A trial of the new pipeline, run when requested (`npm run pipeline -- trial`): real search,
+ * review and translation, nothing published. Never retried on its own; request it again. */
+export function trialJob(env: NodeJS.ProcessEnv, root = pipelineRoot(), spawnTrial = (environment: NodeJS.ProcessEnv) => runScript("ingest/trial.ts", environment)): Job {
+  return { name: "trial", at: 0,
+    ready: async last => {
+      const request = await json<{ at?: string } | null>(join(root, trialRequestFile), null);
+      return !!request?.at && (!last || Date.parse(last.startedAt) < Date.parse(request.at));
+    },
+    run: async () => {
+      const code = await spawnTrial(env);
+      if (code !== 0) throw new Error(`trial exited with ${code}`);
+      const finished = (await readEvents(root, 50)).filter(event => event.type === "trial.finished").at(-1);
+      return `试跑完成：${JSON.stringify(finished?.counts ?? {})}`;
+    } };
+}
+
 function runDaily(env: NodeJS.ProcessEnv): Promise<number> {
+  return runScript("ingest/daily.ts", env, ["--publish"]);
+}
+
+function runScript(script: string, env: NodeJS.ProcessEnv, args: string[] = []): Promise<number> {
   return new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, ["--import", "tsx", "ingest/daily.ts", "--publish"], { cwd: repo, env, stdio: ["ignore", "inherit", "inherit"] });
+    const child = spawn(process.execPath, ["--import", "tsx", script, ...args], { cwd: repo, env, stdio: ["ignore", "inherit", "inherit"] });
     const timer = setTimeout(() => child.kill("SIGTERM"), intakeTimeoutMs);
     child.on("error", reject);
     child.on("exit", code => { clearTimeout(timer); resolve(code ?? 1); });
@@ -176,7 +203,7 @@ async function main() {
   if (!release) { console.log(JSON.stringify({ event: "worker_already_running" })); return; }
   const env = { ...await pipelineEnvironment(), ...await childCertificates(root) };
   // Maintenance first: it keeps the verifications every publication requires current.
-  const startedAt = new Date().toISOString(), jobs = [maintenanceJob(env), reportJob(env, root), intakeJob(env)];
+  const startedAt = new Date().toISOString(), jobs = [maintenanceJob(env), reportJob(env, root), intakeJob(env), trialJob(env, root)];
   let stopping = false, sleeping: (() => void) | undefined;
   const stop = () => { stopping = true; sleeping?.(); };
   process.on("SIGTERM", stop); process.on("SIGINT", stop);

@@ -7,7 +7,7 @@ import type { Prompt } from "../packages/schema/catalog.ts";
 import { createTestDatabase } from "../services/feed/test-database.ts";
 import { activatePublication, stagePublication } from "../services/feed/publication.ts";
 import { readEvents, readWorkerStatus, updateConfig, type WorkerStatus } from "./pipeline-control.ts";
-import { intakeJob, jobDue, nightly, reportJob, retryAfterFailureMs, slotStart, tick, type Job } from "./worker.ts";
+import { intakeJob, jobDue, nightly, reportJob, retryAfterFailureMs, slotStart, tick, trialJob, trialRequestFile, type Job } from "./worker.ts";
 import { runMaintenance, takedownLimit } from "./worker-maintenance.ts";
 import { workerPlist } from "./worker-launchd.ts";
 
@@ -77,6 +77,19 @@ test("the 08:30 report covers the 24 hours before it, once the worker has run an
   await later.run(1);
   assert.equal(sent.length, 1);
   assert.equal(sent[0], new Date(slotStart(nightly.report, Date.now() + 24 * hour)).toLocaleDateString("sv-SE"));
+});
+
+test("a trial runs once per request and is never retried on its own", async () => {
+  const root = join(await mkdtemp(join(tmpdir(), "prompix-worker-")), "pipeline");
+  let runs = 0;
+  const jobs = [trialJob({}, root, async () => { runs++; return 0; })];
+  await tick(root, at(0), jobs, { now: () => now });
+  assert.equal(runs, 0, "nothing requested");
+  const { atomic } = await import("./publication.ts");
+  await atomic(join(root, trialRequestFile), { at: new Date(now - 1000).toISOString(), by: "test" });
+  await tick(root, at(0), jobs, { now: () => now });
+  await tick(root, at(0), jobs, { now: () => now + hour });
+  assert.equal(runs, 1);
 });
 
 test("each tick writes a heartbeat, runs a due job once and records success or failure", async () => {

@@ -50,11 +50,11 @@ Facet ids:
 ${facetGroups.map(group => `${group}: ${facetDefinitions[group].map(facet => `${facet.id} (${facet.en})`).join(", ")}`).join("\n")}`;
 
 export const minorJudgments = ["none", "safe", "unsafe", "uncertain"] as const;
-const nullable = (schema: JsonSchema): JsonSchema => ({ anyOf: [schema, { type: "null" }] });
-const object = (properties: Record<string, JsonSchema>): JsonSchema => ({ type: "object", additionalProperties: false, required: Object.keys(properties), properties });
-const string: JsonSchema = { type: "string" };
-const enumOf = (values: readonly string[]): JsonSchema => ({ type: "string", enum: [...values] });
-const array = (items: JsonSchema): JsonSchema => ({ type: "array", items });
+export const nullable = (schema: JsonSchema): JsonSchema => ({ anyOf: [schema, { type: "null" }] });
+export const object = (properties: Record<string, JsonSchema>): JsonSchema => ({ type: "object", additionalProperties: false, required: Object.keys(properties), properties });
+export const string: JsonSchema = { type: "string" };
+export const enumOf = (values: readonly string[]): JsonSchema => ({ type: "string", enum: [...values] });
+export const array = (items: JsonSchema): JsonSchema => ({ type: "array", items });
 
 /** Plain JSON Schema that every provider accepts: enums and required keys, no length or
  * numeric constraints (some vendors reject them). zod enforces the exact limits after. */
@@ -78,9 +78,9 @@ export const enrichmentOutputJSONSchema: JsonSchema = object({
 });
 
 /** Envelope check only: one bad item must not discard its neighbours. */
-const envelopeSchema = z.object({ items: z.array(z.looseObject({ id: z.string() })).min(1).max(enrichmentLimits.items) }).strict();
+export const envelopeSchema = z.object({ items: z.array(z.looseObject({ id: z.string() })).min(1).max(enrichmentLimits.items) }).strict();
 
-const dropNulls = (value: unknown): unknown => {
+export const dropNulls = (value: unknown): unknown => {
   if (Array.isArray(value)) return value.map(dropNulls);
   if (value && typeof value === "object") return Object.fromEntries(Object.entries(value).filter(([, entry]) => entry !== null).map(([key, entry]) => [key, dropNulls(entry)]));
   return value;
@@ -218,6 +218,8 @@ export async function reviewEnrichmentBatch(provider: ModelProvider, candidates:
 const familyPatterns: [typeof modelFamilies[number], RegExp][] = [
   ["gpt-image", /\bgpt[\s-]*image\b|\bchatgpt[\s-]*image/i], ["nano-banana", /\bnano[\s-]*banana\b/i], ["midjourney", /\bmidjourney\b|\bniji\b/i],
   ["seedance", /\bseedance\b/i], ["veo", /\bveo\b/i], ["kling", /\bkling\b/i], ["flux", /\bflux\b/i], ["claude", /\bclaude\b/i],
+  ["seedream", /\bseedream\b|即梦/i], ["ideogram", /\bideogram\b/i], ["hailuo", /\bhailuo\b|海螺|\bminimax\b/i],
+  ["runway", /\brunway\b/i], ["wan", /\bwan\s*2(?:\.\d)?\b|万相/i],
   ["gemini", /\bgemini\b/i], ["gpt", /\bgpt\b|\bchatgpt\b|\bcodex\b/i],
 ];
 
