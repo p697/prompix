@@ -391,11 +391,11 @@ struct PromptVersion: Identifiable, Hashable {
                 version = feed.state?.release ?? version
                 updatedAt = feed.state?.publishedAt.flatMap(Self.parseDate)
                 syncState = .current
-                // Revalidate the visible first page after a new publication. An
-                // already paged session keeps its snapshot until pull-to-refresh.
-                if !force, let query = feed.discovery.query, !feed.discovery.isLoading,
-                   !feed.discovery.hasLoadedAdditionalPages, feed.discovery.release != feed.state?.release {
-                    await feed.discovery.load(query, force: true)
+                // A new publication never replaces works the reader is looking at:
+                // it arrives with the next page, a pull refresh or another query.
+                // Only an empty feed is fetched again here.
+                if !force, let query = feed.discovery.query, !feed.discovery.isLoading, feed.discovery.items.isEmpty {
+                    await feed.discovery.load(query)
                 }
                 let releaseChanged = previousRelease != nil && previousRelease != feed.state?.release
                 if force || releaseChanged {

@@ -17,7 +17,6 @@ import XCTest
         XCTAssertEqual(store.items.map(\.id), ["image-0", "image-1"])
         XCTAssertEqual(store.nextCursor, "next")
         XCTAssertFalse(store.isLoading); XCTAssertFalse(store.isCached)
-        XCTAssertFalse(store.hasLoadedAdditionalPages)
         await store.load(image, now: now.addingTimeInterval(2))
         let calls = await server.calls
         XCTAssertEqual(calls.count, 3, "Returning to a fresh category must not refetch")
@@ -53,7 +52,8 @@ import XCTest
         XCTAssertTrue(store.isCached); XCTAssertNil(store.nextCursor)
         await store.load(first)
         XCTAssertFalse(store.isCached)
-        let calls = await server.calls; XCTAssertEqual(calls.count, 4)
+        // The expired cursor also tried once to continue from a fresh first page.
+        let calls = await server.calls; XCTAssertEqual(calls.count, 5)
     }
 
     func testMemoryPagesAreBoundedAndIsolatedByCompleteQuery() async throws {
@@ -197,16 +197,32 @@ import XCTest
         }
     }
 
-    func testExpiredSnapshotKeepsVisibleCardsUntilRefreshLoadsFreshFirstPage() async throws {
+    func testExpiredCursorContinuesFromAFreshFirstPageBelowTheReadCards() async throws {
         let server = FeedStoreServer(), store = FeedStore(service: server)
-        await store.load(FeedQuery(locale: "original"))
+        let query = FeedQuery(locale: "original")
+        await store.load(query)
         await server.setFailure(.snapshotExpired)
         await store.loadMore(); await store.loadMore()
-        XCTAssertEqual(store.items.count, 2)
-        let calls = await server.calls; XCTAssertEqual(calls.count, 2)
+        XCTAssertEqual(store.items.map(\.id), ["test-0", "test-1"], "A retired cursor never clears what was read")
         await server.setFailure(nil)
-        await store.load(FeedQuery(locale: "original"), force: true)
-        XCTAssertNil(store.failure); XCTAssertEqual(store.items.count, 2)
+        await server.setFirst(FeedPage(schemaVersion: 3, release: FeedFixture.release,
+            items: [FeedFixture.card(id: "test-1"), FeedFixture.card(id: "new-0")], nextCursor: "next"))
+        await store.load(query) // the recovery row's retry
+        XCTAssertNil(store.failure)
+        XCTAssertEqual(store.items.map(\.id), ["test-0", "test-1", "new-0"], "The fresh first page continues below, without repeats")
+    }
+
+    func testAgedPageRevalidatesBelowTheCardsOnScreen() async throws {
+        let server = FeedStoreServer(), store = FeedStore(service: server)
+        let query = FeedQuery(locale: "original"), now = Date()
+        await store.load(query, now: now)
+        await server.setFirst(FeedPage(schemaVersion: 3, release: "feed-" + String(repeating: "e", count: 64),
+            items: [FeedFixture.card(id: "new-0"), FeedFixture.card(id: "test-0")], nextCursor: "next"))
+        // Coming back to the tab after a while, with a newer publication.
+        await store.load(query, now: now.addingTimeInterval(600))
+        XCTAssertEqual(store.items.map(\.id), ["test-0", "test-1", "new-0"], "Returning never swaps the cards being read")
+        await store.load(query, force: true, now: now.addingTimeInterval(601))
+        XCTAssertEqual(store.items.map(\.id), ["new-0", "test-0"], "Pull refresh still replaces")
     }
 
     func testOfflineCacheNeverUsesOldCursorAndIsIndependentOfPersonalFiles() async throws {

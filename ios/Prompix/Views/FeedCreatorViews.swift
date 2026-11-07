@@ -26,7 +26,7 @@ struct FeedCreatorResults: View {
                 ContentRecoveryRow(retryAt: store.retryAt, retryID: "retryCreators") {
                     Task {
                         if !store.failedFirstPage, store.nextCursor != nil, !store.isCached, store.failure as? FeedError != .snapshotExpired { await store.loadMore() }
-                        else { await store.load(query, force: true) }
+                        else { await store.load(query) } // keeps any cards already read
                     }
                 }
             } else if items.isEmpty && !waiting && !store.isLoading {
