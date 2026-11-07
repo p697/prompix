@@ -101,7 +101,9 @@ export async function lockContent(root: string) {
     let alive = false;
     try { if (owner) { process.kill(owner.pid, 0); alive = true; } }
     catch (e) { if ((e as NodeJS.ErrnoException).code !== "ESRCH") throw e; }
-    if (alive || Date.now() - (await stat(lock)).mtimeMs < 3600000) throw new Error("Another content operation is running");
+    // A recorded owner that has exited no longer holds the lock (the worker kills a run at its time
+    // limit); a lock without an owner yet may still be starting, so it waits out the hour.
+    if (alive || (!owner && Date.now() - (await stat(lock)).mtimeMs < 3600000)) throw new Error("Another content operation is running");
     await rm(lock, { recursive: true });
     await mkdir(lock);
   }
