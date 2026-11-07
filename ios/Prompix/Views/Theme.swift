@@ -158,8 +158,8 @@ extension View {
 }
 
 /// The header keeps its inset while hidden, so the content never moves; only
-/// the header does. Behind it, a paper veil covers the status bar and the tabs
-/// and fades out just below them once work scrolls underneath.
+/// the header does. Shown over work, it sits on paper that fades out below it;
+/// hidden, only a soft edge stays behind the status bar.
 private struct RootHeader<Trailing: View, Bar: View>: ViewModifier {
     let title: String
     let titleID: String
@@ -190,17 +190,46 @@ private struct RootHeader<Trailing: View, Bar: View>: ViewModifier {
             .offset(y: shift).opacity(collapsed ? 0 : 1)
             .allowsHitTesting(!collapsed).accessibilityHidden(collapsed)
             .background(alignment: .top) {
-                // Paper behind the status bar and the header, then a 32 pt fade.
-                VStack(spacing: 0) {
-                    Palette.paper
-                    LinearGradient(colors: [Palette.paper, Palette.paper.opacity(0)], startPoint: .top, endPoint: .bottom)
-                        .frame(height: 32).opacity(covered ? 1 : 0)
-                }.padding(.bottom, -32).ignoresSafeArea(edges: .top)
-                    .offset(y: shift)
-                    .allowsHitTesting(false).accessibilityHidden(true)
+                ZStack(alignment: .top) {
+                    EdgeVeil(hold: height, fade: 12).offset(y: shift).opacity(covered && !collapsed ? 1 : 0)
+                    EdgeVeil().opacity(collapsed ? 1 : 0)
+                }
             }
             .animation(reduceMotion ? nil : Motion.chrome, value: collapsed)
             .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: covered)
+    }
+}
+
+/// The top edge over moving work, after Cosmos: a light wash of paper and
+/// blur behind the status bar only, gone `fade` points below it. With `hold`,
+/// paper stays solid that much further down, behind a bar's own controls.
+struct EdgeVeil: View {
+    var hold: CGFloat = 0
+    var fade: CGFloat = 10
+    var body: some View {
+        let top = Self.statusBarHeight + hold
+        let height = top + fade
+        let solid = hold > 0 ? top / height : 0.45
+        ZStack {
+            Rectangle().fill(.ultraThinMaterial)
+                .mask(LinearGradient(stops: [.init(color: .black.opacity(hold > 0 ? 1 : 0.7), location: 0), .init(color: .black.opacity(hold > 0 ? 1 : 0.4), location: solid), .init(color: .clear, location: 1)], startPoint: .top, endPoint: .bottom))
+            LinearGradient(stops: [.init(color: Palette.paper.opacity(hold > 0 ? 0.94 : 0.8), location: 0),
+                                   .init(color: Palette.paper.opacity(hold > 0 ? 0.94 : 0.5), location: solid),
+                                   .init(color: Palette.paper.opacity(0), location: 1)], startPoint: .top, endPoint: .bottom)
+        }.frame(height: height).frame(maxWidth: .infinity)
+            .ignoresSafeArea(edges: .top).allowsHitTesting(false).accessibilityHidden(true)
+    }
+    /// Read from the window: a view that ignores the safe area reports none.
+    @MainActor static var statusBarHeight: CGFloat {
+        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+        return scenes.lazy.compactMap(\.keyWindow).first?.safeAreaInsets.top ?? scenes.first?.windows.first?.safeAreaInsets.top ?? 0
+    }
+}
+
+extension View {
+    /// Hides the system's blur under the top bar, for screens that draw their own edge.
+    @ViewBuilder func hidesTopEdgeEffect() -> some View {
+        if #available(iOS 26, *) { scrollEdgeEffectHidden(true, for: .top) } else { self }
     }
 }
 

@@ -6,11 +6,13 @@ struct Artwork: View {
     // Feed previews fill their reserved frame; full-image reading remains fitted.
     var fillsFrame = false
     var showsVideoBadge = true
+    /// Crops tall pictures from the bottom, keeping faces near the top.
+    var anchorsTop = false
     init(item: Prompt, compact: Bool = false, fillsFrame: Bool = false) {
         self.item = ContentPreview(item); self.compact = compact; self.fillsFrame = fillsFrame
     }
-    init(preview: ContentPreview, compact: Bool = false, fillsFrame: Bool = false, showsVideoBadge: Bool = true) {
-        item = preview; self.compact = compact; self.fillsFrame = fillsFrame; self.showsVideoBadge = showsVideoBadge
+    init(preview: ContentPreview, compact: Bool = false, fillsFrame: Bool = false, showsVideoBadge: Bool = true, anchorsTop: Bool = false) {
+        item = preview; self.compact = compact; self.fillsFrame = fillsFrame; self.showsVideoBadge = showsVideoBadge; self.anchorsTop = anchorsTop
     }
     var body: some View {
         GeometryReader { proxy in
@@ -19,7 +21,7 @@ struct Artwork: View {
                 else if let name = item.media?.image, UIImage(named: name) != nil { photo(name, size: proxy.size) }
                 else if let url = item.media?.imageURL { RemoteImage(url: url, contentMode: compact || fillsFrame ? .fill : .fit)
                     // A web page reads from its top-left corner; never crop away its left edge.
-                    .frame(width: proxy.size.width, height: proxy.size.height, alignment: item.kind == .web ? .topLeading : .center).clipped() }
+                    .frame(width: proxy.size.width, height: proxy.size.height, alignment: item.kind == .web ? .topLeading : anchorsTop ? .top : .center).clipped() }
                 else if item.kind == .web, UIImage(named: "web-\(item.id)") != nil {
                     Image("web-\(item.id)").resizable().scaledToFill().frame(width: proxy.size.width, height: proxy.size.height, alignment: .top).clipped()
                 }
@@ -97,7 +99,7 @@ struct Artwork: View {
         }.overlay { RoundedRectangle(cornerRadius: PromptCardGeometry.cornerRadius, style: .continuous).strokeBorder(Palette.line, lineWidth: 0.5) }
     }
     private func photo(_ name: String, size: CGSize) -> some View {
-        Image(name).resizable().scaledToFill().frame(width: size.width, height: size.height).clipped()
+        Image(name).resizable().scaledToFill().frame(width: size.width, height: size.height, alignment: anchorsTop ? .top : .center).clipped()
     }
     private func abstractArtwork(size: CGSize) -> some View {
         ZStack {

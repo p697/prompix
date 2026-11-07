@@ -86,11 +86,11 @@ struct PromptDetail: View {
             }
         }
         .overlay(alignment: .top) {
-            LinearGradient(stops: [.init(color: Palette.paper, location: 0), .init(color: Palette.paper.opacity(0.92), location: 0.6), .init(color: Palette.paper.opacity(0), location: 1)],
-                           startPoint: .top, endPoint: .bottom)
-                .frame(height: 118).ignoresSafeArea(edges: .top)
-                .opacity(titleShown ? 1 : 0).animation(.easeOut(duration: 0.2), value: titleShown)
-                .allowsHitTesting(false).accessibilityHidden(true)
+            // Over the picture only the status bar gets an edge; the title brings paper behind the bar.
+            ZStack(alignment: .top) {
+                EdgeVeil().opacity(hasMediaPreview && !titleShown ? 1 : 0)
+                EdgeVeil(hold: 44, fade: 12).opacity(titleShown ? 1 : 0)
+            }.animation(.easeOut(duration: 0.2), value: titleShown)
         }
         .toolbar {
             ToolbarItem(placement: .principal) {
@@ -144,7 +144,7 @@ struct PromptDetail: View {
                         if !mediaPaneVisible { largePreview }
                         readingContent
                     }.padding(.bottom, 28).frame(maxWidth: 700).frame(maxWidth: .infinity)
-                }.ignoresSafeArea(edges: mediaPaneVisible ? [] : .top)
+                }.ignoresSafeArea(edges: mediaPaneVisible ? [] : .top).hidesTopEdgeEffect()
                     .tracksTitle($titleShown, after: mediaPaneVisible ? 60 : 340)
                     .preservingReadingPosition(readingPosition).readingChrome($actionsCollapsed).readingBottomEdge().accessibilityIdentifier("detailReadingPane")
             } secondary: {
@@ -159,7 +159,7 @@ struct PromptDetail: View {
                     largePreview
                     readingContent
                 }.padding(.bottom, 28).frame(maxWidth: 700).frame(maxWidth: .infinity)
-            }.ignoresSafeArea(edges: hasMediaPreview ? .top : [])
+            }.ignoresSafeArea(edges: hasMediaPreview ? .top : []).hidesTopEdgeEffect()
                 .tracksTitle($titleShown, after: hasMediaPreview ? 340 : 60)
                 .preservingReadingPosition(readingPosition).readingChrome($actionsCollapsed).readingBottomEdge().accessibilityIdentifier("detailReadingPane")
         }
