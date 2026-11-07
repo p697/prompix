@@ -11,8 +11,8 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 # `content` and `ios` are the required checks and stay under about two minutes:
 # types, builds and data validation. The full test suites run beside them as
-# `node-tests` and `ios-tests`; they report on every pull request but do not hold
-# the merge. Nothing ships (deploy, release build) until they are green.
+# `node-tests` (on pull requests) and `ios-tests` (after merging, on main); neither
+# holds the merge.
 jobs:
   changes:
     runs-on: ubuntu-latest
@@ -100,9 +100,11 @@ jobs:
       # only: a generic destination would also build x86_64 and double the time.
       - name: Build app and tests
         run: xcodebuild -project ios/Prompix.xcodeproj -scheme Prompix -destination 'generic/platform=iOS Simulator' build-for-testing ARCHS=arm64 ONLY_ACTIVE_ARCH=NO CODE_SIGNING_ALLOWED=NO COMPILER_INDEX_STORE_ENABLE=NO
+  # The complete iOS unit suite boots a cold simulator (6–10 minutes), so it runs
+  # once per merge on main as a safety net rather than on every pull request.
   ios-tests:
     needs: changes
-    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.ios == 'true') }}
+    if: ${{ !cancelled() && github.event_name == 'push' }}
     runs-on: xcode-27
     env:
       DEVELOPER_DIR: /Applications/Xcode_27.1.app/Contents/Developer
