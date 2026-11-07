@@ -18,7 +18,7 @@ import { ModelProviderError, type ModelUsage } from "./models/types.ts";
 import { appendEvent, pipelineRoot, readEvents } from "./pipeline-control.ts";
 import { atomic, contentRoot, json } from "./publication.ts";
 import { applyReview, reviewBatch, reviewBlocker, type ReviewOutcome } from "./review-pass.ts";
-import { locatePrompts } from "./prompt-locate.ts";
+import { locatePrompts, unmarkedPosts } from "./prompt-locate.ts";
 import { modelTranslationProvider } from "./translation-provider.ts";
 import { runTranslations } from "./translation-runner.ts";
 import { attachTranslations, emptyTranslationCache, translationLocales } from "./translation.ts";
@@ -27,27 +27,14 @@ import { pipelineEnvironment } from "./worker-maintenance.ts";
 import { xAcquisitionsPerDay } from "./x-collection.ts";
 import { convertXDiscovery } from "./x-intake.ts";
 import { publishedXIdentities } from "./x-maintenance-admission.ts";
-import { creatorRules, japanDay, perCreatorDaily, portraitShare, ruleQuery, ruleQuotas, xSearchRules, type XSearchRule } from "./x-search-rules.ts";
+import { japanDay, portraitShare } from "./x-search-rules.ts";
+import { curatedCreators, searchXDay, xDaySnapshots, type XDaySearch, type XRuleStats } from "./x-day-search.ts";
 import { configuredXSpendBudget } from "./x-spend.ts";
 import type { CreatorCache } from "./creators.ts";
-import type { XMedia, XPost } from "./x-intake.ts";
+import type { XPost } from "./x-intake.ts";
 
 const dayMs = 24 * 3600000;
-type RuleStats = { rule: string; lane: string; kind: string; label: string; quota: number; requests: number; returned: number; admitted: number;
-  known: number; capped: number; wrongMedia: number; error?: string };
 type Stage = { name: string; startedAt: number; finishedAt?: number };
-
-/** Curated creators: three or more live works, not dominated by portraits, most productive first. */
-async function curatedCreators(env: NodeJS.ProcessEnv): Promise<string[]> {
-  return withPublisherDatabase(async db => (await db.query<{ username: string }>(`
-    select v.card#>>'{creator,username}' as username from prompix.state s
-    join prompix.release_entries e on e.release_id = s.active_release join prompix.revisions v on v.id = e.revision_id
-    join prompix.content c on c.id = e.content_id
-    where s.singleton and c.removed_at is null and v.card#>>'{creator,platform}' = 'x' and v.card#>>'{creator,username}' ~ '^[A-Za-z0-9_]{1,15}$'
-    group by 1 having count(*) >= 3
-      and avg(case when coalesce(v.card->'facets'->'useCase','[]'::jsonb) ? 'portraits' then 1 else 0 end) <= 0.6
-    order by count(*) desc, 1 limit 48`)).rows.map(row => row.username), env);
-}
 
 /** Posts already searched by an earlier trial, so a rule change can be judged on the same day. */
 async function replayedSearch(directory: string) {
@@ -56,7 +43,7 @@ async function replayedSearch(directory: string) {
   // Trials before rules.json kept each drafted post's rule and engagement in results.json.
   const earlier = await json<{ id: string; rule: string; likes?: number; views?: number }[]>(join(directory, "results.json"), []);
   const rules = await json<Record<string, string>>(join(directory, "rules.json"), Object.fromEntries(earlier.map(row => [row.id.replace("x-post-", ""), row.rule])));
-  return { snapshots, rules, metrics: earlier.map(row => [row.id.replace("x-post-", ""), { likes: row.likes, views: row.views }] as const), stats: await json<RuleStats[]>(join(directory, "search.json"), []),
+  return { snapshots, rules, metrics: earlier.map(row => [row.id.replace("x-post-", ""), { likes: row.likes, views: row.views }] as const), stats: await json<XRuleStats[]>(join(directory, "search.json"), []),
     summary: await json<{ window: { since: string; until: string } } | null>(join(directory, "summary.json"), null) };
 }
 
@@ -77,49 +64,16 @@ export async function runTrial(options: { env: NodeJS.ProcessEnv; root?: string;
 
   // 1. Search under the approved rules, admitting posts until each rule's quota is met.
   const creators = replay ? [] : await stage("creators", () => curatedCreators(env));
-  const searchRules: { rule: XSearchRule; creators: string[] }[] = [...xSearchRules.map(rule => ({ rule, creators: [] })), ...creatorRules(creators)];
-  const quotas = ruleQuotas(searchRules.map(entry => entry.rule), dailyPosts);
   const known = replay ? new Set<string>() : await stage("known", async () => new Set([...await withPublisherDatabase(publishedXIdentities, env)].map(value => value.replace("x-post-", ""))));
   const budget = configuredXSpendBudget(env);
   if (!replay && (!budget || !env.TWITTERAPI_IO_KEY)) throw new Error("The trial needs the TwitterAPI key and the shared X budget");
-  const stats: RuleStats[] = replay?.stats ?? [], admitted = new Map<string, { post: XPost; rule: string }>(), metrics = new Map<string, { likes?: number; views?: number }>();
-  const media = new Map<string, XMedia>(), profiles = new Map<string, unknown>(), perCreator = new Map<string, number>();
-  if (!replay) await stage("search", async () => {
-    const client = new TwitterAPIClient(env.TWITTERAPI_IO_KEY!, budget!);
-    for (const { rule, creators: group } of searchRules) {
-      const entry: RuleStats = { rule: rule.id, lane: rule.lane, kind: rule.kind, label: rule.label, quota: quotas.get(rule.id) ?? 0,
-        requests: 0, returned: 0, admitted: 0, known: 0, capped: 0, wrongMedia: 0 };
-      stats.push(entry);
-      let cursor: string | undefined;
-      try {
-        for (let page = 0; page < 3 && entry.admitted < entry.quota; page++) {
-          const { result } = await client.search(ruleQuery(rule, since, until, group), cursor, async raw => {
-            for (const tweet of (raw as { tweets?: { id?: string; likeCount?: number; viewCount?: number }[] }).tweets ?? [])
-              if (tweet.id) metrics.set(tweet.id, { likes: tweet.likeCount, views: tweet.viewCount });
-          });
-          entry.requests++; entry.returned += result.posts.length;
-          for (const item of result.media) media.set(item.media_key, item);
-          for (const creator of result.creators) profiles.set(creator.externalID ?? creator.id, creator);
-          for (const post of result.posts) {
-            if (entry.admitted >= entry.quota) break;
-            if (known.has(post.id) || admitted.has(post.id)) { entry.known++; continue; }
-            const kinds = (post.attachments?.media_keys ?? []).map(key => media.get(key)?.type);
-            if (!kinds.some(kind => rule.kind === "video" ? kind === "video" : kind === "photo")) { entry.wrongMedia++; continue; }
-            if ((perCreator.get(post.author_id) ?? 0) >= perCreatorDaily) { entry.capped++; continue; }
-            perCreator.set(post.author_id, (perCreator.get(post.author_id) ?? 0) + 1);
-            admitted.set(post.id, { post, rule: rule.id }); entry.admitted++;
-          }
-          cursor = result.nextToken;
-          if (!cursor) break;
-        }
-      } catch (error) { entry.error = (error as Error).message.slice(0, 200); }
-      await atomic(join(directory, "search.json"), stats);
-    }
-    await atomic(join(directory, "rules.json"), Object.fromEntries([...admitted].map(([post, entry]) => [post, entry.rule])));
-  });
+  const search: XDaySearch = replay ? { stats: replay.stats, admitted: new Map(), media: new Map(), profiles: new Map(), metrics: new Map() }
+    : await stage("search", () => searchXDay(new TwitterAPIClient(env.TWITTERAPI_IO_KEY!, budget!), { since, until, dailyPosts, creators, known,
+      progress: stats => atomic(join(directory, "search.json"), stats) }));
+  const { stats, admitted, metrics } = search;
+  if (!replay) await atomic(join(directory, "rules.json"), Object.fromEntries([...admitted].map(([post, entry]) => [post, entry.rule])));
 
   // 2. The same intake as the daily pipeline: prompt boundaries, modality, attribution.
-  const posts = [...admitted.values()].map(entry => entry.post);
   const snapshots = replay?.snapshots ?? [];
   if (replay) await stage("replay", async () => {
     for (const { name, data } of snapshots) await atomic(join(directory, "x-discovery", name), data);
@@ -128,29 +82,20 @@ export async function runTrial(options: { env: NodeJS.ProcessEnv; root?: string;
     for (const [post, value] of replay.metrics) metrics.set(post, value);
     await atomic(join(directory, "rules.json"), replay.rules);
   });
-  for (let offset = 0; offset < posts.length; offset += 100) {
-    const batch = posts.slice(offset, offset + 100), keys = new Set(batch.flatMap(post => post.attachments?.media_keys ?? []));
-    const data = { provider: "twitterapi", capturedAt: new Date(now).toISOString(), posts: batch, media: [...media.values()].filter(item => keys.has(item.media_key)),
-      creators: [...profiles.values()].filter(creator => batch.some(post => (creator as { externalID?: string }).externalID === post.author_id)) };
-    const name = `trial-${String(offset / 100 + 1).padStart(3, "0")}.json`;
+  for (const [index, data] of xDaySnapshots(search, new Date(now).toISOString()).entries()) {
+    const name = `trial-${String(index + 1).padStart(3, "0")}.json`;
     await atomic(join(directory, "x-discovery", name), data);
     snapshots.push({ name, data });
   }
   // Posts without a "Prompt:" heading go to the model, which points at the prompt in the author's text.
   const creatorCache = await json<CreatorCache>(join(root, "creators.json"), {});
-  const marked = convertXDiscovery(snapshots, creatorCache);
-  const unmarked = new Set(marked.records.filter(record => ["missing-prompt-boundary", "multiple-prompt-boundaries"].includes(record.reason)).map(record => record.postID));
-  const snapshotPosts = snapshots.flatMap(({ data }) => (data as { posts: XPost[]; media?: XMedia[] }).posts.map(post => ({ post, media: (data as { media?: XMedia[] }).media ?? [] })));
+  const pending = unmarkedPosts(snapshots, creatorCache);
   const locate = await stage("locate", async () => {
-    const pending = snapshotPosts.filter(({ post }) => unmarked.has(post.id)).map(({ post, media: attached }) => {
-      const kinds = (post.attachments?.media_keys ?? []).map(key => attached.find(item => item.media_key === key)?.type);
-      return { post, kind: kinds.some(kind => kind === "video" || kind === "animated_gif") ? "video" as const : "image" as const };
-    });
     if (!pending.length) return undefined;
     const routed = await routedProvider("review", task);
     return locatePrompts(routed.provider, pending, { effort: routed.effort, record: routed.record, now: new Date(now) });
   });
-  const intake = locate ? convertXDiscovery(snapshots, creatorCache, locate.excerpts) : marked;
+  const intake = convertXDiscovery(snapshots, creatorCache, locate?.excerpts ?? {});
   const ruleOf = (item: Prompt) => admitted.get(item.id.replace("x-post-", ""))?.rule ?? "unknown";
 
   // 3. Mirror media, then one review pass with the full gallery and frames.
@@ -230,7 +175,7 @@ export async function runTrial(options: { env: NodeJS.ProcessEnv; root?: string;
   const summary = {
     id, window: { since: new Date(since * 1000).toISOString(), until: new Date(until * 1000).toISOString() }, dailyPosts, creators: creators.length,
     search: stats, intake: { drafted: intake.candidates.length, blocked: intake.report.blocked, reasons: intake.report.reasons,
-      ...(locate ? { located: { asked: unmarked.size, found: locate.located, none: locate.none, unmatched: locate.unmatched, failed: locate.failed } } : {}) },
+      ...(locate ? { located: { asked: pending.length, found: locate.located, none: locate.none, unmatched: locate.unmatched, failed: locate.failed } } : {}) },
     ...(options.replay ? { replayOf: options.replay } : {}),
     counts: Object.fromEntries((["published", "rejected", "deferred", "failed"] as const).map(status => [status, rows.filter(row => row.status === status).length])),
     stages: stages.map(entry => ({ name: entry.name, minutes: Math.round(((entry.finishedAt ?? Date.now()) - entry.startedAt) / 6000) / 10 })),

@@ -1315,3 +1315,7 @@ In the replay trial "may be under 18" blocked seven ordinary adult fashion, cosp
 ### 2026-11-07 — 300 X posts a day, and trials can replay a past day
 
 The owner set the default X acquisition to 300 posts a day instead of 600. Trials take `--day YYYY-MM-DD` to search one whole Japan day, so a past day the pipeline never searched (1–3 November) can be run as an ordinary day without repeating posts.
+
+### 2026-11-07 — The nightly run searches two days back and reviews new X posts once
+
+The nightly run now searches X under the approved rules for the whole Japan day two days earlier: by then likes have settled, deleted posts are gone and authors have posted their reply prompts. The owner chose two days over one or three. A cursor catches up missed nights, at most three days. New X posts are judged by the single review pass alone, replacing the editorial, visual and 2.0 reviews for them; prompts.chat and live items keep the old gates until they are moved too. The old search plan, lead queue and official supplement no longer run nightly.
