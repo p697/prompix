@@ -32,6 +32,9 @@ test("one review decides, labels and names the model with a single spelling", ()
   assert.equal(reviewed.prompt, item().prompt, "the prompt is never rewritten");
   assert.equal(reviewed.inputs, undefined);
   assert.equal(reviewed.localization?.sourceFingerprint, translationFingerprint(reviewed));
+  const loose = validateReviewItem(candidate(), answer({ variables: [{ token: "[a perfume bottle]", name: { zh: "产品", en: "Product" }, default: "", hint: null },
+    { token: "【初音未来】", name: { zh: "角色", en: "Character" }, default: null, hint: null }] }));
+  assert.ok(loose.ok && loose.fields.variables.length === 1 && loose.fields.variables[0].default === undefined, "an empty default and a missing token do not fail the item");
   const mislabelled = validateReviewItem(candidate(), answer({ generation: { ...answer().generation, mode: "text" } }));
   assert.ok(mislabelled.ok && mislabelled.fields.generation.mode === "t2i", "a mode from another kind falls back to the item's plain mode");
   assert.equal(canonicalModelName("other"), "Unspecified");
