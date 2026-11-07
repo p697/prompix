@@ -14,14 +14,17 @@ struct PromptMarkdownDocument {
 
     let blocks: [Block]
     let usedPlainTextFallback: Bool
+    /// A prompt written as a JSON object reads by its indentation, which Markdown would discard.
+    let isJSON: Bool
     let metadata: String?
 
     init(_ originalSource: String) {
         let frontmatter = Self.splitFrontmatter(originalSource)
         metadata = frontmatter.metadata
         let source = frontmatter.body
+        isJSON = Self.looksLikeJSON(source)
         // Bound parser work for unusually large imported Skills without truncating their text.
-        guard source.utf8.count <= 250_000, !Self.hasDefinitionLikeFields(source),
+        guard !isJSON, source.utf8.count <= 250_000, !Self.hasDefinitionLikeFields(source),
               let parsed = try? AttributedString(markdown: source, options: .init(
                 allowsExtendedAttributes: false,
                 interpretedSyntax: .full,
@@ -99,6 +102,16 @@ struct PromptMarkdownDocument {
             return (nil, source)
         }
         return (header, lines[(end + 1)...].joined(separator: "\n"))
+    }
+
+    private static func looksLikeJSON(_ source: String) -> Bool {
+        let text = source.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let first = text.first, let last = text.last,
+              (first == "{" && last == "}") || (first == "[" && last == "]") else { return false }
+        // Hand-written prompts are often almost-JSON (a trailing comma, a comment),
+        // so several quoted keys are enough; one key must also parse.
+        if text.components(separatedBy: "\":").count > 2 { return true }
+        return text.utf8.count <= 250_000 && (try? JSONSerialization.jsonObject(with: Data(text.utf8))) != nil
     }
 
     static func isSafeLink(_ url: URL) -> Bool {
@@ -220,7 +233,8 @@ private struct PromptMarkdownContent: View, Equatable {
                 .padding(.leading, CGFloat(min(max(block.listDepth - 1, 0), 3)) * 14)
             }
         }
-        .font(Typography.usesSerif(source) ? .system(.body, design: .serif) : .body)
+        .font(document.isJSON ? .system(.callout, design: .monospaced)
+              : Typography.usesSerif(source) ? .system(.body, design: .serif) : .body)
         .foregroundStyle(Palette.ink)
         .tint(Palette.accent)
         .textSelection(.enabled)

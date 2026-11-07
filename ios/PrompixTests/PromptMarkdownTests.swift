@@ -160,4 +160,15 @@ final class PromptMarkdownTests: XCTestCase {
         XCTAssertEqual(parsed.blocks.count, 600)
         XCTAssertEqual(Set(parsed.blocks.map(\.id)).count, parsed.blocks.count)
     }
+
+    func testJSONPromptsKeepTheirIndentation() {
+        let source = "{\n  \"subject\": {\n    \"face\": \"oval\",\n  },\n  \"style\": \"film\"\n}\n"
+        let document = PromptMarkdownDocument(source)
+        XCTAssertTrue(document.isJSON)
+        XCTAssertEqual(document.blocks.map { String($0.text.characters) }.joined(), source)
+        XCTAssertTrue(PromptMarkdownDocument("{\"prompt\": \"a red kite\"}").isJSON)
+        for prose in ["A {cat} on a mat", "{ not json }", "[ROLE]: painter", "{\"a\": 1} and more"] {
+            XCTAssertFalse(PromptMarkdownDocument(prose).isJSON, prose)
+        }
+    }
 }

@@ -1299,3 +1299,7 @@ The owner found title-and-summary text cards too plain and chose, from four dire
 ### 2026-11-07 — Review publishes by default; the model finds unmarked prompts
 
 The first trial of the new pipeline published 14 of 124 admitted posts. The owner judged the review far too strict and named examples that should pass: a prompt with the author's typo, a prompt for the user's own reference photo, a video whose sampled frames miss a story beat, and suggestive portraits. The rubric now publishes by default and rejects only clear failures; suggestive work is labelled and published, hidden until a viewer opts in, as the feed already does. Minors, real people, explicit content and sexual coercion stay hard rejections. Posts without a "Prompt:" heading (62% of the trial) go to the review route, which copies the prompt; only a copy that matches the author's text becomes an excerpt, so wording never changes. X acquisition rises to 600 posts and 200 searches a day by default.
+
+### 2026-11-07 — JSON prompts keep their indentation
+
+About 49 of 2,947 published prompts (1.7%) are a whole JSON object, and 43 of them are indented by level. The detail page read them as Markdown paragraphs, which dropped the indentation and set them in the serif reading face. A prompt that is a bracketed object or array with several quoted keys, or that parses as JSON, now skips Markdown and shows its exact text in monospace. Copying and editing still use the source string. The owner judged the share too small for a structured key-value view.
