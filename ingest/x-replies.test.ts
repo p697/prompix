@@ -39,7 +39,8 @@ test("reply queries request full relationship fields without altering ordinary d
 });
 
 test("only explicit public reply locations become leads, never private giveaways or known replies", () => {
-  for (const text of ["Prompt in first reply", "Prompt in the comments", "提示词在评论里", "プロンプトは返信にあります"]) assert.ok(hasPublicReplyPrompt(text), text);
+  for (const text of ["Prompt in first reply", "Prompt in the comments", "提示词在评论里", "プロンプトは返信にあります", "▼プロンプトはリプ欄へ▼",
+    "Ref. Prompt (SFW) See reply, welcome to send photo", "提示词见评论区", "Prompt in thread 👇"]) assert.ok(hasPublicReplyPrompt(text), text);
   for (const text of ["Comment EARN and I'll DM the prompt", "DM for prompt", "Great replies!", "Prompt in replies; DM me for access"]) assert.equal(hasPublicReplyPrompt(text), false);
   const snapshot = { capturedAt: now, posts: [root], creators: [creator] };
   assert.equal(convertXDiscovery([{ name: "fixture", data: snapshot }]).replyLeads.length, 1);

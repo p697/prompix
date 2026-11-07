@@ -40,6 +40,7 @@ test("a night writes intake snapshots, locates unmarked prompts and moves the cu
   assert.equal(report.days[0].day, "2026-11-05");
   assert.equal(report.days[0].admitted, 2);
   assert.equal(report.days[0].located, 1);
+  assert.equal(report.replies?.status, "failed", "reply reading without credentials fails on its own, the night goes on");
   assert.ok(queries.every(query => query.includes("since_time:") && query.includes("until_time:")));
   assert.equal(asked, 1);
   const names = await readdir(join(root, "x-discovery"));
