@@ -88,7 +88,6 @@ struct FeedBrowse: Codable, Sendable {
     private(set) var isLoading = false
     private(set) var isCached = false
     private(set) var retryAt: Date?
-    private var loadedAt: Date?
     private var locale: String?
     private var owner: UUID?
     private let service: any FeedServing
@@ -96,7 +95,9 @@ struct FeedBrowse: Codable, Sendable {
     init(service: any FeedServing, cache: FeedCache) { self.service = service; self.cache = cache }
     func load(locale: String = ContentLanguage.preferred, force: Bool = false, now: Date = Date()) async {
         guard !Task.isCancelled, !isLoading, retryAt == nil || now >= retryAt! else { return }
-        if !force, self.locale == locale, let loadedAt, now.timeIntervalSince(loadedAt) < 300 { return }
+        // Collections already on screen are never swapped while reading; a pull
+        // refresh or another language brings fresh ones.
+        if !force, self.locale == locale, value != nil, !isCached { return }
         let token = UUID(); owner = token; isLoading = true; failure = nil
         defer { if owner == token { isLoading = false } }
         if self.locale != locale {
@@ -106,7 +107,7 @@ struct FeedBrowse: Codable, Sendable {
             let value = try await service.browse(locale: locale).validated(locale: locale)
             try Task.checkCancellation()
             guard owner == token else { return }
-            self.value = value; self.loadedAt = now; isCached = false; retryAt = nil
+            self.value = value; isCached = false; retryAt = nil
             try? await cache.store(value, locale: locale)
         } catch {
             guard owner == token, !(error is CancellationError), (error as? URLError)?.code != .cancelled else { return }

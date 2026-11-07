@@ -293,7 +293,7 @@ struct PreviewMasonryGrid<Item: Identifiable, Cell: View>: View {
                 let columns = balancedColumns
                 HStack(alignment: .top, spacing: 0) {
                     ForEach(0..<layout.columns, id: \.self) { index in
-                        column(columns[index]).frame(width: layout.widths.isEmpty ? nil : layout.widths[index])
+                        column(columns[index], width: columnWidths[index]).frame(width: layout.widths.isEmpty ? nil : layout.widths[index])
                         if index < layout.columns - 1 { Color.clear.frame(width: layout.gaps[index], height: 1) }
                     }
                 }.frame(minWidth: 0, maxWidth: .infinity)
@@ -327,19 +327,45 @@ struct PreviewMasonryGrid<Item: Identifiable, Cell: View>: View {
         var seen = Set<URL>()
         return Array(candidates.sorted { $0.0 < $1.0 }.map(\.1).filter { seen.insert($0).inserted }.prefix(20))
     }
+    private var columnWidths: [CGFloat] {
+        layout.widths.isEmpty ? Array(repeating: CGFloat(180), count: layout.columns) : layout.widths
+    }
     private var balancedColumns: [[Int]] {
-        let widths = layout.widths.isEmpty ? Array(repeating: CGFloat(180), count: layout.columns) : layout.widths
-        return PromptMasonry.columns(itemCount: items.count, widths: widths, spacing: PromptGridLayout.gap) { index, width in
+        PromptMasonry.columns(itemCount: items.count, widths: columnWidths, spacing: PromptGridLayout.gap) { index, width in
             PromptCardGeometry.height(for: preview(items[index]), width: width, titled: titled)
         }
     }
-    private func column(_ indices: [Int]) -> some View {
-        LazyVStack(spacing: PromptGridLayout.gap) {
-            ForEach(indices.map { items[$0] }) { item in
-                cell(item)
+    /// Every card's height is known before it is drawn, so a column is a plain
+    /// stack of exact frames rather than a lazy stack of estimates: the grid's
+    /// height never changes while scrolling and nothing above the reader moves.
+    /// Only cards within a screen of the viewport are built.
+    private func column(_ indices: [Int], width: CGFloat) -> some View {
+        var top: CGFloat = 0
+        let slots = indices.map { index -> GridSlot<Item.ID> in
+            let height = PromptCardGeometry.height(for: preview(items[index]), width: width, titled: titled)
+            defer { top += height + PromptGridLayout.gap }
+            return GridSlot(id: items[index].id, index: index, top: top, height: height)
+        }
+        return VStack(spacing: PromptGridLayout.gap) {
+            ForEach(slots, id: \.id) { slot in
+                ZStack(alignment: .top) {
+                    if builds(slot) { cell(items[slot.index]) }
+                }.frame(maxWidth: .infinity).frame(height: slot.height, alignment: .top)
             }
         }.frame(maxWidth: .infinity)
     }
+    private func builds<ID>(_ slot: GridSlot<ID>) -> Bool {
+        // Before the first measurement, build the opening screen.
+        guard viewport.height > 0 else { return slot.top < 1200 }
+        return slot.top + slot.height >= viewport.top - viewport.height && slot.top <= viewport.top + viewport.height * 2
+    }
+}
+
+private struct GridSlot<ID: Hashable> {
+    let id: ID
+    let index: Int
+    let top: CGFloat
+    let height: CGFloat
 }
 
 struct PromptGridLayout: Equatable {
