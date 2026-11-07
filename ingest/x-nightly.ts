@@ -11,6 +11,7 @@ import { atomic, json } from "./publication.ts";
 import { TwitterAPIClient } from "./twitterapi.ts";
 import { xAcquisitionsPerDay } from "./x-collection.ts";
 import { curatedCreators, searchXDay, xDaySnapshots } from "./x-day-search.ts";
+import { reviewedCreators } from "./review-daily.ts";
 import { readXExcerptReviews } from "./x-excerpts.ts";
 import { collectXFeeds, type XFeedSearch } from "./x-feed.ts";
 import { thirdPartyFeedSearch } from "./x-third-party.ts";
@@ -73,7 +74,9 @@ async function searchDays(root: string, days: string[], options: Parameters<type
   const budget = configuredXSpendBudget(env);
   if (!options.search && (!budget || !env.TWITTERAPI_IO_KEY)) throw new Error("Nightly X search needs the TwitterAPI key and the shared X budget");
   const client = options.search ?? new TwitterAPIClient(env.TWITTERAPI_IO_KEY!, budget!);
-  const creators = options.creators ?? await curatedCreators(env);
+  // Curated creators from the live library, then creators the single review keeps approving.
+  const creators = options.creators ?? [...new Map([...await curatedCreators(env), ...await reviewedCreators(root, now)]
+    .map(username => [username.toLowerCase(), username])).values()];
   const known = options.known ?? new Set([...await withPublisherDatabase(publishedXIdentities, env)].map(value => value.replace("x-post-", "")));
   const creatorCache = await json<CreatorCache>(join(root, "creators.json"), {});
   const report: NightlyXReport = { status: "ok", days: [] };
