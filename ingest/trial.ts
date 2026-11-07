@@ -31,7 +31,7 @@ import { japanDay, portraitShare } from "./x-search-rules.ts";
 import { curatedCreators, searchXDay, xDaySnapshots, type XDaySearch, type XRuleStats } from "./x-day-search.ts";
 import { configuredXSpendBudget } from "./x-spend.ts";
 import type { CreatorCache } from "./creators.ts";
-import type { XMedia, XPost } from "./x-intake.ts";
+import type { XPost } from "./x-intake.ts";
 
 const dayMs = 24 * 3600000;
 type Stage = { name: string; startedAt: number; finishedAt?: number };
