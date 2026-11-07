@@ -29,6 +29,9 @@ struct PromptDetail: View {
     /// Once the title scrolls away it returns, small, between the bar buttons over a paper veil.
     @State private var titleShown = false
     @State private var informationExpanded = false
+    @State private var renamingVersion: PromptVersion?
+    @State private var versionName = ""
+    @State private var deletingVersion: PromptVersion?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var typeSize
     @Environment(\.colorScheme) private var colorScheme
@@ -47,6 +50,7 @@ struct PromptDetail: View {
     private var versions: [PromptVersion] { library.versions(of: item) }
     /// What the copy button copies and the editor starts from.
     private var shownText: String { versions.first { $0.id == selectedVersion }?.text ?? content.prompt }
+    private var shownVersion: PromptVersion? { versions.first { $0.id == selectedVersion } }
     private var spokenLicense: String {
         // Give the common abbreviation a pronounceable name for VoiceOver.
         item.source.license == "CC0-1.0" ? "Creative Commons Zero" : item.source.license
@@ -116,6 +120,17 @@ struct PromptDetail: View {
             PromptEditor(item: context.item, version: context.version, text: context.text) { selectedVersion = $0 }
         }
         .sheet(isPresented: $deckPickerPresented) { DeckPicker(item: item) }
+        .alert(String(localized: "重命名"), isPresented: Binding { renamingVersion != nil } set: { if !$0 { renamingVersion = nil } }) {
+            TextField(renamingVersion.map { PromptVersion.title(of: $0, in: versions) } ?? "", text: $versionName).accessibilityIdentifier("versionName")
+            Button(String(localized: "取消"), role: .cancel) { }
+            Button(String(localized: "完成")) { if let renamingVersion { library.renameVersion(renamingVersion.id, to: versionName) } }
+        }
+        .confirmationDialog(String(localized: "删除这个版本？"), isPresented: Binding { deletingVersion != nil } set: { if !$0 { deletingVersion = nil } }, titleVisibility: .visible) {
+            Button(String(localized: "删除"), role: .destructive) {
+                if let deletingVersion, library.deleteVersion(deletingVersion.id) { selectedVersion = nil }
+            }.accessibilityIdentifier("confirmDeleteVersion")
+            Button(String(localized: "取消"), role: .cancel) {}
+        } message: { Text(String(localized: "原版和其他版本不受影响。")) }
         .fullScreenCover(isPresented: $imagePresented) {
             ImageViewer(name: item.media?.image ?? item.artwork, urls: item.media?.galleryURLs ?? [], selection: imagePage)
                 .promptTransitionDestination(id: "image-\(item.id)", in: imageTransition)
@@ -288,16 +303,33 @@ struct PromptDetail: View {
         library.recommendations.record(.use, prompt: item)
         copied = true
     }
-    /// 原版 first, then the reader's own versions, newest first.
+    /// 原版 first, then the reader's own versions in the order they were made,
+    /// and last a way to start another from what is shown.
     private var versionPicker: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 2) {
                 versionChip(String(localized: "原版"), id: nil)
-                ForEach(Array(versions.enumerated()), id: \.element.id) { index, version in
-                    versionChip(String(localized: "我的 \(versions.count - index)"), id: version.id)
+                ForEach(versions) { version in
+                    versionChip(PromptVersion.title(of: version, in: versions), id: version.id)
                 }
+                Button { editorContext = EditorContext(item: item, version: nil, text: shownText) } label: {
+                    PrompixIcon.plus.image(size: 16).foregroundStyle(Palette.muted)
+                        .frame(width: 44, height: 44).contentShape(Rectangle())
+                }.buttonStyle(.plain).accessibilityLabel(String(localized: "新建版本")).accessibilityIdentifier("newVersion")
             }
         }.scrollClipDisabled().accessibilityIdentifier("promptVersions")
+    }
+    /// A chosen version's own actions take the language menu's place.
+    private func versionMenu(_ version: PromptVersion) -> some View {
+        Menu {
+            Button { versionName = version.name ?? ""; renamingVersion = version } label: { Label(String(localized: "重命名"), systemImage: "pencil") }
+                .accessibilityIdentifier("renameVersion")
+            Button(role: .destructive) { deletingVersion = version } label: { Label(String(localized: "删除这个版本"), systemImage: "trash") }
+                .accessibilityIdentifier("deleteVersion")
+        } label: {
+            PrompixIcon.more.image(size: 18).foregroundStyle(Palette.muted)
+                .frame(minWidth: 44, minHeight: 44).contentShape(Rectangle())
+        }.accessibilityLabel(PromptVersion.title(of: version, in: versions)).accessibilityIdentifier("versionActions")
     }
     private func versionChip(_ title: String, id: String?) -> some View {
         let selected = selectedVersion == id
@@ -312,12 +344,13 @@ struct PromptDetail: View {
     }
     private var languagePicker: some View {
         VStack(alignment: .leading, spacing: 10) {
+            // One height for the original and every version, whatever sits on the right.
             HStack {
                 Text(verbatim: "PROMPT").font(Typography.meta(size: 11)).tracking(1.4).foregroundStyle(Palette.muted)
                     .accessibilityAddTraits(.isHeader)
                 Spacer(minLength: 4)
-                if selectedVersion == nil { languageMenu }
-            }
+                if let shownVersion { versionMenu(shownVersion) } else { languageMenu }
+            }.frame(minHeight: 44)
             if library.isRemoved(item) {
                 Text(String(localized: "这条内容已被移除，无法再保存。你仍可复制当前文字。"))
                     .font(.footnote).foregroundStyle(Palette.muted).fixedSize(horizontal: false, vertical: true)
@@ -419,7 +452,6 @@ struct PromptEditor: View {
     @State private var text: String
     @State private var copied = false
     @State private var saveError: String?
-    @State private var deletePresented = false
     @State private var leavePresented = false
     @State private var discarded = false
     @FocusState private var editorFocused: Bool
@@ -428,6 +460,10 @@ struct PromptEditor: View {
         _version = State(initialValue: version); _text = State(initialValue: text)
     }
     private var isEmpty: Bool { text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    private var title: String {
+        let versions = library.versions(of: item)
+        return versions.first { $0.id == version }.map { PromptVersion.title(of: $0, in: versions) } ?? String(localized: "新版本")
+    }
     private var unsaved: Bool {
         guard let version else { return text != baseline }
         return library.versions(of: item).first { $0.id == version }?.text != text
@@ -445,7 +481,7 @@ struct PromptEditor: View {
                     .scrollContentBackground(.hidden).padding(.horizontal, 16)
                     .frame(maxHeight: .infinity).accessibilityIdentifier("promptEditor")
             }.paperScreen()
-                .navigationTitle(version == nil ? String(localized: "新版本") : String(localized: "我的版本"))
+                .navigationTitle(title)
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
@@ -457,14 +493,6 @@ struct PromptEditor: View {
                             Label(copied ? String(localized: "已复制") : String(localized: "复制"), systemImage: copied ? "checkmark" : "doc.on.doc")
                         }.disabled(isEmpty).accessibilityIdentifier("copyEditedPrompt").sensoryFeedback(.success, trigger: copied)
                     }
-                    if version != nil {
-                        ToolbarItem(placement: .primaryAction) {
-                            Menu {
-                                Button(String(localized: "删除这个版本"), systemImage: "trash", role: .destructive) { deletePresented = true }
-                            } label: { Label { Text(String(localized: "更多")) } icon: { PrompixIcon.more.image } }
-                                .accessibilityIdentifier("versionActions")
-                        }
-                    }
                 }
                 .onAppear { editorFocused = true }
                 .onChange(of: text) { _, _ in copied = false; saveError = nil }
@@ -474,12 +502,6 @@ struct PromptEditor: View {
                 }
                 .onDisappear { if !discarded { save() } }
                 .onChange(of: scenePhase) { _, phase in if phase != .active { save() } }
-                .confirmationDialog(String(localized: "删除这个版本？"), isPresented: $deletePresented, titleVisibility: .visible) {
-                    Button(String(localized: "删除"), role: .destructive) {
-                        if let version, library.deleteVersion(version) { discarded = true; onSaved(nil); dismiss() }
-                    }
-                    Button(String(localized: "取消"), role: .cancel) {}
-                } message: { Text(String(localized: "原版和其他版本不受影响。")) }
                 .alert(String(localized: "本次修改尚未保存"), isPresented: $leavePresented) {
                     Button(String(localized: "复制并退出")) { UIPasteboard.general.string = text; discarded = true; dismiss() }
                         .accessibilityIdentifier("copyDraftAndLeave")
