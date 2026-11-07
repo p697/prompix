@@ -23,6 +23,13 @@ enum Palette {
     static let muted = adaptive(0x6B6B67, 0x9A9A97)
     static let accent = ink
     static let line = adaptive(0xDAD9D3, 0x2A2A2C)
+    /// Text cards are artwork too: quiet tints, one per work, steady across launches.
+    static let noteTints = [adaptive(0xE7E5DA, 0x24251F), adaptive(0xEFE3D6, 0x2A241F), adaptive(0xE2E5EA, 0x1F2228),
+                            adaptive(0xEEE0DF, 0x2A2122), adaptive(0xE9E4D3, 0x27251E)]
+    static func noteTint(for id: String) -> Color {
+        let hash = id.utf8.reduce(UInt64(14695981039346656037)) { ($0 ^ UInt64($1)) &* 1099511628211 }
+        return noteTints[Int(hash % UInt64(noteTints.count))]
+    }
 
     // Liquid Glass tints are resolved from the page appearance, because material
     // snapshots can carry temporary UIKit traits during an interactive zoom.
@@ -130,8 +137,39 @@ enum Typography {
         }
         return cjk * 5 < letters
     }
+    /// A text card's title is set like a quotation: New York for Latin, Songti
+    /// for Chinese once the system has it, Hiragino Mincho for Japanese.
+    @MainActor static func noteTitle(_ text: String, size: CGFloat) -> Font {
+        if usesSerif(text) { return .system(size: size, weight: .semibold, design: .serif) }
+        let scalars = text.unicodeScalars
+        if scalars.contains(where: { (0xAC00...0xD7AF).contains($0.value) }) { return .system(size: size, weight: .semibold) }
+        if scalars.contains(where: { (0x3040...0x30FF).contains($0.value) }) { return .custom("HiraMinProN-W6", fixedSize: size) }
+        return NoteFonts.shared.songtiReady ? .custom(NoteFonts.songti, fixedSize: size) : .system(size: size, weight: .semibold)
+    }
     /// Parameters such as kind, model and ratio read like film-edge printing: SF Mono.
     static func meta(size: CGFloat) -> Font { .system(size: size, weight: .regular, design: .monospaced) }
+}
+
+/// Songti SC is one of Apple's downloadable system fonts: nothing ships in the
+/// app, and text cards use the system face until it is on the device.
+@MainActor @Observable final class NoteFonts {
+    static let shared = NoteFonts()
+    static let songti = "STSongti-SC-Bold"
+    private(set) var songtiReady = UIFont(name: songti, size: 12) != nil
+    private var requested = false
+    func prepare() {
+        guard !songtiReady, !requested else { return }
+        requested = true
+        Self.download(Self.songti) { Task { @MainActor in NoteFonts.shared.songtiReady = UIFont(name: NoteFonts.songti, size: 12) != nil } }
+    }
+    /// Core Text reports progress on its own queue, so the handler is not main-actor code.
+    nonisolated private static func download(_ name: String, finished: @escaping @Sendable () -> Void) {
+        let descriptor = CTFontDescriptorCreateWithNameAndSize(name as CFString, 0)
+        CTFontDescriptorMatchFontDescriptorsWithProgressHandler([descriptor] as CFArray, nil) { state, _ in
+            if state == .didFinish { finished() }
+            return true
+        }
+    }
 }
 
 extension View {
