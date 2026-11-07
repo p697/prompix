@@ -12,7 +12,7 @@ export const videoShare = 0.3;
 export const minimumLikes = 20;
 export const perCreatorDaily = 3;
 /** Portraits and people may fill at most this share of a day's new works. */
-export const portraitShare = 0.35;
+export const portraitShare = 0.5;
 
 const promptWords = "(prompt OR prompts OR 提示词 OR プロンプト OR 프롬프트)";
 const exclusions = "-is:retweet -is:reply -is:quote -sora -giveaway -抽奖";

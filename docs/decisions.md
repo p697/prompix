@@ -1303,3 +1303,7 @@ The first trial of the new pipeline published 14 of 124 admitted posts. The owne
 ### 2026-11-07 — JSON prompts keep their indentation
 
 About 49 of 2,947 published prompts (1.7%) are a whole JSON object, and 43 of them are indented by level. The detail page read them as Markdown paragraphs, which dropped the indentation and set them in the serif reading face. A prompt that is a bracketed object or array with several quoted keys, or that parses as JSON, now skips Markdown and shows its exact text in monospace. Copying and editing still use the source string. The owner judged the share too small for a structured key-value view.
+
+### 2026-11-07 — Portraits may fill half of a day
+
+In the replay trial 16 reviewed items waited only because portraits and people passed 35% of the day. The owner raised the share to 50% so that volume can reach 100 a day; items over the share are deferred.
