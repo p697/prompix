@@ -7,7 +7,7 @@ import { isAbsolute, join } from "node:path";
 import { parseArgs } from "node:util";
 import { catalogSchema, type Prompt } from "../packages/schema/catalog.ts";
 import {
-  applyEnrichment, packEnrichmentBatches, withLikenessDefault, reviewEnrichmentBatch, type EnrichmentCandidate, type EnrichmentImage, type EnrichmentOutcome,
+  applyEnrichment, packEnrichmentBatches, reviewEnrichmentBatch, type EnrichmentCandidate, type EnrichmentImage, type EnrichmentOutcome,
 } from "../ingest/enrichment-review.ts";
 import { prepareEnrichmentMedia, type PreparedEnrichmentMedia } from "../ingest/enrichment-media.ts";
 import { trustSystemCertificates } from "../ingest/models/http.ts";
@@ -192,7 +192,7 @@ async function publish(dryRun: boolean) {
   const run = values.run;
   if (!run) throw new Error("--run <name> is required");
   const outcomes = join(work!, "runs", run, "outcomes");
-  const report = { startedAt: new Date().toISOString(), published: false, enriched: 0, likeness: 0, unchanged: 0, stale: 0, failed: 0, relabelled: {} as Record<string, number>, removed: [] as string[], withheld: [] as string[], total: 0, version: "" };
+  const report = { startedAt: new Date().toISOString(), published: false, enriched: 0, unchanged: 0, stale: 0, failed: 0, relabelled: {} as Record<string, number>, removed: [] as string[], withheld: [] as string[], total: 0, version: "" };
   await withDailyStatus(contentRoot, report, async () => {
     if (await readPublicationHold(contentRoot)) throw new Error("Publication is held");
     const prepared = await prepareDailyStaging(contentRoot);
@@ -205,7 +205,6 @@ async function publish(dryRun: boolean) {
       if (removed.has(item.id)) { report.removed.push(item.id); continue; }
       const path = join(outcomes, `${item.id}.json`);
       const outcome = await exists(path) ? await json(path) : undefined;
-      if (item.inputs && withLikenessDefault(item.inputs) !== item.inputs) { report.likeness++; prompts.push({ ...item, inputs: withLikenessDefault(item.inputs) }); continue; }
       if (!outcome || item.facets) { report.unchanged++; prompts.push(item); continue; }
       if (!outcome.ok) { report.failed++; prompts.push(item); continue; }
       if (outcome.itemHash !== itemHash(item)) { report.stale++; prompts.push(item); continue; }
@@ -226,7 +225,7 @@ async function publish(dryRun: boolean) {
     const catalog = preservePublicationInput({ ...previous, prompts, removedIDs, publishedAt: new Date().toISOString(),
       version: languagePackEditionVersion(prompts, removedIDs) });
     await atomic(join(work!, "runs", run, `publication-${dryRun ? "dry-run" : "input"}.json`), catalog);
-    if (!dryRun && (report.enriched || report.likeness || report.removed.length || report.withheld.length)) {
+    if (!dryRun && (report.enriched || report.removed.length || report.withheld.length)) {
       const result = await publishDailyCatalog(contentRoot, catalog, prepared);
       report.published = true; report.version = result.authoritative.version;
     }

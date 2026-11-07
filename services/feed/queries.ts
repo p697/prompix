@@ -83,7 +83,6 @@ function feedConditions(filters: FeedFilters, parameter: (value: unknown) => str
   if (filters.facet) where.push(`v.card->'facets'->'${facetGroupOf(filters.facet)}' @> to_jsonb(${parameter(filters.facet)}::text)`);
   if (filters.mode) where.push(`v.card#>>'{generation,mode}'=${parameter(filters.mode)}`);
   if (filters.modelFamily) where.push(`v.card#>>'{generation,modelFamily}'=${parameter(filters.modelFamily)}`);
-  if (filters.inputs) where.push(`v.card#>>'{inputs,requirement}'=${parameter(filters.inputs)}`);
   if (filters.tag) {
     const tagged = `v.tags @> array[${parameter(filters.tag)}]::text[]`;
     where.push(filters.tag === "创作灵感" ? `(v.kind<>'text' or ${tagged})` : tagged);

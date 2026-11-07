@@ -31,7 +31,7 @@ function cardFor(item: Prompt, revision: string, locale: FeedLocale, languages: 
     creator: item.creator, media: item.media, presentation: item.presentation,
     cover: item.cover ? { ...item.cover, ...(translated?.cover ?? {}) } : undefined,
     language: translated ? locale : "original", availableLanguages: languages,
-    facets: item.facets, generation: item.generation, inputs: item.inputs, palette: item.palette, rights: item.rights,
+    facets: item.facets, generation: item.generation, palette: item.palette, rights: item.rights,
     ...(locale === "original" && item.localization?.en ? { en: item.localization.en } : {}),
   });
   // Fifty cards plus cursor and envelope must always fit the public byte budget.

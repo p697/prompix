@@ -23,7 +23,7 @@ type Stored = z.infer<typeof storedSchema>;
 /** A failed item judgment is retried once on a later run, then waits for its content to change. */
 const maxItemAttempts = 2;
 
-const enrichmentKeys = ["inputs", "generation", "variables", "facets", "palette", "shots", "rights"] as const;
+const enrichmentKeys = ["generation", "variables", "facets", "palette", "shots", "rights"] as const;
 const restrictiveness: Record<string, number> = { general: 0, suggestive: 1, unknown: 2, explicit: 3 };
 /** Unchanged live content keeps what its 2.0 review decided. A rebuild from the source loses
  * the 2.0 fields, and the visual review's own label store may disagree with the 2.0 label:

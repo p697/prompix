@@ -36,7 +36,7 @@ test("cards carry the 2.0 fields, English card text and the new filters", async 
   const page = await getFeed(reader, { filters: base, limit: 50 }, secret);
   const card = page.items.find(value => value.id === "work-1")!;
   assert.deepEqual(card.generation, { modelFamily: "veo", mode: "i2v", hasAudio: true });
-  assert.deepEqual(card.inputs, { requirement: "required", count: 1, kinds: ["face"], ownLikenessOnly: true });
+  assert.equal("inputs" in card, false, "the retired upload field is never served");
   assert.equal(card.palette?.[0].hex, "#C2410C");
   assert.equal(card.rights?.imageExport, true);
   assert.equal(card.title, "作品 1");
@@ -54,8 +54,6 @@ test("cards carry the 2.0 fields, English card text and the new filters", async 
   assert.deepEqual(await ids({ facet: "cinematic" }), [...even, ...odd].sort());
   assert.deepEqual(await ids({ mode: "i2v" }), odd);
   assert.deepEqual(await ids({ modelFamily: "gpt-image" }), even);
-  assert.deepEqual(await ids({ inputs: "required" }), odd);
-  assert.deepEqual(await ids({ inputs: "none", kind: "video" }), []);
   assert.deepEqual(await ids({ facet: "portraits", sort: "discovery" }), even);
 
   const browse = await getBrowse(reader, "en");
@@ -68,7 +66,10 @@ test("cards carry the 2.0 fields, English card text and the new filters", async 
 });
 
 test("new filter values are validated against the shared vocabularies", () => {
-  for (const query of ["facet=unknown-facet", "mode=t3v", "inputs=maybe", "modelFamily=dalle", "facet=portraits&facet=fashion"])
+  for (const query of ["facet=unknown-facet", "mode=t3v", "modelFamily=dalle", "facet=portraits&facet=fashion"])
     assert.throws(() => parseFeedQuery(new URL(`https://example.com/v3/feed?${query}`)), query);
-  assert.equal(parseFeedQuery(new URL("https://example.com/v3/feed?facet=portraits&mode=t2i&inputs=none&modelFamily=veo")).filters.facet, "portraits");
+  // Older apps may still send the retired upload filter: accepted and ignored.
+  const legacy = parseFeedQuery(new URL("https://example.com/v3/feed?facet=portraits&mode=t2i&inputs=none&modelFamily=veo")).filters;
+  assert.equal(legacy.facet, "portraits");
+  assert.equal("inputs" in legacy, false);
 });

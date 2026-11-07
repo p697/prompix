@@ -100,7 +100,8 @@ export const sourceMetricsSchema = z.object({
   capturedAt: z.iso.datetime(),
 }).strict();
 
-/** Merged into the public item schema; all optional. */
+/** Merged into the public item schema; all optional. `inputs` is no longer produced or served;
+ * it stays readable so catalogs written before 2026-11-07 still validate. */
 export const enrichmentShape = {
   inputs: inputsSchema.optional(),
   generation: generationSchema.optional(),
@@ -114,7 +115,7 @@ export const enrichmentShape = {
 type EnrichableItem = {
   kind: "text" | "image" | "video" | "web"; contentType?: "prompt" | "skill"; prompt: string;
   presentation?: string; localization?: { en?: unknown }; media?: unknown;
-  inputs?: z.infer<typeof inputsSchema>; generation?: z.infer<typeof generationSchema>;
+  generation?: z.infer<typeof generationSchema>;
   variables?: z.infer<typeof variablesSchema>; facets?: Facets; palette?: Palette; rights?: unknown;
 };
 
@@ -130,9 +131,6 @@ export function enrichmentConsistencyIssues(item: EnrichableItem): string[] {
   for (const variable of item.variables ?? [])
     if (!item.prompt.includes(variable.token)) issues.push(`Variable token is not in the prompt: ${variable.token}`);
   if (item.generation && !allowedModes(item).includes(item.generation.mode)) issues.push(`Mode ${item.generation.mode} does not fit ${item.contentType === "skill" ? "skill" : item.kind}`);
-  if (item.generation && ["i2i", "i2v", "v2v"].includes(item.generation.mode) && item.inputs?.requirement === "none")
-    issues.push("Reference modes need an input");
-  if (item.generation?.mode === "v2v" && item.inputs && !item.inputs.kinds.includes("video")) issues.push("v2v needs a video input");
   return issues;
 }
 
@@ -143,6 +141,6 @@ export function enrichedPromptIssues(item: EnrichableItem): string[] {
   if (visual && !item.presentation) issues.push("Visual items need a presentation label");
   if (!item.localization?.en) issues.push("English card metadata is required");
   if ((item.media as { imageURL?: string } | null | undefined)?.imageURL && !item.palette) issues.push("Items with a preview need a palette");
-  for (const field of ["inputs", "generation", "facets", "rights"] as const) if (!item[field]) issues.push(`Missing ${field}`);
+  for (const field of ["generation", "facets", "rights"] as const) if (!item[field]) issues.push(`Missing ${field}`);
   return issues;
 }

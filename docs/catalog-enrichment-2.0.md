@@ -9,7 +9,7 @@
 | 字段 | 内容 | 来源 |
 |---|---|---|
 | `presentation` | general / suggestive / unknown / explicit。图片、视频、网页必填 | 模型看真实画面，标准与 `visual-review.ts` 共用（`presentationStandard`） |
-| `inputs` | `requirement`、`count`、`kinds`、`ownLikenessOnly` | 模型；需要上传人脸而模型没判定时，`ownLikenessOnly` 默认为 true（App 统一显示「人像照片」，不区分本人与他人） |
+| `inputs` | 2026-11-07 停用 | 原来记录要不要上传参考图（`requirement`、`count`、`kinds`、`ownLikenessOnly`）。owner 认为对用户没有意义，已不再生成、不再下发，也不再提供筛选；旧条目里留着的这个字段只读不用 |
 | `generation` | `modelFamily`、`modelVersion`、`mode`、`outputAspect`、`durationSeconds`、`hasAudio` | 模型；`model` 标签能认出型号时以标签为准；视频的时长和有无音轨按实际文件测量；画幅没写明时取示例的实际比例（与常见比例相差 3% 以内） |
 | `variables` | `token`（Prompt 里占位符原文）、`name`、`default`、`hint`（name、hint 中英两份） | 模型；token 必须在 Prompt 原文里出现 |
 | `facets` | `useCase` ≤2、`style` ≤3、`subject` ≤3 | 模型，只能用 `packages/schema/facets.json` 里的 id，否则整条失败 |
@@ -32,7 +32,7 @@
 - `packEnrichmentBatches()`：按顺序打包，每次最多 10 条、24 张图、6 万字符输入；Codex 订阅建议 8–10 条一包，摊薄每次约 1 万 token 的固定开销。
 - `reviewEnrichmentBatch(provider, candidates)`：只经 `ingest/models/` 的提供方和 `completeValidated` 调用，记录走 `review` 环节（路由用 `npm run pipeline -- route review …`）。原始内容只放在不可信数据块里。
 - 返回给模型的 JSON Schema 只用类型、枚举和必填，不带长度、数值、数组长度约束（有的厂商会拒收），精确限制由 zod 在本地再校验一遍。
-- 一条不合格（词表外的值、超过数量上限、占位符不在原文里、模式和类型不符、参考图模式却不要输入）只判这一条失败；条目顺序或 id 对不上判整包失败。
+- 一条不合格（词表外的值、超过数量上限、占位符不在原文里、模式和类型不符）只判这一条失败；条目顺序或 id 对不上判整包失败。
 - 拒答原样抛出，不换模型重试：调用方把整包判为不发布，并写入排除记录。
 - `applyEnrichment(item, outcome, { palette, video, policy })` 生成新条目，正文字段一律不动。`policy: "label"` 用于新条目，以模型的尺度为准；`"stricter-only"` 用于存量：unknown 重判；已有标签只能变严（general→suggestive），不会放宽。
 
