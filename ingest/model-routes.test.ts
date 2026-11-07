@@ -48,7 +48,11 @@ test("a stage whose primary cannot be built starts on its fallback and logs the 
     review: { provider: "codex-cli", fallback: { provider: "codex-cli", fallback: { provider: "codex-cli" } } as never } } })));
 });
 
-test("an Anthropic route stops serving once today's logged spend reaches the cap", async () => {
+test("an Anthropic route stops serving once today's logged spend reaches the cap", async t => {
+  // CI has no key; a placeholder is enough because the cap refuses before any request.
+  const saved = process.env.ANTHROPIC_API_KEY;
+  process.env.ANTHROPIC_API_KEY = "sk-ant-placeholder";
+  t.after(() => { if (saved === undefined) delete process.env.ANTHROPIC_API_KEY; else process.env.ANTHROPIC_API_KEY = saved; });
   const root = join(await mkdtemp(join(tmpdir(), "prompix-cap-")), "pipeline");
   await updateConfig(root, "codex", undefined, config => ({ ...config, routing: { ...config.routing,
     review: { provider: "anthropic-api", model: "claude-sonnet-5-5" } } }));
