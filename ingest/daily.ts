@@ -4,6 +4,7 @@ import { limitNewPublications } from "./publication-quota.ts";
 import { enrichNewItems } from "./enrichment-daily.ts";
 import { routedProvider } from "./model-routes.ts";
 import { checkNewTranslations } from "./translation-check-daily.ts";
+import { withCleanCreator, withoutTrailingTags } from "./prompt-cleanup.ts";
 import { withPublisherDatabase } from "./database-publication.ts";
 import { prepareDiscoveredSkills } from "./discovered-skill-daily.ts";
 import { preparePublisherSkills } from "./publisher-skill-daily.ts";
@@ -311,10 +312,16 @@ async function run() {
       complete = quota.prompts;
       report.sources["publication-quota"] = quota.report;
     }
+    // Published text drops trailing hashtags and self-links, and display names their taglines.
+    // Editorial and source checks stay bound to the original; the live edition is compared
+    // after the same cleanup, so reviews and translations of unchanged meaning carry over.
+    const clean = (item: Prompt) => withCleanCreator(withoutTrailingTags(item));
+    complete = complete.map(clean);
+    const live = previous?.prompts.map(clean);
     // A new item enters only with a valid 2.0 review and a publishable label, minors judged.
-    if (previous && publication.previous?.database) {
+    if (live && publication.previous?.database) {
       const routed = publishing ? await routedProvider("review", "enrichment:daily") : undefined;
-      const enrichment = await enrichNewItems(complete, new Map(previous.prompts.map(item => [item.id, item])), root,
+      const enrichment = await enrichNewItems(complete, new Map(live.map(item => [item.id, item])), root,
         routed ? { provider: routed.provider, effort: routed.effort, record: routed.record } : {});
       complete = enrichment.prompts;
       report.sources.enrichment = enrichment.report;
@@ -325,13 +332,13 @@ async function run() {
       return mirrored;
     }, (creatorID, error) => report.avatarErrors.push(`${creatorID}: ${String(error)}`));
     // Dry-run only reads validated translations; it never starts a paid batch.
-    const localized = await prepareDailyTranslations(inheritPreviousTranslations(complete, previous?.prompts ?? []), root, process.env, publishing);
+    const localized = await prepareDailyTranslations(inheritPreviousTranslations(complete, live ?? []), root, process.env, publishing);
     let prompts = localized.prompts;
     report.translations = localized.report;
     // A translation enters an edition only after an independent review; held text hides that locale alone.
-    if (previous && publication.previous?.database) {
+    if (live && publication.previous?.database) {
       const routed = publishing ? await routedProvider("translationCheck", "translation-check:daily") : undefined;
-      const checked = await checkNewTranslations(prompts, previous.prompts, join(root, "translations"),
+      const checked = await checkNewTranslations(prompts, live, join(root, "translations"),
         routed ? { provider: routed.provider, effort: routed.effort, record: routed.record,
           maxRequests: Number(process.env.PROMPIX_TRANSLATION_CHECK_MAX_REQUESTS ?? 10) } : {});
       prompts = checked.prompts;
