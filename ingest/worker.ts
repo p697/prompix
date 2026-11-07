@@ -92,7 +92,9 @@ export function maintenanceJob(env: NodeJS.ProcessEnv): Job {
 
 type IntakeReport = { published?: boolean; error?: string; changes?: { added?: { total?: number } };
   editorial?: { requests?: number }; visualReview?: { requests?: number };
-  sources?: { enrichment?: { enriched?: number; excluded?: number; deferred?: number } } };
+  sources?: { enrichment?: { enriched?: number; excluded?: number; deferred?: number };
+    x?: { status?: string; days?: { day: string; returned: number; admitted: number; located?: number }[] };
+    "x-review"?: { approved?: number; rejected?: number; deferredPortraits?: number; waiting?: number; reasons?: Record<string, number> } } };
 
 /** The owner's 08:30 email about the 24 hours before it, which hold that night's run. Nothing is
  * sent before the worker's first intake, or when that day's report was already sent by hand. */
@@ -139,11 +141,13 @@ export function intakeJob(env: NodeJS.ProcessEnv, spawnDaily = runDaily, alert =
       const code = await spawnDaily({ ...rest, PROMPIX_TRANSLATION_PROVIDER: "pipeline", ...(trials.length ? { PROMPIX_IMPORT_TRIALS: trials.join(",") } : {}) });
       const report = await json<IntakeReport>(join(root, "status.json"), {});
       if (code !== 0) throw new Error(report.error ?? `daily exited with ${code}`);
-      const added = report.changes?.added?.total ?? 0, enrichment = report.sources?.enrichment;
-      return { published: added, summary: `新发布 ${added} 条；2.0 审核通过 ${enrichment?.enriched ?? 0} 条，排除 ${enrichment?.excluded ?? 0} 条，顺延 ${enrichment?.deferred ?? 0} 条`,
+      const added = report.changes?.added?.total ?? 0, enrichment = report.sources?.enrichment, review = report.sources?.["x-review"];
+      const days = report.sources?.x?.days ?? [];
+      const searched = days.length ? `搜索日本时间 ${days.map(day => day.day.slice(5).replace("-", "/")).join("、")}：搜到 ${days.reduce((sum, day) => sum + day.returned, 0)} 条，收进 ${days.reduce((sum, day) => sum + day.admitted, 0)} 条，模型找出提示词 ${days.reduce((sum, day) => sum + (day.located ?? 0), 0)} 条；` : "";
+      return { published: added, summary: `新发布 ${added} 条；${searched}X 新帖审核通过 ${review?.approved ?? 0} 条，拒绝 ${review?.rejected ?? 0} 条，人像超比例顺延 ${review?.deferredPortraits ?? 0} 条；其他内容 2.0 审核通过 ${enrichment?.enriched ?? 0} 条，排除 ${enrichment?.excluded ?? 0} 条`,
         // Subscription calls outside the provider layer, for the daily report.
         details: { editorialRequests: report.editorial?.requests ?? 0, visualRequests: report.visualReview?.requests ?? 0,
-          excluded: enrichment?.excluded ?? 0 } };
+          excluded: (enrichment?.excluded ?? 0) + (review?.rejected ?? 0), ...(review?.reasons ? { rejectReasons: review.reasons } : {}) } };
     } };
 }
 

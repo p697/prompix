@@ -13,7 +13,7 @@ test("the report leads with the outcome and covers changes, work, time and cost"
       event("2026-11-05T23:00:00Z", "job.finished", { job: "intake", summary: "outside the window", durationMs: 1 }),
       event("2026-11-06T00:30:00Z", "job.failed", { job: "intake", error: "network", durationMs: 60000 }),
       event("2026-11-06T01:10:00Z", "job.finished", { job: "intake", summary: "新发布 80 条", durationMs: 3600000, published: 80,
-        excluded: 4, translationsHeld: 2, editorialRequests: 12, visualRequests: 6 }),
+        excluded: 4, translationsHeld: 2, editorialRequests: 12, visualRequests: 6, rejectReasons: { "ad-or-bait": 3, "real-person": 1 } }),
       event("2026-11-06T01:15:00Z", "job.finished", { job: "maintenance", summary: "X 复查 60 条", durationMs: 120000 }),
       event("2026-11-06T01:00:00Z", "model.call", { actor: "pipeline", stage: "review", provider: "anthropic-api", model: "claude-haiku-5-5", usage: { inputTokens: 1_000_000, outputTokens: 0 } }),
       event("2026-11-06T01:00:00Z", "model.call", { actor: "pipeline", stage: "translationCheck", provider: "anthropic-api", model: "claude-sonnet-5-5", usage: { inputTokens: 100_000, outputTokens: 10_000 } }),
@@ -28,7 +28,7 @@ test("the report leads with the outcome and covers changes, work, time and cost"
   assert.match(text, /^结论：每日任务正常完成/);
   assert.match(text, /新增 80 条，其中每日流程发布 80 条（每日目标 100，差 20 条）/);
   assert.match(text, /下架 1 条，线上共 3645 条/);
-  assert.match(text, /审核自动排除 4 条/);
+  assert.match(text, /审核自动排除 4 条（广告或引流 3，真实人物 1）/);
   assert.match(text, /每日采集发布：2 次（成功 1，失败 1），用时 1 小时 1 分钟/);
   assert.match(text, /合计用时 1 小时 3 分钟（另有 1 次没有记录用时）/);
   assert.match(text, /其他会话的模型调用（例如补库）：1 次，\$2\.00/);

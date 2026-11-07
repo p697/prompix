@@ -15,6 +15,11 @@ export type ReportInput = { start: number; end: number; target: number; desired:
   database?: { added: number; removed: number; live: number }; databaseError?: string; xSpendUSD?: number;
   funnel?: FunnelSummary; funnelError?: string };
 
+/** Review codes as the owner reads them. */
+const reasonNames: Record<string, string> = { "incomplete-prompt": "提示词不完整", "too-generic": "太短太泛", "no-result-media": "没有生成结果",
+  "media-mismatch": "图文不符", "low-quality": "效果差", "ad-or-bait": "广告或引流", "watermark-or-collage": "水印或拼贴", "real-person": "真实人物",
+  unsafe: "不安全", "minors-unsafe": "未成年人不安全", "minors-uncertain-with-suggestive": "疑似未成年加擦边", "minors-safe-with-suggestive": "未成年人加擦边",
+  "presentation-explicit": "露骨", "presentation-unknown": "尺度判不准", invalid: "审核输出无效" };
 const jobNames: Record<string, string> = { intake: "每日采集发布", maintenance: "来源维护复查" };
 const local = (at: number) => new Date(at).toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false });
 const clock = (at: string) => new Date(at).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", hour12: false });
@@ -31,6 +36,7 @@ export function buildDailyReport(input: ReportInput): DailyReport {
   const problems: string[] = [], notes: string[] = [];
   const done: string[] = [];
   let total = 0, untimed = 0, excluded = 0, editorial = 0, visual = 0;
+  const reasons = new Map<string, number>();
   for (const name of [...new Set(runs.map(event => String(event.job)))]) {
     const own = runs.filter(event => event.job === name), failed = own.filter(event => event.type === "job.failed");
     const timed = own.filter(event => typeof event.durationMs === "number"), spent = timed.reduce((sum, event) => sum + Number(event.durationMs), 0);
@@ -41,6 +47,7 @@ export function buildDailyReport(input: ReportInput): DailyReport {
     else if (failed.length) notes.push(`${jobNames[name] ?? name}曾失败 ${failed.length} 次，之后已自动恢复`);
     for (const event of own) {
       excluded += Number(event.excluded ?? 0);
+      for (const [reason, count] of Object.entries((event.rejectReasons ?? {}) as Record<string, number>)) reasons.set(reason, (reasons.get(reason) ?? 0) + count);
       editorial += Number(event.editorialRequests ?? 0); visual += Number(event.visualRequests ?? 0);
     }
   }
@@ -79,7 +86,7 @@ export function buildDailyReport(input: ReportInput): DailyReport {
     "线上变化",
     input.database ? `- 新增 ${added} 条，其中每日流程发布 ${published} 条（每日目标 ${input.target}${published < input.target ? `，差 ${input.target - published} 条` : ""}）` : `- 新增：读取失败；每日流程发布 ${published} 条`,
     ...(input.database ? [`- 下架 ${input.database.removed} 条，线上共 ${input.database.live} 条`] : []),
-    `- 审核自动排除 ${excluded} 条`,
+    `- 审核自动排除 ${excluded} 条${reasons.size ? `（${[...reasons].sort((a, b) => b[1] - a[1]).slice(0, 5).map(([reason, count]) => `${reasonNames[reason] ?? reason} ${count}`).join("，")}）` : ""}`,
     ...(input.funnel ? ["", "条目状态（npm run pipeline -- funnel）",
       `- 排队中 ${input.funnel.counts.waiting} 条，悬空 ${input.funnel.counts.stalled} 条（这一天新增 ${input.funnel.newlyStalled} 条）`,
       ...input.funnel.stalled.slice(0, 5).map(group => `  · ${group.count} 条：${group.reason.slice(0, 120)}`)] : []),
