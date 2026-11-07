@@ -23,6 +23,8 @@ export async function pipelineEnvironment(env: NodeJS.ProcessEnv = process.env, 
 /** More confirmed deletions than this in one run is far likelier a provider fault than
  * real removals, so nothing is taken down and the run fails loudly instead. */
 export const takedownLimit = 50;
+/** Drafts each scheduled maintenance may recheck regardless of the editorial capacity left. */
+export const maintenanceDrafts = 50;
 
 export type MaintenanceReport = { x: unknown; clawhub: unknown; removed: number; takenDown: string[] };
 type Dependencies = {
@@ -40,7 +42,9 @@ export async function runMaintenance(env: NodeJS.ProcessEnv, root = contentRoot,
   const unlock = await io.lock(root);
   try {
     // Without the published IDs the recheck counts as growth and the maintenance reserve refuses it.
-    const admission = env.X_BEARER_TOKEN || env.PROMPIX_X_DISCOVERY_PROVIDER === "third-party" ? await io.admission(root, env) : undefined;
+    // Up to one third-party request of drafts beyond the editorial capacity (see maintenanceDrafts).
+    const admission = env.X_BEARER_TOKEN || env.PROMPIX_X_DISCOVERY_PROVIDER === "third-party"
+      ? await io.admission(root, env, new Date(), undefined, maintenanceDrafts) : undefined;
     const x = await io.availability(root, { enabled: true, bearer: env.X_BEARER_TOKEN, admission, environment: env });
     const removed = Object.entries(x.state).filter(([, state]) => state.removed).map(([id]) => id).sort();
     let takenDown: string[] = [];
