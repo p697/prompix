@@ -109,7 +109,12 @@ import Observation
     private func download(_ url: URL) async throws -> Data {
         if let data = prepared.object(forKey: url as NSURL) { return data as Data }
         if let existing = downloads[url] { return try await existing.value }
-        let task = Task { try await CatalogSync.fetch(url, maximum: 8_000_000, session: session) }
+        let task = Task {
+            #if DEBUG && targetEnvironment(simulator)
+            await SimulatorSlowNetwork.wait(seconds: Double.random(in: 1...3))
+            #endif
+            return try await CatalogSync.fetch(url, maximum: 8_000_000, session: session)
+        }
         downloads[url] = task
         defer { downloads[url] = nil }
         let data = try await task.value
@@ -143,21 +148,27 @@ import Observation
 struct RemoteImage: View {
     let url: URL
     var contentMode: ContentMode = .fit
+    /// The work's own main colour, shown until the picture arrives.
+    var tone: Color?
     @State private var image: UIImage?
     @State private var loadedURL: URL?
     @State private var failed = false
     @State private var attempt = 0
+    @State private var develops = false
     var body: some View {
         ZStack {
-            Palette.soft
-            if let image = (loadedURL == url ? image : nil) ?? ImageStore.shared.cachedImage(for: url) { Image(uiImage: image).resizable().aspectRatio(contentMode: contentMode) }
-            else if failed {
+            tone ?? Palette.soft
+            if let image = (loadedURL == url ? image : nil) ?? ImageStore.shared.cachedImage(for: url) {
+                Image(uiImage: image).resizable().aspectRatio(contentMode: contentMode).developsIn(develops && loadedURL == url)
+            } else if failed {
                 Button { attempt += 1 } label: { Image(systemName: "arrow.clockwise").font(.title3.weight(.light)).foregroundStyle(Palette.muted).frame(width: 44, height: 44) }
                     .accessibilityLabel(String(localized: "重新加载图片"))
             }
         }.task(id: "\(url)-\(attempt)") {
             if loadedURL != url { image = nil }
             failed = false
+            // Only a picture that was not already on screen develops in.
+            develops = image == nil && ImageStore.shared.cachedImage(for: url) == nil
             do {
                 let loaded = try await ImageStore.shared.image(for: url)
                 guard !Task.isCancelled else { return }
@@ -167,5 +178,30 @@ struct RemoteImage: View {
                 failed = true
             }
         }
+    }
+}
+
+extension View {
+    /// A picture that arrives from the network develops in, the way a print
+    /// surfaces in the tray: grey and flat out of the paper (out of the dark in
+    /// the darkroom), then its own colour. Reduce Motion keeps a short fade.
+    func developsIn(_ active: Bool) -> some View { modifier(Developing(active: active)) }
+}
+
+private struct Developing: ViewModifier {
+    let active: Bool
+    @State private var developed = false
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    func body(content: Content) -> some View {
+        let shown = developed || !active
+        let toned = shown || reduceMotion
+        content
+            .saturation(toned ? 1 : 0).contrast(toned ? 1 : 0.5)
+            .brightness(toned ? 0 : colorScheme == .dark ? -0.5 : 0.35)
+            .animation(.timingCurve(0.2, 0.65, 0.2, 1, duration: 1.1), value: toned)
+            .opacity(shown ? 1 : 0)
+            .animation(.easeOut(duration: reduceMotion ? 0.2 : 0.3), value: shown)
+            .onAppear { developed = true }
     }
 }

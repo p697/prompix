@@ -150,7 +150,7 @@ struct SearchView: View {
     }
     @ViewBuilder private var legacyResults: some View {
         if completedSearch != localSearch {
-            ContentActivityLabel().frame(maxWidth: .infinity).padding()
+            FeedLoadingGrid().padding(.horizontal, PromptGridLayout.inset)
         } else { legacyMatches }
     }
 

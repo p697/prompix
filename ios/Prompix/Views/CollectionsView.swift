@@ -196,9 +196,11 @@ struct CollectionRail: View {
                                     VStack(alignment: .leading, spacing: 5) {
                                         Text(collection.title).font(.subheadline.weight(.medium))
                                             .lineLimit(1)
-                                        Text(String(localized: "\(collection.count(in: library)) 条内容"))
-                                            .font(.caption).foregroundStyle(Palette.muted)
-                                            .redacted(reason: waiting ? .placeholder : [])
+                                        if waiting { LoadingLine(font: .caption, width: 46) }
+                                        else {
+                                            Text(String(localized: "\(collection.count(in: library)) 条内容"))
+                                                .font(.caption).foregroundStyle(Palette.muted)
+                                        }
                                     }.frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 2)
                                 }.frame(width: 246)
                                     .foregroundStyle(Palette.ink).multilineTextAlignment(.leading).contentShape(Rectangle())

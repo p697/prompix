@@ -96,6 +96,9 @@ struct FeedClient: FeedServing {
         if !parameters.isEmpty { components.queryItems = parameters }
         guard let url = components.url, url.absoluteString.utf8.count <= 4096 else { throw FeedError.invalidQuery }
         try await gate.check()
+        #if DEBUG && targetEnvironment(simulator)
+        await SimulatorSlowNetwork.wait(seconds: 6)
+        #endif
         let data: Data
         do { data = try await CatalogSync.fetch(url, maximum: maximum, session: session, requiresExactURL: true, timeout: 20, validateResponse: { response in
             let retry = response.value(forHTTPHeaderField: "Retry-After").flatMap(TimeInterval.init)

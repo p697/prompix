@@ -1,3 +1,5 @@
+**骨架屏 · 显影**：全 App 骨架按真实布局铺满一屏，一道跨整屏的淡光扫过；作品图片到达前先显示作品主色，到达时像相纸显影一样浮现。见[设计语言](design-language.md#动态语法)和[决定](decisions/2026-11-07-skeleton-develop.md)。
+
 **2.0.0（48）已装到 owner 的 iPhone Air**：暗房 · 白配色与新图标；发现页只有作品、创作者与用途横条移进信息流、2.0 筛选（用途／模型族／参考图）；长按预览；详情页参数行、衬线正文、「你需要」、分镜；详情大图通栏铺满、多图原地滑动；收藏卡组与「我的改写」；搜索首页与结果标题；两步引导；设置里的「显示成人内容」。未做：今日一组、榜单与匿名统计（等服务端）、填空就地编辑、按颜色与以图搜图、分享卡。见[设计语言](design-language.md)。
 
 **2.0 条目字段**：presentation、inputs、generation、variables、facets、英文卡片、palette、shots、rights 进入 schema（全部可选），配固定 facets 词表；一次模型调用产出除 palette（本地计算）和 sourceMetrics 外的全部字段。见[字段与合并审核](catalog-enrichment-2.0.md)。
