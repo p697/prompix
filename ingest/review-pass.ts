@@ -44,6 +44,7 @@ ${reasonIDs.map(id => `  ${id}: ${rejectReasons[id]}`).join("\n")}
   - Small artifacts, a few distorted details or soft focus are not low quality.
   - A small tool or platform watermark, an author signature or a model label is fine. A grid, contact sheet, before-and-after or character sheet is fine when the prompt asks for it or every panel comes from the same prompt.
   - A generated commercial, a brand in the result, or the tool's name and hashtags are not an ad.
+  - Text candidates (kind text) are prompts for a chat model and have no result media: judge the prompt alone, never use no-result-media or media-mismatch for them, and label presentation general unless the prompt itself is sexual.
   - Lingerie, swimwear, revealing outfits and sexy poses are not unsafe: label them suggestive under presentation and publish. Viewers see suggestive work only after opting in.
 - presentation: ${presentationValues.join(", ")}. Apply this standard:
 ${presentationStandard}

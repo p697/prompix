@@ -72,3 +72,23 @@ test("creators the review approves twice, mostly not portraits, join the creator
   assert.deepEqual(await reviewedCreators(root), ["maker"]);
   assert.deepEqual(await reviewedCreators(root, Date.now() + 15 * 86400_000), [], "only the last two weeks count");
 });
+
+test("prompts.chat prompts are reviewed after visual work, a few a night, and survive repository revisions", async t => {
+  const root = await mkdtemp(join(tmpdir(), "prompix-review-text-")); t.after(() => rm(root, { recursive: true, force: true }));
+  const text = (id: string, revision: string): Candidate => ({ ...candidate(id, "0"), kind: "text", media: null,
+    source: { name: "prompts.chat", url: "https://github.com/f/prompts.chat", license: "CC0-1.0", method: "社区收录", revision } } as unknown as Candidate);
+  const seen: string[][] = [];
+  const provider = { id: "fixture", model: "fixture", capabilities: { images: true }, complete: async (request: { input: string }) => {
+    const ids = (JSON.parse(request.input).candidates as { id: string }[]).map(item => item.id); seen.push(ids);
+    return { provider: "fixture", model: "fixture", usage: {}, output: { items: ids.map(id => answer(id, id.startsWith("pc-") ? { generation: { ...answer(id).generation, mode: "text" } } : {})) } };
+  } } as unknown as ModelProvider;
+  const dependencies = { mirror: async (prompts: readonly Candidate[]) => ({ prompts: [...prompts], errors: [] }),
+    prepare: async (item: Candidate) => ({ images: item.kind === "text" ? [] : [{ path: "/tmp/a.jpg", mediaType: "image/jpeg" as const, role: "image" as const, sourceRole: "image" }] }) } as never;
+  const items = [text("pc-1", "rev-a"), text("pc-2", "rev-a"), text("pc-3", "rev-a"), candidate("x-post-21", "21")];
+  const first = await reviewDailyX(items, root, { provider, maxText: 2, ...dependencies as object });
+  assert.equal(first.report.pending, 3, "the visual post and two of the three text prompts");
+  assert.equal(seen.flat()[0], "x-post-21", "visual work first");
+  const moved = [text("pc-1", "rev-b"), text("pc-2", "rev-b")];
+  const again = await reviewDailyX(moved, root, { provider, ...dependencies as object });
+  assert.equal(again.report.pending, 0, "a new repository commit does not re-review unchanged prompts");
+});

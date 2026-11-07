@@ -155,7 +155,7 @@ async function runIntake(env: NodeJS.ProcessEnv, spawnDaily: typeof runDaily, al
   const added = report.changes?.added?.total ?? 0, enrichment = report.sources?.enrichment, review = report.sources?.["x-review"];
   const days = report.sources?.x?.days ?? [];
   const searched = days.length ? `搜索日本时间 ${days.map(day => day.day.slice(5).replace("-", "/")).join("、")}：搜到 ${days.reduce((sum, day) => sum + day.returned, 0)} 条，收进 ${days.reduce((sum, day) => sum + day.admitted, 0)} 条，模型找出提示词 ${days.reduce((sum, day) => sum + (day.located ?? 0), 0)} 条；` : "";
-  return { published: added, summary: `新发布 ${added} 条；${searched}X 新帖审核通过 ${review?.approved ?? 0} 条，拒绝 ${review?.rejected ?? 0} 条，人像超比例顺延 ${review?.deferredPortraits ?? 0} 条；其他内容 2.0 审核通过 ${enrichment?.enriched ?? 0} 条，排除 ${enrichment?.excluded ?? 0} 条`,
+  return { published: added, summary: `新发布 ${added} 条；${searched}新内容一轮审核通过 ${review?.approved ?? 0} 条，拒绝 ${review?.rejected ?? 0} 条，人像超比例顺延 ${review?.deferredPortraits ?? 0} 条；其他内容 2.0 审核通过 ${enrichment?.enriched ?? 0} 条，排除 ${enrichment?.excluded ?? 0} 条`,
     // Subscription calls outside the provider layer, for the daily report.
     details: { editorialRequests: report.editorial?.requests ?? 0, visualRequests: report.visualReview?.requests ?? 0,
       excluded: (enrichment?.excluded ?? 0) + (review?.rejected ?? 0), ...(review?.reasons ? { rejectReasons: review.reasons } : {}) } };
