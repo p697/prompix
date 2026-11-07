@@ -57,7 +57,7 @@ export async function admitXSearchLeads(root: string, directory: string, plan: X
 
 /** Caller holds the content lock. All historical attempts remain deduplication evidence across UTC days. */
 export async function admitXLeadSelection(root: string, leads: XSearchLead[], planID: string, options: XAdmissionOptions) {
-  if (!Number.isInteger(options.maxPosts) || options.maxPosts < 0 || options.maxPosts > 400) throw new Error("Invalid X acquisition limit");
+  if (!Number.isInteger(options.maxPosts) || options.maxPosts < 0 || options.maxPosts > 1000) throw new Error("Invalid X acquisition limit");
   const now = options.now ?? new Date().toISOString(), day = z.iso.datetime().parse(now).slice(0, 10);
   const lane = options.lane ?? "live";
   const report = { status: "dry-run", requests: 0, acquired: 0, unavailable: 0, known: 0, pending: leads.length, needsInspection: 0 };

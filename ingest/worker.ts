@@ -137,14 +137,16 @@ export function intakeJob(env: NodeJS.ProcessEnv, spawnDaily = runDaily, alert =
 export const trialRequestFile = "trial-request.json";
 /** A trial of the new pipeline, run when requested (`npm run pipeline -- trial`): real search,
  * review and translation, nothing published. Never retried on its own; request it again. */
-export function trialJob(env: NodeJS.ProcessEnv, root = pipelineRoot(), spawnTrial = (environment: NodeJS.ProcessEnv) => runScript("ingest/trial.ts", environment)): Job {
+export function trialJob(env: NodeJS.ProcessEnv, root = pipelineRoot(), spawnTrial = (environment: NodeJS.ProcessEnv, args: string[]) => runScript("ingest/trial.ts", environment, args)): Job {
   return { name: "trial", at: 0,
     ready: async last => {
       const request = await json<{ at?: string } | null>(join(root, trialRequestFile), null);
       return !!request?.at && (!last || Date.parse(last.startedAt) < Date.parse(request.at));
     },
     run: async () => {
-      const code = await spawnTrial(env);
+      // A replay re-reviews an earlier trial's posts without searching X again.
+      const replay = (await json<{ replay?: string } | null>(join(root, trialRequestFile), null))?.replay;
+      const code = await spawnTrial(env, replay && /^[\w-]+$/.test(replay) ? ["--replay", replay] : []);
       if (code !== 0) throw new Error(`trial exited with ${code}`);
       const finished = (await readEvents(root, 50)).filter(event => event.type === "trial.finished").at(-1);
       return `试跑完成：${JSON.stringify(finished?.counts ?? {})}`;
