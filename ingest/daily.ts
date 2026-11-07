@@ -144,10 +144,14 @@ async function run() {
     ]) {
       const path = join(root, "candidates", `${source.id}.json`);
       try {
-        const raw = await collectRepository(
-          source.repo,
-          "prompts.csv",
-        );
+        // The whole CSV is downloaded only when the repository moved since the last snapshot.
+        const previous = await json<Candidate[]>(path, []);
+        const raw = await collectRepository(source.repo, "prompts.csv", previous[0]?.source.revision);
+        if (raw.text === undefined) {
+          all.push(...previous);
+          report.sources[source.id] = { status: "unchanged", count: previous.length, revision: raw.revision };
+          continue;
+        }
         const candidates = parseCommunityCSV(raw.text, raw.revision);
         if (!candidates.length)
           throw new Error("Empty parsed source; retaining previous snapshot");
