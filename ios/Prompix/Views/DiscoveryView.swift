@@ -442,16 +442,16 @@ enum PromptCardGeometry {
         let summary = item.displaySummary.trimmingCharacters(in: .whitespacesAndNewlines)
         return (item.detailMeta.lead, summary == item.displayTitle ? "" : summary)
     }
-    /// Estimated at a nominal 180 pt column with 14 pt insets: a 10 pt lead,
-    /// up to three title lines of 16 pt and three summary lines of 13 pt.
+    /// Estimated at a nominal 180 pt column with 14 pt insets: the opening mark,
+    /// up to three 18 pt title lines, three 12.5 pt summary lines and the model.
     static func textCardRatio(_ item: ContentPreview) -> CGFloat {
         func lines(_ text: String, perLine: Double, limit: Double) -> Double {
             let units = text.unicodeScalars.reduce(0.0) { sum, scalar in sum + (scalar.value > 0x2E80 ? 1 : 0.55) }
             return text.isEmpty ? 0 : min(limit, max(1, (units / perLine).rounded(.up)))
         }
         let note = textNote(item)
-        let title = lines(item.displayTitle, perLine: 9.5, limit: 3), summary = lines(note.summary, perLine: 11.5, limit: 3)
-        let height = 28 + (note.lead.isEmpty ? 0 : 20) + title * 23 + (summary > 0 ? 8 + summary * 19 : 0)
+        let title = lines(item.displayTitle, perLine: 8.4, limit: 3), summary = lines(note.summary, perLine: 11.8, limit: 3)
+        let height = 12 + 24 + 4 + title * 25.5 + (summary > 0 ? 8 + summary * 18.5 : 0) + (note.lead.isEmpty ? 0 : 24) + 16
         return 180 / height
     }
     static func height(for item: ContentPreview, width: CGFloat, titled: Bool = false) -> CGFloat {

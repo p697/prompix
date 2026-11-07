@@ -1292,3 +1292,6 @@ The owner wants authors to ask for removal with one email, handled within 24 hou
 - App、商店引用的 `/support`、`/privacy`、`/content`、`/report?id=` 及 `/zh` 版本全部保留，文案原样迁移；隐私页「这个网站」一节按新的加载与搜索行为更新。
 - 视觉沿用 `design-language.md` 色板：中性白底、墨色正文、蓝紫粉光谱只用于标题重点词、数字与局部光晕；系统字体，无第三方脚本或字体；动效仅入场、滚动渐显与图片墙缓慢漂移，尊重减少动态效果。
 
+### 2026-11-07 — Text cards set as quotations on quiet tints
+
+The owner found title-and-summary text cards too plain and chose, from four directions on the design canvas, direction A's structure with direction C's colours. A text card is now one of five low-saturation tints chosen by the work's ID, with dark counterparts and no border. It carries an opening quotation mark, an 18 pt serif title, the summary and the model in mono. Chinese titles use Songti SC, one of Apple's downloadable system fonts: the app requests it at launch and uses the system face until it is on the device, so nothing is bundled. Japanese titles use Hiragino Mincho and Latin titles New York. The Core Text progress handler runs off the main actor; an isolated closure crashed on launch.

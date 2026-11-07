@@ -47,6 +47,7 @@ import SwiftUI
                 .tint(Palette.accent)
                 .foregroundStyle(Palette.ink)
                 .task { await library.refresh() }
+                .task { NoteFonts.shared.prepare() }
                 .task(id: library.savedImageURLs) { if let urls = library.savedImageURLs { await ImageStore.shared.keepOffline(urls) } }
                 .onChange(of: scenePhase) { _, phase in if phase == .active { Task { await library.refresh() } } else { library.recommendations.flush() } }
                 .alert(String(localized: "暂时遇到一点问题"), isPresented: Binding(get: { library.error != nil }, set: { if !$0 { library.dismissError() } })) {

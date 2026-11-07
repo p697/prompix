@@ -81,30 +81,34 @@ struct Artwork: View {
         }
     }
     /// Text cards are the words themselves on a quiet sheet, sized to them.
-    /// Words as a card: the model in mono, the title, then what it does, in the
-    /// proportions `PromptCardGeometry.textCardRatio` reserves for them.
+    /// Words as a card, set like a quotation on a quiet tint: an opening mark,
+    /// the title, what it does, then the model in mono, in the proportions
+    /// `PromptCardGeometry.textCardRatio` reserves for them.
     private func noteArtwork(size: CGSize) -> some View {
         let words = item.displayTitle
         let note = PromptCardGeometry.textNote(item)
         return ZStack(alignment: .topLeading) {
-            Palette.surface
+            Palette.noteTint(for: item.id)
             if compact {
-                Text(words).font(Typography.prompt(size: min(size.width * 0.13, 16), for: words))
+                Text(words).font(Typography.noteTitle(words, size: min(size.width * 0.13, 16)))
                     .lineSpacing(2).lineLimit(4).foregroundStyle(Palette.ink).padding(8)
             } else {
-                VStack(alignment: .leading, spacing: 8) {
-                    if !note.lead.isEmpty {
-                        Text(verbatim: note.lead).font(Typography.meta(size: 10)).tracking(1.2).foregroundStyle(Palette.muted).lineLimit(1)
-                    }
-                    Text(words).font(Typography.prompt(size: 16, for: words)).lineSpacing(4).lineLimit(3)
-                        .foregroundStyle(Palette.ink)
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(verbatim: "\u{201C}").font(.system(size: 46, design: .serif)).foregroundStyle(Palette.ink.opacity(0.2))
+                        .frame(height: 24, alignment: .top).offset(y: -2).accessibilityHidden(true)
+                    Text(words).font(Typography.noteTitle(words, size: 18)).lineSpacing(4).lineLimit(3)
+                        .foregroundStyle(Palette.ink).padding(.top, 4)
                     if !note.summary.isEmpty {
-                        Text(note.summary).font(.system(size: 13)).lineSpacing(3).lineLimit(3)
-                            .foregroundStyle(Palette.muted)
+                        Text(note.summary).font(.system(size: 12.5)).lineSpacing(3).lineLimit(3)
+                            .foregroundStyle(Palette.ink.opacity(0.58)).padding(.top, 8)
                     }
-                }.padding(14)
+                    if !note.lead.isEmpty {
+                        Text(verbatim: note.lead).font(Typography.meta(size: 9.5)).tracking(1.3).lineLimit(1)
+                            .foregroundStyle(Palette.ink.opacity(0.45)).padding(.top, 12)
+                    }
+                }.padding(.horizontal, 14).padding(.top, 12).padding(.bottom, 14)
             }
-        }.overlay { RoundedRectangle(cornerRadius: PromptCardGeometry.cornerRadius, style: .continuous).strokeBorder(Palette.line, lineWidth: 0.5) }
+        }
     }
     private func photo(_ name: String, size: CGSize) -> some View {
         Image(name).resizable().scaledToFill().frame(width: size.width, height: size.height, alignment: anchorsTop ? .top : .center).clipped()
