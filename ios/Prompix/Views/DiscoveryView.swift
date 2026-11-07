@@ -214,23 +214,9 @@ struct DiscoverView: View {
             Text(feedSort == "latest" ? String(localized: "最新收录") : String(localized: "为你挑的"))
                 .font(.subheadline.weight(.semibold))
             Spacer()
-            kindMenu
+            KindMenu(selection: kind, identifier: "discoveryKind", select: selectKind)
             sortMenu
         }.padding(.leading, 20).padding(.trailing, 16)
-    }
-    private var kindMenu: some View {
-        Menu {
-            choice(String(localized: "全部"), selected: kind == nil) { selectKind(nil) }.accessibilityIdentifier("kind-all")
-            ForEach([PromptKind.image, .video, .text]) { value in
-                choice(value.title, selected: kind == value) { selectKind(value) }.accessibilityIdentifier("kind-\(value.rawValue)")
-            }
-        } label: {
-            HStack(spacing: 4) {
-                Text(kind?.title ?? String(localized: "类型")).font(Typography.meta(size: 12)).tracking(1.2)
-                PrompixIcon.chevronDown.image(size: 12)
-            }.foregroundStyle(kind == nil ? Palette.muted : Palette.ink).frame(minWidth: 44, minHeight: 44).contentShape(Rectangle())
-        }.accessibilityLabel(String(localized: "类型")).accessibilityValue(kind?.title ?? String(localized: "全部"))
-            .accessibilityIdentifier("discoveryKind")
     }
     private var sortMenu: some View {
         Menu {
