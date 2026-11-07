@@ -48,9 +48,12 @@ extension XCUIApplication {
         // A reading presentation has an explicit close control; its toolbar's
         // first accessibility element can be Share, not the back chevron.
         if let close = buttons.matching(identifier: "closePromptDetail").allElementsBoundByIndex.first(where: { $0.isHittable }) { close.tap(); return }
-        // A slow simulator can still be finishing the push that shows the back button.
-        let back = navigationBars.buttons.firstMatch
-        XCTAssertTrue(back.waitForExistence(timeout: 5)); back.tap()
+        // iPhone Duo shows navigation as a side bar, whose back control is outside any
+        // navigation bar; a slow simulator can also still be finishing the push.
+        let bar = navigationBars.buttons.firstMatch, side = buttons["BackButton"]
+        let shown = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in bar.exists || side.exists }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [shown], timeout: 5), .completed)
+        (side.exists ? side : bar).tap()
     }
     /// Creators and uses sit after the twelfth work in the discover feed.
     @MainActor func revealDiscoveryRails() {
