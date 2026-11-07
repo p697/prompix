@@ -451,6 +451,24 @@ struct PromptEditor: View {
         let versions = library.versions(of: item)
         return versions.first { $0.id == version }.map { PromptVersion.title(of: $0, in: versions) } ?? String(localized: "新版本")
     }
+    private var header: some View {
+        HStack {
+            Button { if save() { dismiss() } else { leavePresented = true } } label: {
+                Text(String(localized: "完成")).font(.body.weight(.medium)).padding(.horizontal, 16).frame(minHeight: 44).readingGlass()
+            }.buttonStyle(.plain).accessibilityIdentifier("finishPromptEditing")
+            Spacer(minLength: 0)
+            Button(action: copy) {
+                Image(systemName: copied ? "checkmark" : "doc.on.doc").font(.system(size: 21, weight: .medium))
+                    .frame(width: 44, height: 44).readingGlass()
+            }.buttonStyle(.plain).disabled(isEmpty).opacity(isEmpty ? 0.4 : 1)
+                .accessibilityLabel(copied ? String(localized: "已复制") : String(localized: "复制"))
+                .accessibilityIdentifier("copyEditedPrompt").sensoryFeedback(.success, trigger: copied)
+        }
+        .overlay {
+            Text(title).font(.headline).lineLimit(1).frame(maxWidth: 200).accessibilityAddTraits(.isHeader)
+        }
+        .foregroundStyle(Palette.ink).padding(.horizontal, 16).padding(.top, 16)
+    }
     private var unsaved: Bool {
         guard let version else { return text != baseline }
         return library.versions(of: item).first { $0.id == version }?.text != text
@@ -458,6 +476,7 @@ struct PromptEditor: View {
     var body: some View {
         NavigationStack {
             VStack(alignment: .leading, spacing: 8) {
+                header
                 if let saveError {
                     Text(saveError).font(.footnote).foregroundStyle(Palette.muted)
                         .fixedSize(horizontal: false, vertical: true).padding(.horizontal, 20)
@@ -468,19 +487,9 @@ struct PromptEditor: View {
                     .scrollContentBackground(.hidden).padding(.horizontal, 16)
                     .frame(maxHeight: .infinity).accessibilityIdentifier("promptEditor")
             }.paperScreen()
-                .navigationTitle(title)
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button(String(localized: "完成")) { if save() { dismiss() } else { leavePresented = true } }
-                            .accessibilityIdentifier("finishPromptEditing")
-                    }
-                    ToolbarItem(placement: .primaryAction) {
-                        Button(action: copy) {
-                            Label(copied ? String(localized: "已复制") : String(localized: "复制"), systemImage: copied ? "checkmark" : "doc.on.doc")
-                        }.disabled(isEmpty).accessibilityIdentifier("copyEditedPrompt").sensoryFeedback(.success, trigger: copied)
-                    }
-                }
+                // The editor draws its own bar: on iPhone Duo the system bar dropped 完成
+                // and the title as soon as typing scrolled the text.
+                .toolbar(.hidden, for: .navigationBar)
                 .onAppear { editorFocused = true }
                 .onChange(of: text) { _, _ in copied = false; saveError = nil }
                 .task(id: text) {

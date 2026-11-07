@@ -1,0 +1,3 @@
+# The version editor draws its own header
+
+On iPhone Duo the editor's system navigation bar hid 完成 and the title once typing scrolled the text. Only the side bar's copy button remained, so a reader could only swipe the sheet away. Forcing the bar visible and hiding the scroll edge effect did not help. The editor now draws its header row itself: 完成 in a glass capsule, the version title, and copy in a glass circle. It matches the old bar on a regular iPhone, as before-and-after screenshots show. The smoke test taps 完成 again with the keyboard up, so CI, which runs on iPhone Duo, keeps covering it.

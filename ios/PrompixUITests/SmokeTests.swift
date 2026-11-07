@@ -109,10 +109,13 @@ import XCTest
         XCTAssertTrue(editor.waitForExistence(timeout: 5))
         editor.tap()
         editor.typeText(" My personal intention.")
-        // The editor saves as it is typed: the version's chip appears behind it. Relaunch
-        // with the editor still open (on iPhone Duo the keyboard leaves no room for Done).
+        // The editor saves as it is typed; 完成 must stay reachable with the keyboard up,
+        // including on iPhone Duo, where the system bar used to drop it.
         let versions = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'version-' AND identifier != 'version-original'"))
         XCTAssertTrue(versions.firstMatch.waitForExistence(timeout: 5))
+        let done = app.buttons["finishPromptEditing"]
+        XCTAssertTrue(done.isHittable); done.tap()
+        XCTAssertTrue(app.buttons["editPromptAction"].waitForExistence(timeout: 5))
         app.terminate(); app.launchPrompix()
         app.chooseKind("kind-text")
         app.buttons["prompt-gentle-tarot"].tap()
