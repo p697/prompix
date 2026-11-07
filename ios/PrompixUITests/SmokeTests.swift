@@ -109,7 +109,9 @@ import XCTest
         XCTAssertTrue(editor.waitForExistence(timeout: 5))
         editor.tap()
         editor.typeText(" My personal intention.")
-        app.buttons["finishPromptEditing"].tap()
+        // The first change saves a version and retitles the editor, which redraws its toolbar.
+        let finish = app.buttons["finishPromptEditing"]
+        XCTAssertTrue(finish.waitForExistence(timeout: 5)); finish.tap()
         app.terminate(); app.launchPrompix()
         app.chooseKind("kind-text")
         app.buttons["prompt-gentle-tarot"].tap()
