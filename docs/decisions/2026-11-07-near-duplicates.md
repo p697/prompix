@@ -1,0 +1,3 @@
+# Near-duplicate prompts keep the earliest post
+
+2026-11-07. The owner decided that the same prompt text is a duplicate even when the result images differ, and that later copies already live are taken down. Before publication the whole library is compared by 4-word shingles (single characters for Chinese, Japanese and Korean); 80% overlap is one prompt. The earliest post stays. A new later copy never goes live; a live later copy is taken down, at most 50 per run, as a bound against a faulty comparison. Prompts shorter than eight shingles are not compared. On 2026-11-07 the live library held 16 later copies.
