@@ -9,7 +9,7 @@ import { visualCacheSchema, visualReviewVersion, type VisualCache } from "./visu
 import { readExclusions, type Exclusion } from "./exclusion-log.ts";
 import { readQualityHolds, type QualityHolds } from "./quality-holds.ts";
 import { filterXAvailability, readXAvailability, type XAvailabilityState } from "./x-availability.ts";
-import { isNativeXDraft, xSourceLifetime } from "./x-source.ts";
+import { isNativeXDraft } from "./x-source.ts";
 import { atomic, json, moderationSchema } from "./publication.ts";
 import { withPublisherDatabase } from "./database-publication.ts";
 
@@ -83,10 +83,8 @@ export function classifyItems(input: ItemStateInput): ItemStatus[] {
     if (isNativeXDraft(item) && !xVisible.has(item.id)) {
       const record = input.xAvailability[item.id];
       if (record?.removed) return status("excluded", "原帖已删除", "source", record.checkedAt);
-      // Maintenance rechecks published posts only, so an unpublished draft whose check lapsed is never checked again.
-      const lapsed = record && item.source.post ? new Date(Date.parse(record.checkedAt) + xSourceLifetime(item.source.post.createdAt, Date.parse(record.checkedAt))).toISOString() : undefined;
-      return status("stalled", record?.status === "withheld" ? "原帖已改动或无法确认，未上线的草稿没有任何环节会再复查"
-        : "原帖复查已过期，未上线的草稿没有任何环节会再复查", "source", lapsed);
+      // Maintenance rechecks drafts in editorial queue order, newest posts first, so an older draft waits behind newer ones.
+      return status("waiting", "原帖待复查：维护复查按编辑队列顺序处理，排在更新的草稿后面", "source");
     }
     const approved = reviewed.get(item.id)!;
     if (approved.reviewStatus !== "candidate") {

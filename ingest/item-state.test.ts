@@ -70,10 +70,10 @@ test("approved items continue through library rules, visual review and holds", (
   assert.deepEqual([result.copy.state, result.copy.reason], ["excluded", "与线上已有条目重复"]);
 });
 
-test("an unpublished X draft without a current source check is stalled", () => {
+test("an unpublished X draft without a current source check waits for the maintenance recheck", () => {
   const draft = { ...candidate("x-post-1"), source: { name: "X", url: "https://x.com/i/web/status/1", license: "X-API-Terms", method: "X API" } } as Candidate;
   const [status] = classifyItems(input([draft], { candidates: [{ source: "x-native", items: [draft] }] }));
-  assert.deepEqual([status.state, status.stage], ["stalled", "source"]);
+  assert.deepEqual([status.state, status.stage], ["waiting", "source"]);
 });
 
 test("the funnel counts states by source and the items that stalled within the window", () => {
