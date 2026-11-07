@@ -35,19 +35,21 @@ test("database state and retired sources decide first", () => {
   assert.deepEqual([result.moderated.state, result.moderated.reason], ["excluded", "Branded combat example"]);
 });
 
-test("a cached model deferral is stalled because nothing sends it again; a rejection is final", () => {
+test("a cached model deferral or rejection is final; an unreviewed item waits", () => {
   const [deferred, rejected, fresh] = ["deferred", "rejected", "fresh"].map(id => candidate(id));
   const result = byID(classifyItems(input([deferred, rejected, fresh], { editorial: { version: 1, decisions: Object.fromEntries([
     decision(deferred, "defer", "Output kind does not match"), decision(rejected, "reject", "Unsafe medical advice")]) } })));
-  assert.deepEqual([result.deferred.state, result.deferred.stage, result.deferred.since], ["stalled", "editorial", "2026-11-06T12:00:00Z"]);
+  assert.deepEqual([result.deferred.state, result.deferred.stage, result.deferred.since], ["excluded", "editorial", "2026-11-06T12:00:00Z"]);
   assert.deepEqual([result.rejected.state, result.rejected.reason], ["excluded", "Unsafe medical advice"]);
   assert.deepEqual([result.fresh.state, result.fresh.reason], ["waiting", "等待编辑审核"]);
 });
 
 test("preflight reasons about the content are final; defects nobody repairs are stalled", () => {
   const short = candidate("short", "Too short.");
-  const large = candidate("large", "Plan a weekend with many careful details. ".repeat(1200));
-  const result = byID(classifyItems(input([short, large])));
+  const long = candidate("long", "Plan a weekend with many careful details. ".repeat(1200));
+  const large = { ...candidate("large", "Plan a weekend with many careful details. ".repeat(700)), title: "T".repeat(8000) };
+  const result = byID(classifyItems(input([short, long, large])));
+  assert.deepEqual([result.long.state, result.long.reason], ["excluded", "Prompt exceeds the publishable length"]);
   assert.deepEqual([result.short.state, result.short.reason], ["excluded", "Insufficient complete copyable instructions"]);
   assert.equal(result.large.state, "stalled");
   assert.match(result.large.reason, /manual review required/);
@@ -62,7 +64,7 @@ test("approved items continue through library rules, visual review and holds", (
     visual: { version: 1, decisions: Object.fromEntries([visual(items[1], "uncertain"), visual(items[2], "mismatch")]) } as never,
     qualityHolds: { schemaVersion: 1, holds: { held: { reason: "Preview mismatches captions" } } } as never })));
   assert.deepEqual([result.ready.state, result.ready.stage], ["waiting", "publication"]);
-  assert.deepEqual([result.uncertain.state, result.uncertain.stage], ["stalled", "visual"]);
+  assert.deepEqual([result.uncertain.state, result.uncertain.stage], ["excluded", "visual"]);
   assert.deepEqual([result.mismatch.state, result.mismatch.reason], ["excluded", "Visual mismatch"]);
   assert.deepEqual([result.held.state, result.held.stage], ["excluded", "quality"]);
   assert.deepEqual([result.copy.state, result.copy.reason], ["excluded", "与线上已有条目重复"]);

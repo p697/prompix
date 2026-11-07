@@ -11,13 +11,16 @@ export function countByKind(items: readonly Pick<Prompt, "kind">[]): KindCounts 
 }
 
 /** Select the complete eligible library after current-fingerprint editorial review. */
+/** Longer instructions are never published, so they are not worth reviewing either. */
+export const maximumPromptLength = 30000;
+
 /** Why a reviewed item cannot enter the library, or undefined when it can. */
 export function libraryIssue(item: Candidate, excluded: ReadonlySet<string>): string | undefined {
   if (excluded.has(item.id)) return "已被下架处理";
   const source = nativeXSourceIssue(item);
   if (source) return source;
   if (item.prompt.length < (item.editorialRank !== undefined ? 20 : 80)) return "正文太短";
-  if (item.prompt.length > 30000) return "正文太长";
+  if (item.prompt.length > maximumPromptLength) return "正文太长";
   if (item.title.length > 160) return "标题太长";
   if (item.reviewStatus !== "candidate") return "没有通过编辑审核";
   if (item.kind === "video" && !(item.media?.imageURL && item.media?.videoURL)) return "视频缺少来源封面或片段";
