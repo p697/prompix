@@ -299,7 +299,7 @@ export async function readXIntake(root: string, creators: CreatorCache = {}, exc
 }
 
 export function hasPublicReplyPrompt(text: string): boolean {
-  return /\bprompt(?:s)?\s+(?:is\s+|are\s+)?(?:in|below|in the)\s+(?:the\s+)?(?:first\s+)?(?:repl(?:y|ies)|comments?)\b|(?:first\s+)?(?:repl(?:y|ies)|comments?)\s+(?:for|contains?)\s+(?:the\s+)?prompt\b|提示词.{0,8}(?:在|见).{0,5}(?:评论|回复)|プロンプト.{0,8}(?:返信|リプライ)/i.test(text)
+  return /\bprompt(?:s)?\s+(?:is\s+|are\s+)?(?:in|below|in the)\s+(?:the\s+)?(?:first\s+)?(?:repl(?:y|ies)|comments?|thread)\b|(?:first\s+)?(?:repl(?:y|ies)|comments?)\s+(?:for|contains?)\s+(?:the\s+)?prompt\b|\bprompt\b[^\n]{0,40}\bsee\s+(?:the\s+)?(?:first\s+)?repl(?:y|ies)\b|提示词.{0,8}(?:在|见).{0,5}(?:评论|回复)|(?:提示词|prompt).{0,6}(?:见|看|放|在)?评论区|プロンプト.{0,8}(?:返信|リプライ|リプ欄|リプ|ツリー)/i.test(text)
     && !/\b(?:DM|direct message|comment.{0,20}(?:send|receive|DM))\b/i.test(text);
 }
 

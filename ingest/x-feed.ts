@@ -77,7 +77,7 @@ export async function collectXFeeds(root: string, options: {
   const pageSize = options.pageSize ?? 50, replyEvery = options.replyEvery ?? 6, feeds = options.feeds ?? xFeeds;
   if (!Number.isInteger(pageSize) || pageSize < 10 || pageSize > 50 || !Number.isInteger(replyEvery) || replyEvery < 1 ||
       replyEvery > 20 || !feeds.length || feeds.some(feed => !feed.id || !feed.query)) throw new Error("Invalid X feed routing");
-  if (!Number.isInteger(limits.requests) || limits.requests < 0 || limits.requests > 20 ||
+  if (!Number.isInteger(limits.requests) || limits.requests < 0 || limits.requests > 100 ||
       !Number.isInteger(limits.posts) || limits.posts < 0 || limits.posts > 1000) throw new Error("Invalid X collection limits");
   const report: XFeedReport = { status: "dry-run", requests: 0, count: 0, creators: 0,
     dailyRequests: 0, reservedPosts: 0, limits, feeds: [] };

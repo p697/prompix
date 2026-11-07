@@ -12,6 +12,8 @@ import { TwitterAPIClient } from "./twitterapi.ts";
 import { xAcquisitionsPerDay } from "./x-collection.ts";
 import { curatedCreators, searchXDay, xDaySnapshots } from "./x-day-search.ts";
 import { readXExcerptReviews } from "./x-excerpts.ts";
+import { collectXFeeds, type XFeedSearch } from "./x-feed.ts";
+import { thirdPartyFeedSearch } from "./x-third-party.ts";
 import { publishedXIdentities } from "./x-maintenance-admission.ts";
 import { japanDay } from "./x-search-rules.ts";
 import { configuredXSpendBudget } from "./x-spend.ts";
@@ -37,7 +39,11 @@ export function nightlyDays(searchedThrough: string | undefined, now: number): s
 
 type Locate = { provider: ModelProvider; effort?: Effort; record?: (summary: ModelCallSummary) => Promise<void> };
 
-export type NightlyXReport = { status: "ok" | "failed" | "up-to-date" | "dry-run"; days: { day: string; requests: number; returned: number; admitted: number;
+/** Reply threads read a night for posts whose prompt is in the author's reply: about one request
+ * each, for some 60 such posts a day (research, 2026-11-07). */
+export const replyRequestsPerNight = 60;
+
+export type NightlyXReport = { status: "ok" | "failed" | "up-to-date" | "dry-run"; replies?: { status: string; requests: number; posts: number }; days: { day: string; requests: number; returned: number; admitted: number;
   located?: number; unlocated?: number; error?: string }[] };
 
 /** The nightly X collection: search each pending Japan day under the approved rules, write the
@@ -45,12 +51,25 @@ export type NightlyXReport = { status: "ok" | "failed" | "up-to-date" | "dry-run
  * Each finished day moves the cursor, so a failure retries only the days it did not finish. */
 export async function collectNightlyX(root: string, options: { enabled: boolean; env: NodeJS.ProcessEnv; now?: number;
   locate?: Locate;
-  search?: Pick<TwitterAPIClient, "search">; creators?: string[]; known?: Set<string> }): Promise<NightlyXReport> {
+  search?: Pick<TwitterAPIClient, "search">; creators?: string[]; known?: Set<string>; replies?: XFeedSearch }): Promise<NightlyXReport> {
   if (!options.enabled) return { status: "dry-run", days: [] };
-  const env = options.env, now = options.now ?? Date.now(), cursorPath = join(root, "x-nightly", "cursor.json");
-  const cursor = cursorSchema.optional().parse(await json(cursorPath, undefined));
-  const days = nightlyDays(cursor?.searchedThrough, now);
+  const cursor = cursorSchema.optional().parse(await json(join(root, "x-nightly", "cursor.json"), undefined));
+  const days = nightlyDays(cursor?.searchedThrough, options.now ?? Date.now());
   if (!days.length) return { status: "up-to-date", days: [] };
+  const report = await searchDays(root, days, options);
+  // Prompts posted in the author's own reply (owner, 2026-11-07): read those threads too. The
+  // thread intake turns a reply with a prompt into a candidate; its source is rechecked before publication.
+  try {
+    const replies = await collectXFeeds(root, { enabled: true, bearer: "third-party", provider: "twitterapi", now: () => new Date(options.now ?? Date.now()),
+      search: options.replies ?? thirdPartyFeedSearch(root, options.env), replyOnly: true, pageSize: 20,
+      limits: { requests: replyRequestsPerNight, posts: replyRequestsPerNight * 20 } });
+    report.replies = { status: replies.status, requests: replies.requests, posts: replies.count };
+  } catch { report.replies = { status: "failed", requests: 0, posts: 0 }; }
+  return report;
+}
+
+async function searchDays(root: string, days: string[], options: Parameters<typeof collectNightlyX>[1]): Promise<NightlyXReport> {
+  const env = options.env, now = options.now ?? Date.now(), cursorPath = join(root, "x-nightly", "cursor.json");
   const budget = configuredXSpendBudget(env);
   if (!options.search && (!budget || !env.TWITTERAPI_IO_KEY)) throw new Error("Nightly X search needs the TwitterAPI key and the shared X budget");
   const client = options.search ?? new TwitterAPIClient(env.TWITTERAPI_IO_KEY!, budget!);
