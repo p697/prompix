@@ -21,7 +21,9 @@ import {
 } from "./sources.ts";
 import { download } from "./network.ts";
 import { discoverX } from "./x-discovery.ts";
-import { collectXDiscovery } from "./x-collection.ts";
+import { collectNightlyX } from "./x-nightly.ts";
+import { reviewDailyX } from "./review-daily.ts";
+import { isNativeXDraft } from "./x-source.ts";
 import { readAllXIntake as readXIntake } from "./x-thread-intake.ts";
 import { enrichCreators, mergeCreatorCache, mirrorCreatorAvatars, type CreatorCache } from "./creators.ts";
 import { publishAvatar } from "./creator-images.ts";
@@ -173,7 +175,10 @@ async function run() {
         await atomic(creatorsPath, creators);
       }
     } else {
-      report.sources.x = await collectXDiscovery(root, { enabled: publishing, bearer: process.env.X_BEARER_TOKEN });
+      // Since 2026-11-07: the approved search rules, two Japan days late; prompts without a heading are located by the review route.
+      const routed = publishing ? await routedProvider("review", "x-nightly:locate") : undefined;
+      report.sources.x = await collectNightlyX(root, { enabled: publishing, env: process.env,
+        ...(routed ? { locate: { provider: routed.provider, effort: routed.effort, record: routed.record } } : {}) });
     }
     // Cached discoveries still enter intake when today's paid search is disabled.
     // Marked source bodies are drafts; incomplete posts keep an explicit reason.
@@ -203,10 +208,18 @@ async function run() {
       if (publishing) await atomic(join(root, "moderation.json"), moderation);
     }
     const excluded = new Set(moderation.removedIDs);
-    const editorial = await prepareDailyEditorial(candidates.filter(item => !excluded.has(item.id)), reviews, previous?.prompts ?? [], root, publishing);
+    // New X posts get the single review (2026-11-07) instead of the editorial, visual and 2.0 reviews.
+    const liveIDs = new Set(previous?.prompts.map(item => item.id) ?? []);
+    const singleReview = (item: Candidate) => isNativeXDraft(item) && !liveIDs.has(item.id);
+    const reviewRoute = publishing ? await routedProvider("review", "review:daily") : undefined;
+    const xReview = await reviewDailyX(candidates.filter(item => singleReview(item) && !excluded.has(item.id)), root,
+      reviewRoute ? { provider: reviewRoute.provider, effort: reviewRoute.effort, record: reviewRoute.record } : {});
+    report.sources["x-review"] = xReview.report;
+    const singlyReviewed = new Map(xReview.approved.map(item => [item.id, item]));
+    const editorial = await prepareDailyEditorial(candidates.filter(item => !excluded.has(item.id) && !singleReview(item)), reviews, previous?.prompts ?? [], root, publishing);
     reviews = editorial.reviews;
     report.editorial = editorial.report;
-    const reviewed = applyEditorialReviews(candidates, reviews);
+    const reviewed = applyEditorialReviews(candidates, reviews).map(item => singleReview(item) ? singlyReviewed.get(item.id) ?? { ...item, reviewStatus: "draft" as const } : item);
     report.counts.reviewed = countByKind(reviewed.filter((item) => item.reviewStatus === "candidate"));
     const picked = selectLibrary(reviewed, excluded);
     report.counts.eligible = countByKind(picked);
@@ -242,7 +255,8 @@ async function run() {
       }
     }
     Object.assign(mediaMap, await json<Record<string, string>>(join(root, "media-map.json"), {}));
-    const visual = await prepareDailyVisualReview(published, previous?.prompts ?? [], root, publishing);
+    const visual = await prepareDailyVisualReview(published.filter(item => !singlyReviewed.has(item.id)), previous?.prompts ?? [], root, publishing);
+    visual.prompts.push(...published.filter(item => singlyReviewed.has(item.id)));
     report.visualReview = visual.report;
     for (const id of visual.blockedIDs) excluded.add(id);
     const mediaAwaitingReview = new Set(visual.withheldIDs);
@@ -271,7 +285,9 @@ async function run() {
     // Retained snapshots receive the same creator enrichment and translations
     // as fresh candidates, including older editions without creator metadata.
     // A quality hold removes public discovery only, after retention can restore old snapshots.
-    const labeled = await applyDailyVisualPresentation(retained.prompts, root);
+    // The single review's label stands for its own posts; the visual store has none for them.
+    const labeled = (await applyDailyVisualPresentation(retained.prompts, root))
+      .map(item => singlyReviewed.has(item.id) ? { ...item, presentation: singlyReviewed.get(item.id)!.presentation } : item);
     const visible = applyQualityHolds(labeled.filter(item => item.presentation !== "explicit"), qualityHolds);
     report.qualityHeldIDs = visible.withheldIDs;
     const registryVisible = { prompts: visible.prompts.filter(inScope), withheldIDs: visible.prompts.filter(item => !inScope(item)).map(item => item.id) };

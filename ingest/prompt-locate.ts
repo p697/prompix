@@ -3,7 +3,8 @@ import { array, nullable, object, string } from "./enrichment-review.ts";
 import { completeValidated, type ModelCallSummary } from "./models/call.ts";
 import type { Effort, JsonSchema, ModelProvider } from "./models/types.ts";
 import { xExcerptSourceSHA256, type XExcerptReviews } from "./x-excerpts.ts";
-import { fullXText, type XPost } from "./x-intake.ts";
+import type { CreatorCache } from "./creators.ts";
+import { convertXDiscovery, fullXText, type Snapshot, type XMedia, type XPost } from "./x-intake.ts";
 
 /** Many authors post a full prompt without a "Prompt:" heading. The model only points at the
  * prompt by copying it; the excerpt is cut from the author's own text, so wording never changes. */
@@ -61,4 +62,17 @@ export async function locatePrompts(provider: ModelProvider, posts: readonly { p
     }
   }));
   return result;
+}
+
+/** Posts in these snapshots that have no single "Prompt:" heading, with the kind of media they carry. */
+export function unmarkedPosts(snapshots: readonly Snapshot[], creators: CreatorCache = {}): { post: XPost; kind: "image" | "video" }[] {
+  const unmarked = new Set(convertXDiscovery(snapshots, creators).records
+    .filter(record => record.reason === "missing-prompt-boundary" || record.reason === "multiple-prompt-boundaries").map(record => record.postID));
+  return snapshots.flatMap(({ data }) => {
+    const { posts = [], media = [] } = data as { posts?: XPost[]; media?: XMedia[] };
+    return posts.filter(post => unmarked.has(post.id)).map(post => {
+      const kinds = (post.attachments?.media_keys ?? []).map(key => media.find(item => item.media_key === key)?.type);
+      return { post, kind: kinds.some(kind => kind === "video" || kind === "animated_gif") ? "video" as const : "image" as const };
+    });
+  });
 }

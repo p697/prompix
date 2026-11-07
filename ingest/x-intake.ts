@@ -27,7 +27,7 @@ const snapshotSchema = z.object({ provider: z.enum(["twitterapi", "rapidapi"]).o
 export type XPost = z.infer<typeof xPostSchema>;
 export type XMedia = z.infer<typeof xMediaSchema>;
 type XURLEntity = NonNullable<z.infer<typeof entitiesSchema>["urls"]>[number];
-type Snapshot = { name: string; data: unknown };
+export type Snapshot = { name: string; data: unknown };
 export type XIntakeRecord = { postID: string; authorID?: string; sourceURL?: string; snapshot: string; candidateID?: string;
   fingerprint?: string; sourceDigest?: string; state: "draft" | "blocked"; reason: string; fullTextSource?: "note_tweet" | "note_post" | "text";
   expandedLinks?: string[]; hasCreatorProfile?: boolean; mediaItems?: number; attachedMediaKeys?: string[] };

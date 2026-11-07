@@ -7,6 +7,7 @@ import { atomic, json } from "./publication.ts";
 import { checkXAvailability } from "./x.ts";
 import { convertXDiscovery } from "./x-intake.ts";
 import { readXExcerptReviews } from "./x-excerpts.ts";
+import { reviewPassHash, reviewPassRejections } from "./review-daily.ts";
 import { isNativeXDraft, nativeXSourceIssue, nativeXPostIDs, nativeXSourceDigest, xSourceLifetime } from "./x-source.ts";
 import { mergeCreatorCache, type CreatorCache } from "./creators.ts";
 import { reviewsSchema } from "./editorial.ts";
@@ -119,7 +120,9 @@ export async function prepareXAvailability(root: string, options: { enabled: boo
   const holds = await readQualityHolds(root);
   const protectedIDs = new Set([...Object.keys(reviews), ...(options.admission?.publishedIDs ?? []),
     ...Object.values(decisions).filter(decision => decision.decision === "approve").map(decision => decision.id)]);
-  const isInactive = (item: typeof intake.candidates[number]) => removed.has(item.id) || !!holds.holds[item.id] ||
+  // Posts the single review rejected need no more rechecks while they are unchanged.
+  const rejected = await reviewPassRejections(root);
+  const isInactive = (item: typeof intake.candidates[number]) => removed.has(item.id) || !!holds.holds[item.id] || rejected[item.id] === reviewPassHash(item) ||
     (!protectedIDs.has(item.id) && !!decisions[editorialDecisionKey(item)] && decisions[editorialDecisionKey(item)].decision !== "approve");
   report.maintenanceReserve = await saveMaintenanceCensus(intake.candidates, protectedIDs,
     new Set([...removed, ...Object.keys(holds.holds), ...Object.entries(state).filter(([, value]) => value.removed).map(([id]) => id)]), new Date(now), !!options.admission, env);
