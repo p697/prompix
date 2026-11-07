@@ -252,10 +252,12 @@ export function parseCommunityCSV(csv: string, revision: string): Candidate[] {
       } as Candidate;
     });
 }
+/** With `knownRevision`, an unchanged repository returns its revision without downloading the file. */
 export async function collectRepository(
   repo: string,
   filename: string,
-): Promise<{ text: string; revision: string }> {
+  knownRevision?: string,
+): Promise<{ text?: string; revision: string }> {
   const allowed = repo === "f/prompts.chat"
     ? filename === "prompts.csv"
     : repositories.some((source) => source.repo === repo) && filename === "README_zh.md";
@@ -270,6 +272,7 @@ export async function collectRepository(
   const revision = metadata.stdout.match(/^([a-f0-9]{40})\tHEAD\r?$/m)?.[1];
   if (!revision)
     throw new Error("Invalid repository revision");
+  if (revision === knownRevision) return { revision };
   const result = await download(
     `https://raw.githubusercontent.com/${repo}/${revision}/${filename}`,
     ["raw.githubusercontent.com"],
