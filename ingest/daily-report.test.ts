@@ -15,25 +15,28 @@ test("the report leads with the outcome and covers changes, work, time and cost"
       event("2026-11-06T01:10:00Z", "job.finished", { job: "intake", summary: "新发布 80 条", durationMs: 3600000, published: 80,
         excluded: 4, translationsHeld: 2, editorialRequests: 12, visualRequests: 6 }),
       event("2026-11-06T01:15:00Z", "job.finished", { job: "maintenance", summary: "X 复查 60 条", durationMs: 120000 }),
-      event("2026-11-06T01:00:00Z", "model.call", { stage: "review", provider: "anthropic-api", model: "claude-haiku-5-5", usage: { inputTokens: 1_000_000, outputTokens: 0 } }),
-      event("2026-11-06T01:00:00Z", "model.call", { stage: "translationCheck", provider: "anthropic-api", model: "claude-sonnet-5-5", usage: { inputTokens: 100_000, outputTokens: 10_000 } }),
-      event("2026-11-06T01:00:00Z", "model.call", { stage: "translate", provider: "codex-cli", model: "gpt-6.1-terra", usage: {} }),
+      event("2026-11-06T01:00:00Z", "model.call", { actor: "pipeline", stage: "review", provider: "anthropic-api", model: "claude-haiku-5-5", usage: { inputTokens: 1_000_000, outputTokens: 0 } }),
+      event("2026-11-06T01:00:00Z", "model.call", { actor: "pipeline", stage: "translationCheck", provider: "anthropic-api", model: "claude-sonnet-5-5", usage: { inputTokens: 100_000, outputTokens: 10_000 } }),
+      event("2026-11-06T01:00:00Z", "model.call", { actor: "pipeline", stage: "translate", provider: "codex-cli", model: "gpt-6.1-terra", usage: {} }),
       event("2026-11-06T01:00:00Z", "route.fallback", { stage: "translate" }),
+      event("2026-11-06T02:00:00Z", "model.call", { actor: "claude-code", stage: "review", provider: "anthropic-api", model: "claude-sonnet-5-5", usage: { inputTokens: 1_000_000 } }),
+      event("2026-11-06T03:00:00Z", "job.finished", { job: "maintenance", summary: "old run" }),
     ] });
   assert.equal(report.ok, true, "a failure followed by a success has recovered");
   assert.equal(report.date, "2026-11-06");
   const text = report.text;
   assert.match(text, /^结论：每日任务正常完成/);
-  assert.match(text, /新增 80 条（目标 100），差 20 条/);
+  assert.match(text, /新增 80 条，其中每日流程发布 80 条（每日目标 100，差 20 条）/);
   assert.match(text, /下架 1 条，线上共 3645 条/);
   assert.match(text, /2\.0 审核自动排除 4 条，译文复核拦下 2 处/);
   assert.match(text, /每日采集发布：2 次（成功 1，失败 1），用时 1 小时 1 分钟/);
-  assert.match(text, /合计用时 1 小时 3 分钟/);
+  assert.match(text, /合计用时 1 小时 3 分钟（另有 1 次没有记录用时）/);
+  assert.match(text, /其他会话的模型调用（例如补库）：1 次，\$2\.00/);
   assert.match(text, /曾失败 1 次，之后已自动恢复/);
   assert.match(text, /备用模型 1 次/);
-  assert.match(text, /模型 API：\$0\.40/);
+  assert.match(text, /每日流程的模型 API：\$0\.40/);
   assert.match(text, /Codex 订阅：翻译 1 次，编辑审核 12 次，图片审核 6 次/);
-  assert.match(text, /按量付费合计：\$0\.45/);
+  assert.match(text, /按量付费合计：\$2\.45/);
   assert.doesNotMatch(text, /outside the window/);
 });
 
@@ -42,6 +45,10 @@ test("a last failure, no successful intake or unreadable data marks the day as h
     events: [event("2026-11-06T06:00:00Z", "job.failed", { job: "intake", error: "boom", durationMs: 1000 })] });
   assert.equal(failed.ok, false);
   assert.match(failed.text, /^结论：有问题，每日采集发布最近一次失败；这一天没有成功完成的每日采集发布；读取线上数据失败：timeout/);
+  const idle = buildDailyReport({ start, end, target: 100, desired: "running", database: { added: 500, removed: 0, live: 1 },
+    events: [event("2026-11-06T06:00:00Z", "job.finished", { job: "intake", summary: "新发布 0 条", durationMs: 1000 })] });
+  assert.match(idle.text, /^结论：有问题，每日流程这一天没有发布新内容/);
+  assert.match(idle.text, /新增 500 条，其中每日流程发布 0 条/);
   assert.equal(buildDailyReport({ start, end, target: 100, desired: "stopped", database: { added: 0, removed: 0, live: 1 }, events: [] }).ok, true);
 });
 

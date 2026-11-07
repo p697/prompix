@@ -224,7 +224,7 @@ export async function main(argv = process.argv.slice(2)) {
       console.log(values.json ? JSON.stringify(report) : report.text);
       if (values.send) {
         await sendDailyReport(report, env);
-        await appendEvent(root, actor, "report.sent", { date: report.date, ok: report.ok, since: new Date(start).toISOString() });
+        await appendEvent(root, actor, "report.sent", { date: report.date, ok: report.ok, since: new Date(start).toISOString(), fullDay: !values.since });
         console.log("\n已发送到监控邮箱");
       }
       return;

@@ -87,8 +87,9 @@ type IntakeReport = { published?: boolean; error?: string; changes?: { added?: {
 export function reportJob(env: NodeJS.ProcessEnv, root = pipelineRoot(), send = sendDailyReport, clock: Clock = { now: Date.now }): Job {
   return { name: "report", interval: reportWindowMs, aligned: true, run: async () => {
     const end = Math.floor(clock.now() / reportWindowMs) * reportWindowMs;
-    const intakes = (await readEvents(root, Number.MAX_SAFE_INTEGER)).filter(event => event.job === "intake" && Date.parse(event.at) < end);
-    if (!intakes.length) return "每日采集还没开始，不发日报";
+    const events = await readEvents(root, Number.MAX_SAFE_INTEGER), day = new Date(end - reportWindowMs).toISOString().slice(0, 10);
+    if (!events.some(event => event.job === "intake" && Date.parse(event.at) < end)) return "每日采集还没开始，不发日报";
+    if (events.some(event => event.type === "report.sent" && event.date === day && event.fullDay)) return `${day} 的日报已经手动发过`;
     const report = await collectDailyReport(end - reportWindowMs, end, env, root);
     await send(report, env);
     return `已发送 ${report.date} 的日报${report.ok ? "" : "（有问题）"}`;

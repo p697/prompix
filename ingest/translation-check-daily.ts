@@ -44,8 +44,12 @@ export async function checkNewTranslations(items: readonly Prompt[], previous: r
   }
   if (options.provider && report.pending) {
     const provider = options.provider, review = options.review ?? reviewTranslationSemanticsWith;
-    const queue = [...pending].flatMap(([locale, group]) => Array.from({ length: Math.ceil(group.length / batchSize) },
-      (_, index) => ({ locale, batch: group.slice(index * batchSize, index * batchSize + batchSize) }))).slice(0, options.maxRequests ?? 40);
+    // New items first, Simplified Chinese first: a capped run spends its reviews where readers see them first.
+    const rank = (item: Prompt, locale: TranslationLocale) => (live.has(item.id) ? 2 : 0) + (locale === "zh-Hans" ? 0 : 1);
+    const queue = [...pending].flatMap(([locale, group]) => {
+      const ordered = [...group].sort((a, b) => rank(a, locale) - rank(b, locale));
+      return Array.from({ length: Math.ceil(ordered.length / batchSize) }, (_, index) => ({ locale, batch: ordered.slice(index * batchSize, index * batchSize + batchSize) }));
+    }).sort((a, b) => rank(a.batch[0], a.locale) - rank(b.batch[0], b.locale)).slice(0, options.maxRequests ?? 10);
     const record = async () => atomic(ledgerPath, ledger);
     await Promise.all(Array.from({ length: Math.min(options.concurrency ?? 3, queue.length) }, async () => {
       while (queue.length) {
