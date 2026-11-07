@@ -51,9 +51,11 @@ export function acceptHeartbeat(state: MonitorState, event: Heartbeat, now: numb
 export function evaluate(state: MonitorState, now: number): void {
   const last = state.last;
   let problem: Incident | undefined;
-  if (last?.state === "failed") problem = "run_failed";
-  else if (last?.state === "running" && now - Date.parse(last.startedAt) >= 2 * HOUR) problem = "run_stalled";
-  else if (now - (state.lastSuccess ?? state.armedAt) >= 8 * HOUR) problem = "schedule_missed";
+  // Since 2026-11-07 the Mac runs once a night with its own retries and alerts on the last failed
+  // attempt; this monitor only watches what the Mac cannot report: no success for a day, or a run
+  // past the worker's three-hour limit.
+  if (last?.state === "running" && now - Date.parse(last.startedAt) >= 3.5 * HOUR) problem = "run_stalled";
+  else if (now - (state.lastSuccess ?? state.armedAt) >= 26 * HOUR) problem = "schedule_missed";
   else if (now - (state.lastPublication ?? state.armedAt) >= 26 * HOUR) problem = "publication_stale";
   else if (now - (state.lastAddition ?? state.armedAt) >= 26 * HOUR) problem = "content_stale";
   else if ((state.degradedRuns ?? 0) >= 2) problem = "source_degraded";

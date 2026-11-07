@@ -7,7 +7,7 @@ import type { Prompt } from "../packages/schema/catalog.ts";
 import { createTestDatabase } from "../services/feed/test-database.ts";
 import { activatePublication, stagePublication } from "../services/feed/publication.ts";
 import { readEvents, readWorkerStatus, updateConfig, type WorkerStatus } from "./pipeline-control.ts";
-import { intakeJob, intakeRequestFile, jobDue, nightly, reportJob, retryAfterFailureMs, slotStart, tick, trialJob, trialRequestFile, type Job } from "./worker.ts";
+import { extraIntakeJob, intakeJob, intakeRequestFile, jobDue, nightly, reportJob, retryAfterFailureMs, slotStart, tick, trialJob, trialRequestFile, type Job } from "./worker.ts";
 import { runMaintenance, takedownLimit } from "./worker-maintenance.ts";
 import { workerPlist } from "./worker-launchd.ts";
 
@@ -50,7 +50,7 @@ test("the intake runs only while the pipeline is running, and a missing drive or
   let runs = 0;
   const alerts: string[] = [];
   const alert = async (text: string) => { alerts.push(text); };
-  const jobs = [intakeJob({}, async env => { runs++; assert.equal(env.PROMPIX_TRANSLATION_PROVIDER, "pipeline"); return 1; }, alert, content, root)];
+  const jobs = [intakeJob({}, async env => { runs++; assert.equal(env.PROMPIX_TRANSLATION_PROVIDER, "pipeline"); return 1; }, alert, content)];
   await tick(root, at(0), jobs, { now: () => now });
   assert.equal(runs, 0, "a stopped pipeline collects nothing");
   await updateConfig(root, "codex", undefined, config => ({ ...config, desired: "running" }));
@@ -64,11 +64,14 @@ test("the intake runs only while the pipeline is running, and a missing drive or
   assert.equal(alerts.length, 2, "a missing drive is reported on the first attempt only");
 });
 
-test("an extra intake runs once per request, can import trials, and leaves the night's slot", async () => {
+test("an extra intake runs once per request, can import trials, and neither alerts nor uses the night's attempts", async () => {
   const root = join(await mkdtemp(join(tmpdir(), "prompix-worker-")), "pipeline"), content = await mkdtemp(join(tmpdir(), "prompix-content-"));
   const runs: (string | undefined)[] = [];
   const translations: (string | undefined)[] = [];
-  const jobs = [intakeJob({}, async env => { runs.push(env.PROMPIX_IMPORT_TRIALS); translations.push(env.PROMPIX_TRANSLATION_MAX_REQUESTS); return 0; }, async () => {}, content, root)];
+  const alerts: string[] = [];
+  let exit = 0;
+  const spawn = async (env: NodeJS.ProcessEnv) => { runs.push(env.PROMPIX_IMPORT_TRIALS); translations.push(env.PROMPIX_TRANSLATION_MAX_REQUESTS); return exit; };
+  const jobs = [intakeJob({}, spawn, async text => { alerts.push(text); }, content), extraIntakeJob({}, spawn, content, root)];
   await updateConfig(root, "codex", undefined, config => ({ ...config, desired: "running" }));
   const morning = Date.parse("2026-11-07T08:00:00Z");
   await tick(root, at(0), jobs, { now: () => morning });
@@ -79,8 +82,16 @@ test("an extra intake runs once per request, can import trials, and leaves the n
   await tick(root, at(0), jobs, { now: () => morning + hour });
   assert.deepEqual(runs, [undefined, "2026-11-07T06-27-06-637Z"], "a request runs once, with only valid trial ids");
   assert.deepEqual(translations, [undefined, "300"], "a request may translate more than a night");
+  exit = 1;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    await atomic(join(root, intakeRequestFile), { at: new Date(morning + 2 * hour + attempt * hour).toISOString(), by: "test" });
+    await tick(root, at(0), jobs, { now: () => morning + 2 * hour + attempt * hour + 60_000 });
+  }
+  assert.equal(runs.length, 5, "three failed extra runs, each requested");
+  assert.equal(alerts.length, 0, "a failed extra run never alerts");
+  exit = 0;
   await tick(root, at(0), jobs, { now: () => Date.parse("2026-11-07T18:01:00Z") });
-  assert.equal(runs.length, 3, "the night's run still happens");
+  assert.equal(runs.length, 6, "the night's run still happens");
 });
 
 test("the 08:30 report covers the 24 hours before it, once the worker has run an intake", async () => {
