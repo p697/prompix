@@ -23,7 +23,7 @@ test("the report leads with the outcome and covers changes, work, time and cost"
       event("2026-11-06T03:00:00Z", "job.finished", { job: "maintenance", summary: "old run" }),
     ] });
   assert.equal(report.ok, true, "a failure followed by a success has recovered");
-  assert.equal(report.date, "2026-11-06");
+  assert.equal(report.date, new Date(end).toLocaleDateString("sv-SE"), "named after the morning it is read");
   const text = report.text;
   assert.match(text, /^结论：每日任务正常完成/);
   assert.match(text, /新增 80 条，其中每日流程发布 80 条（每日目标 100，差 20 条）/);

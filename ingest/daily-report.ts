@@ -10,6 +10,7 @@ import { collectItemStates, saveFunnelSnapshot, summarizeFunnel, type FunnelSumm
 import { contentRoot } from "./publication.ts";
 
 export const reportWindowMs = 24 * 3600000;
+const localDate = (at: number) => new Date(at).toLocaleDateString("sv-SE");
 export type ReportInput = { start: number; end: number; target: number; desired: string; events: readonly PipelineEvent[];
   database?: { added: number; removed: number; live: number }; databaseError?: string; xSpendUSD?: number;
   funnel?: FunnelSummary; funnelError?: string };
@@ -95,7 +96,8 @@ export function buildDailyReport(input: ReportInput): DailyReport {
     ...(otherCalls ? [`- 其他会话的模型调用（例如补库）：${otherCalls} 次，${usd(otherUSD)}`] : []),
     `- 按量付费合计：${usd(apiUSD + xUSD + otherUSD)}`,
   ];
-  return reportSchema.parse({ date: new Date(input.start).toISOString().slice(0, 10), ok: problems.length === 0, text: lines.join("\n") });
+  // Named after the local day it is read on (the nightly run's morning).
+  return reportSchema.parse({ date: localDate(input.end), ok: problems.length === 0, text: lines.join("\n") });
 }
 
 /** Completed X provider spend recorded by the shared ledger, in USD. */
@@ -141,4 +143,9 @@ export async function sendDailyReport(report: DailyReport, environment: NodeJS.P
     if (attempt === 2 || (response && response.status < 500 && response.status !== 429)) throw new Error(`Report delivery failed (${response?.status ?? "network"})`);
     await new Promise(resolve => setTimeout(resolve, [2000, 6000][attempt]));
   }
+}
+
+/** An immediate email for a failure that cannot wait for the morning report. */
+export async function sendAlert(text: string, environment: NodeJS.ProcessEnv, fetcher: typeof fetch = fetch) {
+  await sendDailyReport(reportSchema.parse({ date: localDate(Date.now()), ok: false, kind: "alert", text }), environment, fetcher);
 }

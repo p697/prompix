@@ -7,30 +7,34 @@ import type { Prompt } from "../packages/schema/catalog.ts";
 import { createTestDatabase } from "../services/feed/test-database.ts";
 import { activatePublication, stagePublication } from "../services/feed/publication.ts";
 import { readEvents, readWorkerStatus, updateConfig, type WorkerStatus } from "./pipeline-control.ts";
-import { intakeJob, intakeWindowMs, jobDue, reportJob, maintenanceIntervalMs, retryAfterFailureMs, tick, type Job } from "./worker.ts";
+import { intakeJob, jobDue, nightly, reportJob, retryAfterFailureMs, slotStart, tick, type Job } from "./worker.ts";
 import { runMaintenance, takedownLimit } from "./worker-maintenance.ts";
 import { workerPlist } from "./worker-launchd.ts";
 
-const hour = 3600000, now = Date.parse("2026-11-06T12:00:00Z");
+const hour = 3600000, now = Date.parse("2026-11-06T18:30:00Z"); // 03:30 in Japan, after the 03:00 intake slot
 const at = (offset: number) => new Date(now - offset).toISOString();
 const status = (job?: NonNullable<WorkerStatus["jobs"]>[string]): WorkerStatus => ({ pid: 1, startedAt: at(0), heartbeatAt: at(0), state: "idle",
-  today: { date: "2026-11-06", published: 0, reviewed: 0, held: 0, rejected: 0 }, ...(job ? { jobs: { maintenance: job } } : {}) });
-const job = { name: "maintenance", interval: maintenanceIntervalMs };
+  today: { date: "2026-11-06", published: 0, reviewed: 0, held: 0, rejected: 0 }, ...(job ? { jobs: { intake: job } } : {}) });
+const job = { name: "intake", at: nightly.intake };
 
-test("a job is due when it never ran, its interval passed, a failure waited out its backoff, or a run was cut off", () => {
+test("a nightly job runs once per slot, catches up after a missed night and retries a failure twice", () => {
+  assert.equal(slotStart(nightly.intake, now), Date.parse("2026-11-06T18:00:00Z"));
   assert.equal(jobDue(job, undefined, now), true);
-  assert.equal(jobDue(job, status({ startedAt: at(hour), finishedAt: at(hour), ok: true }), now), false);
-  assert.equal(jobDue(job, status({ startedAt: at(13 * hour), finishedAt: at(13 * hour), ok: true }), now), true);
-  assert.equal(jobDue(job, status({ startedAt: at(retryAfterFailureMs / 3), finishedAt: at(retryAfterFailureMs / 3), ok: false }), now), false);
-  assert.equal(jobDue(job, status({ startedAt: at(retryAfterFailureMs + 1), finishedAt: at(retryAfterFailureMs), ok: false }), now), true);
-  assert.equal(jobDue(job, status({ startedAt: at(hour) }), now), true);
+  assert.equal(jobDue(job, status({ startedAt: at(20 * 60000), finishedAt: at(0), ok: true }), now), false, "tonight's run is done");
+  assert.equal(jobDue(job, status({ startedAt: at(24 * hour), finishedAt: at(23 * hour), ok: true }), now), true, "last night's run does not count");
+  assert.equal(jobDue(job, status({ startedAt: at(24 * hour), finishedAt: at(23 * hour), ok: true }), now - hour), false, "not before 03:00");
+  assert.equal(jobDue(job, status({ startedAt: at(40 * hour), finishedAt: at(39 * hour), ok: true }), now), true, "a missed night catches up");
+  assert.equal(jobDue(job, status({ startedAt: at(10 * 60000), finishedAt: at(5 * 60000), ok: false, attempts: 1 }), now), false, "waits out the backoff");
+  assert.equal(jobDue(job, status({ startedAt: at(retryAfterFailureMs), finishedAt: at(0), ok: false, attempts: 2 }), now), true);
+  assert.equal(jobDue(job, status({ startedAt: at(retryAfterFailureMs), finishedAt: at(0), ok: false, attempts: 3 }), now), false, "three attempts a night");
+  assert.equal(jobDue(job, status({ startedAt: at(hour) }), now), true, "a run cut off by a restart is due");
 });
 
 test("the heartbeat continues while a long job runs", async t => {
   t.mock.timers.enable({ apis: ["setInterval"] });
   const root = join(await mkdtemp(join(tmpdir(), "prompix-worker-")), "pipeline");
   let clock = now, finish!: () => void;
-  const running = tick(root, at(0), [{ name: "maintenance", interval: maintenanceIntervalMs, run: () => new Promise<string>(resolve => { finish = () => resolve("done"); }) }], { now: () => clock });
+  const running = tick(root, at(0), [{ name: "maintenance", at: nightly.maintenance, run: () => new Promise<string>(resolve => { finish = () => resolve("done"); }) }], { now: () => clock });
   while (!finish) await new Promise(resolve => setImmediate(resolve));
   clock += 2 * hour; t.mock.timers.tick(60000);
   for (let i = 0; i < 20 && (await readWorkerStatus(root))?.heartbeatAt !== new Date(clock).toISOString(); i++) await new Promise(resolve => setImmediate(resolve));
@@ -41,38 +45,44 @@ test("the heartbeat continues while a long job runs", async t => {
   assert.equal((await readWorkerStatus(root))?.jobs?.maintenance.summary, "done");
 });
 
-test("the intake runs once per six-hour UTC window and only while the pipeline is running", async () => {
-  const window = { name: "maintenance", interval: intakeWindowMs, aligned: true };
-  // now is 12:00 UTC, the start of the third window.
-  assert.equal(jobDue(window, status({ startedAt: at(1), finishedAt: at(0), ok: true }), now), true, "11:59 belongs to the previous window");
-  assert.equal(jobDue(window, status({ startedAt: at(-1), finishedAt: at(-1), ok: true }), now + 5 * hour), false);
-  const root = join(await mkdtemp(join(tmpdir(), "prompix-worker-")), "pipeline");
+test("the intake runs only while the pipeline is running, and a missing drive or a third failure alerts at once", async () => {
+  const root = join(await mkdtemp(join(tmpdir(), "prompix-worker-")), "pipeline"), content = await mkdtemp(join(tmpdir(), "prompix-content-"));
   let runs = 0;
-  const jobs = [{ ...intakeJob({}, async env => { runs++; assert.equal(env.PROMPIX_TRANSLATION_PROVIDER, "pipeline"); return 0; }), name: "intake" }];
+  const alerts: string[] = [];
+  const alert = async (text: string) => { alerts.push(text); };
+  const jobs = [intakeJob({}, async env => { runs++; assert.equal(env.PROMPIX_TRANSLATION_PROVIDER, "pipeline"); return 1; }, alert, content)];
   await tick(root, at(0), jobs, { now: () => now });
   assert.equal(runs, 0, "a stopped pipeline collects nothing");
   await updateConfig(root, "codex", undefined, config => ({ ...config, desired: "running" }));
-  await tick(root, at(0), jobs, { now: () => now });
-  assert.equal(runs, 1);
+  for (let attempt = 0; attempt < 4; attempt++) await tick(root, at(0), jobs, { now: () => now + attempt * retryAfterFailureMs });
+  assert.equal(runs, 3, "three attempts, then nothing until tomorrow");
+  assert.equal(alerts.length, 1);
+  assert.match(alerts[0], /连续 3 次失败/);
+  const missing = intakeJob({}, async () => 0, alert, join(content, "not-mounted"));
+  await assert.rejects(missing.run(1), /外置硬盘/);
+  await assert.rejects(missing.run(2), /外置硬盘/);
+  assert.equal(alerts.length, 2, "a missing drive is reported on the first attempt only");
 });
 
-test("the daily report covers the UTC day that just ended, once the worker has run an intake", async () => {
+test("the 08:30 report covers the 24 hours before it, once the worker has run an intake", async () => {
   const root = join(await mkdtemp(join(tmpdir(), "prompix-worker-")), "pipeline");
   const sent: string[] = [];
-  const job = reportJob({}, root, async report => { sent.push(report.date); }, { now: () => now });
-  assert.equal(await job.run(), "每日采集还没开始，不发日报");
+  const morning = Date.parse("2026-11-06T23:40:00Z");
+  const job = reportJob({}, root, async report => { sent.push(report.date); }, { now: () => morning });
+  assert.equal(await job.run(1), "每日采集还没开始，不发日报");
   await updateConfig(root, "codex", undefined, config => config);
   const { appendEvent } = await import("./pipeline-control.ts");
   await appendEvent(root, "worker", "job.failed", { job: "intake", error: "x", durationMs: 1 });
   const later = reportJob({}, root, async report => { sent.push(report.date); }, { now: () => Date.now() + 24 * hour });
-  await later.run();
-  assert.deepEqual(sent, [new Date(Date.now()).toISOString().slice(0, 10)]);
+  await later.run(1);
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0], new Date(slotStart(nightly.report, Date.now() + 24 * hour)).toLocaleDateString("sv-SE"));
 });
 
 test("each tick writes a heartbeat, runs a due job once and records success or failure", async () => {
   const root = join(await mkdtemp(join(tmpdir(), "prompix-worker-")), "pipeline");
   let runs = 0, fail = false;
-  const jobs: Job[] = [{ name: "maintenance", interval: maintenanceIntervalMs, run: async () => {
+  const jobs: Job[] = [{ name: "maintenance", at: nightly.maintenance, run: async () => {
     runs++; if (fail) throw new Error("provider down"); return "all verified"; } }];
   let clock = now;
   await updateConfig(root, "codex", undefined, config => ({ ...config, desired: "paused" }));
@@ -83,9 +93,9 @@ test("each tick writes a heartbeat, runs a due job once and records success or f
   assert.equal(current?.jobs?.maintenance.summary, "all verified");
   clock += hour;
   await tick(root, at(0), jobs, { now: () => clock });
-  assert.equal(runs, 1, "not due again within the interval");
+  assert.equal(runs, 1, "not due again the same night");
   assert.equal((await readWorkerStatus(root))?.heartbeatAt, new Date(clock).toISOString());
-  clock += maintenanceIntervalMs; fail = true;
+  clock += 24 * hour; fail = true;
   await tick(root, at(0), jobs, { now: () => clock });
   current = await readWorkerStatus(root);
   assert.equal(runs, 2);
