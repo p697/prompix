@@ -44,28 +44,23 @@ test("latest feed sorts by first successful publication, not staging or edits, a
   await activatePublication(writer, second, (await getState(reader)).generation);
   assert.deepEqual((await getFeed(reader, { filters, limit: 10 }, secret)).items.map(i => i.id), ["new-a", "old-a", "old-b", "old-c"]);
 });
-test("new-publication ceiling survives multiple activations and rollback while existing content edits remain allowed", async t => {
+test("activation no longer caps a day's new publications, and text still waits for four visual works", async t => {
   const { pg, writer, reader } = await createTestDatabase(); t.after(() => pg.close());
   const baseline = await stagePublication(writer, input([prompt("baseline")])); await activatePublication(writer, baseline, "0");
-  const items = Array.from({ length: 100 }, (_, i) => prompt(`new-${i}`));
+  const visual = (id: string) => ({ ...prompt(id), kind: "image" as const, media: { image: "lake", video: null, demoURL: null } });
+  const items = Array.from({ length: 120 }, (_, i) => visual(`new-${i}`));
   const release = await stagePublication(writer, input(items)); await activatePublication(writer, release, "1");
-  const over = await stagePublication(writer, input([...items, prompt("over-limit")]));
-  await assert.rejects(activatePublication(writer, over, "2"), /ceiling exceeded/);
   assert.equal((await getState(reader)).release, release);
-  assert.equal((await writer.query("select first_published_at from prompix.content where id='over-limit'")).rows[0].first_published_at, null);
-  await activatePublication(writer, baseline, "2");
-  await assert.rejects(activatePublication(writer, over, "3"), /ceiling exceeded/);
-  const edited = await stagePublication(writer, input([{ ...items[0], title: "Edited after quota" }])); await activatePublication(writer, edited, "3");
-  const quota = await limitNewPublications(writer, [items[0], prompt("held")]);
-  assert.deepEqual(quota.prompts.map(i => i.id), [items[0].id]); assert.equal(quota.report.deferred, 1);
+  const quota = await limitNewPublications(writer, [items[0], ...Array.from({ length: 40 }, (_, i) => prompt(`text-${i}`))]);
+  assert.equal(quota.report.plainSelected, 30, "120 visual works today allow 30 texts");
+  assert.ok(quota.prompts.some(i => i.id === items[0].id));
 });
-test("quota carries unused capacity through the day and never counts staged drafts as already published", async t => {
+test("every reviewed visual work is selected at any hour and staged drafts never count as published", async t => {
   const { pg, writer } = await createTestDatabase(); t.after(() => pg.close());
   const items = Array.from({ length: 110 }, (_, i) => ({ ...prompt(`draft-${i}`), kind: "image" as const, media: { image: "lake", video: null, demoURL: null } }));
   await stagePublication(writer, input(items));
   const early = await limitNewPublications(writer, items, new Date("2026-10-15T00:00:00Z"));
-  const late = await limitNewPublications(writer, items, new Date("2026-10-15T18:00:00Z"));
-  assert.equal(early.prompts.length, 25); assert.equal(late.prompts.length, 100); assert.equal(late.report.deferred, 10);
+  assert.equal(early.prompts.length, 110); assert.equal(early.report.deferred, 0); assert.equal(early.report.alreadyPublished, 0);
 });
 
 test("backup restoration preserves first-publication order and quota history including inactive identities", async t => {
@@ -84,7 +79,7 @@ test("backup restoration preserves first-publication order and quota history inc
   assert.equal((await limitNewPublications(restored.writer, [prompt("fresh"), prompt("old")])).report.selected, 0);
 });
 
-test("frozen historical authorization publishes beyond daily cap without granting new discovery capacity", async t => {
+test("frozen historical authorization publishes without counting toward the day's text ratio", async t => {
   const { pg, writer, reader } = await createTestDatabase(); t.after(() => pg.close());
   const initial = await stagePublication(writer, input([prompt("baseline")])); await activatePublication(writer, initial, "0");
   const ordinary = Array.from({ length: 100 }, (_, i) => prompt(`ordinary-${i}`));
@@ -93,13 +88,10 @@ test("frozen historical authorization publishes beyond daily cap without grantin
   const authorization = { version: 1 as const, id: "owner-approved-history", approvedAt: new Date(Date.now()-1000).toISOString(),
     expiresAt: new Date(Date.now()+3600_000).toISOString(), contentIDs: history.map(p => p.id) };
   const target = await stagePublication(writer, input([...ordinary, ...history]));
-  await assert.rejects(activatePublication(writer, target, "2"), /ceiling/);
   await assert.rejects(activatePublication(writer, target, "2", { ...authorization, expiresAt: new Date(Date.now()-500).toISOString() }), /expired/);
   await activatePublication(writer, target, "2", authorization);
   assert.equal((await getState(reader)).count, 230);
   assert.equal((await writer.query("select count(*)::int as count from prompix.content where counts_toward_daily_limit")).rows[0].count, 100);
-  const unapproved = await stagePublication(writer, input([...ordinary, ...history, prompt("x-post-999999")]));
-  await assert.rejects(activatePublication(writer, unapproved, "3", authorization), /ceiling/);
   const selection = await limitNewPublications(writer, [prompt("x-post-999999"), history[0]], new Date(), authorization);
   assert.deepEqual(selection.prompts.map(p => p.id), [history[0].id]);
   await activatePublication(writer, daily, "3");
