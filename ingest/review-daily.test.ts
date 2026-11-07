@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { promptSchema } from "../packages/schema/catalog.ts";
-import { reviewDailyX, reviewPassRejections } from "./review-daily.ts";
+import { reviewDailyX, reviewedCreators, reviewPassRejections } from "./review-daily.ts";
 import type { ModelProvider } from "./models/types.ts";
 import type { Candidate } from "./sources.ts";
 
@@ -58,4 +58,17 @@ test("one review a night approves, rejects, caps portraits and reuses stored out
   assert.equal(again.report.pending, 0);
   const dry = await reviewDailyX(items, root);
   assert.equal(dry.approved.length, 3);
+});
+
+test("creators the review approves twice, mostly not portraits, join the creator search", async t => {
+  const root = await mkdtemp(join(tmpdir(), "prompix-reviewed-creators-")); t.after(() => rm(root, { recursive: true, force: true }));
+  const by = (item: Candidate, username: string): Candidate => ({ ...item, creator: { id: `x-${username}`, platform: "x", externalID: "9", username, displayName: username, profileURL: `https://x.com/${username}` } });
+  const items = [by(candidate("x-post-11", "11"), "maker"), by(candidate("x-post-12", "12"), "maker"), by(candidate("x-post-13", "13"), "once")];
+  const provider = { id: "fixture", model: "fixture", capabilities: { images: true }, complete: async (request: { input: string }) => ({ provider: "fixture", model: "fixture", usage: {},
+    output: { items: (JSON.parse(request.input).candidates as { id: string }[]).map(item => answer(item.id)) } }) } as unknown as ModelProvider;
+  const dependencies = { mirror: async (prompts: readonly Candidate[]) => ({ prompts: [...prompts], errors: [] }),
+    prepare: async () => ({ images: [{ path: "/tmp/a.jpg", mediaType: "image/jpeg" as const, role: "image" as const, sourceRole: "image" }] }) } as never;
+  await reviewDailyX(items, root, { provider, ...dependencies as object });
+  assert.deepEqual(await reviewedCreators(root), ["maker"]);
+  assert.deepEqual(await reviewedCreators(root, Date.now() + 15 * 86400_000), [], "only the last two weeks count");
 });

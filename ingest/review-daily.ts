@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { z } from "zod";
 import type { Prompt } from "../packages/schema/catalog.ts";
@@ -16,6 +16,7 @@ import { portraitShare } from "./x-search-rules.ts";
 /** The judged source: an outcome stays valid while the post and its media are unchanged. */
 export const reviewPassHash = (item: Candidate) => createHash("sha256").update(JSON.stringify([item.id, item.fingerprint, item.source.revision ?? null])).digest("hex");
 const storedSchema = z.object({ hash: z.string(), attempts: z.number().int().min(1), provider: z.string(), model: z.string(),
+  at: z.iso.datetime().optional(), creator: z.string().optional(),
   outcome: z.custom<ReviewOutcome>(value => !!value && typeof value === "object") });
 type Stored = z.infer<typeof storedSchema>;
 /** A failed judgment is retried once on a later night, then waits for the post to change. */
@@ -55,7 +56,8 @@ export async function reviewDailyX(items: readonly Candidate[], root: string, op
     // The review sees the mirrored media; publication mirrors the same URLs again from the media map.
     const mirrored = await (options.mirror ?? mirrorPromptMediaBatch)(pending, root, 3);
     const save = async (item: Candidate, outcome: ReviewOutcome, served: { provider: string; model: string }) => {
-      const entry: Stored = { hash: reviewPassHash(item), attempts: (stored.get(item.id)?.attempts ?? 0) + 1, ...served, outcome };
+      const entry: Stored = { hash: reviewPassHash(item), attempts: (stored.get(item.id)?.attempts ?? 0) + 1, ...served,
+        at: new Date().toISOString(), ...(item.creator?.platform === "x" && item.creator.username ? { creator: item.creator.username } : {}), outcome };
       await mkdir(join(directory, "outcomes"), { recursive: true });
       await writeFile(outcomePath(item.id), JSON.stringify(entry, null, 2));
       stored.set(item.id, entry);
@@ -118,4 +120,23 @@ export async function reviewDailyX(items: readonly Candidate[], root: string, op
   report.deferredPortraits = approved.length - kept.length;
   report.approved = kept.length;
   return { approved: kept, report };
+}
+
+/** Creators the single review approved at least twice in the last two weeks, at most half of
+ * it portraits: the search then follows them like the curated list (research, 2026-11-07). */
+export async function reviewedCreators(root: string, now = Date.now(), limit = 24): Promise<string[]> {
+  const directory = join(root, "review-pass", "outcomes"), counts = new Map<string, { approved: number; portraits: number }>();
+  const names = await readdir(directory).catch(() => [] as string[]);
+  for (const name of names.filter(value => value.endsWith(".json"))) {
+    const value = await readFile(join(directory, name), "utf8").then(text => storedSchema.safeParse(JSON.parse(text)), () => undefined);
+    if (!value?.success || !value.data.creator || !value.data.at || now - Date.parse(value.data.at) > 14 * 86400_000) continue;
+    const { outcome } = value.data;
+    if (!outcome.ok || reviewBlocker(outcome.fields)) continue;
+    const entry = counts.get(value.data.creator) ?? { approved: 0, portraits: 0 };
+    entry.approved++;
+    if (outcome.fields.facets.useCase.includes("portraits") || outcome.fields.facets.subject.includes("person")) entry.portraits++;
+    counts.set(value.data.creator, entry);
+  }
+  return [...counts].filter(([username, { approved, portraits }]) => /^[A-Za-z0-9_]{1,15}$/.test(username) && approved >= 2 && portraits * 2 <= approved)
+    .sort((a, b) => b[1].approved - a[1].approved || a[0].localeCompare(b[0])).slice(0, limit).map(([username]) => username);
 }
