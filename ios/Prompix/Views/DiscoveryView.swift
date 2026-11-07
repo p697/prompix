@@ -146,6 +146,21 @@ struct DiscoverView: View {
                         .frame(minHeight: viewportHeight, alignment: .top)
                         .transaction { $0.animation = nil }
                 }
+                // Refresh belongs to the feed alone. Applied outside the header,
+                // it would also reach the horizontal uses bar: that bar would then
+                // bounce vertically, refresh the page and show a system spinner.
+                .pageRefreshable {
+                    // SwiftUI can cancel the refresh action when lazy sections
+                    // move during overscroll. The user's bounded request owns its
+                    // lifetime; query changes still cancel it inside the store.
+                    await Task { @MainActor in
+                        async let metadata: Void = library.refresh(force: true)
+                        if let feed = library.feed {
+                            await feed.discovery.load(feedQuery, force: true)
+                        }
+                        await metadata
+                    }.value
+                }
                 .accessibilityIdentifier("discoveryScroll")
                 .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { viewportHeight = $0 }
                 .onGeometryChange(for: PromptGridLayout.self) { proxy in
@@ -158,18 +173,6 @@ struct DiscoverView: View {
                 }
                 .sheet(isPresented: $showsAllUses) {
                     UseDirectory(uses: uses, selection: facet) { selectUse($0); showsAllUses = false }
-                }
-                .pageRefreshable {
-                    // SwiftUI can cancel the refresh action when lazy sections
-                    // move during overscroll. The user's bounded request owns its
-                    // lifetime; query changes still cancel it inside the store.
-                    await Task { @MainActor in
-                        async let metadata: Void = library.refresh(force: true)
-                        if let feed = library.feed {
-                            await feed.discovery.load(feedQuery, force: true)
-                        }
-                        await metadata
-                    }.value
                 }
                 .onChange(of: feedQuery) { _, query in
                     // One reset for the complete query; no intermediate kind +
