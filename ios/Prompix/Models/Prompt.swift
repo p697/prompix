@@ -32,7 +32,6 @@ struct Prompt: Codable, Identifiable, Hashable {
     var localization: Localization? = nil
     var presentation: String? = nil
     var publishedAt: String? = nil
-    var inputs: Inputs? = nil
     var generation: Generation? = nil
     var variables: [Variable]? = nil
     var facets: Facets? = nil
@@ -152,12 +151,6 @@ struct Prompt: Codable, Identifiable, Hashable {
     // Prompix 2.0 fields, defined in packages/schema/enrichment.ts. Every one is
     // optional; vocabularies stay plain strings so a newer server value never makes
     // this app reject a card. `enrichmentSanitized()` drops anything malformed.
-    struct Inputs: Codable, Hashable, Sendable {
-        let requirement: String
-        var count: Int? = nil
-        let kinds: [String]
-        var ownLikenessOnly: Bool? = nil
-    }
     struct Generation: Codable, Hashable, Sendable {
         let modelFamily: String
         var modelVersion: String? = nil
@@ -389,13 +382,6 @@ enum SupportLinks {
     }
 }
 
-extension Prompt.Inputs {
-    var isValid: Bool {
-        ["none", "optional", "required"].contains(requirement) && kinds.count <= 6 && Set(kinds).count == kinds.count
-            && (requirement == "none") == kinds.isEmpty && (count.map { (1...8).contains($0) } ?? true)
-            && (ownLikenessOnly == nil || kinds.contains("face"))
-    }
-}
 extension Prompt.Generation {
     var isValid: Bool {
         FeedValidation.text(modelFamily, max: 40) && FeedValidation.text(mode, max: 20)
@@ -434,7 +420,6 @@ extension Prompt {
     /// Keeps only well-formed 2.0 fields. Variables must point at text in the prompt.
     func enrichmentSanitized() -> Prompt {
         var item = self
-        if item.inputs?.isValid == false { item.inputs = nil }
         if item.generation?.isValid == false { item.generation = nil }
         if item.facets?.isValid == false { item.facets = nil }
         item.palette = Enrichment.palette(item.palette)
