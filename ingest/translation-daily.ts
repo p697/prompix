@@ -9,6 +9,7 @@ import { atomic, json } from "./publication.ts";
 import { attachTranslations, inheritPreviousTranslations, translationLocales } from "./translation.ts";
 import { codexTranslationProvider, modelTranslationProvider, openAITranslationProvider } from "./translation-provider.ts";
 import { routedProvider } from "./model-routes.ts";
+import { processAlive } from "./pipeline-control.ts";
 import { runTranslations, type TranslationRunReport } from "./translation-runner.ts";
 
 export type DailyTranslationStatus = { status: "cached" | "running" | "updated" | "busy" | "failed" | "partial"; model?: string; error?: string;
@@ -36,7 +37,13 @@ export async function prepareDailyTranslations(items: readonly Prompt[], root: s
     else {
       await mkdir(directory, { recursive: true });
       let locked = false;
-      try { await mkdir(lock); locked = true; } catch { status = "busy"; }
+      try { await mkdir(lock); locked = true; }
+      catch {
+        // A run killed at its time limit leaves its lock behind; a dead owner no longer holds it.
+        const owner = await json<{ pid?: number } | null>(join(lock, "owner.json"), null);
+        if (owner?.pid && !processAlive(owner.pid)) { await rm(lock, { recursive: true, force: true }); await mkdir(lock); locked = true; }
+        else status = "busy";
+      }
       if (locked) {
         try {
           // Another writer may have completed between the initial read and lock acquisition.
