@@ -52,7 +52,8 @@ export async function runTranslations(options: { items: readonly Prompt[]; cache
   const maxUSD = options.maxUSD ?? 5;
   const concurrency = options.concurrency ?? 2;
   const maxAttempts = options.maxAttempts ?? 2;
-  const maximumConcurrency = options.providerName === "codex" ? 6 : 3;
+  // Subscription CLIs and the pipeline's routed providers queue on their side; direct APIs stay at three.
+  const maximumConcurrency = options.providerName === "codex" || options.providerName === "pipeline" ? 6 : 3;
   if (!Number.isInteger(maxRequests) || maxRequests < 0 || maxRequests > 1000 || !Number.isInteger(concurrency) || concurrency < 1 || concurrency > maximumConcurrency || !Number.isInteger(maxAttempts) || maxAttempts < 1 || maxAttempts > 3 || !Number.isFinite(maxUSD) || maxUSD < 0) throw new Error("Invalid translation budget or concurrency");
   if (options.maxCharacters !== undefined && (!Number.isFinite(options.maxCharacters) || options.maxCharacters < 1000 || options.maxCharacters > 30000)) throw new Error("Invalid translation batch size");
   seedOriginalSegments(options.items, cache);

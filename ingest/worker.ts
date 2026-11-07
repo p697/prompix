@@ -120,10 +120,10 @@ export const intakeRequestFile = "intake-request.json";
  * extra run does not use up the night's slot, which starts later. */
 export function intakeJob(env: NodeJS.ProcessEnv, spawnDaily = runDaily, alert = sendAlert, root = contentRoot, control = pipelineRoot()): Job {
   const requested = async (last: NonNullable<WorkerStatus["jobs"]>[string] | undefined) => {
-    const request = await json<{ at?: string; importTrials?: string[] } | null>(join(control, intakeRequestFile), null);
+    const request = await json<{ at?: string; importTrials?: string[]; translationRequests?: number } | null>(join(control, intakeRequestFile), null);
     return request?.at && (!last || Date.parse(last.startedAt) < Date.parse(request.at)) ? request : undefined;
   };
-  let extra: { importTrials?: string[] } | undefined;
+  let extra: { importTrials?: string[]; translationRequests?: number } | undefined;
   return { name: "intake", at: nightly.intake, enabled: config => config.desired === "running" && config.dailyTarget > 0,
     ready: async (last, now) => {
       extra = await requested(last);
@@ -138,7 +138,10 @@ export function intakeJob(env: NodeJS.ProcessEnv, spawnDaily = runDaily, alert =
       }
       const { PROMPIX_HISTORY_CAMPAIGN: _, ...rest } = env;
       const trials = (extra?.importTrials ?? []).filter(trial => /^[\w-]+$/.test(trial));
-      const code = await spawnDaily({ ...rest, PROMPIX_TRANSLATION_PROVIDER: "pipeline", ...(trials.length ? { PROMPIX_IMPORT_TRIALS: trials.join(",") } : {}) });
+      // An extra run may translate more of the library than a night does (backfill, owner 2026-11-07).
+      const translationRequests = Number.isInteger(extra?.translationRequests) && extra!.translationRequests! > 0 && extra!.translationRequests! <= 1000 ? extra!.translationRequests : undefined;
+      const code = await spawnDaily({ ...rest, PROMPIX_TRANSLATION_PROVIDER: "pipeline", ...(trials.length ? { PROMPIX_IMPORT_TRIALS: trials.join(",") } : {}),
+        ...(translationRequests ? { PROMPIX_TRANSLATION_MAX_REQUESTS: String(translationRequests) } : {}) });
       const report = await json<IntakeReport>(join(root, "status.json"), {});
       if (code !== 0) throw new Error(report.error ?? `daily exited with ${code}`);
       const added = report.changes?.added?.total ?? 0, enrichment = report.sources?.enrichment, review = report.sources?.["x-review"];

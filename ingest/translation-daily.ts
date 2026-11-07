@@ -58,7 +58,10 @@ export async function prepareDailyTranslations(items: readonly Prompt[], root: s
           const maxOutputTokens = 24000;
           const provider = routed ? modelTranslationProvider(routed.provider, maxOutputTokens, routed.record)
             : providerName === "codex" ? codexTranslationProvider(environment.PROMPIX_CODEX ?? "codex", maxOutputTokens, model) : openAITranslationProvider(environment.OPENAI_API_KEY ?? "", maxOutputTokens);
-          report = await runTranslations({ items: prepared, cache, provider, providerName, model, locales, fairLocales: true,
+          // Newest work first, so tonight's additions are complete before older items are backfilled.
+          const newestFirst = [...prepared].sort((a, b) => (b.publishedAt ?? "").localeCompare(a.publishedAt ?? ""));
+          report = await runTranslations({ items: newestFirst, cache, provider, providerName, model, locales, fairLocales: true,
+            concurrency: Number(environment.PROMPIX_TRANSLATION_CONCURRENCY ?? "4"), maxCharacters: 20000,
             maxRequests: Number(environment.PROMPIX_TRANSLATION_MAX_REQUESTS ?? "36"), maxUSD: Number(environment.PROMPIX_TRANSLATION_MAX_USD ?? "2"), maxOutputTokens,
             persist: async (state, progress) => { await atomic(cachePath, state); await atomic(ledgerPath, { ...progress, day, model, updatedAt: new Date().toISOString() }); }, prior, reviews });
           status = report.failed > (prior?.failed ?? 0) ? "partial" : "updated";
