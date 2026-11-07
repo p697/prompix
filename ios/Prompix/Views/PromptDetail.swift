@@ -246,15 +246,14 @@ struct PromptDetail: View {
     /// Licence codes from the pipeline, in words a reader understands.
     private var licenseText: String {
         switch item.source.license {
-        case "X-API-Terms": String(localized: "通过 X API 收录")
-        case "Source-author-rights": String(localized: "版权归原作者")
+        // X posts are the author's own work, whichever way they were collected.
+        case "X-API-Terms", "Source-author-rights": String(localized: "版权归原作者")
         case "CC0-1.0": "CC0"
         default: item.source.license
         }
     }
     /// Only licenses a reader recognises at a glance; the full terms stay inside.
     private var shortLicense: String? {
-        if item.source.license == "X-API-Terms" { return "X" }
         return item.source.license.hasPrefix("CC") ? item.source.license.replacingOccurrences(of: "-1.0", with: "") : nil
     }
     /// Who and under what terms, in one quiet line; everything else waits inside.
