@@ -114,7 +114,6 @@ async function maintenanceFixture(removedCount: number) {
     admission: async () => { calls.push("admission"); return { publishedIDs: new Set<string>(), attemptedIDs: new Set<string>(), maxDrafts: 0 }; },
     availability: async (_root: string, options: { admission?: unknown }) => { calls.push(options.admission ? "availability+admission" : "availability");
       return { state: { ...removed, "x-post-999": { removed: true } }, report: { status: "checked" } }; },
-    clawhub: async () => { calls.push("clawhub"); return { report: { status: "fresh" } }; },
     database: <T>(work: (db: typeof writer) => Promise<T>) => work(writer),
   } as unknown as Parameters<typeof runMaintenance>[2];
   return { content, pg, writer, calls, overrides };
@@ -124,7 +123,7 @@ test("maintenance rechecks with the published IDs, then takes down live items wh
   const { content, pg, writer, calls, overrides } = await maintenanceFixture(2);
   t.after(() => pg.close());
   const report = await runMaintenance({ PROMPIX_X_DISCOVERY_PROVIDER: "third-party" }, content, overrides);
-  assert.deepEqual(calls, ["lock", "admission", "availability+admission", "clawhub", "unlock"]);
+  assert.deepEqual(calls, ["lock", "admission", "availability+admission", "unlock"]);
   assert.deepEqual(report.takenDown, ["x-post-100", "x-post-101"]);
   assert.equal(report.removed, 3, "an ID that was never published is recorded but not taken down");
   const live = (await writer.query<{ id: string }>("select id from prompix.content where removed_at is null order by id")).rows.map(row => row.id);

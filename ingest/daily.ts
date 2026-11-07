@@ -4,8 +4,6 @@ import { limitNewPublications } from "./publication-quota.ts";
 import { enrichNewItems } from "./enrichment-daily.ts";
 import { routedProvider } from "./model-routes.ts";
 import { withPublisherDatabase } from "./database-publication.ts";
-import { prepareDiscoveredSkills } from "./discovered-skill-daily.ts";
-import { preparePublisherSkills } from "./publisher-skill-daily.ts";
 import { prepareXAvailability, filterXAvailability, assertXAvailability, adoptFreshXDiscoveries } from "./x-availability.ts";
 import { mkdir, readFile, writeFile, rm } from "node:fs/promises";
 import { createHash } from "node:crypto";
@@ -25,8 +23,6 @@ import { download } from "./network.ts";
 import { discoverX } from "./x-discovery.ts";
 import { collectXDiscovery } from "./x-collection.ts";
 import { readAllXIntake as readXIntake } from "./x-thread-intake.ts";
-import { collectSkill, skillRepositoryRevision, skillSources } from "./skills.ts";
-import { prepareClawHub, filterClawHubAvailability, assertClawHubAvailability } from "./clawhub-daily.ts";
 import { enrichCreators, mergeCreatorCache, mirrorCreatorAvatars, type CreatorCache } from "./creators.ts";
 import { publishAvatar } from "./creator-images.ts";
 import { refreshCreatorProfiles } from "./creator-refresh.ts";
@@ -45,6 +41,8 @@ import { beginDailyPublication, clearMatchingPublicationHold, prepareDailyStagin
 import { languagePackEditionVersion, preserveCatalogText, stageRelease } from "./release-publication.ts";
 import { databaseLibraryLimit, preservePublicationInput } from "../services/feed/publication.ts";
 import { applyQualityHolds, assertNoQualityHolds, readQualityHolds, registerQualityHoldScope } from "./quality-holds.ts";
+/** Image, video and text prompts only. */
+const inScope = (item: Pick<Prompt, "kind" | "contentType">) => item.kind !== "web" && item.contentType !== "skill";
 const publishing = process.argv.includes("--publish");
 const resumePublishing = process.argv.includes("--resume-publishing");
 if (resumePublishing && !publishing) throw new Error("--resume-publishing requires --publish");
@@ -103,8 +101,6 @@ async function run() {
         await atomic(moderationPath, { ...current, removedIDs: [...new Set([...current.removedIDs, ...removed])].sort() });
       }
     }
-    const communitySkills = await prepareClawHub(root);
-    report.sources.clawhub = communitySkills.report;
     // Reconcile retained publication work before any collectors or paid models run.
     const publication = publishing ? await beginDailyPublication(root, { resumePublishing }) : await prepareDailyStaging(root);
     const libraryLimit = publication.previous?.database ? databaseLibraryLimit : 1000;
@@ -133,9 +129,9 @@ async function run() {
         return;
       }
     }
-    const publisherSkills = await preparePublisherSkills(root);
-    report.sources["publisher-skills"] = publisherSkills.report;
-    const all: Candidate[] = [...communitySkills.candidates, ...publisherSkills.candidates];
+    // Since 2026-11-07 the library carries image, video and text prompts from X and prompts.chat only:
+    // no Skill sources (repositories, publishers, ClawHub, discovered) and no web category.
+    const all: Candidate[] = [];
     const creatorsPath = join(root, "creators.json");
     let creators = await json<CreatorCache>(creatorsPath, {});
     for (const source of [
@@ -166,27 +162,6 @@ async function run() {
         report.sources[source.id] = { status: "failed", message: String(e) };
       }
     }
-    // Resolve one immutable revision per repository, but preserve each failed
-    // Skill snapshot independently so one deleted file cannot drop the shelf.
-    const skillRevisions = new Map<string, string | Error>();
-    for (const source of skillSources) {
-      const path = join(root, "candidates", `skill-${source.id}.json`);
-      try {
-        if (!skillRevisions.has(source.repo)) {
-          try { skillRevisions.set(source.repo, await skillRepositoryRevision(source.repo)); }
-          catch (error) { skillRevisions.set(source.repo, error instanceof Error ? error : new Error(String(error))); }
-        }
-        const revision = skillRevisions.get(source.repo)!;
-        if (revision instanceof Error) throw revision;
-        const candidate = await collectSkill(source, revision);
-        await atomic(path, [candidate]);
-        all.push(candidate);
-        report.sources[`skill-${source.id}`] = { status: "ok", count: 1, revision };
-      } catch (error) {
-        all.push(...(await json<Candidate[]>(path, [])));
-        report.sources[`skill-${source.id}`] = { status: "failed", message: String(error) };
-      }
-    }
     // OpenLab remains historical attribution only; never fetch or grow from it.
     for (const source of repositories) report.sources[source.id] = { status: "retired", count: 0 };
     if (process.env.PROMPIX_X_LOOKUP_IDS !== undefined) {
@@ -213,11 +188,8 @@ async function run() {
     all.push(...filterXAvailability(xIntake.candidates, xAvailability.state).prompts);
     await atomic(join(root, "candidates", "x-native.json"), xIntake.candidates);
     await atomic(join(root, "x-intake", "status.json"), { updatedAt: new Date().toISOString(), ...xIntake.report, threads: xIntake.threads, records: xIntake.records });
-    const discoveredSkills = await prepareDiscoveredSkills(root, xIntake.records, { enabled: publishing });
-    report.sources["skill-discovery"] = discoveredSkills.report;
-    all.push(...discoveredSkills.candidates);
     report.sources[videoArchive.id] = { status: "retired", count: 0 };
-    const candidates = enrichCreators(mergeCandidates(all), creators);
+    const candidates = enrichCreators(mergeCandidates(all), creators).filter(inScope);
     report.counts.candidates = countByKind(candidates);
     const moderation = moderationSchema.parse(await json(join(root, "moderation.json"), { removedIDs: [] }));
     let previous: Catalog | undefined;
@@ -249,7 +221,7 @@ async function run() {
     creators = refreshed.cache;
     planned = enrichCreators(planned, creators);
     let bundled = catalogSchema.parse(JSON.parse(await readFile(join(repo, "ios/Prompix/Resources/catalog.json"), "utf8")))
-      .prompts.filter((item) => !excluded.has(item.id));
+      .prompts.filter((item) => !excluded.has(item.id) && inScope(item));
     report.counts.bundled = countByKind(bundled);
     // Fail before uploading media if the complete library exceeds the publisher's safety bound.
     interleaveLibrary(planned, bundled, excluded, libraryLimit);
@@ -302,7 +274,7 @@ async function run() {
     const labeled = await applyDailyVisualPresentation(retained.prompts, root);
     const visible = applyQualityHolds(labeled.filter(item => item.presentation !== "explicit"), qualityHolds);
     report.qualityHeldIDs = visible.withheldIDs;
-    const registryVisible = filterClawHubAvailability(visible.prompts, communitySkills.state);
+    const registryVisible = { prompts: visible.prompts.filter(inScope), withheldIDs: visible.prompts.filter(item => !inScope(item)).map(item => item.id) };
     report.registryWithheldIDs = registryVisible.withheldIDs;
     const xVisible = filterXAvailability(registryVisible.prompts, xAvailability.state);
     report.sources["x-withheld"] = { ids: xVisible.withheldIDs };
@@ -396,7 +368,6 @@ async function run() {
     await atomic(manifestPath, manifest);
     if (publishing) {
       assertNoQualityHolds(stored, await readQualityHolds(root));
-      await assertClawHubAvailability(root, stored);
       await assertXAvailability(root, stored);
       await upload(
         `releases/${version}/catalog.json`,
@@ -405,7 +376,6 @@ async function run() {
       );
       await remoteCatalog(manifest);
       assertNoQualityHolds(stored, await readQualityHolds(root));
-      await assertClawHubAvailability(root, stored);
       await assertXAvailability(root, stored);
       // Activate LAST. Any earlier failure leaves clients on the previous complete edition.
       await upload("v1/latest.json", manifestPath, "application/json");
