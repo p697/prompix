@@ -28,7 +28,7 @@ test("the report leads with the outcome and covers changes, work, time and cost"
   assert.match(text, /^结论：每日任务正常完成/);
   assert.match(text, /新增 80 条，其中每日流程发布 80 条（每日目标 100，差 20 条）/);
   assert.match(text, /下架 1 条，线上共 3645 条/);
-  assert.match(text, /2\.0 审核自动排除 4 条，译文复核拦下 2 处/);
+  assert.match(text, /审核自动排除 4 条/);
   assert.match(text, /每日采集发布：2 次（成功 1，失败 1），用时 1 小时 1 分钟/);
   assert.match(text, /合计用时 1 小时 3 分钟（另有 1 次没有记录用时）/);
   assert.match(text, /其他会话的模型调用（例如补库）：1 次，\$2\.00/);

@@ -79,8 +79,7 @@ export function maintenanceJob(env: NodeJS.ProcessEnv): Job {
 
 type IntakeReport = { published?: boolean; error?: string; changes?: { added?: { total?: number } };
   editorial?: { requests?: number }; visualReview?: { requests?: number };
-  sources?: { enrichment?: { enriched?: number; excluded?: number; deferred?: number };
-    "translation-check"?: { passed?: number; held?: number; withheld?: number } } };
+  sources?: { enrichment?: { enriched?: number; excluded?: number; deferred?: number } } };
 
 /** The owner's email for the UTC day that just ended, sent at the first tick after midnight UTC.
  * Days before the worker's first intake have nothing to report. */
@@ -106,11 +105,11 @@ export function intakeJob(env: NodeJS.ProcessEnv, spawnDaily = runDaily): Job {
     const code = await spawnDaily({ ...rest, PROMPIX_TRANSLATION_PROVIDER: "pipeline" });
     const report = await json<IntakeReport>(join(contentRoot, "status.json"), {});
     if (code !== 0) throw new Error(report.error ?? `daily exited with ${code}`);
-    const added = report.changes?.added?.total ?? 0, enrichment = report.sources?.enrichment, check = report.sources?.["translation-check"];
+    const added = report.changes?.added?.total ?? 0, enrichment = report.sources?.enrichment;
     return { published: added, summary: `新发布 ${added} 条；2.0 审核通过 ${enrichment?.enriched ?? 0} 条，排除 ${enrichment?.excluded ?? 0} 条，顺延 ${enrichment?.deferred ?? 0} 条`,
       // Subscription calls outside the provider layer, for the daily report.
       details: { editorialRequests: report.editorial?.requests ?? 0, visualRequests: report.visualReview?.requests ?? 0,
-        excluded: enrichment?.excluded ?? 0, translationsHeld: check?.held ?? 0 } };
+        excluded: enrichment?.excluded ?? 0 } };
   } };
 }
 

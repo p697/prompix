@@ -3,7 +3,6 @@ import { prepareXMaintenanceAdmission } from "./x-maintenance-admission.ts";
 import { limitNewPublications } from "./publication-quota.ts";
 import { enrichNewItems } from "./enrichment-daily.ts";
 import { routedProvider } from "./model-routes.ts";
-import { checkNewTranslations } from "./translation-check-daily.ts";
 import { withPublisherDatabase } from "./database-publication.ts";
 import { prepareDiscoveredSkills } from "./discovered-skill-daily.ts";
 import { preparePublisherSkills } from "./publisher-skill-daily.ts";
@@ -330,17 +329,8 @@ async function run() {
     }, (creatorID, error) => report.avatarErrors.push(`${creatorID}: ${String(error)}`));
     // Dry-run only reads validated translations; it never starts a paid batch.
     const localized = await prepareDailyTranslations(inheritPreviousTranslations(complete, previous?.prompts ?? []), root, process.env, publishing);
-    let prompts = localized.prompts;
+    const prompts = localized.prompts;
     report.translations = localized.report;
-    // A translation enters an edition only after an independent review; held text hides that locale alone.
-    if (previous && publication.previous?.database) {
-      const routed = publishing ? await routedProvider("translationCheck", "translation-check:daily") : undefined;
-      const checked = await checkNewTranslations(prompts, previous.prompts, join(root, "translations"),
-        routed ? { provider: routed.provider, effort: routed.effort, record: routed.record,
-          maxRequests: Number(process.env.PROMPIX_TRANSLATION_CHECK_MAX_REQUESTS ?? 10) } : {});
-      prompts = checked.prompts;
-      report.sources["translation-check"] = checked.report;
-    }
     report.retainedPrevious = retained.retainedPrevious;
     report.counts.prepared = countByKind(prompts);
     if (previous) report.changes = libraryDelta(previous.prompts, prompts);
