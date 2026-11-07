@@ -3,7 +3,6 @@ import { homedir } from "node:os";
 import { atomic, contentRoot, json, lockContent, moderationSchema } from "./publication.ts";
 import { prepareXMaintenanceAdmission } from "./x-maintenance-admission.ts";
 import { prepareXAvailability } from "./x-availability.ts";
-import { prepareClawHub } from "./clawhub-daily.ts";
 import { withPublisherDatabase } from "./database-publication.ts";
 import { loadEnvFile } from "./models/registry.ts";
 import { removeContent } from "../services/feed/publication.ts";
@@ -26,19 +25,19 @@ export const takedownLimit = 50;
 /** Drafts each scheduled maintenance may recheck regardless of the editorial capacity left. */
 export const maintenanceDrafts = 50;
 
-export type MaintenanceReport = { x: unknown; clawhub: unknown; removed: number; takenDown: string[] };
+export type MaintenanceReport = { x: unknown; removed: number; takenDown: string[] };
 type Dependencies = {
   lock: typeof lockContent; admission: typeof prepareXMaintenanceAdmission; availability: typeof prepareXAvailability;
-  clawhub: typeof prepareClawHub; database: <T>(work: (db: TransactionalDatabase) => Promise<T>) => Promise<T>;
+  database: <T>(work: (db: TransactionalDatabase) => Promise<T>) => Promise<T>;
 };
 
 /** Source maintenance is a safety duty and runs whatever the intake state is: it refreshes
- * the X and ClawHub verifications that every publication requires, and takes down live
+ * the X verifications that every publication requires, and takes down live
  * items whose source post is confirmed gone with a tombstone rather than waiting for the
  * next release. Holds the shared content lock, so it never overlaps a legacy run. */
 export async function runMaintenance(env: NodeJS.ProcessEnv, root = contentRoot, overrides: Partial<Dependencies> = {}): Promise<MaintenanceReport> {
   const io: Dependencies = { lock: lockContent, admission: prepareXMaintenanceAdmission, availability: prepareXAvailability,
-    clawhub: prepareClawHub, database: work => withPublisherDatabase(work, env), ...overrides };
+    database: work => withPublisherDatabase(work, env), ...overrides };
   const unlock = await io.lock(root);
   try {
     // Without the published IDs the recheck counts as growth and the maintenance reserve refuses it.
@@ -59,7 +58,6 @@ export async function runMaintenance(env: NodeJS.ProcessEnv, root = contentRoot,
         return live;
       });
     }
-    const clawhub = await io.clawhub(root);
-    return { x: x.report, clawhub: clawhub.report, removed: removed.length, takenDown };
+    return { x: x.report, removed: removed.length, takenDown };
   } finally { await unlock(); }
 }

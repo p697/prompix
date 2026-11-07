@@ -73,3 +73,9 @@ test("new filter values are validated against the shared vocabularies", () => {
   assert.equal(legacy.facet, "portraits");
   assert.equal("inputs" in legacy, false);
 });
+
+test("the retired web collection answers older apps with an empty web listing", () => {
+  const filters = parseFeedQuery(new URL("https://example.com/v3/feed?collection=web")).filters;
+  assert.equal(filters.collection, undefined);
+  assert.equal(filters.kind, "web");
+});

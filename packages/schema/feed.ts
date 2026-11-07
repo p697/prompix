@@ -86,8 +86,10 @@ export function parseFeedQuery(url: URL): { filters: FeedFilters; limit: number;
     if (!allowed.has(key) || Object.hasOwn(values, key)) throw new Error("Invalid query parameters");
     values[key] = value;
   }
-  // Older apps may still send the retired upload filter; it is accepted and ignored.
+  // Older apps may still send the retired upload filter (ignored) or the retired web collection
+  // (answered as an empty web listing).
   const { limit = "30", cursor, inputs: _, ...raw } = values;
+  if (raw.collection === "web") { delete raw.collection; raw.kind = "web"; }
   if (!/^[1-9][0-9]?$/.test(limit) || Number(limit) > feedPageLimit || (cursor !== undefined && (!cursor || cursor.length > 2048)))
     throw new Error("Invalid pagination parameters");
   if (Object.values(raw).some(value => /[\u0000-\u001f\u007f]/u.test(value))) throw new Error("Invalid filter text");

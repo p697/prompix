@@ -88,9 +88,5 @@
   "video": {
     "tags": [],
     "kind": "video"
-  },
-  "web": {
-    "tags": [],
-    "kind": "web"
   }
 }

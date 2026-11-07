@@ -30,7 +30,7 @@ test("global browse facets and collection pages share definitions and respect vi
   await stagePublication(writer, { schemaVersion: 1, version: "private", prompts: [{ ...prompts[0], title: "Unpublished", localization: undefined }] });
   const browse = await getBrowse(reader, "zh-Hans");
   assert.equal(browse.release, release);
-  assert.equal(browse.collections.length, 10);
+  assert.equal(browse.collections.length, 9);
   assert.equal(browse.modelCount, 54);
   assert.equal(browse.models.length, 50);
   assert.deepEqual(browse.models[0], { name: "Popular model", count: 10 });
