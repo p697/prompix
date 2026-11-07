@@ -24,6 +24,7 @@ import { discoverX } from "./x-discovery.ts";
 import { collectNightlyX, importTrialPosts } from "./x-nightly.ts";
 import { reviewDailyX } from "./review-daily.ts";
 import { duplicateTakedownLimit, laterDuplicates } from "./near-duplicates.ts";
+import { applyPresentationOverrides } from "./presentation-relabel.ts";
 import { isNativeXDraft } from "./x-source.ts";
 import { readAllXIntake as readXIntake } from "./x-thread-intake.ts";
 import { enrichCreators, mergeCreatorCache, mirrorCreatorAvatars, type CreatorCache } from "./creators.ts";
@@ -315,6 +316,14 @@ async function run() {
       complete = enrichment.prompts;
       report.sources.enrichment = enrichment.report;
     }
+    // Labels decided again under the current standard (\`pipeline -- relabel\`) may loosen live ones.
+    const overridden = await applyPresentationOverrides(complete, root);
+    complete = overridden.prompts;
+    if (publishing && overridden.removed.length && overridden.removed.length <= 50) {
+      moderation.removedIDs = [...new Set([...moderation.removedIDs, ...overridden.removed])].sort();
+      await atomic(join(root, "moderation.json"), moderation);
+    }
+    report.sources["presentation-overrides"] = { relabelled: overridden.relabelled, removed: overridden.removed };
     if (publishing) complete = await mirrorCreatorAvatars(complete, async url => {
       const mirrored = await publishAvatar(url, root, mediaMap, upload);
       await atomic(join(root, "media-map.json"), mediaMap);

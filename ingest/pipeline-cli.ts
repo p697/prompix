@@ -8,6 +8,10 @@ import { createProvider, isProviderId, modelEnvironment, providerAvailability, p
 import { ModelProviderError, providerIds, type ModelImage } from "./models/types.ts";
 import { appendEvent, pipelineRoot, pipelineStages, readEvents, snapshot, stageLabels, updateConfig, type PipelineEvent, type PipelineSnapshot, type StageRoute } from "./pipeline-control.ts";
 import { atomic, contentRoot, repo } from "./publication.ts";
+import type { Prompt } from "../packages/schema/catalog.ts";
+import { withPublisherDatabase } from "./database-publication.ts";
+import { routedProvider } from "./model-routes.ts";
+import { relabelPresentation } from "./presentation-relabel.ts";
 import { installWorker, restartWorker, uninstallWorker, workerPlistPath } from "./worker-launchd.ts";
 import { pipelineEnvironment, runMaintenance } from "./worker-maintenance.ts";
 import { collectDailyReport, reportWindowMs, sendDailyReport } from "./daily-report.ts";
@@ -40,6 +44,7 @@ const usage = `用法：npm run pipeline -- <命令> [参数]
   maintenance                            立刻做一次来源维护复查（X、ClawHub），确认已删的来源自动下架
   trial [--replay <试跑编号>] [--day <日期>]  请后台进程按新策略试跑一轮（真实搜索、审核、翻译，不发布）；--replay 用那次搜到的帖子重审，不再搜索；--day 搜日本时间那一整天
   intake [--import-trial <试跑编号,…>] [--translate <次数>]  请后台进程现在就跑一轮采集发布（不占当晚的那一轮）；--import-trial 把这些试跑搜到的帖子一起收录审核，要在试跑后 12 小时内；--translate 这一轮最多调用翻译多少次（补齐存量译文用，默认按每晚的上限）
+  relabel                                按现在的尺度标准，重新判定线上所有标成「擦边」的内容；放宽的立即在下一次发布生效
   report [--since 时间] [--send]          生成日报（默认最近一次 08:30 之前的 24 小时；--since 到现在），--send 发到监控邮箱
 
 环节：${pipelineStages.join(", ")}
@@ -262,6 +267,19 @@ export async function main(argv = process.argv.slice(2)) {
       await atomic(join(root, intakeRequestFile), { at: new Date().toISOString(), by: actor, ...request });
       await appendEvent(root, actor, "intake.requested", { ...request, ...(values.reason ? { reason: values.reason } : {}) });
       console.log("已请求现在跑一轮采集发布；后台进程会在当前任务结束后开始");
+      return;
+    }
+    case "relabel": {
+      const actor = actorOf(values);
+      const env = await pipelineEnvironment();
+      const items = await withPublisherDatabase(async db => (await db.query<{ original: Prompt }>(`select v.original from prompix.state s
+        join prompix.release_entries e on e.release_id = s.active_release join prompix.revisions v on v.id = e.revision_id
+        join prompix.content c on c.id = e.content_id where s.singleton and c.removed_at is null and v.card->>'presentation' = 'suggestive'`)).rows.map(row => row.original), env);
+      const routed = await routedProvider("review", "relabel");
+      const report = await relabelPresentation(items, contentRoot, routed.provider, { effort: routed.effort, record: routed.record,
+        progress: done => process.stderr.write(`\r${done}/${items.length}`) });
+      await appendEvent(root, actor, "relabel.finished", { ...report, ...(values.reason ? { reason: values.reason } : {}) });
+      console.log(values.json ? JSON.stringify(report) : `重新判定 ${report.pending} 条：普通 ${report.general}，擦边 ${report.suggestive}，下架 ${report.explicit}，失败 ${report.failed}；下一次发布生效`);
       return;
     }
     case "trial": {
