@@ -8,3 +8,8 @@ Rejected:
 - Tinting the page from the image picks an unpredictable colour per work.
 - The mirrored extension turns the page into a dark poster, which changes the whole detail design.
 - A progressive blur is barely visible on dark edges.
+
+Follow-up the same day:
+- The owner found a frosted top and a grainy bottom an odd pair, so the hero's top edge now uses the same grain. It is the status bar plus 30 pt, starts at 90% paper and dissolves into the work. The frosted veil remains behind the collapsed title and on the home page.
+- The bottom grain is 60 pt instead of 90 pt.
+- On the device, a grey line flashed at the hero's bottom edge while the detail zoomed open. The hero's height is rarely a whole pixel, and the picture's last row showed through, so solid paper now runs 2 pt past the edge.
