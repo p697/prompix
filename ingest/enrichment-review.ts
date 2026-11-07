@@ -2,7 +2,7 @@ import { z } from "zod";
 import { promptSchema, type Prompt } from "../packages/schema/catalog.ts";
 import {
   allowedModes, englishCardSchema, enrichedPromptIssues, enrichmentConsistencyIssues, facetDefinitions, facetGroups, facetIDs,
-  facetLimits, facetsSchema, generationModes, generationSchema, inputKinds, inputsSchema, modelFamilies, presentationSchema,
+  facetLimits, facetsSchema, generationModes, generationSchema, modelFamilies, presentationSchema,
   presentationValues, rightsSchema, shotsSchema, sourceAuthorRights, variablesSchema, type Palette,
 } from "../packages/schema/enrichment.ts";
 import { completeValidated, type ModelCallSummary } from "./models/call.ts";
@@ -37,7 +37,6 @@ Return one entry per candidate, in input order, with the same id.
 - presentation: ${presentationValues.join(", ")}. Apply this standard:
 ${presentationStandard}
   For text, Skill and website candidates without images, judge the prompt and the output it asks for by the same standard; use unknown only if you genuinely cannot tell. Explain the label in presentationReason with visible or textual evidence only.
-- inputs: media the person must upload before running the prompt (photos, product shots, reference images, video or audio). Text the person types or pastes, documents and links are not inputs. requirement none when no upload is needed; optional when the prompt works without it; required when it depends on an upload (a reference photo, a product shot, a source video). count is how many uploads when the prompt says so, else null. kinds from: ${inputKinds.join(", ")} (face is a person's photo used for identity; style is a style reference; scene is a location or background reference). ownLikenessOnly true when the prompt is meant to be used with the user's own face ("my photo", "keep my face"), false when it takes any person's face, null when no face input.
 - generation: modelFamily from ${modelFamilies.join(", ")} — the model the prompt was written for, from the model label, prompt or source post; other when none is named. modelVersion only when a version is stated (for example "2.5", "Pro", "v7"), else null. mode must be one of the candidate's allowedModes: i2i when an uploaded image is transformed or used as reference, else t2i; i2v when a video starts from an uploaded image, v2v when it transforms an uploaded video, else t2v. outputAspect "W:H" only when the prompt states it, else null. durationSeconds and hasAudio only when the prompt states them, else null.
 - variables: placeholders the person is meant to replace, such as [a feeling], {product}, <name> or ALL-CAPS slots. token is copied character for character from the prompt, brackets included. name is a short label in Chinese (zh) and English (en). default is the example value the prompt already uses, if any. hint is a short bilingual explanation, or null. Return an empty list when the prompt has no such slots; never invent slots for ordinary words.
 - facets: choose only ids from the lists below. useCase up to ${facetLimits.useCase} (what people would use it for), style up to ${facetLimits.style} (the look or tone), subject up to ${facetLimits.subject} (what is depicted or discussed). Prefer fewer, accurate ids over many weak ones; an empty list is allowed when nothing fits. If an important aspect has no fitting id, name it in vocabularyGaps (English, a few words each) instead of forcing one.
@@ -65,8 +64,6 @@ export const enrichmentOutputJSONSchema: JsonSchema = object({
     sourceLanguage: string,
     presentation: enumOf(presentationValues),
     presentationReason: string,
-    inputs: object({ requirement: enumOf(["none", "optional", "required"]), count: nullable({ type: "integer" }),
-      kinds: array(enumOf(inputKinds)), ownLikenessOnly: nullable({ type: "boolean" }) }),
     generation: object({ modelFamily: enumOf(modelFamilies), modelVersion: nullable(string), mode: enumOf(generationModes),
       outputAspect: nullable(string), durationSeconds: nullable({ type: "number" }), hasAudio: nullable({ type: "boolean" }) }),
     variables: array(object({ token: string, name: object({ zh: string, en: string }), default: nullable(string),
@@ -94,7 +91,6 @@ const itemOutputSchema = z.object({
   sourceLanguage: z.string().regex(/^([a-z]{2,3}|und)$/),
   presentation: presentationSchema,
   presentationReason: z.string().trim().min(1).max(600),
-  inputs: inputsSchema,
   generation: generationSchema,
   variables: variablesSchema,
   facets: facetsSchema,
@@ -106,7 +102,7 @@ const itemOutputSchema = z.object({
 }).strict();
 
 export type EnrichmentFields = {
-  inputs: z.infer<typeof inputsSchema>; generation: z.infer<typeof generationSchema>;
+  generation: z.infer<typeof generationSchema>;
   variables: z.infer<typeof variablesSchema>; facets: z.infer<typeof facetsSchema>;
   en: z.infer<typeof englishCardSchema>; shots?: z.infer<typeof shotsSchema>;
 };
@@ -171,19 +167,12 @@ export function packEnrichmentBatches(candidates: readonly EnrichmentCandidate[]
   return batches;
 }
 
-/** Repairs that cannot change meaning: duplicate kinds collapse, and optional details that
- * contradict their own field (an own-likeness flag without a face, a count beyond the limit,
- * a ratio that is not W:H) are dropped. Everything else still fails the item. */
+/** Repairs that cannot change meaning: a ratio that is not W:H is dropped, and a retired
+ * upload field a model still volunteers is ignored. Everything else still fails the item. */
 function normalizeOutput(value: unknown): unknown {
   if (!value || typeof value !== "object") return value;
-  const output = structuredClone(value) as { inputs?: Record<string, unknown>; generation?: Record<string, unknown> };
-  const inputs = output.inputs;
-  if (inputs && Array.isArray(inputs.kinds)) {
-    const kinds = [...new Set(inputs.kinds as unknown[])];
-    inputs.kinds = kinds;
-    if (!kinds.includes("face")) delete inputs.ownLikenessOnly;
-    if (inputs.requirement === "none" || typeof inputs.count !== "number" || inputs.count > 8) delete inputs.count;
-  }
+  const output = structuredClone(value) as { inputs?: unknown; generation?: Record<string, unknown> };
+  delete output.inputs;
   if (output.generation && typeof output.generation.outputAspect === "string" && !/^[1-9]\d{0,2}:[1-9]\d{0,2}$/.test(output.generation.outputAspect))
     delete output.generation.outputAspect;
   return output;
@@ -205,7 +194,7 @@ export function validateEnrichmentItem(candidate: EnrichmentCandidate, raw: unkn
     shots = checked.data;
   }
   const generation = { ...value.generation, ...labelledModel(candidate.item.model) };
-  const fields: EnrichmentFields = { inputs: value.inputs, generation, variables: value.variables, facets: value.facets, en, ...(shots ? { shots } : {}) };
+  const fields: EnrichmentFields = { generation, variables: value.variables, facets: value.facets, en, ...(shots ? { shots } : {}) };
   const issues = enrichmentConsistencyIssues({ ...candidate.item, ...fields });
   if (issues.length) return { id, ok: false, error: issues[0].slice(0, 500) };
   return { id, ok: true, fields, evidence: { sourceLanguage: value.sourceLanguage, presentation: value.presentation, presentationReason: value.presentationReason, vocabularyGaps: value.vocabularyGaps, minors: value.minors, minorsReason: value.minorsReason } };
@@ -262,12 +251,6 @@ export function rightsFor(item: Prompt): z.infer<typeof rightsSchema> {
   return { license, basis: "license", imageExport: license === "CC0-1.0" && !!(item.media?.imageURL || item.media?.image) };
 }
 
-/** A face upload always carries the own-likeness hint; when the review cannot tell, the app
- * asks for the user's own photo. */
-export function withLikenessDefault<T extends { kinds: readonly string[]; ownLikenessOnly?: boolean }>(inputs: T): T {
-  return inputs.kinds.includes("face") && inputs.ownLikenessOnly === undefined ? { ...inputs, ownLikenessOnly: true } : inputs;
-}
-
 export type PresentationPolicy = "label" | "stricter-only";
 const restrictiveness = { general: 0, suggestive: 1, explicit: 2 } as const;
 
@@ -291,10 +274,11 @@ export function applyEnrichment(item: Prompt, outcome: Extract<EnrichmentOutcome
   };
   // Items collected before localization existed get an empty one, so the English card has a home.
   const localization = item.localization ?? { sourceLanguage: evidence.sourceLanguage, sourceFingerprint: translationFingerprint(item), translations: {} };
+  const { inputs: _retired, ...rest } = item;
   const enriched = {
-    ...item,
+    ...rest,
     presentation,
-    inputs: withLikenessDefault(fields.inputs), generation: generationSchema.parse(generation),
+    generation: generationSchema.parse(generation),
     variables: fields.variables, facets: fields.facets,
     ...(context.palette ? { palette: context.palette } : {}),
     ...(fields.shots ? { shots: fields.shots } : {}),

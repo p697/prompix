@@ -4,7 +4,7 @@ import { promptSchema, type Prompt } from "../packages/schema/catalog.ts";
 import { enrichedPromptIssues, facetIDs, paletteSchema } from "../packages/schema/enrichment.ts";
 import {
   applyEnrichment, aspectLabel, enrichmentOutputJSONSchema, enrichmentRequest, labelledModel, packEnrichmentBatches,
-  publicationBlocker, reviewEnrichmentBatch, withLikenessDefault, rightsFor, validateEnrichmentItem, type EnrichmentCandidate,
+  publicationBlocker, reviewEnrichmentBatch, rightsFor, validateEnrichmentItem, type EnrichmentCandidate,
 } from "./enrichment-review.ts";
 import type { ModelCallSummary } from "./models/call.ts";
 import { ModelProviderError, type ModelProvider, type ModelRequest } from "./models/types.ts";
@@ -29,7 +29,6 @@ const candidate = (value = item(), images = 1): EnrichmentCandidate =>
 function output(id = "x-post-1", overrides: Record<string, unknown> = {}) {
   return {
     id, sourceLanguage: "en", presentation: "general", presentationReason: "An ordinary clothed portrait at night.",
-    inputs: { requirement: "required", count: 1, kinds: ["face"], ownLikenessOnly: true },
     generation: { modelFamily: "other", modelVersion: null, mode: "i2i", outputAspect: "9:16", durationSeconds: null, hasAudio: null },
     variables: [{ token: "[a feeling]", name: { zh: "情绪", en: "Feeling" }, default: null, hint: { zh: "想表达的情绪", en: "The mood to convey" } }],
     facets: { useCase: ["portraits"], style: ["cinematic"], subject: ["person", "city"] },
@@ -83,12 +82,12 @@ test("the model cannot add facets beyond the per-group limit or invent variable 
   assert.match(!invented.ok ? invented.error : "", /not in the prompt/);
 });
 
-test("harmless contradictions are repaired", () => {
+test("harmless contradictions are repaired and a volunteered upload field is ignored", () => {
   const repaired = validateEnrichmentItem(candidate(), output("x-post-1", {
     inputs: { requirement: "required", count: 12, kinds: ["product", "product"], ownLikenessOnly: true },
     generation: { modelFamily: "other", modelVersion: null, mode: "i2i", outputAspect: "2.39:1", durationSeconds: null, hasAudio: null } }));
   assert.ok(repaired.ok, !repaired.ok ? repaired.error : "");
-  assert.deepEqual(repaired.fields.inputs, { requirement: "required", kinds: ["product"] });
+  assert.equal("inputs" in repaired.fields, false);
   assert.equal(repaired.fields.generation.outputAspect, undefined);
 });
 
@@ -107,11 +106,9 @@ test("unsafe or undecidable content involving minors is excluded automatically",
   assert.equal(validateEnrichmentItem(candidate(), output("x-post-1", { minors: "maybe" })).ok, false);
 });
 
-test("modes must fit the kind and reference modes need an input", () => {
+test("modes must fit the kind", () => {
   const wrongMode = validateEnrichmentItem(candidate(), output("x-post-1", { generation: { modelFamily: "other", modelVersion: null, mode: "t2v", outputAspect: null, durationSeconds: null, hasAudio: null } }));
   assert.equal(wrongMode.ok, false);
-  const noInput = validateEnrichmentItem(candidate(), output("x-post-1", { inputs: { requirement: "none", count: null, kinds: [], ownLikenessOnly: null } }));
-  assert.equal(noInput.ok, false);
 });
 
 test("out-of-order or missing items reject the whole call", async () => {
@@ -160,7 +157,7 @@ test("multi-shot prompts keep numbered shots; one shot is not a sequence", () =>
   const video = item({ kind: "video", model: "Seedance 2.5", prompt: "Shot 1: a door opens. Shot 2: rain falls." });
   const generation = { modelFamily: "seedance", modelVersion: null, mode: "t2v", outputAspect: null, durationSeconds: null, hasAudio: null };
   const shots = [{ index: 1, startSec: 0, endSec: 3, text: "a door opens" }, { index: 2, startSec: 3, endSec: 6, text: "rain falls" }];
-  const base = { inputs: { requirement: "none", count: null, kinds: [], ownLikenessOnly: null }, variables: [], generation };
+  const base = { variables: [], generation };
   const outcome = validateEnrichmentItem(candidate(video), output("x-post-1", { ...base, shots }));
   assert.ok(outcome.ok, !outcome.ok ? outcome.error : "");
   const enriched = applyEnrichment(video, outcome, { policy: "label", video: { durationSeconds: 6.04, hasAudio: true },
@@ -199,12 +196,9 @@ test("palettes are deterministic, ordered and well-formed", () => {
   assert.throws(() => paletteFromPixels(new Uint8Array(4)));
 });
 
-test("a face upload always carries the own-likeness hint", () => {
-  assert.deepEqual(withLikenessDefault({ requirement: "required", kinds: ["face"] }), { requirement: "required", kinds: ["face"], ownLikenessOnly: true });
-  assert.deepEqual(withLikenessDefault({ requirement: "required", kinds: ["face"], ownLikenessOnly: false }).ownLikenessOnly, false, "an explicit judgment stands");
-  const product = { requirement: "required", kinds: ["product"] };
-  assert.equal(withLikenessDefault(product), product);
-  const outcome = validateEnrichmentItem(candidate(), output("x-post-1", { inputs: { requirement: "required", count: 1, kinds: ["face"], ownLikenessOnly: null } }));
+test("enrichment drops the retired upload field from older items", () => {
+  const outcome = validateEnrichmentItem(candidate(), output());
   assert.ok(outcome.ok);
-  assert.equal(applyEnrichment(item(), outcome, { palette: paletteFromPixels(new Uint8Array([1, 2, 3])), policy: "label" }).inputs?.ownLikenessOnly, true);
+  const older = item({ inputs: { requirement: "required", count: 1, kinds: ["face"], ownLikenessOnly: true } });
+  assert.equal(applyEnrichment(older, outcome, { palette: paletteFromPixels(new Uint8Array([1, 2, 3])), policy: "label" }).inputs, undefined);
 });

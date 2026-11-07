@@ -38,7 +38,6 @@ export const feedFiltersSchema = z.object({
   model: z.string().min(1).max(200).optional(),
   facet: z.enum(allFacetIDs).optional(),
   mode: z.enum(generationModes).optional(),
-  inputs: inputsSchema.shape.requirement.optional(),
   modelFamily: z.enum(modelFamilies).optional(),
   q: z.string().trim().max(120).default(""),
 }).strict();
@@ -58,14 +57,15 @@ export const feedCardSchema = z.object({
   cover: promptSchema.shape.cover,
   language: feedLocale,
   availableLanguages: z.array(z.enum(localizationLanguages)).max(9),
-  facets: facetsSchema.optional(), generation: generationSchema.optional(), inputs: inputsSchema.optional(),
+  facets: facetsSchema.optional(), generation: generationSchema.optional(),
   palette: paletteSchema.optional(), rights: rightsSchema.optional(),
 }).strict();
 export type FeedCard = z.infer<typeof feedCardSchema>;
-/** Stored original cards also carry the English card text, served when English has no full translation. */
-export const storedCardSchema = feedCardSchema.extend({ en: englishCardSchema.optional() }).strict();
+/** Stored original cards also carry the English card text, served when English has no full translation.
+ * Cards stored before 2026-11-07 may still hold `inputs`, which is never served. */
+export const storedCardSchema = feedCardSchema.extend({ en: englishCardSchema.optional(), inputs: inputsSchema.optional() }).strict();
 export type StoredCard = z.infer<typeof storedCardSchema>;
-export function publicCard({ en, ...card }: StoredCard, locale: FeedLocale): FeedCard {
+export function publicCard({ en, inputs: _, ...card }: StoredCard, locale: FeedLocale): FeedCard {
   return locale === "en" && card.language === "original" && en ? { ...card, ...en } : card;
 }
 export const feedPageSchema = z.object({
@@ -86,7 +86,8 @@ export function parseFeedQuery(url: URL): { filters: FeedFilters; limit: number;
     if (!allowed.has(key) || Object.hasOwn(values, key)) throw new Error("Invalid query parameters");
     values[key] = value;
   }
-  const { limit = "30", cursor, ...raw } = values;
+  // Older apps may still send the retired upload filter; it is accepted and ignored.
+  const { limit = "30", cursor, inputs: _, ...raw } = values;
   if (!/^[1-9][0-9]?$/.test(limit) || Number(limit) > feedPageLimit || (cursor !== undefined && (!cursor || cursor.length > 2048)))
     throw new Error("Invalid pagination parameters");
   if (Object.values(raw).some(value => /[\u0000-\u001f\u007f]/u.test(value))) throw new Error("Invalid filter text");

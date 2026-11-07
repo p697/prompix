@@ -20,7 +20,6 @@ const item = (id: string, overrides: Partial<Prompt> = {}): Prompt => promptSche
   presentation: "general", ...overrides });
 const output = (id: string, overrides: Record<string, unknown> = {}) => ({
   id, sourceLanguage: "en", presentation: "general", presentationReason: "An ordinary clothed portrait at night.",
-  inputs: { requirement: "required", count: 1, kinds: ["face"], ownLikenessOnly: true },
   generation: { modelFamily: "other", modelVersion: null, mode: "i2i", outputAspect: "9:16", durationSeconds: null, hasAudio: null },
   variables: [{ token: "[a feeling]", name: { zh: "情绪", en: "Feeling" }, default: null, hint: { zh: "想表达的情绪", en: "The mood to convey" } }],
   facets: { useCase: ["portraits"], style: ["cinematic"], subject: ["person", "city"] },
@@ -92,7 +91,7 @@ test("a refusal excludes for good, a dry run never calls a model, and edited con
 test("a live item rebuilt from its source takes its 2.0 fields back, and edited live content keeps the live version until reviewed", async t => {
   const root = await fixture(t);
   const [reviewed] = (await enrichNewItems([item("x-post-9")], new Map(), root, { prepare, provider: provider(ids => ({ items: ids.map(id => output(id)) })) })).prompts;
-  const { facets: _f, generation: _g, inputs: _i, variables: _v, rights: _r, palette: _p, localization: _l, ...rebuilt } = reviewed;
+  const { facets: _f, generation: _g, variables: _v, rights: _r, palette: _p, localization: _l, ...rebuilt } = reviewed;
   const live = new Map([[reviewed.id, reviewed]]), calls: string[][] = [];
   const kept = await enrichNewItems([rebuilt as Prompt], live, root);
   assert.deepEqual(kept.prompts[0], reviewed);
