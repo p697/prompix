@@ -300,48 +300,81 @@ private struct PaperScreen: ViewModifier {
 
 struct KindPicker: View {
     @Binding var selection: PromptKind?
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Namespace private var selectionLine
-    @State private var picks = 0
     private var onSelect: ((PromptKind?) -> Void)?
     init(selection: Binding<PromptKind?>, onSelect: ((PromptKind?) -> Void)? = nil) {
         _selection = selection
         self.onSelect = onSelect
     }
     var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 2) {
-                choice(nil, title: String(localized: "全部"))
-                // The work people come for leads: images, then video and text.
-                ForEach([PromptKind.image, .video, .text]) { choice($0, title: $0.title) }
-            }.padding(.horizontal, 16)
+        // The work people come for leads: images, then video and text.
+        ChoiceBar(choices: [ChoiceBar.Choice(id: nil, title: String(localized: "全部"), identifier: "kind-all")]
+                  + [PromptKind.image, .video, .text].map { ChoiceBar.Choice(id: $0, title: $0.title, identifier: "kind-\($0.rawValue)") },
+                  selection: selection, identifier: "kindPicker") { kind in
+            if let onSelect { onSelect(kind) } else { selection = kind }
         }
-        .accessibilityIdentifier("kindPicker")
+    }
+}
+
+/// A scrolling row of choices: the selected one is a solid capsule, the others plain text.
+struct ChoiceBar<ID: Hashable>: View {
+    struct Choice: Identifiable {
+        let id: ID?
+        let title: String
+        let identifier: String
+    }
+    let choices: [Choice]
+    let selection: ID?
+    let identifier: String
+    var more: (() -> Void)? = nil
+    let select: (ID?) -> Void
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Namespace private var selectionLine
+    @State private var picks = 0
+    var body: some View {
+        ScrollViewReader { proxy in
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 2) {
+                    ForEach(choices) { choice in
+                        let selected = selection == choice.id
+                        Button {
+                            guard !selected else { return }
+                            picks &+= 1
+                            select(choice.id)
+                        } label: {
+                            label(choice.title, selected: selected)
+                        }.buttonStyle(.plain)
+                            .accessibilityAddTraits(selected ? .isSelected : [])
+                            .accessibilityIdentifier(choice.identifier)
+                            .id(choice.identifier)
+                    }
+                    if let more {
+                        Button(action: more) {
+                            HStack(spacing: 4) {
+                                Text(String(localized: "更多")).font(.subheadline)
+                                PrompixIcon.chevronDown.image(size: 12)
+                            }.foregroundStyle(Palette.muted)
+                                .padding(.horizontal, 14).frame(minWidth: 44, minHeight: 48).contentShape(Rectangle())
+                        }.buttonStyle(.plain).accessibilityIdentifier("moreChoices")
+                    }
+                }.padding(.horizontal, 16)
+            }
+            .accessibilityIdentifier(identifier)
+            // A choice made elsewhere, such as from the full list, scrolls into view.
+            .onChange(of: selection) { _, value in
+                guard let choice = choices.first(where: { $0.id == value }) else { return }
+                withAnimation(reduceMotion ? nil : .snappy(duration: 0.3)) { proxy.scrollTo(choice.identifier, anchor: .center) }
+            }
+        }
         .sensoryFeedback(.selection, trigger: picks)
         .animation(reduceMotion ? nil : .snappy(duration: 0.24), value: selection)
     }
-    private func select(_ kind: PromptKind?) {
-        guard selection != kind else { return }
-        picks &+= 1
-        if let onSelect { onSelect(kind) }
-        else { selection = kind }
-    }
-    private func choice(_ kind: PromptKind?, title: String) -> some View {
-        let selected = selection == kind
-        return Button { select(kind) } label: {
-            choiceLabel(title, selected: selected)
-        }.buttonStyle(.plain)
-            .accessibilityAddTraits(selected ? .isSelected : [])
-            .accessibilityIdentifier("kind-\(kind?.rawValue ?? "all")")
-    }
-    // The selected kind is a solid capsule; the others are plain text.
-    private func choiceLabel(_ title: String, selected: Bool) -> some View {
+    private func label(_ title: String, selected: Bool) -> some View {
         Text(title).font(.subheadline.weight(selected ? .semibold : .regular))
             .foregroundStyle(selected ? Palette.paper : Palette.muted)
             .padding(.horizontal, 14).frame(minHeight: 34)
             .background {
                 if selected {
-                    Capsule().fill(Palette.accent).matchedGeometryEffect(id: "kind-selection", in: selectionLine)
+                    Capsule().fill(Palette.accent).matchedGeometryEffect(id: "choice-selection", in: selectionLine)
                 }
             }
             .frame(minWidth: 44, minHeight: 48).contentShape(Rectangle())

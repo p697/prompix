@@ -197,7 +197,7 @@ import UIKit
         app.launchArguments = ["-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN"]
         app.launchPrompix()
         for kind in ["kind-image", "kind-video"] {
-            XCTAssertTrue(app.buttons[kind].waitForExistence(timeout: 15)); app.buttons[kind].tap()
+            XCTAssertTrue(app.buttons["discoveryKind"].waitForExistence(timeout: 15)); app.chooseKind(kind)
             sleep(4) // Let the served page replace the cached one before choosing a card.
             let card = app.scrollViews["discoveryScroll"].buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'prompt-'")).firstMatch
             XCTAssertTrue(card.waitForExistence(timeout: 15)); card.tap()
@@ -219,7 +219,7 @@ import UIKit
         app.launchArguments = ["-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN"]
         app.launchPrompix()
         for kind in ["kind-image", "kind-video", "kind-all"] {
-            XCTAssertTrue(app.buttons[kind].waitForExistence(timeout: 15)); app.buttons[kind].tap()
+            XCTAssertTrue(app.buttons["discoveryKind"].waitForExistence(timeout: 15)); app.chooseKind(kind)
             let card = app.scrollViews["discoveryScroll"].buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'prompt-'")).firstMatch
             XCTAssertTrue(card.waitForExistence(timeout: 15)); card.tap()
             XCTAssertTrue(app.buttons["copyPrompt"].waitForExistence(timeout: 15))
@@ -228,7 +228,7 @@ import UIKit
             app.buttons["closePromptDetail"].tap()
         }
     }
-    /// Live: the served use, model-family and reference filters narrow the feed.
+    /// Live: the use bar and the model-family filter narrow the feed.
     func testServedFiltersNarrowTheFeed() throws {
         guard ProcessInfo.processInfo.environment["PROMPIX_LIVE_UI"] == "1" else { throw XCTSkip("Explicit live service check only") }
         app.terminate()
@@ -236,11 +236,12 @@ import UIKit
         app.launchPrompix()
         let filters = app.buttons["discoveryFilters"]
         XCTAssertTrue(filters.waitForExistence(timeout: 15)); sleep(3)
+        let portraits = app.buttons["use-portraits"]
+        XCTAssertTrue(portraits.waitForExistence(timeout: 5)); portraits.tap()
+        XCTAssertTrue(portraits.isSelected)
         filters.tap()
-        XCTAssertTrue(app.buttons["filterUse"].waitForExistence(timeout: 5))
         capture("filters-01-menu")
-        app.buttons["filterUse"].tap()
-        XCTAssertTrue(app.buttons["人像写真"].waitForExistence(timeout: 5)); app.buttons["人像写真"].tap()
+        XCTAssertTrue(app.buttons["Midjourney"].waitForExistence(timeout: 5)); app.buttons["Midjourney"].tap()
         XCTAssertEqual(filters.value as? String, "已筛选")
         XCTAssertFalse(app.staticTexts["筛选结果"].exists, "A filtered feed keeps the board's context row")
         let card = app.scrollViews["discoveryScroll"].buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'prompt-'")).firstMatch

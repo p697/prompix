@@ -49,19 +49,19 @@ import UIKit
         measure(metrics: [XCTApplicationLaunchMetric(waitUntilResponsive: true)], options: options) {
             app.terminate()
             app.launchPrompix()
-            XCTAssertTrue(app.buttons["kind-text"].waitForExistence(timeout: 10))
+            XCTAssertTrue(app.buttons["discoveryKind"].waitForExistence(timeout: 10))
         }
     }
 
     func testScrollingResourcePerformance() {
-        XCTAssertTrue(app.buttons["kind-text"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["discoveryKind"].waitForExistence(timeout: 10))
         let options = XCTMeasureOptions()
         options.iterationCount = 3
         measure(metrics: [XCTMemoryMetric(application: app), XCTCPUMetric(application: app)], options: options) {
             for _ in 0..<6 { app.swipeUp() }
             for _ in 0..<6 { app.swipeDown() }
         }
-        XCTAssertTrue(app.buttons["kind-text"].exists)
+        XCTAssertTrue(app.buttons["discoveryKind"].exists)
         capture("air-scroll-after-measurement")
     }
 
@@ -212,13 +212,14 @@ import UIKit
         try focus("creator update action") { $0.contains("检查内容更新") && $0.contains("按钮") }
         try focus("creator directory back", backwards: true) { $0.contains("返回") && $0.contains("按钮") }
         activate(app.navigationBars.buttons.element(boundBy: 0))
-        try require(app.buttons["kind-text"].waitForExistence(timeout: 5), "Creator-directory Back must restore discovery")
-        app.buttons["kind-text"].tap()
-        let textFilterSpeech = try voiceOver.currentSpeech().utterance
-        speech.append("text filter (targeted exploration): \(textFilterSpeech)")
-        try require(textFilterSpeech.contains("文本") && textFilterSpeech.contains("按钮"), "The explored filter must announce Text")
+        try require(app.buttons["discoveryKind"].waitForExistence(timeout: 5), "Creator-directory Back must restore discovery")
+        app.buttons["discoveryKind"].tap()
+        let kindSpeech = try voiceOver.currentSpeech().utterance
+        speech.append("kind menu (targeted exploration): \(kindSpeech)")
+        try require(kindSpeech.contains("类型") && kindSpeech.contains("按钮"), "The explored menu must announce Kind")
+        activate(app.buttons["discoveryKind"])
         activate(app.buttons["kind-text"])
-        try require(app.buttons["kind-text"].isSelected, "The spoken Text filter must activate")
+        try require(app.isKind("kind-text"), "The spoken Text kind must activate")
         try focus("card") { $0.contains("抽一张塔罗") && !$0.contains("收藏") }
         activate(app.buttons["prompt-gentle-tarot"])
         try require(app.buttons["copyPrompt"].waitForExistence(timeout: 5), "Spoken card must open detail")
@@ -276,7 +277,7 @@ import UIKit
         }
         try focus("detail back", backwards: true) { $0.contains("返回") && $0.contains("按钮") }
         activate(app.navigationBars.buttons.element(boundBy: 0))
-        try require(app.buttons["kind-text"].waitForExistence(timeout: 5), "Back must reach discovery")
+        try require(app.buttons["discoveryKind"].waitForExistence(timeout: 5), "Back must reach discovery")
         // Explore the native tab directly rather than rereading the entire feed.
         app.tabBars.buttons["收藏"].tap()
         let savedTabSpeech = try voiceOver.currentSpeech().utterance
@@ -307,7 +308,7 @@ import UIKit
     }
 
     private func exerciseLongDraft(requireVisibleKeyboard: Bool) throws {
-        app.buttons["kind-text"].tap()
+        app.chooseKind("kind-text")
         app.buttons["prompt-gentle-tarot"].tap()
         app.buttons["编辑后使用"].tap()
         let editor = app.textViews["promptEditor"]
@@ -353,7 +354,7 @@ import UIKit
         app.buttons["完成"].tap()
         app.coordinate(withNormalizedOffset: CGVector(dx: 0.01, dy: 0.5))
             .press(forDuration: 0.1, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)))
-        XCTAssertTrue(app.buttons["kind-text"].waitForExistence(timeout: 5), "Native edge return must reach discovery")
+        XCTAssertTrue(app.buttons["discoveryKind"].waitForExistence(timeout: 5), "Native edge return must reach discovery")
         // Restore this simulator-only draft so later VoiceOver traversal remains concise.
         app.buttons["prompt-gentle-tarot"].tap()
         app.buttons["编辑后使用"].tap()
@@ -372,7 +373,7 @@ import UIKit
     }
 
     func testImagePreviewDragDismissAndZoomProtection() {
-        app.buttons["kind-image"].tap()
+        app.chooseKind("kind-image")
         app.buttons["prompt-paper-forms"].tap()
         let preview = app.buttons["previewButton"]
         XCTAssertTrue(preview.waitForExistence(timeout: 5))
@@ -422,7 +423,7 @@ import UIKit
         guard UIAccessibility.isReduceMotionEnabled else { throw XCTSkip("Run explicitly with the simulator Reduce Motion setting enabled.") }
         let state = XCTAttachment(string: "UIAccessibility.isReduceMotionEnabled = true")
         state.name = "Reduced Motion runtime state"; state.lifetime = .keepAlways; add(state)
-        app.buttons["kind-image"].tap()
+        app.chooseKind("kind-image")
         app.buttons["prompt-paper-forms"].tap()
         app.buttons["previewButton"].tap()
         let image = app.descendants(matching: .any)["loadedImage-0"]
@@ -451,13 +452,13 @@ import UIKit
 
     func testAccessibilityAcrossMainScreens() throws {
         continueAfterFailure = true
-        XCTAssertTrue(app.buttons["kind-text"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["discoveryKind"].waitForExistence(timeout: 10))
         try auditScreen("discovery")
         // XCTest can expose automation-only descendants of hidden artwork.
         // Gate the native navigation label here; inspect reading order separately.
         XCTAssertEqual(app.buttons.matching(identifier: "prompt-gentle-tarot").count, 1)
         XCTAssertEqual(app.buttons["prompt-gentle-tarot"].label, "抽一张塔罗，给今天一点新视角")
-        app.buttons["kind-text"].tap()
+        app.chooseKind("kind-text")
         app.buttons["prompt-gentle-tarot"].tap()
         try auditScreen("text-detail")
         app.expandPromptInformation()
@@ -522,10 +523,10 @@ import UIKit
 
     func testAdaptiveBrowsingAndEditing() throws {
         defer { XCUIDevice.shared.orientation = .portrait }
-        XCTAssertTrue(app.buttons["kind-text"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["discoveryKind"].waitForExistence(timeout: 10))
         capture("20-adaptive-discovery")
         try app.performAccessibilityAudit(for: [.hitRegion, .sufficientElementDescription])
-        app.buttons["kind-text"].tap()
+        app.chooseKind("kind-text")
         let card = app.buttons["prompt-gentle-tarot"]
         for _ in 0..<5 { if card.isHittable { break }; app.swipeUp() }
         XCTAssertTrue(card.isHittable); card.tap()
@@ -556,9 +557,9 @@ import UIKit
         XCUIDevice.shared.orientation = .portrait
     }
     func testFourKindsCopyEditSaveAndSearch() {
-        XCTAssertTrue(app.buttons["kind-text"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["discoveryKind"].waitForExistence(timeout: 10))
         capture("01-discover")
-        app.buttons["kind-text"].tap()
+        app.chooseKind("kind-text")
         app.buttons["prompt-gentle-tarot"].tap()
         XCTAssertTrue(app.buttons["copyPrompt"].waitForExistence(timeout: 5))
         capture("02-text-detail")
@@ -588,7 +589,7 @@ import UIKit
         capture("05-search")
     }
     func testOriginalImageExamplesWorkOffline() {
-        app.buttons["kind-image"].tap()
+        app.chooseKind("kind-image")
         for id in ["paper-forms", "object-poster", "quiet-book", "color-memory"] {
             let card = app.buttons["prompt-\(id)"]
             for _ in 0..<6 { if card.isHittable { break }; app.swipeUp() }
@@ -605,7 +606,7 @@ import UIKit
     }
 
     func testImageAndCollections() throws {
-        app.buttons["kind-image"].tap()
+        app.chooseKind("kind-image")
         app.buttons["prompt-summer-citrus"].tap()
         app.buttons["previewButton"].tap()
         XCTAssertTrue(app.buttons["完成"].waitForExistence(timeout: 5))
@@ -616,7 +617,7 @@ import UIKit
         capture("09-collections")
     }
     func testFirstVideoUpdateExplainsOfflineAvailabilityAndReturnsToIdeas() throws {
-        app.buttons["kind-video"].tap()
+        app.chooseKind("kind-video")
         XCTAssertTrue(app.staticTexts["视频内容需要联网更新"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["loadVideoExamples"].isHittable)
         XCTAssertFalse(app.buttons["prompt-slow-road"].exists)
@@ -628,7 +629,7 @@ import UIKit
         XCTAssertFalse(app.buttons["loadVideoExamples"].exists)
     }
     func testEditedDraftPersistsAcrossRelaunch() {
-        app.buttons["kind-text"].tap()
+        app.chooseKind("kind-text")
         app.buttons["prompt-gentle-tarot"].tap()
         app.buttons["编辑后使用"].tap()
         let editor = app.textViews["promptEditor"]
@@ -637,7 +638,7 @@ import UIKit
         editor.typeText(" My personal intention.")
         app.buttons["完成"].tap()
         app.terminate(); app.launchPrompix()
-        app.buttons["kind-text"].tap()
+        app.chooseKind("kind-text")
         app.buttons["prompt-gentle-tarot"].tap()
         app.buttons["编辑后使用"].tap()
         XCTAssertTrue(editor.waitForExistence(timeout: 5))
@@ -645,7 +646,7 @@ import UIKit
         capture("13-persistent-draft")
     }
     func testEditorialTextDiscoveryAndDetail() {
-        app.buttons["kind-text"].tap()
+        app.chooseKind("kind-text")
         let card = app.buttons["prompt-daily-side-quest"]
         for _ in 0..<8 { if card.isHittable { break }; app.swipeUp() }
         XCTAssertTrue(card.isHittable)
@@ -665,7 +666,7 @@ import UIKit
         XCTAssertTrue(app.tabBars.buttons["Collections"].exists)
         XCTAssertTrue(app.tabBars.buttons["Saved"].exists)
         capture("17-english-discovery")
-        app.buttons["kind-text"].tap()
+        app.chooseKind("kind-text")
         app.buttons["prompt-gentle-tarot"].tap()
         XCTAssertEqual(app.buttons["copyPrompt"].label, "Copy prompt")
         app.buttons["Edit prompt"].tap()
@@ -725,7 +726,7 @@ import UIKit
         capture("11-live-image")
         app.buttons["完成"].tap()
         app.goBackInPrompix()
-        app.buttons["kind-video"].tap()
+        app.chooseKind("kind-video")
         let videoCard = app.buttons.containing(NSPredicate(format: "identifier BEGINSWITH %@", "prompt-youmind-seedance-")).firstMatch
         XCTAssertTrue(videoCard.waitForExistence(timeout: 10)); videoCard.tap()
         app.buttons["previewButton"].tap()
@@ -736,7 +737,7 @@ import UIKit
     }
 
     func testShareCancellationKeepsDetailUsable() throws {
-        app.buttons["kind-text"].tap()
+        app.chooseKind("kind-text")
         app.buttons["prompt-gentle-tarot"].tap()
         app.buttons["sharePrompt"].tap()
         XCTAssertTrue(app.otherElements["ActivityListView"].waitForExistence(timeout: 5))
@@ -757,7 +758,7 @@ import UIKit
     }
 
     func testCopiedPromptCanOpenExternalToolAndReturn() throws {
-        app.buttons["kind-text"].tap()
+        app.chooseKind("kind-text")
         app.buttons["prompt-gentle-tarot"].tap()
         app.buttons["copyPrompt"].tap()
         XCTAssertTrue(app.buttons["copyPrompt"].label.contains("已复制"))

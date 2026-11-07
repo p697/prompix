@@ -14,6 +14,12 @@ enum FacetCatalog {
         guard let value = names[id] else { return nil }
         return Locale.preferredLanguages.first?.hasPrefix("zh") == true ? value.zh : value.en
     }
+    /// The short name on the home bar: two to four characters in Chinese, about a word elsewhere.
+    static func shortName(_ id: String) -> String? {
+        let key = "use.\(id)"
+        let value = Bundle.main.localizedString(forKey: key, value: nil, table: nil)
+        return value == key ? name(id) : value
+    }
     /// Model families as people name them. "other" is mostly unnamed models, so it is never offered.
     static let modelFamilies: [String: String] = [
         "gpt-image": "GPT Image", "nano-banana": "Nano Banana", "midjourney": "Midjourney", "seedance": "Seedance",

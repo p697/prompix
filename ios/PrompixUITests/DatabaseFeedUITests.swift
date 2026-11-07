@@ -450,10 +450,10 @@ import UIKit
         XCTAssertTrue(firstFixtureCard.waitForExistence(timeout: 15))
         let allID = firstFixtureCard.identifier
         let settings = app.buttons["discoveryFilters"], top = settings.frame.minY
-        app.buttons["kind-image"].tap()
+        app.chooseKind("kind-image")
         XCTAssertTrue(firstFixtureCard.waitForExistence(timeout: 10))
         let imageID = firstFixtureCard.identifier
-        app.buttons["kind-video"].tap()
+        app.chooseKind("kind-video")
         XCTAssertTrue(firstFixtureCard.waitForExistence(timeout: 10))
         let videoID = firstFixtureCard.identifier
         let before = try requests().filter { $0["operation"] as? String == "page-start" && ($0["cursor"] as? String ?? "").isEmpty }.count
@@ -462,7 +462,7 @@ import UIKit
         defer { try? FileManager.default.removeItem(at: gate) }
         for _ in 0..<3 {
             for (kind, id) in [("image", imageID), ("video", videoID), ("all", allID)] {
-                app.buttons["kind-" + kind].tap()
+                app.chooseKind("kind-" + kind)
                 XCTAssertTrue(app.buttons[id].exists)
                 XCTAssertEqual(settings.frame.minY, top, accuracy: 1)
                 XCTAssertFalse(app.descendants(matching: .any)["feedLoading"].exists)
@@ -471,16 +471,16 @@ import UIKit
         let after = try requests().filter { $0["operation"] as? String == "page-start" && ($0["cursor"] as? String ?? "").isEmpty }.count
         XCTAssertEqual(after, before, "Warm category switches must not clear/refetch their pages")
         capture("filter-warm-all")
-        app.buttons["kind-text"].tap()
+        app.chooseKind("kind-text")
         XCTAssertFalse(app.buttons[videoID].exists)
         XCTAssertFalse(app.buttons[imageID].exists)
         XCTAssertEqual(settings.frame.minY, top, accuracy: 1)
         XCTAssertTrue(app.descendants(matching: .any)["feedLoading"].exists)
         capture("filter-cold-placeholder")
-        app.buttons["kind-image"].tap()
+        app.chooseKind("kind-image")
         XCTAssertTrue(app.buttons[imageID].exists)
         try FileManager.default.removeItem(at: gate)
-        app.buttons["kind-image"].tap() // Repeated selection is a no-op.
+        app.chooseKind("kind-image") // Repeated selection is a no-op.
         XCTAssertTrue(app.buttons[imageID].exists)
         XCTAssertEqual(firstFixtureCard.identifier, imageID)
         capture("filter-warm-image-after-cancellation")
@@ -506,7 +506,7 @@ import UIKit
         settings.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         XCTAssertTrue(app.buttons["replayOnboarding"].waitForExistence(timeout: 5), "Revealed settings must respond to a real tap")
         app.buttons["完成"].tap()
-        app.buttons["kind-image"].tap()
+        app.chooseKind("kind-image")
         XCTAssertTrue(firstFixtureCard.waitForExistence(timeout: 10))
         XCTAssertTrue(settings.isHittable)
         capture("header-03-filter-reset")
@@ -514,7 +514,7 @@ import UIKit
         XCTAssertFalse(settings.isHittable)
         XCTAssertLessThan(settings.frame.maxY, expandedSettingsTop)
         scroll.swipeDown(velocity: .slow)
-        app.buttons["kind-all"].tap()
+        app.chooseKind("kind-all")
         XCTAssertTrue(app.buttons["creator-fixture-author-0"].waitForExistence(timeout: 5))
         XCTAssertTrue(settings.isHittable)
     }
@@ -555,9 +555,9 @@ import UIKit
         XCTAssertFalse(app.otherElements["catalogUpdateStatus"].exists)
         XCTAssertTrue(added.exists)
         capture("refresh-03-new-first-item")
-        app.buttons["kind-image"].tap()
+        app.chooseKind("kind-image")
         XCTAssertTrue(app.buttons["prompt-database-fixture-9997"].waitForExistence(timeout: 10))
-        app.buttons["kind-all"].tap()
+        app.chooseKind("kind-all")
         XCTAssertTrue(added.waitForExistence(timeout: 10))
         app.terminate(); launch(["--feed-fixture-offline"])
         app.buttons["discoverySort"].tap(); app.buttons["最新收录"].tap()

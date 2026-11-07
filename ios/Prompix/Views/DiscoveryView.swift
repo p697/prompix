@@ -66,32 +66,50 @@ struct RootView: View {
 struct DiscoverView: View {
     @Environment(Library.self) private var library
     @State private var kind: PromptKind?
-    @State private var topic: String?
     @State private var feedSort = "recommended"
     @Environment(\.recommendationSurfaceVisible) private var recommendationSurfaceVisible
     @State private var appliedPreferenceRevision = 0
     @State private var model: String?
     @State private var facet: String?
     @State private var modelFamily: String?
+    @State private var showsAllUses = false
     @State private var viewportHeight: CGFloat = 0
     @State private var feedLayout = PromptGridLayout(width: 0)
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    private let topics = ["好玩一点", "创作灵感", "日常有用"]
     private var items: [Prompt] {
         library.prompts.filter {
-            PromptQuery(kind: kind, topic: topic, model: model).matches($0) &&
+            PromptQuery(kind: kind, model: model).matches($0) &&
+                (facet == nil || $0.facets?.useCase.contains(facet ?? "") == true) &&
                 (feedSort != "recommended" || library.recommendations.allowsRecommended($0))
         }
     }
     private var feedQuery: FeedQuery {
-        FeedQuery(kind: kind?.rawValue, tag: topic, model: model, sort: feedSort, facet: facet, modelFamily: modelFamily)
+        FeedQuery(kind: kind?.rawValue, model: model, sort: feedSort, facet: facet, modelFamily: modelFamily)
+    }
+    /// Uses by how much work they hold: the service's counts, or the bundled catalog's offline.
+    private var uses: [String] {
+        if let served = library.feed?.browse.value?.facets?.useCase, !served.isEmpty {
+            return served.filter { $0.count > 0 && FacetCatalog.shortName($0.id) != nil }.sorted { $0.count > $1.count }.map(\.id)
+        }
+        let counts = library.prompts.flatMap { $0.facets?.useCase ?? [] }.reduce(into: [String: Int]()) { $0[$1, default: 0] += 1 }
+        return counts.filter { FacetCatalog.shortName($0.key) != nil }.sorted { $0.value == $1.value ? $0.key < $1.key : $0.value > $1.value }.map(\.key)
+    }
+    private static let leadingUses = 9
+    private var useBar: some View {
+        // The most common uses lead; one chosen from the full list joins them.
+        var shown = Array(uses.prefix(Self.leadingUses))
+        if let facet, !shown.contains(facet) { shown.append(facet) }
+        let choices = [ChoiceBar<String>.Choice(id: nil, title: String(localized: "全部"), identifier: "use-all")]
+            + shown.map { ChoiceBar.Choice(id: $0, title: FacetCatalog.shortName($0) ?? $0, identifier: "use-\($0)") }
+        return ChoiceBar(choices: choices, selection: facet, identifier: "usePicker",
+                         more: uses.count > Self.leadingUses ? { showsAllUses = true } : nil, select: selectUse)
     }
     private var models: [String] {
         if let feed = library.feed { return feed.browse.value?.models.map(\.name) ?? [] }
         return Array(Set(library.prompts.filter { PromptQuery(kind: kind).matches($0) }.map(\.model))).sorted()
     }
-    private var isFiltered: Bool { kind != nil || refined }
-    private var refined: Bool { topic != nil || model != nil || facet != nil || modelFamily != nil }
+    private var isFiltered: Bool { kind != nil || facet != nil || refined }
+    private var refined: Bool { model != nil || modelFamily != nil }
     private var needsFirstVideoUpdate: Bool {
         kind == .video && library.version.hasPrefix("studio-") && !library.prompts.contains { $0.kind == .video }
     }
@@ -114,7 +132,7 @@ struct DiscoverView: View {
                                         Button(library.isRefreshing ? String(localized: "正在更新…") : String(localized: "检查内容更新")) {
                                             Task { await library.refresh(force: true) }
                                         }.buttonStyle(.borderedProminent).foregroundStyle(Palette.paper).disabled(library.isRefreshing).accessibilityIdentifier("loadVideoExamples")
-                                        Button(String(localized: "查看其他内容")) { kind = nil; topic = nil; model = nil }
+                                        Button(String(localized: "查看其他内容")) { kind = nil; facet = nil; model = nil }
                                             .buttonStyle(.bordered).accessibilityIdentifier("browseOtherIdeas")
                                     }
                                 } else {
@@ -136,7 +154,10 @@ struct DiscoverView: View {
                 .scrollClipDisabled()
                 .background(Palette.paper).foregroundStyle(Palette.ink)
                 .rootHeader(title: String(localized: "发现"), titleID: "discoveryHeading") { filterMenu } bar: {
-                    KindPicker(selection: $kind, onSelect: selectKind).padding(.bottom, 6)
+                    useBar.padding(.bottom, 6)
+                }
+                .sheet(isPresented: $showsAllUses) {
+                    UseDirectory(uses: uses, selection: facet) { selectUse($0); showsAllUses = false }
                 }
                 .pageRefreshable {
                     // SwiftUI can cancel the refresh action when lazy sections
@@ -178,8 +199,14 @@ struct DiscoverView: View {
             CollectionRail(query: feedQuery)
         })
     }
+    // Models differ by kind, so a kind change clears them; the use stays.
     private func selectKind(_ next: PromptKind?) {
-        kind = next; topic = nil; model = nil; facet = nil; modelFamily = nil
+        guard next != kind else { return }
+        kind = next; model = nil; modelFamily = nil
+        library.feed?.discovery.select(feedQuery)
+    }
+    private func selectUse(_ next: String?) {
+        facet = next
         library.feed?.discovery.select(feedQuery)
     }
     private var discoveryContext: some View {
@@ -187,8 +214,23 @@ struct DiscoverView: View {
             Text(feedSort == "latest" ? String(localized: "最新收录") : String(localized: "为你挑的"))
                 .font(.subheadline.weight(.semibold))
             Spacer()
+            kindMenu
             sortMenu
         }.padding(.leading, 20).padding(.trailing, 16)
+    }
+    private var kindMenu: some View {
+        Menu {
+            choice(String(localized: "全部"), selected: kind == nil) { selectKind(nil) }.accessibilityIdentifier("kind-all")
+            ForEach([PromptKind.image, .video, .text]) { value in
+                choice(value.title, selected: kind == value) { selectKind(value) }.accessibilityIdentifier("kind-\(value.rawValue)")
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Text(kind?.title ?? String(localized: "类型")).font(Typography.meta(size: 12)).tracking(1.2)
+                PrompixIcon.chevronDown.image(size: 12)
+            }.foregroundStyle(kind == nil ? Palette.muted : Palette.ink).frame(minWidth: 44, minHeight: 44).contentShape(Rectangle())
+        }.accessibilityLabel(String(localized: "类型")).accessibilityValue(kind?.title ?? String(localized: "全部"))
+            .accessibilityIdentifier("discoveryKind")
     }
     private var sortMenu: some View {
         Menu {
@@ -205,11 +247,11 @@ struct DiscoverView: View {
     }
     private var filterMenu: some View {
         Menu {
-            if let browse = library.feed?.browse.value, let uses = browse.facets?.useCase, !uses.isEmpty {
-                servedFilters(uses: uses, families: browse.modelFamilies ?? [])
+            if let families = library.feed?.browse.value?.modelFamilies, !families.isEmpty {
+                servedFilters(families: families)
             } else { catalogFilters }
             if refined {
-                Button(String(localized: "清除筛选"), role: .destructive) { selectKind(kind) }
+                Button(String(localized: "清除筛选"), role: .destructive) { model = nil; modelFamily = nil }
                     .accessibilityIdentifier("clearFilters")
             }
         } label: {
@@ -220,45 +262,59 @@ struct DiscoverView: View {
         }.accessibilityLabel(String(localized: "筛选")).accessibilityValue(refined ? String(localized: "已筛选") : "")
             .accessibilityIdentifier("discoveryFilters")
     }
-    /// 2.0 filters from the service's own counts: use and model family.
-    @ViewBuilder private func servedFilters(uses: [FeedBrowse.Count], families: [FeedBrowse.Count]) -> some View {
-        Menu(facet.flatMap(FacetCatalog.name) ?? String(localized: "全部用途")) {
-            choice(String(localized: "全部用途"), selected: facet == nil) { facet = nil }
-            ForEach(uses.filter { $0.count > 0 }.sorted { $0.count > $1.count }) { use in
-                if let name = FacetCatalog.name(use.id) { choice(name, selected: facet == use.id) { facet = use.id } }
-            }
-        }.accessibilityIdentifier("filterUse")
-        Menu(modelFamily.flatMap { FacetCatalog.modelFamilies[$0] } ?? String(localized: "模型")) {
-            choice(String(localized: "全部模型"), selected: modelFamily == nil) { modelFamily = nil }
-            ForEach(families.filter { $0.count > 0 && FacetCatalog.modelFamilies[$0.id] != nil }.sorted { $0.count > $1.count }) { family in
-                choice(FacetCatalog.modelFamilies[family.id]!, selected: modelFamily == family.id) { modelFamily = family.id }
-            }
-        }.accessibilityIdentifier("filterModelFamily")
+    /// Model families from the service's own counts; uses are on the bar above the feed.
+    @ViewBuilder private func servedFilters(families: [FeedBrowse.Count]) -> some View {
+        choice(String(localized: "全部模型"), selected: modelFamily == nil) { modelFamily = nil }
+        ForEach(families.filter { $0.count > 0 && FacetCatalog.modelFamilies[$0.id] != nil }.sorted { $0.count > $1.count }) { family in
+            choice(FacetCatalog.modelFamilies[family.id]!, selected: modelFamily == family.id) { modelFamily = family.id }
+        }
     }
     private func choice(_ title: String, selected: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) { if selected { Label(title, systemImage: "checkmark") } else { Text(title) } }
     }
-    /// The bundled catalog's simpler use and model filters, offline or on an older service.
+    /// The bundled catalog's models, offline or on an older service.
     @ViewBuilder private var catalogFilters: some View {
-            Menu(String(localized: "全部用途")) {
-                Button(String(localized: "全部用途")) { topic = nil }
-                ForEach(topics, id: \.self) { value in
-                    Button { topic = value } label: {
-                        if topic == value { Label(NSLocalizedString(value, comment: "Topic"), systemImage: "checkmark") }
-                        else { Text(NSLocalizedString(value, comment: "Topic")) }
-                    }
-                }
-            }
-            Menu(library.feed?.browse.value.map { $0.modelCount > $0.models.count } == true ? String(localized: "常用模型") : String(localized: "模型")) {
-                Button(String(localized: "全部模型")) { model = nil }
-                ForEach(models, id: \.self) { value in
-                    Button { model = value } label: {
-                        if model == value { Label(Prompt.localizedModel(value), systemImage: "checkmark") } else { Text(Prompt.localizedModel(value)) }
-                    }
-                }
-            }
+        choice(String(localized: "全部模型"), selected: model == nil) { model = nil }
+        ForEach(models, id: \.self) { value in
+            choice(Prompt.localizedModel(value), selected: model == value) { model = value }
+        }
     }
 
+}
+
+/// Every use, most common first, for the ones the home bar has no room for.
+private struct UseDirectory: View {
+    let uses: [String]
+    let selection: String?
+    let select: (String?) -> Void
+    @ScaledMetric(relativeTo: .subheadline) private var cellWidth = 96.0
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                Text(String(localized: "全部分类")).font(.headline).accessibilityAddTraits(.isHeader)
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: cellWidth), spacing: 8)], spacing: 8) {
+                    cell(nil, title: String(localized: "全部"))
+                    ForEach(uses, id: \.self) { cell($0, title: FacetCatalog.shortName($0) ?? $0) }
+                }
+            }.padding(.horizontal, 20).padding(.top, 28).padding(.bottom, 20)
+        }
+        .scrollBounceBehavior(.basedOnSize)
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
+        .presentationBackground(Palette.paper)
+        .accessibilityIdentifier("useDirectory")
+    }
+    private func cell(_ id: String?, title: String) -> some View {
+        let selected = selection == id
+        return Button { select(id) } label: {
+            Text(title).font(.subheadline.weight(selected ? .semibold : .regular)).lineLimit(1).minimumScaleFactor(0.8)
+                .foregroundStyle(selected ? Palette.paper : Palette.ink)
+                .frame(maxWidth: .infinity, minHeight: 44)
+                .background(selected ? Palette.accent : Palette.soft, in: Capsule())
+        }.buttonStyle(.plain)
+            .accessibilityAddTraits(selected ? .isSelected : [])
+            .accessibilityIdentifier("use-\(id ?? "all")")
+    }
 }
 
 struct PromptGrid: View {
