@@ -20,7 +20,7 @@ struct PendingPromptDetail: View {
                             if !mediaPaneVisible { media }
                             reading
                         }.padding(.bottom, 28).frame(maxWidth: 700).frame(maxWidth: .infinity)
-                    }.ignoresSafeArea(edges: mediaPaneVisible ? [] : .top)
+                    }.ignoresSafeArea(edges: mediaPaneVisible ? [] : .top).hidesTopEdgeEffect()
                         .preservingReadingPosition(position).readingChrome($actionsCollapsed).readingBottomEdge().accessibilityIdentifier("detailReadingPane")
                 } secondary: {
                     ScrollView { media.padding(.bottom, 24).frame(maxWidth: 600).frame(maxWidth: .infinity) }.ignoresSafeArea(edges: .top)
@@ -32,9 +32,10 @@ struct PendingPromptDetail: View {
                         media
                         reading
                     }.padding(.bottom, 28).frame(maxWidth: 700).frame(maxWidth: .infinity)
-                }.ignoresSafeArea(edges: preview.hasDetailMedia ? .top : []).preservingReadingPosition(position).readingChrome($actionsCollapsed).readingBottomEdge().accessibilityIdentifier("detailReadingPane")
+                }.ignoresSafeArea(edges: preview.hasDetailMedia ? .top : []).hidesTopEdgeEffect().preservingReadingPosition(position).readingChrome($actionsCollapsed).readingBottomEdge().accessibilityIdentifier("detailReadingPane")
             }
         }.foregroundStyle(Palette.ink)
+            .overlay(alignment: .top) { if preview.hasDetailMedia { EdgeVeil(fade: 14) } }
             .onChange(of: actionsCollapsed) { _, value in position.actionsCollapsed = value }
             .promptActionBar {
                 ReadingActionBar(isSkill: card.contentType == "skill", ready: false, collapsed: actionsCollapsed, canEdit: card.contentType != "skill")
@@ -105,8 +106,10 @@ struct DetailHero: View {
     var open: ((Int) -> Void)? = nil
     @State private var page = 0
     private var urls: [URL] { preview.media?.galleryURLs ?? [] }
+    /// The work's own frame, so a portrait keeps its face; only pictures
+    /// taller than 3:4 lose some of their bottom, which fades out anyway.
     private var ratio: Double {
-        max(1.1, min(1.8, preview.media?.aspectRatio ?? 1.15))
+        max(0.75, min(1.8, preview.media?.aspectRatio ?? 0.8))
     }
     var body: some View {
         Color.clear.aspectRatio(ratio, contentMode: .fit)
@@ -114,9 +117,8 @@ struct DetailHero: View {
             .clipped()
             .overlay {
                 VStack(spacing: 0) {
-                    LinearGradient(colors: [Palette.paper.opacity(0.35), Palette.paper.opacity(0)], startPoint: .top, endPoint: .bottom).frame(height: 130)
                     Spacer(minLength: 0)
-                    LinearGradient(colors: [Palette.paper.opacity(0), Palette.paper], startPoint: .top, endPoint: .bottom).frame(height: 110)
+                    LinearGradient(colors: [Palette.paper.opacity(0), Palette.paper], startPoint: .top, endPoint: .bottom).frame(height: 72)
                 }.allowsHitTesting(false).accessibilityHidden(true)
             }
             .overlay(alignment: .bottomTrailing) {
@@ -146,13 +148,13 @@ struct DetailHero: View {
             TabView(selection: $page) {
                 ForEach(urls.indices, id: \.self) { index in
                     Group {
-                        if index == 0 { Artwork(preview: preview, fillsFrame: true, showsVideoBadge: false) }
+                        if index == 0 { Artwork(preview: preview, fillsFrame: true, showsVideoBadge: false, anchorsTop: true) }
                         else { RemoteImage(url: urls[index], contentMode: .fill) }
-                    }.frame(maxWidth: .infinity, maxHeight: .infinity).clipped().tag(index)
+                    }.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top).clipped().tag(index)
                 }
             }.tabViewStyle(.page(indexDisplayMode: .never))
         } else {
-            Artwork(preview: preview, fillsFrame: true, showsVideoBadge: false)
+            Artwork(preview: preview, fillsFrame: true, showsVideoBadge: false, anchorsTop: true)
         }
     }
 }

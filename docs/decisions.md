@@ -1250,3 +1250,7 @@ The owner asked for a short daily email: what ran, how long it took, how many it
 ### 2026-11-07 — Count every item that no step will move
 
 Agents kept misreporting why items were not online because each item's state was spread across a dozen stores with different keys. An audit of 80 X drafts found 46 editorial deferrals cached for good and 14 drafts whose source check had lapsed with nothing to recheck them; nothing reported either. The owner asked to fix observability before the individual bugs. `npm run pipeline -- funnel` and `item <id>` now classify every daily-lane candidate as live, removed, excluded (with stage and reason), waiting for an automatic step, or stalled, reusing the pipeline's own decision functions. Stalled items break the rule that the pipeline decides every item: the daily report counts them and marks the day as having a problem when new ones appear, and `status --brief` shows the last count. The first count was 366 stalled items. Fixing the causes (cached deferrals, lapsed drafts, type mismatches) is separate work. Agents report item counts from this command instead of reading the stores by hand. History campaign items that are not live are not covered yet. See [data-pipeline-v2.md](data-pipeline-v2.md).
+
+## 2026-11-07 顶部边缘参照 Cosmos，详情大图按原比例
+
+首页页头收起后不再留一条不透明的纸色带，只在状态栏后面放一道纸色加模糊的渐变（`EdgeVeil`），参照 Cosmos 不带分类器的首页；是否常驻分类器之后再定。详情大图原来把竖图裁成接近正方形的横幅，再叠上系统顶部模糊，人像的脸会被切掉或盖住；现在按作品比例显示（最高到 3:4，更高的从底部裁），图上只留状态栏的浅渐变。
