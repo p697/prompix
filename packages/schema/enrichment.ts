@@ -32,7 +32,21 @@ export const inputsSchema = z.object({
     context.addIssue({ code: "custom", path: ["ownLikenessOnly"], message: "Own-likeness applies only to face inputs" });
 });
 
-export const modelFamilies = ["gpt-image", "nano-banana", "midjourney", "seedance", "veo", "kling", "flux", "claude", "gpt", "gemini", "other"] as const;
+export const modelFamilies = ["gpt-image", "nano-banana", "midjourney", "seedance", "veo", "kling", "flux", "seedream", "ideogram", "hailuo", "runway", "wan",
+  "claude", "gpt", "gemini", "other"] as const;
+/** The one spelling shown for each family; "other" is shown as Unspecified. */
+export const modelFamilyNames: Record<typeof modelFamilies[number], string> = {
+  "gpt-image": "GPT Image", "nano-banana": "Nano Banana", midjourney: "Midjourney", seedance: "Seedance", veo: "Veo", kling: "Kling",
+  flux: "Flux", seedream: "Seedream", ideogram: "Ideogram", hailuo: "Hailuo", runway: "Runway", wan: "Wan", claude: "Claude", gpt: "GPT",
+  gemini: "Gemini", other: "Unspecified",
+};
+/** A canonical model label: family name plus a normalized version ("pro" becomes "Pro"). */
+export function canonicalModelName(family: typeof modelFamilies[number], version?: string): string {
+  if (family === "other") return "Unspecified";
+  const normalized = version?.trim().replace(/\s+/g, " ").split(" ")
+    .map(word => /^v?\d/i.test(word) ? word.replace(/^V/, "v") : word[0].toUpperCase() + word.slice(1).toLowerCase()).join(" ");
+  return normalized ? `${modelFamilyNames[family]} ${normalized}` : modelFamilyNames[family];
+}
 export const generationModes = ["t2i", "i2i", "t2v", "i2v", "v2v", "text", "web", "skill"] as const;
 export type GenerationMode = typeof generationModes[number];
 export const generationSchema = z.object({

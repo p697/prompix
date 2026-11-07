@@ -1,5 +1,5 @@
 import { parseArgs } from "node:util";
-import { extname, resolve } from "node:path";
+import { extname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { z } from "zod";
 import { completeValidated } from "./models/call.ts";
@@ -7,13 +7,12 @@ import { trustSystemCertificates } from "./models/http.ts";
 import { createProvider, isProviderId, modelEnvironment, providerAvailability, providerDefinitions } from "./models/registry.ts";
 import { ModelProviderError, providerIds, type ModelImage } from "./models/types.ts";
 import { appendEvent, pipelineRoot, pipelineStages, readEvents, snapshot, stageLabels, updateConfig, type PipelineEvent, type PipelineSnapshot, type StageRoute } from "./pipeline-control.ts";
-import { repo } from "./publication.ts";
+import { atomic, contentRoot, repo } from "./publication.ts";
 import { installWorker, restartWorker, uninstallWorker, workerPlistPath } from "./worker-launchd.ts";
 import { pipelineEnvironment, runMaintenance } from "./worker-maintenance.ts";
 import { collectDailyReport, reportWindowMs, sendDailyReport } from "./daily-report.ts";
-import { nightly, slotStart } from "./worker.ts";
+import { nightly, slotStart, trialRequestFile } from "./worker.ts";
 import { collectItemStates, readFunnelSnapshot, saveFunnelSnapshot, summarizeFunnel, type FunnelSummary, type ItemState, type ItemStatus } from "./item-state.ts";
-import { contentRoot } from "./publication.ts";
 
 const usage = `用法：npm run pipeline -- <命令> [参数]
 
@@ -38,6 +37,7 @@ const usage = `用法：npm run pipeline -- <命令> [参数]
 后台进程（launchd 保活，开机自启；每天凌晨 2:45 来源维护复查，3:00 采集发布，8:30 发日报，均为日本时间）
   worker install | uninstall | restart   安装、卸载，或在更新代码后重启
   maintenance                            立刻做一次来源维护复查（X、ClawHub），确认已删的来源自动下架
+  trial                                  请后台进程按新策略试跑一轮（真实搜索、审核、翻译，不发布）
   report [--since 时间] [--send]          生成日报（默认最近一次 08:30 之前的 24 小时；--since 到现在），--send 发到监控邮箱
 
 环节：${pipelineStages.join(", ")}
@@ -248,6 +248,13 @@ export async function main(argv = process.argv.slice(2)) {
       const report = await runMaintenance(await pipelineEnvironment());
       await appendEvent(root, actor, "job.finished", { job: "maintenance", summary: `手动：来源已删 ${report.removed} 条，本次下架 ${report.takenDown.length} 条`, report });
       console.log(values.json ? JSON.stringify(report) : `来源维护复查完成：来源已删 ${report.removed} 条，本次下架 ${report.takenDown.length} 条`);
+      return;
+    }
+    case "trial": {
+      const actor = actorOf(values);
+      await atomic(join(root, trialRequestFile), { at: new Date().toISOString(), by: actor });
+      await appendEvent(root, actor, "trial.requested", {});
+      console.log("已请求试跑；后台进程会在当前任务结束后开始，结果在内容目录的 trials/ 下");
       return;
     }
     case "report": {
