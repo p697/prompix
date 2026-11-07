@@ -98,7 +98,7 @@ test("a live item rebuilt from its source takes its 2.0 fields back, and edited 
   const edited = { ...rebuilt, prompt: "Use my uploaded photo and keep my face. A quiet portrait of [a feeling] by a window, 9:16." } as Prompt;
   const unreviewed = await enrichNewItems([edited], live, root);
   assert.equal(unreviewed.prompts[0], reviewed, "the live version stays while the edit waits");
-  const unsafe = await enrichNewItems([edited], live, root, { prepare, provider: provider(ids => ({ items: ids.map(id => output(id, { minors: "uncertain", minorsReason: "Age unclear." })) }), calls) });
+  const unsafe = await enrichNewItems([edited], live, root, { prepare, provider: provider(ids => ({ items: ids.map(id => output(id, { minors: "unsafe", minorsReason: "A child in revealing clothing." })) }), calls) });
   assert.equal(unsafe.prompts[0], reviewed, "a blocked edit never replaces the live version");
   assert.equal(calls.length, 1);
 });

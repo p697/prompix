@@ -43,7 +43,7 @@ ${presentationStandard}
 - sourceLanguage: the main language of the prompt text as a lowercase ISO 639-1 code (en, zh, ja, ko, …), or und when it has no natural-language text.
 - en: always required, even when the prompt is already English. English card title (at most 80 characters) and summary (one or two sentences) describing what the prompt makes. When the candidate provides englishCard, copy it.
 - shots: only when the prompt itself is written as two or more distinct shots or scenes in sequence (for example "Shot 1 … Shot 2 …" or timed segments). Number from 1; startSec and endSec only when stated; text is that shot's description from the prompt, in the prompt's language. Otherwise an empty list.
-- minors: none when nobody depicted or described may be under 18. safe when a child or teenager appears only in ordinary, non-sexual content where the child is part of the story or subject, such as illustration, education or a family scene. unsafe when anyone who is or may be under 18 is sexualized, shown in revealing clothing or poses, or treated as an interchangeable model for fashion, beauty or body-focused output, including templates that ask for a child's photo to restyle. uncertain when a depicted person may be under 18 and the output focuses on their body, attire or attractiveness, so age cannot be ruled out where it matters. Explain in minorsReason. unsafe and uncertain items are never published.
+- minors: none when nobody depicted or described may be under 18. safe when a child or teenager appears only in ordinary, non-sexual content where the child is part of the story or subject, such as illustration, education or a family scene. unsafe when anyone who is or may be under 18 is sexualized, shown in revealing clothing or poses, or treated as an interchangeable model for fashion, beauty or body-focused output, including templates that ask for a child's photo to restyle. uncertain only when there is a concrete sign that a depicted person may be under 18 (a childlike face or body, a school uniform, a stated age, words such as child or kid) and the output focuses on their body, attire or attractiveness. A youthful-looking adult, the word girl, an anime style or a fashion shoot is not such a sign; use none. Explain in minorsReason. unsafe items are never published, and neither are uncertain ones with suggestive styling.
 Apart from the minors judgment, do not infer age, ethnicity, identity or other personal traits of anyone depicted.
 
 Facet ids:
@@ -109,11 +109,10 @@ export type EnrichmentFields = {
 export type EnrichmentEvidence = { sourceLanguage: string; presentation: z.infer<typeof presentationSchema>; presentationReason: string; vocabularyGaps: string[];
   minors: typeof minorJudgments[number]; minorsReason: string };
 /** Why an item must not be published, decided automatically; undefined when nothing blocks it.
- * A possible minor next to suggestive presentation is treated as uncertain. */
+ * An uncertain age alone does not block (owner, 2026-11-07); next to suggestive styling it does. */
 export function publicationBlocker(evidence: EnrichmentEvidence, presentation = evidence.presentation): string | undefined {
   if (evidence.minors === "unsafe") return `minors-unsafe: ${evidence.minorsReason}`;
-  if (evidence.minors === "uncertain") return `minors-uncertain: ${evidence.minorsReason}`;
-  if (evidence.minors === "safe" && presentation !== "general") return `minors-with-${presentation}: ${evidence.minorsReason}`;
+  if (evidence.minors !== "none" && presentation !== "general") return `minors-${evidence.minors}-with-${presentation}: ${evidence.minorsReason}`;
   if (presentation === "explicit") return "explicit";
   if (presentation === "unknown") return "presentation-unknown";
   return undefined;
