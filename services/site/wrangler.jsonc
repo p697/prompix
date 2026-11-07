@@ -1,8 +1,14 @@
 {
+  "$schema": "../../node_modules/wrangler/config-schema.json",
   "name": "prompix-site",
   "account_id": "2af7e222bfcfd78b5df8f627971dfbca",
-  "compatibility_date": "2026-10-11",
+  "main": "src/worker.ts",
+  "compatibility_date": "2026-10-28",
   "workers_dev": false,
+  "preview_urls": false,
   "routes": [{"pattern": "prompix.dev", "custom_domain": true}],
-  "assets": {"directory": "./dist", "html_handling": "drop-trailing-slash", "not_found_handling": "404-page"}
+  "assets": {"directory": "./public", "binding": "ASSETS", "html_handling": "none", "not_found_handling": "none"},
+  "services": [{"binding": "FEED", "service": "prompix-feed", "remote": true}],
+  "observability": {"enabled": true, "head_sampling_rate": 0.1, "redact_query_string": true,
+    "logs": {"enabled": true, "invocation_logs": false}}
 }

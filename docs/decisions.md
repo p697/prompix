@@ -1282,3 +1282,13 @@ The owner limited Prompix to images, video and text prompts from X and prompts.c
 ### 2026-11-07 — Takedown requests by email
 
 The owner wants authors to ask for removal with one email, handled within 24 hours. The existing `support@prompix.dev` (Cloudflare Email Routing to the owner, since 2026-10-12) serves it. The detail's 报告问题或申请下架 now opens a mail to that address whose subject and body carry only the work's title and ID; the app no longer links to the website report page with an `id` query, and `SupportLinks.Page.report` is gone from the app.
+## 2026-10-30：官网改为服务端渲染并展示最新 Prompt
+
+用户要求以 `prompix.dev` 做正式官网（用户提到的 promptx.dev 不在本账号 Cloudflare 中），视觉对标近年 Apple 产品页，展示最新抓取内容并做好 SEO。替代 0.3 时期只放三条原创示例的静态官网，以及产品文档中「完整 SEO 网页产品后置」的边界：本次只做浏览与阅读，不做账号、收藏同步或生成。
+
+- `prompix-site` 改为 Worker 服务端渲染，经 Service Binding 读取已部署的 `prompix-feed` `/v3` 接口，不另建数据库查询；页面和 feed 响应在边缘短时缓存，透传访客 IP 以保留 feed 的按 IP 限流。为不随官网发布未部署的 feed 代码，本次不改 feed。
+- 列表只展示视觉审核为 `general` 的预览（与 App 默认减少暗示性内容一致），其余条目仅直链可见、`noindex` 且不进 sitemap。图片与视频直接从 `api.prompix.dev/media` 加载，网站不复制第三方媒体。
+- 中英双语：英文在 `/`、中文在 `/zh`，语言注册表统一驱动路由、hreflang、sitemap 与语言菜单，新增语言只需加消息文件并注册。当前约六成新增内容只有中文元数据，英文列表只显示英文标题，没有英文标题的英文详情页 `noindex`。
+- App、商店引用的 `/support`、`/privacy`、`/content`、`/report?id=` 及 `/zh` 版本全部保留，文案原样迁移；隐私页「这个网站」一节按新的加载与搜索行为更新。
+- 视觉沿用 `design-language.md` 色板：中性白底、墨色正文、蓝紫粉光谱只用于标题重点词、数字与局部光晕；系统字体，无第三方脚本或字体；动效仅入场、滚动渐显与图片墙缓慢漂移，尊重减少动态效果。
+

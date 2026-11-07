@@ -158,6 +158,6 @@ Prompix 是开源、免费的多模态 Prompt 集合 App。用户像逛手机淘
 
 开发与验证见 [ios/README.md](../ios/README.md)、[ingest/README.md](../ingest/README.md) 与 [acceptance-0.1.md](acceptance-0.1.md)。
 
-品牌官网、帮助、隐私与内容反馈的双语静态实现见 [services/site](../services/site/README.md)，部署于 `prompix.dev`；不代替原生客户端。
+官网 [services/site](../services/site/README.md) 部署于 `prompix.dev`：Worker 服务端渲染最新 Prompt、每条 Prompt 的独立页面和帮助、隐私、内容反馈页，中英双语并预留多语言，内容实时来自 feed；不代替原生客户端。
 
 **0.4.7（20）已提供iPhone Duo模拟器验收现场，并生成同源码本地签名包**；App Store Connect九语言文案与隐私网址已保存并回读核对，未上传二进制或提交审核。X 图片和视频已实际发布；下一轮重点是完整正文的回复／原始外链提取、供给覆盖及外部原生 App 的真实交接。实现与验证边界见[本轮方案](independent-pipeline.md)。
