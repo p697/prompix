@@ -11,7 +11,7 @@ const entities = z.object({ urls: z.array(z.object({ url: z.string(), expanded_u
   unwound_url: z.string().optional(), media_key: z.string().optional(), indices: z.array(z.number().int()).optional() }).passthrough()).max(100).optional() }).passthrough();
 const rawMedia = z.object({ id_str: id.optional(), media_key: z.string().optional(), type: z.enum(["photo", "video", "animated_gif"]),
   url: z.string().optional(), expanded_url: z.string().optional(),
-  media_url_https: z.string(), video_info: z.object({ variants: z.array(z.object({ content_type: z.string(), url: z.string(),
+  media_url_https: z.string(), ext_alt_text: z.string().max(5000).nullable().optional(), video_info: z.object({ variants: z.array(z.object({ content_type: z.string(), url: z.string(),
     bitrate: z.number().optional() })).max(30) }).optional() }).passthrough();
 const rawTweet = z.object({
   id, text: z.string().min(1).max(50_000), createdAt: z.string(), lang: z.string().optional(),
@@ -80,7 +80,7 @@ export function parseTwitterAPI(value: unknown, options: { ids?: readonly string
       if (!key) throw new Error("TwitterAPI returned media without an identity");
       if (attachments.includes(key)) throw new Error("TwitterAPI returned duplicate attachments");
       attachments.push(key);
-      const item = xMediaSchema.parse({ media_key: key, type: source.type,
+      const item = xMediaSchema.parse({ media_key: key, type: source.type, ...(source.ext_alt_text?.trim() ? { alt_text: source.ext_alt_text } : {}),
         ...(source.type === "photo" ? { url: source.media_url_https } : { preview_image_url: source.media_url_https,
           // HLS is not consumed by the MP4-only publication path; keep its source form in raw evidence.
           variants: source.video_info?.variants.filter(v => v.content_type === "video/mp4").map(v => ({ content_type: v.content_type, url: canonicalTwitterVideoURL(v.url), bit_rate: v.bitrate })) }) });

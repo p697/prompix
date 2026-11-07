@@ -20,7 +20,7 @@ export const xPostSchema = z.object({
   attachments: z.object({ media_keys: z.array(z.string()).max(20).optional() }).optional(),
 });
 export const xMediaSchema = z.object({ media_key: z.string(), type: z.enum(["photo", "video", "animated_gif"]),
-  url: z.string().optional(), preview_image_url: z.string().optional(),
+  url: z.string().optional(), preview_image_url: z.string().optional(), alt_text: z.string().max(5000).optional(),
   variants: z.array(z.object({ content_type: z.string(), url: z.string(), bit_rate: z.number().optional() })).max(30).optional() });
 const snapshotSchema = z.object({ provider: z.enum(["twitterapi", "rapidapi"]).optional(), capturedAt: z.iso.datetime().optional(), posts: z.array(z.unknown()).max(100),
   creators: z.array(creatorSchema).max(100).optional(), media: z.array(z.unknown()).max(400).optional() });
@@ -175,7 +175,10 @@ export function extractMarkedXPrompt(post: XPost, media: readonly XMedia[] = [],
   if (!excerpt && markers.length !== 1) return { reason: "multiple-prompt-boundaries" };
   if (excerpt && (post.referenced_tweets?.length || post.in_reply_to_user_id ||
       (post.conversation_id && post.conversation_id !== post.id))) return { reason: "excerpt-requires-standalone-post" };
-  const selection = excerpt ? selectXExcerpt(post, source.text, excerpt) : undefined;
+  // A prompt the author wrote as an image's ALT text is selected from that text instead (owner, 2026-11-07).
+  const altText = excerpt?.mediaKey ? verifiedMedia(post, media).find(item => item.media_key === excerpt.mediaKey)?.alt_text : undefined;
+  if (excerpt?.mediaKey && !altText) return { reason: "excerpt-alt-text-missing" };
+  const selection = excerpt ? selectXExcerpt(post, altText ?? source.text, excerpt) : undefined;
   if (selection && "reason" in selection) return selection;
   const label = excerpt ? `${excerpt.kind} prompt` : markers[0].label.toLowerCase();
   let body = selection?.body ?? text.slice(markers[0].end).trim();
