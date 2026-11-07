@@ -2,6 +2,7 @@ import SwiftUI
 
 /// Owns its navigation history so searches survive switching to another tab.
 struct SearchView: View {
+    private static let top = "search-top"
     @Environment(Library.self) private var library
     let isSelected: Bool
     let activation: Int
@@ -46,22 +47,20 @@ struct SearchView: View {
 
     var body: some View {
         NavigationStack {
-            searchableContent(ScrollView {
-                LazyVStack(alignment: .leading, spacing: 20, pinnedViews: [.sectionHeaders]) {
+            searchableContent(ScrollViewReader { scroll in ScrollView {
+                LazyVStack(alignment: .leading, spacing: 20) {
                     if isBrowsing {
                         if !recent.isEmpty { recentSearches }
                         SearchUseTiles()
-                    } else {
-                        // Kinds narrow a search, so they appear once there is one and stay pinned while results scroll.
-                        Section {
-                            searchResults
-                        } header: {
-                            KindPicker(selection: $kind).padding(.bottom, 4)
-                                .background(Palette.paper)
-                        }
-                    }
-                }.padding(.top, 8).padding(.bottom, 28)
+                    } else { searchResults }
+                }.id(Self.top).padding(.top, 8).padding(.bottom, 28)
             }
+            .onChange(of: FeedQuery(kind: kind?.rawValue, q: normalizedQuery)) {
+                // A shorter page, such as the home after cancelling, would
+                // otherwise keep a deep offset and show only blank paper.
+                var transaction = Transaction(); transaction.disablesAnimations = true
+                withTransaction(transaction) { scroll.scrollTo(Self.top, anchor: .top) }
+            } }
             .accessibilityIdentifier("searchResults")
             .scrollDismissesKeyboard(.interactively)
             .background(Palette.paper).foregroundStyle(Palette.ink)
@@ -146,10 +145,20 @@ struct SearchView: View {
             // One stack, so an empty creator section adds no gap above the works.
             VStack(alignment: .leading, spacing: 0) {
                 if kind == nil && !normalizedQuery.isEmpty { FeedCreatorSearch(repository: feed, query: normalizedQuery) }
+                kindRow(String(localized: "作品"))
                 FeedResults(store: feed.search, query: FeedQuery(kind: kind?.rawValue, q: query), debounce: true, fallback: results)
                     .environment(\.cardShowsTitle, true)
             }
         } else { legacyResults }
+    }
+    /// Kinds narrow a search, so they sit with the works and scroll away with them.
+    private func kindRow(_ title: String, identifier: String? = nil) -> some View {
+        HStack {
+            Text(title).font(.subheadline.weight(.semibold)).accessibilityAddTraits(.isHeader)
+                .accessibilityIdentifier(identifier ?? "")
+            Spacer()
+            KindMenu(selection: kind, identifier: "searchKind") { kind = $0 }
+        }.padding(.leading, 20).padding(.trailing, 16)
     }
     @ViewBuilder private var legacyResults: some View {
         if completedSearch != localSearch {
@@ -182,6 +191,8 @@ struct SearchView: View {
                 }.accessibilityIdentifier("searchCreators")
             }
         }
+        kindRow(matchedPrompts.isEmpty ? String(localized: "作品") : String(localized: "\(matchedPrompts.count) 条内容"),
+                identifier: matchedPrompts.isEmpty ? nil : "searchResultCount")
         if matchedPrompts.isEmpty && matchedCreators.isEmpty {
             ContentUnavailableView {
                 Label(String(localized: "没有找到相关内容"), systemImage: "magnifyingglass")
@@ -193,9 +204,6 @@ struct SearchView: View {
                 }.disabled(library.isRefreshing).accessibilityIdentifier("refreshEmptySearch")
             }
         } else if !matchedPrompts.isEmpty {
-            Text(String(localized: "\(matchedPrompts.count) 条内容")).font(.footnote)
-                .foregroundStyle(Palette.muted).padding(.horizontal, 20)
-                .accessibilityIdentifier("searchResultCount")
             PromptGrid(items: matchedPrompts).padding(.horizontal, 16).environment(\.cardShowsTitle, true)
         }
     }

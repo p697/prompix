@@ -306,20 +306,30 @@ private struct PaperScreen: ViewModifier {
     }
 }
 
-struct KindPicker: View {
-    @Binding var selection: PromptKind?
-    private var onSelect: ((PromptKind?) -> Void)?
-    init(selection: Binding<PromptKind?>, onSelect: ((PromptKind?) -> Void)? = nil) {
-        _selection = selection
-        self.onSelect = onSelect
-    }
+/// The kind filter above a feed: a quiet menu whose title darkens once it narrows.
+struct KindMenu: View {
+    let selection: PromptKind?
+    let identifier: String
+    let select: (PromptKind?) -> Void
     var body: some View {
-        // The work people come for leads: images, then video and text.
-        ChoiceBar(choices: [ChoiceBar.Choice(id: nil, title: String(localized: "全部"), identifier: "kind-all")]
-                  + [PromptKind.image, .video, .text].map { ChoiceBar.Choice(id: $0, title: $0.title, identifier: "kind-\($0.rawValue)") },
-                  selection: selection, identifier: "kindPicker") { kind in
-            if let onSelect { onSelect(kind) } else { selection = kind }
-        }
+        Menu {
+            // The work people come for leads: images, then video and text.
+            choice(nil, title: String(localized: "全部"), identifier: "kind-all")
+            ForEach([PromptKind.image, .video, .text]) { value in
+                choice(value, title: value.title, identifier: "kind-\(value.rawValue)")
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Text(selection?.title ?? String(localized: "类型")).font(Typography.meta(size: 12)).tracking(1.2)
+                PrompixIcon.chevronDown.image(size: 12)
+            }.foregroundStyle(selection == nil ? Palette.muted : Palette.ink).frame(minWidth: 44, minHeight: 44).contentShape(Rectangle())
+        }.accessibilityLabel(String(localized: "类型")).accessibilityValue(selection?.title ?? String(localized: "全部"))
+            .accessibilityIdentifier(identifier)
+    }
+    private func choice(_ kind: PromptKind?, title: String, identifier: String) -> some View {
+        Button { select(kind) } label: {
+            if selection == kind { Label(title, systemImage: "checkmark") } else { Text(title) }
+        }.accessibilityIdentifier(identifier)
     }
 }
 
