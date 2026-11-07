@@ -27,7 +27,6 @@ struct FeedCard: Codable, Identifiable, Hashable, Sendable {
     var presentation: String? = nil
     var facets: Prompt.Facets? = nil
     var generation: Prompt.Generation? = nil
-    var inputs: Prompt.Inputs? = nil
     var palette: [Prompt.Swatch]? = nil
     var rights: Prompt.Rights? = nil
 
@@ -51,7 +50,6 @@ struct FeedCard: Codable, Identifiable, Hashable, Sendable {
         var card = self
         if card.facets?.isValid == false { card.facets = nil }
         if card.generation?.isValid == false { card.generation = nil }
-        if card.inputs?.isValid == false { card.inputs = nil }
         card.palette = Enrichment.palette(card.palette)
         card.rights = Enrichment.rights(card.rights)
         return card

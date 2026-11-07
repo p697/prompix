@@ -245,9 +245,7 @@ import UIKit
         XCTAssertFalse(app.staticTexts["筛选结果"].exists, "A filtered feed keeps the board's context row")
         let card = app.scrollViews["discoveryScroll"].buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'prompt-'")).firstMatch
         XCTAssertTrue(card.waitForExistence(timeout: 15))
-        filters.tap(); app.buttons["filterInputs"].tap(); app.buttons["可以用我的照片"].tap()
-        XCTAssertTrue(card.waitForExistence(timeout: 15))
-        capture("filters-02-portraits-with-my-photo")
+        capture("filters-02-portraits")
         filters.tap(); app.buttons["clearFilters"].tap()
         XCTAssertEqual(filters.value as? String, "")
     }

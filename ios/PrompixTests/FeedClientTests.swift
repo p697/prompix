@@ -69,22 +69,19 @@ import XCTest
         var card = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(FeedFixture.card())) as? [String: Any])
         card["facets"] = ["useCase": ["portraits"], "style": ["cinematic", "minimal"], "subject": []]
         card["generation"] = ["modelFamily": "gpt-image", "mode": "t2i", "outputAspect": "3:4"]
-        card["inputs"] = ["requirement": "required", "count": 1, "kinds": ["face"], "ownLikenessOnly": true]
         card["palette"] = [["hex": "#C2410C", "weight": 0.5], ["hex": "#F5F5F4", "weight": 0.3], ["hex": "#1C1917", "weight": 0.2]]
         card["rights"] = ["license": "CC0-1.0", "basis": "license", "imageExport": true]
         let decoded = try JSONDecoder().decode(FeedCard.self, from: JSONSerialization.data(withJSONObject: card)).validated(locale: "original")
         XCTAssertEqual(decoded.facets?.style, ["cinematic", "minimal"])
         XCTAssertEqual(decoded.generation?.outputAspect, "3:4")
-        XCTAssertEqual(decoded.inputs?.ownLikenessOnly, true)
         XCTAssertEqual(decoded.palette?.first?.hex, "#C2410C")
         XCTAssertEqual(decoded.rights?.imageExport, true)
 
         card["palette"] = [["hex": "#c2410c", "weight": 0.5]]
-        card["inputs"] = ["requirement": "none", "kinds": ["face"]]
         card["rights"] = ["license": "LicenseRef-source-author-rights", "basis": "attribution-only", "imageExport": true]
         card["generation"] = ["modelFamily": "a-future-family", "mode": "t2i", "outputAspect": "wide"]
         let sanitized = try JSONDecoder().decode(FeedCard.self, from: JSONSerialization.data(withJSONObject: card)).validated(locale: "original")
-        XCTAssertNil(sanitized.palette); XCTAssertNil(sanitized.inputs); XCTAssertNil(sanitized.rights); XCTAssertNil(sanitized.generation)
+        XCTAssertNil(sanitized.palette); XCTAssertNil(sanitized.rights); XCTAssertNil(sanitized.generation)
         XCTAssertEqual(sanitized.facets?.useCase, ["portraits"], "Well-formed fields survive beside malformed ones")
         XCTAssertEqual(sanitized.title, "Synthetic title", "A malformed 2.0 field never hides the work")
     }
