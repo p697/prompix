@@ -2,7 +2,7 @@
  * under the approved rules, the same intake, media mirroring, one review pass and translation
  * into nine languages, all through the configured routes and spend ledgers. Nothing is
  * published; everything lands in content/trials/<run>/ with an acceptance page. */
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import type { Prompt } from "../packages/schema/catalog.ts";
@@ -18,6 +18,7 @@ import { ModelProviderError, type ModelUsage } from "./models/types.ts";
 import { appendEvent, pipelineRoot, readEvents } from "./pipeline-control.ts";
 import { atomic, contentRoot, json } from "./publication.ts";
 import { applyReview, reviewBatch, reviewBlocker, type ReviewOutcome } from "./review-pass.ts";
+import { locatePrompts } from "./prompt-locate.ts";
 import { modelTranslationProvider } from "./translation-provider.ts";
 import { runTranslations } from "./translation-runner.ts";
 import { attachTranslations, emptyTranslationCache, translationLocales } from "./translation.ts";
@@ -48,7 +49,18 @@ async function curatedCreators(env: NodeJS.ProcessEnv): Promise<string[]> {
     order by count(*) desc, 1 limit 48`)).rows.map(row => row.username), env);
 }
 
-export async function runTrial(options: { env: NodeJS.ProcessEnv; root?: string; now?: number; dailyPosts?: number }) {
+/** Posts already searched by an earlier trial, so a rule change can be judged on the same day. */
+async function replayedSearch(directory: string) {
+  const names = (await readdir(join(directory, "x-discovery"))).filter(name => name.endsWith(".json")).sort();
+  const snapshots = await Promise.all(names.map(async name => ({ name, data: JSON.parse(await readFile(join(directory, "x-discovery", name), "utf8")) })));
+  // Trials before rules.json kept each drafted post's rule and engagement in results.json.
+  const earlier = await json<{ id: string; rule: string; likes?: number; views?: number }[]>(join(directory, "results.json"), []);
+  const rules = await json<Record<string, string>>(join(directory, "rules.json"), Object.fromEntries(earlier.map(row => [row.id.replace("x-post-", ""), row.rule])));
+  return { snapshots, rules, metrics: earlier.map(row => [row.id.replace("x-post-", ""), { likes: row.likes, views: row.views }] as const), stats: await json<RuleStats[]>(join(directory, "search.json"), []),
+    summary: await json<{ window: { since: string; until: string } } | null>(join(directory, "summary.json"), null) };
+}
+
+export async function runTrial(options: { env: NodeJS.ProcessEnv; root?: string; now?: number; dailyPosts?: number; replay?: string }) {
   const env = options.env, root = options.root ?? contentRoot, now = options.now ?? Date.now();
   const id = new Date(now).toISOString().replace(/[:.]/g, "-"), directory = join(root, "trials", id), task = `trial:${id}`;
   await mkdir(directory, { recursive: true });
@@ -57,20 +69,22 @@ export async function runTrial(options: { env: NodeJS.ProcessEnv; root?: string;
     const entry: Stage = { name, startedAt: Date.now() }; stages.push(entry);
     try { return await work(); } finally { entry.finishedAt = Date.now(); await atomic(join(directory, "stages.json"), stages); }
   };
-  const since = Math.floor((now - dayMs) / 1000), until = Math.floor(now / 1000);
+  const replay = options.replay ? await replayedSearch(join(root, "trials", options.replay)) : undefined;
+  const since = replay?.summary ? Date.parse(replay.summary.window.since) / 1000 : Math.floor((now - dayMs) / 1000);
+  const until = replay?.summary ? Date.parse(replay.summary.window.until) / 1000 : Math.floor(now / 1000);
   const dailyPosts = options.dailyPosts ?? xAcquisitionsPerDay(env);
 
   // 1. Search under the approved rules, admitting posts until each rule's quota is met.
-  const creators = await stage("creators", () => curatedCreators(env));
+  const creators = replay ? [] : await stage("creators", () => curatedCreators(env));
   const searchRules: { rule: XSearchRule; creators: string[] }[] = [...xSearchRules.map(rule => ({ rule, creators: [] })), ...creatorRules(creators)];
   const quotas = ruleQuotas(searchRules.map(entry => entry.rule), dailyPosts);
-  const known = await stage("known", async () => new Set([...await withPublisherDatabase(publishedXIdentities, env)].map(value => value.replace("x-post-", ""))));
+  const known = replay ? new Set<string>() : await stage("known", async () => new Set([...await withPublisherDatabase(publishedXIdentities, env)].map(value => value.replace("x-post-", ""))));
   const budget = configuredXSpendBudget(env);
-  if (!budget || !env.TWITTERAPI_IO_KEY) throw new Error("The trial needs the TwitterAPI key and the shared X budget");
-  const client = new TwitterAPIClient(env.TWITTERAPI_IO_KEY, budget);
-  const stats: RuleStats[] = [], admitted = new Map<string, { post: XPost; rule: string }>(), metrics = new Map<string, { likes?: number; views?: number }>();
+  if (!replay && (!budget || !env.TWITTERAPI_IO_KEY)) throw new Error("The trial needs the TwitterAPI key and the shared X budget");
+  const stats: RuleStats[] = replay?.stats ?? [], admitted = new Map<string, { post: XPost; rule: string }>(), metrics = new Map<string, { likes?: number; views?: number }>();
   const media = new Map<string, XMedia>(), profiles = new Map<string, unknown>(), perCreator = new Map<string, number>();
-  await stage("search", async () => {
+  if (!replay) await stage("search", async () => {
+    const client = new TwitterAPIClient(env.TWITTERAPI_IO_KEY!, budget!);
     for (const { rule, creators: group } of searchRules) {
       const entry: RuleStats = { rule: rule.id, lane: rule.lane, kind: rule.kind, label: rule.label, quota: quotas.get(rule.id) ?? 0,
         requests: 0, returned: 0, admitted: 0, known: 0, capped: 0, wrongMedia: 0 };
@@ -100,11 +114,19 @@ export async function runTrial(options: { env: NodeJS.ProcessEnv; root?: string;
       } catch (error) { entry.error = (error as Error).message.slice(0, 200); }
       await atomic(join(directory, "search.json"), stats);
     }
+    await atomic(join(directory, "rules.json"), Object.fromEntries([...admitted].map(([post, entry]) => [post, entry.rule])));
   });
 
   // 2. The same intake as the daily pipeline: prompt boundaries, modality, attribution.
   const posts = [...admitted.values()].map(entry => entry.post);
-  const snapshots = [];
+  const snapshots = replay?.snapshots ?? [];
+  if (replay) await stage("replay", async () => {
+    for (const { name, data } of snapshots) await atomic(join(directory, "x-discovery", name), data);
+    await atomic(join(directory, "search.json"), stats);
+    for (const [post, rule] of Object.entries(replay.rules)) admitted.set(post, { post: { id: post } as XPost, rule });
+    for (const [post, value] of replay.metrics) metrics.set(post, value);
+    await atomic(join(directory, "rules.json"), replay.rules);
+  });
   for (let offset = 0; offset < posts.length; offset += 100) {
     const batch = posts.slice(offset, offset + 100), keys = new Set(batch.flatMap(post => post.attachments?.media_keys ?? []));
     const data = { provider: "twitterapi", capturedAt: new Date(now).toISOString(), posts: batch, media: [...media.values()].filter(item => keys.has(item.media_key)),
@@ -113,7 +135,21 @@ export async function runTrial(options: { env: NodeJS.ProcessEnv; root?: string;
     await atomic(join(directory, "x-discovery", name), data);
     snapshots.push({ name, data });
   }
-  const intake = convertXDiscovery(snapshots, await json<CreatorCache>(join(root, "creators.json"), {}));
+  // Posts without a "Prompt:" heading go to the model, which points at the prompt in the author's text.
+  const creatorCache = await json<CreatorCache>(join(root, "creators.json"), {});
+  const marked = convertXDiscovery(snapshots, creatorCache);
+  const unmarked = new Set(marked.records.filter(record => ["missing-prompt-boundary", "multiple-prompt-boundaries"].includes(record.reason)).map(record => record.postID));
+  const snapshotPosts = snapshots.flatMap(({ data }) => (data as { posts: XPost[]; media?: XMedia[] }).posts.map(post => ({ post, media: (data as { media?: XMedia[] }).media ?? [] })));
+  const locate = await stage("locate", async () => {
+    const pending = snapshotPosts.filter(({ post }) => unmarked.has(post.id)).map(({ post, media: attached }) => {
+      const kinds = (post.attachments?.media_keys ?? []).map(key => attached.find(item => item.media_key === key)?.type);
+      return { post, kind: kinds.some(kind => kind === "video" || kind === "animated_gif") ? "video" as const : "image" as const };
+    });
+    if (!pending.length) return undefined;
+    const routed = await routedProvider("review", task);
+    return locatePrompts(routed.provider, pending, { effort: routed.effort, record: routed.record, now: new Date(now) });
+  });
+  const intake = locate ? convertXDiscovery(snapshots, creatorCache, locate.excerpts) : marked;
   const ruleOf = (item: Prompt) => admitted.get(item.id.replace("x-post-", ""))?.rule ?? "unknown";
 
   // 3. Mirror media, then one review pass with the full gallery and frames.
@@ -192,7 +228,9 @@ export async function runTrial(options: { env: NodeJS.ProcessEnv; root?: string;
     .entries?.filter(entry => Date.parse(entry.at) >= now).reduce((sum, entry) => sum + (entry.accounted ?? 0), 0) ?? 0;
   const summary = {
     id, window: { since: new Date(since * 1000).toISOString(), until: new Date(until * 1000).toISOString() }, dailyPosts, creators: creators.length,
-    search: stats, intake: { drafted: intake.candidates.length, blocked: intake.report.blocked, reasons: intake.report.reasons },
+    search: stats, intake: { drafted: intake.candidates.length, blocked: intake.report.blocked, reasons: intake.report.reasons,
+      ...(locate ? { located: { asked: unmarked.size, found: locate.located, none: locate.none, unmatched: locate.unmatched, failed: locate.failed } } : {}) },
+    ...(options.replay ? { replayOf: options.replay } : {}),
     counts: Object.fromEntries((["published", "rejected", "deferred", "failed"] as const).map(status => [status, rows.filter(row => row.status === status).length])),
     stages: stages.map(entry => ({ name: entry.name, minutes: Math.round(((entry.finishedAt ?? Date.now()) - entry.startedAt) / 6000) / 10 })),
     cost: { xUSD: xSpend / 1e6, anthropicUSD: calls.filter(call => call.provider === "anthropic-api").reduce((sum, call) => sum + estimateUSD(String(call.model), call.usage as ModelUsage), 0),
@@ -223,7 +261,8 @@ export async function runTrial(options: { env: NodeJS.ProcessEnv; root?: string;
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
   trustSystemCertificates();
-  const result = await runTrial({ env: await pipelineEnvironment() });
+  const replay = process.argv.indexOf("--replay");
+  const result = await runTrial({ env: await pipelineEnvironment(), ...(replay > 0 ? { replay: process.argv[replay + 1] } : {}) });
   await writeFile(join(result.directory, "done"), "");
   console.log(JSON.stringify({ event: "trial_finished", directory: result.directory, counts: result.summary.counts }));
 }

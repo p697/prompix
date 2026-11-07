@@ -15,17 +15,18 @@ import { presentationStandard } from "./visual-review.ts";
 
 export const reviewPassVersion = 1;
 
-/** The owner-approved rubric (2026-11-07). Any one of these keeps an item out. */
+/** The owner-approved rubric (2026-11-07, loosened the same day after the first trial): only a
+ * clear failure keeps an item out. Suggestive work is published and hidden until a viewer opts in. */
 export const rejectReasons = {
-  "incomplete-prompt": "提示词不完整，或者要依赖看不到的上下文",
-  "too-generic": "提示词太短太泛，不值得收藏",
-  "no-result-media": "没有真实的生成结果（只有文字截图、界面截图或无关图片）",
-  "media-mismatch": "图片或视频和提示词对不上",
-  "low-quality": "效果图质量差（明显瑕疵、模糊、难看）",
-  "ad-or-bait": "广告、课程推广、引流（关注、私信、转发领提示词）或抽奖",
-  "watermark-or-collage": "大面积水印，或者多张无关结果拼贴",
+  "incomplete-prompt": "提示词被截断、缺了主体，或者离开原帖就看不懂",
+  "too-generic": "只有几个词，没有可复用的内容",
+  "no-result-media": "没有生成结果（只有文字截图、界面截图或无关图片）",
+  "media-mismatch": "结果明显是另一个主题或场景",
+  "low-quality": "结果明显失败（严重变形、糊到看不清）",
+  "ad-or-bait": "要关注、私信、转发或付费才给提示词，或者整帖是课程、付费服务广告",
+  "watermark-or-collage": "大水印盖住主体，或者把不相关的多个作品拼在一起",
   "real-person": "针对具体的真实人物（名人、公众人物）生成形象",
-  "unsafe": "露骨内容，或涉及未成年人的不当内容",
+  "unsafe": "露骨色情、性暴力或胁迫，或涉及未成年人的不当内容",
 } as const;
 export type RejectReason = keyof typeof rejectReasons;
 const reasonIDs = Object.keys(rejectReasons) as RejectReason[];
@@ -37,7 +38,13 @@ Images are attached in candidate order; each candidate lists the 1-based positio
 Return one entry per candidate, in input order, with the same id.
 - decision: publish only when every check passes; otherwise reject and list every reason that applies in reasons, using only these codes:
 ${reasonIDs.map(id => `  ${id}: ${rejectReasons[id]}`).join("\n")}
-  The bar is a library people trust: a complete, reusable prompt with a real, good-looking result that matches it. When unsure whether an item meets the bar, reject it. reasonNote explains the decision in one short Chinese sentence.
+  Publish by default. Reject only when a reason clearly applies; when unsure, publish. reasonNote explains the decision in one short Chinese sentence. Read the codes narrowly:
+  - A prompt that works on the user's own uploaded photo, face, product or reference images is complete; so is one with an author's typo or a missing first letter.
+  - Video candidates come with a handful of sampled frames, so a story beat missing from them is not a mismatch. Mismatch means the result plainly shows another subject or scene.
+  - Small artifacts, a few distorted details or soft focus are not low quality.
+  - A small tool or platform watermark, an author signature or a model label is fine. A grid, contact sheet, before-and-after or character sheet is fine when the prompt asks for it or every panel comes from the same prompt.
+  - A generated commercial, a brand in the result, or the tool's name and hashtags are not an ad.
+  - Lingerie, swimwear, revealing outfits and sexy poses are not unsafe: label them suggestive under presentation and publish. Viewers see suggestive work only after opting in.
 - presentation: ${presentationValues.join(", ")}. Apply this standard:
 ${presentationStandard}
 - minors: none when nobody depicted or described may be under 18. safe when a child appears only in ordinary, non-sexual content such as illustration, education or a family scene. unsafe when anyone who is or may be under 18 is sexualized, shown in revealing clothing or poses, or used as an interchangeable model for fashion, beauty or body-focused output. uncertain when a depicted person may be under 18 and the output focuses on their body, attire or attractiveness. Explain in minorsReason. Apart from this, do not infer age, ethnicity, identity or other personal traits.

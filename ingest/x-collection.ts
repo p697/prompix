@@ -35,8 +35,8 @@ const bounded = (value: string | undefined, fallback: number, max: number) => {
   if (!Number.isInteger(parsed) || parsed < 0 || parsed > max) throw new Error("Invalid X growth limit");
   return parsed;
 };
-export const xAcquisitionsPerDay = (env: NodeJS.ProcessEnv) => bounded(env.PROMPIX_X_ACQUISITIONS_PER_DAY, 200, 400);
-export const xSearchRequestsPerDay = (env: NodeJS.ProcessEnv) => bounded(env.PROMPIX_X_SEARCH_REQUESTS_PER_DAY, 80, 200);
+export const xAcquisitionsPerDay = (env: NodeJS.ProcessEnv) => bounded(env.PROMPIX_X_ACQUISITIONS_PER_DAY, 600, 1000);
+export const xSearchRequestsPerDay = (env: NodeJS.ProcessEnv) => bounded(env.PROMPIX_X_SEARCH_REQUESTS_PER_DAY, 200, 400);
 
 export async function collectXDiscovery(root: string, options: {
   enabled: boolean; bearer?: string; environment?: NodeJS.ProcessEnv; now?: () => Date;
