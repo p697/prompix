@@ -118,16 +118,14 @@ struct DetailHero: View {
             .overlay {
                 VStack(spacing: 0) {
                     Spacer(minLength: 0)
-                    // A short, eased fade: the work meets the page without a veil over it.
-                    LinearGradient(stops: [.init(color: Palette.paper.opacity(0), location: 0), .init(color: Palette.paper.opacity(0.35), location: 0.5),
-                                           .init(color: Palette.paper, location: 1)], startPoint: .top, endPoint: .bottom).frame(height: 28)
+                    GrainDissolve()
                 }.allowsHitTesting(false).accessibilityHidden(true)
             }
             .overlay(alignment: .bottomTrailing) {
                 if urls.count > 1 {
                     Text(verbatim: "\(page + 1) / \(urls.count)").font(Typography.meta(size: 11)).tracking(1).monospacedDigit()
                         .padding(.horizontal, 10).frame(height: 26).readingGlass()
-                        .padding(.trailing, 16).padding(.bottom, 28)
+                        .padding(.trailing, 16).padding(.bottom, 44)
                         .allowsHitTesting(false).accessibilityHidden(true)
                 }
             }
@@ -164,6 +162,39 @@ struct DetailHero: View {
             Artwork(preview: preview, fillsFrame: true, showsVideoBadge: false, anchorsTop: true)
         }
     }
+}
+
+/// The work's bottom edge dissolves into the page as film grain, the way a print
+/// fades at its edge in the darkroom, instead of a smooth fade laid over it.
+struct GrainDissolve: View {
+    static let height: CGFloat = 90
+    var body: some View {
+        Palette.paper
+            .mask { Image(uiImage: Self.mask).resizable().interpolation(.none) }
+            .frame(height: Self.height)
+    }
+    /// One grain per pixel at 3x across the widest phone, made once. The grain is
+    /// densest mid-way and settles to plain paper at the bottom edge.
+    private static let mask: UIImage = {
+        let width = 1290, height = Int(Self.height) * 3
+        var alpha = [UInt8](repeating: 0, count: width * height)
+        var seed: UInt32 = 0x9E3779B9
+        for y in 0..<height {
+            let t = Double(y) / Double(height - 1)
+            let eased = t * t * (3 - 2 * t)
+            // Grain grows in from nothing at the top and settles to solid paper at the
+            // bottom, so the dissolve has no line at either end.
+            let spread = 0.9 * (1 - abs(2 * eased - 1) * 0.6) * min(1, t / 0.3, (1 - t) / 0.15)
+            for x in 0..<width {
+                seed ^= seed << 13; seed ^= seed >> 17; seed ^= seed << 5
+                let grain = Double(seed & 0xFFFF) / 65535 - 0.5
+                alpha[y * width + x] = UInt8(max(0, min(1, eased + grain * spread)) * 255)
+            }
+        }
+        let context = CGContext(data: &alpha, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width,
+                                space: CGColorSpaceCreateDeviceGray(), bitmapInfo: CGImageAlphaInfo.alphaOnly.rawValue)
+        return context?.makeImage().map { UIImage(cgImage: $0, scale: 3, orientation: .up) } ?? UIImage()
+    }()
 }
 
 extension ContentPreview {
